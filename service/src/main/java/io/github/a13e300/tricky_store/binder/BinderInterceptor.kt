@@ -35,9 +35,40 @@ open class BinderInterceptor : Binder() {
         fun registerBinderInterceptor(backdoor: IBinder, target: IBinder, interceptor: BinderInterceptor) {
             val data = Parcel.obtain()
             val reply = Parcel.obtain()
-            data.writeStrongBinder(target)
-            data.writeStrongBinder(interceptor)
-            backdoor.transact(1, data, reply, 0)
+            try {
+                data.writeStrongBinder(target)
+                data.writeStrongBinder(interceptor)
+                // The C++ BinderInterceptor's onTransact will expect code 1 for REGISTER_INTERCEPTOR
+                backdoor.transact(1, data, reply, 0)
+            } finally {
+                data.recycle()
+                reply.recycle()
+            }
+        }
+
+        private const val REGISTER_PROPERTY_SERVICE_TRANSACTION_CODE = 3 // Must match C++ enum
+
+        fun registerPropertyService(backdoor: IBinder, propertyService: IBinder) {
+            val data = Parcel.obtain()
+            val reply = Parcel.obtain()
+            try {
+                Logger.d("Registering PropertyHiderService with native layer.")
+                data.writeStrongBinder(propertyService) // The service to be stored by C++
+                // The C++ BinderInterceptor's onTransact will expect this code
+                backdoor.transact(REGISTER_PROPERTY_SERVICE_TRANSACTION_CODE, data, reply, 0)
+                // Check reply for errors if necessary
+                if (reply.readInt() != 0) { // Assuming 0 is success from C++
+                    Logger.e("Native layer failed to register property service, error: ${reply.readExceptionCode()}")
+                } else {
+                    Logger.i("PropertyHiderService registered successfully with native layer.")
+                }
+            } catch (e: Exception) {
+                Logger.e("Failed to transact for registerPropertyService", e)
+            }
+            finally {
+                data.recycle()
+                reply.recycle()
+            }
         }
     }
 

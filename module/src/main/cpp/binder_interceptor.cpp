@@ -14,6 +14,10 @@
 #include <shared_mutex>
 #include <vector>
 #include <queue>
+#include <set>
+#include <string>
+// #include <android/log.h> // logging.hpp should cover this
+#include <sys/system_properties.h> // For PROP_VALUE_MAX
 
 #include "logging.hpp"
 #include "lsplt.hpp"
@@ -22,10 +26,95 @@
 using namespace SandHook;
 using namespace android;
 
+// Define Target Properties
+static std::set<std::string> g_target_properties = {
+    "ro.boot.verifiedbootstate",
+    "ro.boot.flash.locked",
+    "ro.boot.veritymode",
+    "ro.boot.vbmeta.device_state",
+    "ro.boot.warranty_bit",
+    "ro.secure",
+    "ro.debuggable",
+    "ro.oem_unlock_supported"
+};
+
+// Declare Original Function Pointer
+int (*original_system_property_get)(const char* name, char* value);
+
+// Forward declaration for gBinderInterceptor
+class BinderInterceptor;
+extern sp<BinderInterceptor> gBinderInterceptor;
+
+// Define transaction code for fetching spoofed property
+static const uint32_t GET_SPOOFED_PROPERTY_TRANSACTION_CODE = IBinder::FIRST_CALL_TRANSACTION + 0;
+// Define interface token for the property service
+static const String16 PROPERTY_SERVICE_INTERFACE_TOKEN = String16("android.os.IPropertyServiceHider");
+
+
+// Implement Hook Function
+int new_system_property_get(const char* name, char* value) {
+    // LOGD("Property get: %s", name); // Too verbose for every property get
+    if (g_target_properties.count(name)) {
+        LOGI("Targeted property access: %s", name);
+        if (gBinderInterceptor != nullptr && gBinderInterceptor->gPropertyServiceBinder != nullptr) {
+            Parcel data_parcel, reply_parcel;
+            status_t status;
+
+            // Write interface token
+            status = data_parcel.writeInterfaceToken(PROPERTY_SERVICE_INTERFACE_TOKEN);
+            if (status != OK) {
+                LOGE("Failed to write interface token for property %s: %d", name, status);
+                return original_system_property_get(name, value);
+            }
+
+            // Write property name
+            status = data_parcel.writeCString(name);
+            if (status != OK) {
+                LOGE("Failed to write property name %s to parcel: %d", name, status);
+                return original_system_property_get(name, value);
+            }
+            
+            LOGD("Transacting with property service for %s", name);
+            status = gBinderInterceptor->gPropertyServiceBinder->transact(
+                GET_SPOOFED_PROPERTY_TRANSACTION_CODE, data_parcel, &reply_parcel, 0);
+
+            if (status != OK) {
+                LOGE("Transaction failed for property %s: %d", name, status);
+                return original_system_property_get(name, value);
+            }
+
+            int32_t exception_code = reply_parcel.readExceptionCode();
+            if (exception_code != 0) {
+                LOGE("Property service threw exception for %s: %d", name, exception_code);
+                return original_system_property_get(name, value);
+            }
+
+            // Read nullable string value
+            const char* spoofed_value_cstr = reply_parcel.readCString();
+
+            if (spoofed_value_cstr != nullptr) {
+                LOGI("Received spoofed value for %s: '%s'", name, spoofed_value_cstr);
+                strncpy(value, spoofed_value_cstr, PROP_VALUE_MAX - 1);
+                value[PROP_VALUE_MAX - 1] = '\0'; // Ensure null termination
+                return strlen(value);
+            } else {
+                LOGD("Property service returned null for %s, using original.", name);
+            }
+        } else {
+            LOGW("Property service binder not available for %s.", name);
+        }
+    }
+    return original_system_property_get(name, value);
+}
+
 class BinderInterceptor : public BBinder {
+public: // Made public for access from new_system_property_get
+    sp<IBinder> gPropertyServiceBinder = nullptr;
+private:
     enum {
         REGISTER_INTERCEPTOR = 1,
-        UNREGISTER_INTERCEPTOR = 2
+        UNREGISTER_INTERCEPTOR = 2,
+        REGISTER_PROPERTY_SERVICE = 3 // New transaction code
     };
     enum {
         PRE_TRANSACT = 1,
@@ -46,7 +135,7 @@ class BinderInterceptor : public BBinder {
     using ReadGuard = std::shared_lock<RwLock>;
     RwLock lock;
     std::map<wp<IBinder>, InterceptItem> items{};
-public:
+// public: // gPropertyServiceBinder moved up
     status_t onTransact(uint32_t code, const android::Parcel &data, android::Parcel *reply,
                         uint32_t flags) override;
 
@@ -56,7 +145,7 @@ public:
     bool needIntercept(const wp<BBinder>& target);
 };
 
-static sp<BinderInterceptor> gBinderInterceptor = nullptr;
+sp<BinderInterceptor> gBinderInterceptor = nullptr; // Definition moved here from below BinderStub
 
 struct thread_transaction_info {
     uint32_t code;
@@ -236,6 +325,23 @@ BinderInterceptor::onTransact(uint32_t code, const android::Parcel &data, androi
             }
             return BAD_VALUE;
         }
+    } else if (code == REGISTER_PROPERTY_SERVICE) {
+        LOGI("Registering property service binder");
+        sp<IBinder> property_service;
+        if (data.readStrongBinder(&property_service) != OK) {
+            LOGE("Failed to read property service binder from parcel");
+            return BAD_VALUE;
+        }
+        if (property_service == nullptr) {
+            LOGE("Received null property service binder");
+            return BAD_VALUE;
+        }
+        this->gPropertyServiceBinder = property_service;
+        LOGI("Property service binder registered successfully");
+        if (reply) { // Send a success reply
+            reply->writeInt32(0); // No error
+        }
+        return OK;
     }
     return UNKNOWN_TRANSACTION;
 }
@@ -345,7 +451,68 @@ bool hookBinder() {
     return true;
 }
 
+bool initialize_hooks() {
+    auto maps = lsplt::MapInfo::Scan();
+    dev_t binder_dev;
+    ino_t binder_ino;
+    bool binder_found = false;
+    dev_t libc_dev;
+    ino_t libc_ino;
+    bool libc_found = false;
+
+    for (auto &m: maps) {
+        if (m.path.ends_with("/libbinder.so")) {
+            binder_dev = m.dev;
+            binder_ino = m.inode;
+            binder_found = true;
+            LOGD("Found libbinder.so: dev=%lu, ino=%lu", m.dev, m.inode);
+        }
+        if (m.path.ends_with("/libc.so")) {
+            libc_dev = m.dev;
+            libc_ino = m.inode;
+            libc_found = true;
+            LOGD("Found libc.so: dev=%lu, ino=%lu, path=%s", m.dev, m.inode, m.path.c_str());
+        }
+        if (binder_found && libc_found) {
+            break;
+        }
+    }
+
+    if (!binder_found) {
+        LOGE("libbinder.so not found!");
+        // return false; // Should not return early, try to hook libc if possible
+    } else {
+        gBinderInterceptor = sp<BinderInterceptor>::make();
+        gBinderStub = sp<BinderStub>::make();
+        lsplt::RegisterHook(binder_dev, binder_ino, "ioctl", (void *) new_ioctl, (void **) &old_ioctl);
+        LOGI("Registered ioctl hook for libbinder.so");
+    }
+
+    if (!libc_found) {
+        LOGE("libc.so not found!");
+        // return false; // Should not return early if libbinder hook was set
+    } else {
+        lsplt::RegisterHook(libc_dev, libc_ino, "__system_property_get", (void *) new_system_property_get, (void **) &original_system_property_get);
+        LOGI("Registered __system_property_get hook for libc.so");
+    }
+    
+    if (!binder_found && !libc_found) {
+        LOGE("Neither libbinder.so nor libc.so found! Cannot apply hooks.");
+        return false;
+    }
+
+    if (!lsplt::CommitHook()) {
+        LOGE("hook failed!");
+        return false;
+    }
+    LOGI("hook success!");
+    return true;
+}
+
+// Ensure gBinderInterceptor is initialized in initialize_hooks if not already.
+// It is initialized: gBinderInterceptor = sp<BinderInterceptor>::make();
+
 extern "C" [[gnu::visibility("default")]] [[gnu::used]] bool entry(void *handle) {
     LOGI("injected, my handle %p", handle);
-    return hookBinder();
+    return initialize_hooks();
 }

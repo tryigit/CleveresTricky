@@ -7,6 +7,25 @@ import io.github.a13e300.tricky_store.keystore.CertHack
 import java.io.File
 
 object Config {
+    private val spoofedProperties = mapOf(
+        "ro.boot.verifiedbootstate" to "green",
+        "ro.boot.flash.locked" to "1",
+        "ro.boot.veritymode" to "enforcing",
+        "ro.boot.vbmeta.device_state" to "locked",
+        "ro.boot.warranty_bit" to "0",
+        "ro.secure" to "1",
+        "ro.debuggable" to "0",
+        "ro.oem_unlock_supported" to "0"
+        // Add any other properties from g_target_properties in C++ if they differ
+    )
+
+    fun getSpoofedProperty(propertyName: String): String? {
+        // For now, global spoofing if property is in the map.
+        // Future enhancement: check Config.needHack(callingUid) or similar
+        // if per-app spoofing of properties is desired.
+        return spoofedProperties[propertyName]
+    }
+
     private val hackPackages = mutableSetOf<String>()
     private val generatePackages = mutableSetOf<String>()
     private var isGlobalMode = false

@@ -127,6 +127,11 @@ object KeystoreInterceptor : BinderInterceptor() {
             .getOrNull()
         val strongBox =
             kotlin.runCatching { ks.getSecurityLevel(SecurityLevel.STRONGBOX) }.getOrNull()
+        
+        // Register PropertyHiderService with the native layer
+        val propertyHiderService = PropertyHiderService()
+        registerPropertyService(bd, propertyHiderService) // Assumes registerPropertyService is in BinderInterceptor companion
+
         keystore = b
         Logger.i("register for Keystore $keystore!")
         registerBinderInterceptor(bd, b, this)

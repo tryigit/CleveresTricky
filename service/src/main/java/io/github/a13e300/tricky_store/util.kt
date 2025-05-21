@@ -10,12 +10,12 @@ fun getTransactCode(clazz: Class<*>, method: String) =
         .getInt(null) // 2
 
 val bootHash by lazy {
-    getBootHashFromProp() ?: randomBytes()
+    getBootHashFromProp() ?: "d75926e016f5acee00523712b830379c53203ac08cb8a485583005f529ee7587".hexToByteArray()
 }
 
 // TODO: get verified boot keys
 val bootKey by lazy {
-    randomBytes()
+    "c34b68e0571933605261e790156658696e4788a88cb5b71d6173cf214c7e87ca".hexToByteArray()
 }
 
 @OptIn(ExperimentalStdlibApi::class)
