@@ -22,6 +22,7 @@
 #include "logging.hpp"
 #include "lsplt.hpp"
 #include "elf_util.h"
+#include "binder_interceptor.h"
 
 using namespace SandHook;
 using namespace android;
@@ -61,7 +62,7 @@ int new_system_property_get(const char* name, char* value) {
             status_t status;
 
             // Write interface token
-            status = data_parcel.writeInterfaceToken(PROPERTY_SERVICE_INTERFACE_TOKEN);
+            status = data_parcel.writeString16(PROPERTY_SERVICE_INTERFACE_TOKEN);
             if (status != OK) {
                 LOGE("Failed to write interface token for property %s: %d", name, status);
                 return original_system_property_get(name, value);
@@ -90,7 +91,12 @@ int new_system_property_get(const char* name, char* value) {
             }
 
             // Read nullable string value
-            const char* spoofed_value_cstr = reply_parcel.readCString();
+            String16 spoofed_value_s16 = reply_parcel.readString16();
+            String8 spoofed_value_s8; // Default constructor
+            if (spoofed_value_s16.size() > 0) { // Check if String16 has content
+                spoofed_value_s8 = String8(spoofed_value_s16);
+            }
+            const char* spoofed_value_cstr = (spoofed_value_s16.size() > 0) ? spoofed_value_s8.string() : nullptr;
 
             if (spoofed_value_cstr != nullptr) {
                 LOGI("Received spoofed value for %s: '%s'", name, spoofed_value_cstr);
@@ -107,45 +113,9 @@ int new_system_property_get(const char* name, char* value) {
     return original_system_property_get(name, value);
 }
 
-class BinderInterceptor : public BBinder {
-public: // Made public for access from new_system_property_get
-    sp<IBinder> gPropertyServiceBinder = nullptr;
-private:
-    enum {
-        REGISTER_INTERCEPTOR = 1,
-        UNREGISTER_INTERCEPTOR = 2,
-        REGISTER_PROPERTY_SERVICE = 3 // New transaction code
-    };
-    enum {
-        PRE_TRANSACT = 1,
-        POST_TRANSACT
-    };
-    enum {
-        SKIP = 1,
-        CONTINUE,
-        OVERRIDE_REPLY,
-        OVERRIDE_DATA
-    };
-    struct InterceptItem {
-        wp<IBinder> target{};
-        sp<IBinder> interceptor;
-    };
-    using RwLock = std::shared_mutex;
-    using WriteGuard = std::unique_lock<RwLock>;
-    using ReadGuard = std::shared_lock<RwLock>;
-    RwLock lock;
-    std::map<wp<IBinder>, InterceptItem> items{};
-// public: // gPropertyServiceBinder moved up
-    status_t onTransact(uint32_t code, const android::Parcel &data, android::Parcel *reply,
-                        uint32_t flags) override;
-
-    bool handleIntercept(sp<BBinder> target, uint32_t code, const Parcel &data, Parcel *reply,
-                         uint32_t flags, status_t &result);
-
-    bool needIntercept(const wp<BBinder>& target);
-};
-
-sp<BinderInterceptor> gBinderInterceptor = nullptr; // Definition moved here from below BinderStub
+// Definition of gBinderInterceptor is now after BinderStub,
+// ensure BinderInterceptor class is known via header.
+sp<BinderInterceptor> gBinderInterceptor = nullptr;
 
 struct thread_transaction_info {
     uint32_t code;

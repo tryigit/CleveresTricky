@@ -190,11 +190,11 @@ const std::string ElfImg::findSymbolNameForAddr(ElfW(Addr) addr) const {
                 auto off = symtab_start[i].st_value;
                 auto len = symtab_start[i].st_size;
                 if (off <= addr_off && addr_off < off + len) {
-                    LOGD("found in symtab sym %p name %s", off,
+                    LOGD("found in symtab sym %p name %s", (void*)off,
                          st_name);
                     char buf[1024];
-                    snprintf(buf, sizeof(buf), "%s (0x%lx)+0x%lx/(0x%lx) from symtab %d", st_name,
-                             off, addr_off - off, len, i);
+                    snprintf(buf, sizeof(buf), "%s (0x%llx)+0x%llx/(0x%llx) from symtab %llu", st_name,
+                             (unsigned long long)off, (unsigned long long)(addr_off - off), (unsigned long long)len, (unsigned long long)i);
                     return buf;
                 }
             }
@@ -210,11 +210,11 @@ const std::string ElfImg::findSymbolNameForAddr(ElfW(Addr) addr) const {
                 auto off = dynsym_start[i].st_value;
                 auto len = dynsym_start[i].st_size;
                 if (off <= addr_off && addr_off < off + len) {
-                    LOGD("found in dynsym sym %p name %s", off,
+                    LOGD("found in dynsym sym %p name %s", (void*)off,
                          st_name);
                     char buf[1024];
-                    snprintf(buf, sizeof(buf), "%s (0x%lx)+0x%lx/(0x%lx) from dynsym %d", st_name,
-                             off, addr_off - off, len, i);
+                    snprintf(buf, sizeof(buf), "%s (0x%llx)+0x%llx/(0x%llx) from dynsym %llu", st_name,
+                             (unsigned long long)off, (unsigned long long)(addr_off - off), (unsigned long long)len, (unsigned long long)i);
                     return buf;
                 }
             }
