@@ -256,7 +256,7 @@ bool remote_pre_call(int pid, struct user_regs_struct &regs, uintptr_t func_addr
                      std::vector<uintptr_t> &args) {
     align_stack(regs);
     LOGV("calling remote function %" PRIxPTR " args %zu", func_addr, args.size());
-    for (auto &[[maybe_unused]] a : args) {
+    for ([[maybe_unused]] auto &a : args) {
         LOGV("arg %p", (void *) a);
     }
 #if defined(__x86_64__)

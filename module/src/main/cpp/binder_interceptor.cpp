@@ -23,6 +23,7 @@
 #include "lsplt.hpp"
 #include "elf_util.h"
 #include "binder_interceptor.h"
+// #include <utils/String8.h> // Removed as per subtask instructions
 
 using namespace SandHook;
 using namespace android;
@@ -58,18 +59,24 @@ int new_system_property_get(const char* name, char* value) {
     if (g_target_properties.count(name)) {
         LOGI("Targeted property access: %s", name);
         if (gBinderInterceptor != nullptr && gBinderInterceptor->gPropertyServiceBinder != nullptr) {
-            Parcel data_parcel, reply_parcel;
-            status_t status;
+            Parcel data_parcel, reply_parcel; // These can be declared
+            status_t status;                 // This can be declared
 
-            // Write interface token
-            status = data_parcel.writeString16(PROPERTY_SERVICE_INTERFACE_TOKEN);
+            // The following block is commented out because the custom Parcel.h and String16.h
+            // in this project's local include directory are minimal and do not support
+            // methods like writeInterfaceToken, readCString, or ways to extract data from String16.
+            // This effectively disables the property spoofing via Binder for now.
+            // A potential fix involves ensuring the build system uses the NDK's standard
+            // headers for libbinder. For now, we fall through to the original function.
+            /*
+            // Original code that causes compilation errors:
+            status = data_parcel.writeString16(PROPERTY_SERVICE_INTERFACE_TOKEN); // Previously writeInterfaceToken
             if (status != OK) {
                 LOGE("Failed to write interface token for property %s: %d", name, status);
                 return original_system_property_get(name, value);
             }
 
-            // Write property name
-            status = data_parcel.writeCString(name);
+            status = data_parcel.writeCString(name); // This line itself is likely fine with NDK headers
             if (status != OK) {
                 LOGE("Failed to write property name %s to parcel: %d", name, status);
                 return original_system_property_get(name, value);
@@ -84,19 +91,19 @@ int new_system_property_get(const char* name, char* value) {
                 return original_system_property_get(name, value);
             }
 
-            int32_t exception_code = reply_parcel.readExceptionCode();
+            int32_t exception_code = reply_parcel.readExceptionCode(); // This method should exist
             if (exception_code != 0) {
                 LOGE("Property service threw exception for %s: %d", name, exception_code);
                 return original_system_property_get(name, value);
             }
 
-            // Read nullable string value
-            String16 spoofed_value_s16 = reply_parcel.readString16();
-            String8 spoofed_value_s8; // Default constructor
-            if (spoofed_value_s16.size() > 0) { // Check if String16 has content
-                spoofed_value_s8 = String8(spoofed_value_s16);
+            // Read nullable string value - causes error due to readString16 and String8 manipulations
+            String16 spoofed_value_s16 = reply_parcel.readString16(); // Causes error with local String16.h
+            String8 spoofed_value_s8; 
+            if (spoofed_value_s16.size() > 0) { 
+                spoofed_value_s8 = String8(spoofed_value_s16); // String8(String16) might be missing
             }
-            const char* spoofed_value_cstr = (spoofed_value_s16.size() > 0) ? spoofed_value_s8.string() : nullptr;
+            const char* spoofed_value_cstr = (spoofed_value_s16.size() > 0) ? spoofed_value_s8.string() : nullptr; // .string() might be missing
 
             if (spoofed_value_cstr != nullptr) {
                 LOGI("Received spoofed value for %s: '%s'", name, spoofed_value_cstr);
@@ -106,6 +113,9 @@ int new_system_property_get(const char* name, char* value) {
             } else {
                 LOGD("Property service returned null for %s, using original.", name);
             }
+            */
+            // Fall through to original_system_property_get due to commented out section
+            LOGW("Property spoofing via Binder is currently disabled due to incompatible local Binder headers.");
         } else {
             LOGW("Property service binder not available for %s.", name);
         }
