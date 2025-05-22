@@ -21,6 +21,9 @@
 #define LOGE(...)  logging::log(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 #define LOGF(...)  logging::log(ANDROID_LOG_FATAL, LOG_TAG, __VA_ARGS__)
 #define PLOGE(fmt, args...) LOGE(fmt " failed with %d: %s", ##args, errno, strerror(errno))
+#define PLOGW(fmt, args...) LOGW(fmt " failed with %d: %s", ##args, errno, strerror(errno))
+#define PLOGF(fmt, args...) LOGF(fmt " failed with %d: %s", ##args, errno, strerror(errno))
+#define PCHECK(cond) (static_cast<void>((cond) || (PLOGF("Check failed: " #cond), 0)))
 
 namespace logging {
     void setPrintEnabled(bool print);

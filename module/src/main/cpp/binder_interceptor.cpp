@@ -48,7 +48,7 @@ class BinderInterceptor;
 extern sp<BinderInterceptor> gBinderInterceptor;
 
 // Define transaction code for fetching spoofed property
-static const uint32_t GET_SPOOFED_PROPERTY_TRANSACTION_CODE = IBinder::FIRST_CALL_TRANSACTION + 0;
+// static const uint32_t GET_SPOOFED_PROPERTY_TRANSACTION_CODE = IBinder::FIRST_CALL_TRANSACTION + 0;
 // Define interface token for the property service
 static const String16 PROPERTY_SERVICE_INTERFACE_TOKEN = String16("android.os.IPropertyServiceHider");
 
@@ -60,7 +60,7 @@ int new_system_property_get(const char* name, char* value) {
         LOGI("Targeted property access: %s", name);
         if (gBinderInterceptor != nullptr && gBinderInterceptor->gPropertyServiceBinder != nullptr) {
             Parcel data_parcel, reply_parcel; // These can be declared
-            status_t status;                 // This can be declared
+            // status_t status;                 // This can be declared
 
             // The following block is commented out because the custom Parcel.h and String16.h
             // in this project's local include directory are minimal and do not support

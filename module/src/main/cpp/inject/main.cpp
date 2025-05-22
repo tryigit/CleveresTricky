@@ -93,7 +93,7 @@ bool inject_library(int pid, const char *lib_path, const char* entry_name) {
         // Scoped block for FD passing
         {
             // SELinux context setting - best effort, log if fails
-            if (set_sockcreate_con("u:object_r:system_file:s0") == -1) {
+            if (!set_sockcreate_con("u:object_r:system_file:s0")) {
                  PLOGW("set_sockcreate_con failed (non-fatal)");
             }
             UniqueFd local_socket = socket(AF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC, 0);
