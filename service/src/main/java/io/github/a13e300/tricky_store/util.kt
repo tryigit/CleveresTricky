@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalStdlibApi::class)
+
 package io.github.a13e300.tricky_store
 
 import android.content.pm.IPackageManager

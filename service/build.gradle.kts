@@ -82,6 +82,7 @@ dependencies {
     compileOnly(project(":stub"))
     compileOnly(libs.annotation)
     implementation(libs.bcpkix.jdk18on)
+    testImplementation(libs.junit)
 }
 
 afterEvaluate {

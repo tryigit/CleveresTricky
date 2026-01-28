@@ -31,14 +31,10 @@ object Config {
     private var isGlobalMode = false
     private var isTeeBrokenMode = false
 
-    private fun updateTargetPackages(f: File?) = runCatching {
-        hackPackages.clear()
-        generatePackages.clear()
-        if (isGlobalMode) {
-            Logger.i("Global mode is enabled, skipping updateTargetPackages execution.")
-            return@runCatching
-        }
-        f?.readLines()?.forEach {
+    fun parsePackages(lines: List<String>, isTeeBrokenMode: Boolean): Pair<Set<String>, Set<String>> {
+        val hackPackages = mutableSetOf<String>()
+        val generatePackages = mutableSetOf<String>()
+        lines.forEach {
             if (it.isNotBlank() && !it.startsWith("#")) {
                 val n = it.trim()
                 if (isTeeBrokenMode || n.endsWith("!"))
@@ -48,6 +44,19 @@ object Config {
                 else hackPackages.add(n)
             }
         }
+        return hackPackages to generatePackages
+    }
+
+    private fun updateTargetPackages(f: File?) = runCatching {
+        hackPackages.clear()
+        generatePackages.clear()
+        if (isGlobalMode) {
+            Logger.i("Global mode is enabled, skipping updateTargetPackages execution.")
+            return@runCatching
+        }
+        val (h, g) = parsePackages(f?.readLines() ?: emptyList(), isTeeBrokenMode)
+        hackPackages.addAll(h)
+        generatePackages.addAll(g)
         Logger.i("update hack packages: $hackPackages, generate packages=$generatePackages")
     }.onFailure {
         Logger.e("failed to update target files", it)
