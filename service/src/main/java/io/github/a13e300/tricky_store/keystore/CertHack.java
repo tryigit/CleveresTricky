@@ -154,7 +154,8 @@ public final class CertHack {
             }
             Logger.i("update " + numberOfKeyboxes + " keyboxes");
         } catch (Throwable t) {
-            Logger.e("Error loading xml file (keyboxes cleared): " + t);
+            // Do not log the exception details as it might contain sensitive data from the keybox file.
+            Logger.e("Error loading xml file (keyboxes cleared).");
         }
     }
 
