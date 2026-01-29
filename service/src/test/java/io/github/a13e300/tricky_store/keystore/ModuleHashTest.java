@@ -88,7 +88,7 @@ public class ModuleHashTest {
         X509Certificate cert = generateSelfSignedCert(kp);
 
         // Inject keybox
-        CertHack.KeyBox keyBox = new CertHack.KeyBox(null, kp, Collections.singletonList(cert));
+        CertHack.KeyBox keyBox = new CertHack.KeyBox(kp, Collections.singletonList(cert));
         Field keyboxesField = CertHack.class.getDeclaredField("keyboxes");
         keyboxesField.setAccessible(true);
         Map<String, CertHack.KeyBox> keyboxes = (Map) keyboxesField.get(null);

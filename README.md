@@ -26,8 +26,9 @@ Compared to the standard TrickyStore, **CleveresTricky** brings:
 
 **All configuration files will take effect immediately.**
 
-## Configuration Paths
-**Note:** The configuration directory is now `/data/adb/cleveres_tricky/`.
+## Low RAM Usage
+
+Tricky Store is optimized for low RAM devices. It automatically releases memory used by configuration files (like `keybox.xml`) immediately after parsing.
 
 ## keybox.xml
 

@@ -160,7 +160,7 @@ public final class CertHack {
                 }
                 var pemKp = parseKeyPair(privateKey);
                 var kp = new JcaPEMKeyConverter().getKeyPair(pemKp);
-                keyboxes.put(algo, new KeyBox(pemKp, kp, certificateChain));
+                keyboxes.put(algo, new KeyBox(kp, certificateChain));
             }
             Logger.i("update " + numberOfKeyboxes + " keyboxes");
         } catch (Throwable t) {
@@ -561,7 +561,7 @@ public final class CertHack {
         }
     }
 
-    record KeyBox(PEMKeyPair pemKeyPair, KeyPair keyPair, List<Certificate> certificates) {
+    record KeyBox(KeyPair keyPair, List<Certificate> certificates) {
     }
 
     public static class KeyGenParameters {
