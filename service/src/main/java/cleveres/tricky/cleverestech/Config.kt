@@ -63,8 +63,6 @@ object Config {
 
     private fun updateKeyBox(f: File?) = runCatching {
         CertHack.readFromXml(f?.readText())
-        // Encourage GC to free the large XML string memory immediately
-        System.gc()
     }.onFailure {
         Logger.e("failed to update keybox", it)
     }
