@@ -9,13 +9,14 @@
 ## Why CleveresTricky?
 
 Compared to the standard TrickyStore, **CleveresTricky** brings:
-- **AI-Powered Continuous Updates:** Leveraging advanced AI to stay ahead of Google's detections.
+- **AI-Powered Continuous Updates:** Leveraging advanced AI to stay ahead of Google's detections. More security vulnerabilities are being fixed.
 - **Unrivaled Security & Stealth:** Implements **Binder-level System Property Spoofing** to hide sensitive props (like `ro.boot.verifiedbootstate`) from deep inspection methods (DroidGuard/GMS) without relying on fragile hooking frameworks for every app.
 - **Peak Performance:** Optimized C++ injection and lightweight Java service.
+- **Low RAM Usage:** CleveresTricky is optimized for low RAM devices. It automatically releases memory used by configuration files (like `keybox.xml`) immediately after parsing.
 - **God-Mode Features:**
     - **Safe Binder Spoofing:** Bypasses ABI issues to safely spoof system properties at the IPC level.
     - **KeyMint 4.0 Support:** Ready for the future.
-    - **Module Hash Spoofing:** (Experimental) To match official firmware fingerprints.
+    - **Module Hash Spoofing:** (Experimental) To match official firmware fingerprints. ... more
 
 ## Usage
 
@@ -25,10 +26,6 @@ Compared to the standard TrickyStore, **CleveresTricky** brings:
 4. Enjoy!  
 
 **All configuration files will take effect immediately.**
-
-## Low RAM Usage
-
-Tricky Store is optimized for low RAM devices. It automatically releases memory used by configuration files (like `keybox.xml`) immediately after parsing.
 
 ## keybox.xml
 
