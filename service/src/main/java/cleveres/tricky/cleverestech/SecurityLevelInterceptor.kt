@@ -16,8 +16,6 @@ import cleveres.tricky.cleverestech.keystore.CertHack.KeyGenParameters
 import cleveres.tricky.cleverestech.keystore.Utils
 import java.security.KeyPair
 import java.security.cert.Certificate
-import java.util.concurrent.ConcurrentHashMap
-
 class SecurityLevelInterceptor(
     private val original: IKeystoreSecurityLevel,
     private val level: Int
@@ -25,7 +23,7 @@ class SecurityLevelInterceptor(
     companion object {
         private val generateKeyTransaction =
             getTransactCode(IKeystoreSecurityLevel.Stub::class.java, "generateKey")
-        private val keys = ConcurrentHashMap<Key, Info>()
+        private val keys = KeyCache<Key, Info>(1000)
 
         fun getKeyResponse(uid: Int, alias: String): KeyEntryResponse? =
             keys[Key(uid, alias)]?.response
