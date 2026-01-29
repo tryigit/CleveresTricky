@@ -19,6 +19,76 @@ public class XMLParser {
         this.xml = xml;
     }
 
+    public static class Node {
+        public final String name;
+        public final Map<String, String> attributes = new HashMap<>();
+        public String text;
+        public final List<Node> children = new ArrayList<>();
+
+        public Node(String name) {
+            this.name = name;
+        }
+
+        public Node getChild(String name) {
+            for (Node child : children) {
+                if (child.name.equals(name)) return child;
+            }
+            return null;
+        }
+
+        public List<Node> getChildren(String name) {
+            List<Node> list = new ArrayList<>();
+            for (Node child : children) {
+                if (child.name.equals(name)) list.add(child);
+            }
+            return list;
+        }
+    }
+
+    public Node parse() throws XmlPullParserException, IOException {
+        XmlPullParserFactory xmlFactoryObject = XmlPullParserFactory.newInstance();
+        XmlPullParser parser = xmlFactoryObject.newPullParser();
+        parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false);
+        parser.setInput(new StringReader(xml));
+
+        Node root = null;
+        List<Node> stack = new ArrayList<>();
+
+        int eventType = parser.getEventType();
+        while (eventType != XmlPullParser.END_DOCUMENT) {
+            if (eventType == XmlPullParser.START_TAG) {
+                Node node = new Node(parser.getName());
+                for (int i = 0; i < parser.getAttributeCount(); i++) {
+                    node.attributes.put(parser.getAttributeName(i), parser.getAttributeValue(i));
+                }
+
+                if (root == null) {
+                    root = node;
+                }
+
+                if (!stack.isEmpty()) {
+                    stack.get(stack.size() - 1).children.add(node);
+                }
+                stack.add(node);
+            } else if (eventType == XmlPullParser.END_TAG) {
+                if (!stack.isEmpty()) {
+                    stack.remove(stack.size() - 1);
+                }
+            } else if (eventType == XmlPullParser.TEXT) {
+                if (!stack.isEmpty()) {
+                    String text = parser.getText();
+                    if (text != null) {
+                        Node parent = stack.get(stack.size() - 1);
+                        if (parent.text == null) parent.text = text;
+                        else parent.text += text;
+                    }
+                }
+            }
+            eventType = parser.next();
+        }
+        return root;
+    }
+
     private static class Tag {
         final String name;
         final int index;
