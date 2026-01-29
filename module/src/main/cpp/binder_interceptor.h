@@ -31,7 +31,8 @@ private:
     };
     enum { // These were likely intended to be scoped to functions or private
         PRE_TRANSACT = 1,
-        POST_TRANSACT
+        POST_TRANSACT,
+        INTERCEPTOR_REPLACED = 3
     };
     enum { // These were likely intended to be scoped to functions or private
         SKIP = 1,

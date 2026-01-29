@@ -92,7 +92,7 @@ namespace android {
         LIBBINDER_EXPORTED virtual ~BpRefBase();
         LIBBINDER_EXPORTED virtual void onFirstRef();
         LIBBINDER_EXPORTED virtual void onLastStrongRef(const void* id);
-        LIBBINDER_EXPORTED virtual bool onIncStrongAttempted(uint32_t flags, const void* id);
+        LIBBINDER_EXPORTED virtual bool onIncStrongAttempted(const void* id);
 
         LIBBINDER_EXPORTED inline IBinder* remote() const { return mRemote; }
         LIBBINDER_EXPORTED inline sp<IBinder> remoteStrong() const {
