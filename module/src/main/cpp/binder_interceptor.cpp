@@ -7,10 +7,12 @@
 #include <binder/Common.h>
 #include <binder/IServiceManager.h>
 #include <sys/ioctl.h>
+#include <unistd.h>
 #include "kernel/binder.h"
 
 #include <utility>
 #include <map>
+#include <mutex>
 #include <shared_mutex>
 #include <vector>
 #include <queue>
@@ -207,6 +209,39 @@ class BinderStub : public BBinder {
 
 static sp<BinderStub> gBinderStub = nullptr;
 
+static std::shared_mutex g_binder_fd_lock;
+static std::map<int, bool> g_binder_fds;
+
+static bool is_binder_fd(int fd) {
+    {
+        std::shared_lock<std::shared_mutex> lock(g_binder_fd_lock);
+        auto it = g_binder_fds.find(fd);
+        if (it != g_binder_fds.end()) {
+            return it->second;
+        }
+    }
+
+    char path[256];
+    char proc_path[64];
+    snprintf(proc_path, sizeof(proc_path), "/proc/self/fd/%d", fd);
+    ssize_t len = readlink(proc_path, path, sizeof(path) - 1);
+
+    bool is_binder = false;
+    if (len > 0) {
+        std::string_view sv(path, static_cast<size_t>(len));
+        if (sv.find("binder") != std::string_view::npos) {
+            is_binder = true;
+        }
+    }
+
+    if (is_binder) {
+        std::unique_lock<std::shared_mutex> lock(g_binder_fd_lock);
+        g_binder_fds[fd] = true;
+    }
+
+    return is_binder;
+}
+
 // FIXME: when use ioctl hooking, some already blocked ioctl calls will not be hooked
 int (*old_ioctl)(int fd, int request, ...) = nullptr;
 int new_ioctl(int fd, int request, ...) {
@@ -215,8 +250,17 @@ int new_ioctl(int fd, int request, ...) {
     auto arg = va_arg(list, void*);
     va_end(list);
     auto result = old_ioctl(fd, request, arg);
-    // TODO: check fd
+
     if (result >= 0 && request == BINDER_WRITE_READ) {
+        // Check if the FD is a binder device.
+        // Note: We use a cache in is_binder_fd which never invalidates.
+        // This is generally safe because if an FD is reused for a non-binder file,
+        // old_ioctl above would likely have failed (returning < 0) for BINDER_WRITE_READ,
+        // causing us to skip this block anyway.
+        if (!is_binder_fd(fd)) {
+            return result;
+        }
+
         auto &bwr = *(struct binder_write_read*) arg;
         LOGD("read buffer %p size %zu consumed %zu", bwr.read_buffer, bwr.read_size,
              bwr.read_consumed);
