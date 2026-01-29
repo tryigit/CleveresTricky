@@ -101,7 +101,7 @@ open class BinderInterceptor : Binder() {
                 val callingPid = data.readInt()
                 val resultCode = data.readInt()
                 val theData = Parcel.obtain()
-                val theReply = Parcel.obtain()
+                var theReply: Parcel? = null
                 try {
                     val sz = data.readLong().toInt()
                     theData.appendFrom(data, data.dataPosition(), sz)
@@ -109,13 +109,14 @@ open class BinderInterceptor : Binder() {
                     data.setDataPosition(data.dataPosition() + sz)
                     val sz2 = data.readLong().toInt()
                     if (sz2 != 0) {
+                        theReply = Parcel.obtain()
                         theReply.appendFrom(data, data.dataPosition(), sz2)
                         theReply.setDataPosition(0)
                     }
-                    onPostTransact(target, theCode, theFlags, callingUid, callingPid, theData, if (sz2 == 0) null else theReply, resultCode)
+                    onPostTransact(target, theCode, theFlags, callingUid, callingPid, theData, theReply, resultCode)
                 } finally {
                     theData.recycle()
-                    theReply.recycle()
+                    theReply?.recycle()
                 }
             }
             else -> return super.onTransact(code, data, reply, flags)
