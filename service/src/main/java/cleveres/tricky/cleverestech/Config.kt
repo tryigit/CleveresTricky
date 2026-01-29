@@ -56,7 +56,7 @@ object Config {
         val (h, g) = parsePackages(f?.readLines() ?: emptyList(), isTeeBrokenMode)
         hackPackages = h
         generatePackages = g
-        Logger.i("update hack packages: $hackPackages, generate packages=$generatePackages")
+        Logger.i("update hack packages: ${hackPackages.size}, generate packages=${generatePackages.size}")
     }.onFailure {
         Logger.e("failed to update target files", it)
     }
