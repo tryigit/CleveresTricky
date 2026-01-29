@@ -86,6 +86,7 @@ dependencies {
     implementation(libs.annotation)
     implementation(libs.bcpkix.jdk18on)
     testImplementation(libs.junit)
+    testImplementation("net.sf.kxml:kxml2:2.3.0")
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)

@@ -4,8 +4,7 @@ import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 import org.xmlpull.v1.XmlPullParserFactory;
 
-import java.io.IOException;
-import java.io.StringReader;
+import java.io.Reader;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -13,167 +12,109 @@ import java.util.Map;
 
 public class XMLParser {
 
-    private final String xml;
+    private static class Element {
+        String name;
+        Map<String, String> attributes = new HashMap<>();
+        String text;
+        Map<String, List<Element>> children = new HashMap<>();
 
-    public XMLParser(String xml) {
-        this.xml = xml;
-    }
-
-    public static class Node {
-        public final String name;
-        public final Map<String, String> attributes = new HashMap<>();
-        public String text;
-        public final List<Node> children = new ArrayList<>();
-
-        public Node(String name) {
+        Element(String name) {
             this.name = name;
         }
 
-        public Node getChild(String name) {
-            for (Node child : children) {
-                if (child.name.equals(name)) return child;
-            }
-            return null;
-        }
-
-        public List<Node> getChildren(String name) {
-            List<Node> list = new ArrayList<>();
-            for (Node child : children) {
-                if (child.name.equals(name)) list.add(child);
-            }
-            return list;
+        void addChild(Element child) {
+            children.computeIfAbsent(child.name, k -> new ArrayList<>()).add(child);
         }
     }
 
-    public Node parse() throws XmlPullParserException, IOException {
+    private final Element root;
+
+    public XMLParser(Reader reader) throws Exception {
+        root = parse(reader);
+    }
+
+    private Element parse(Reader reader) throws Exception {
         XmlPullParserFactory xmlFactoryObject = XmlPullParserFactory.newInstance();
         XmlPullParser parser = xmlFactoryObject.newPullParser();
         parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false);
-        parser.setInput(new StringReader(xml));
+        parser.setInput(reader);
 
-        Node root = null;
-        List<Node> stack = new ArrayList<>();
+        Element currentElement = null;
+        // Stack to keep track of parents
+        List<Element> stack = new ArrayList<>();
 
         int eventType = parser.getEventType();
         while (eventType != XmlPullParser.END_DOCUMENT) {
-            if (eventType == XmlPullParser.START_TAG) {
-                Node node = new Node(parser.getName());
-                for (int i = 0; i < parser.getAttributeCount(); i++) {
-                    node.attributes.put(parser.getAttributeName(i), parser.getAttributeValue(i));
-                }
-
-                if (root == null) {
-                    root = node;
-                }
-
-                if (!stack.isEmpty()) {
-                    stack.get(stack.size() - 1).children.add(node);
-                }
-                stack.add(node);
-            } else if (eventType == XmlPullParser.END_TAG) {
-                if (!stack.isEmpty()) {
-                    stack.remove(stack.size() - 1);
-                }
-            } else if (eventType == XmlPullParser.TEXT) {
-                if (!stack.isEmpty()) {
-                    String text = parser.getText();
-                    if (text != null) {
-                        Node parent = stack.get(stack.size() - 1);
-                        if (parent.text == null) parent.text = text;
-                        else parent.text += text;
+            switch (eventType) {
+                case XmlPullParser.START_TAG:
+                    Element element = new Element(parser.getName());
+                    for (int i = 0; i < parser.getAttributeCount(); i++) {
+                        element.attributes.put(parser.getAttributeName(i), parser.getAttributeValue(i));
                     }
-                }
+                    if (!stack.isEmpty()) {
+                        stack.get(stack.size() - 1).addChild(element);
+                    }
+                    stack.add(element);
+                    currentElement = element;
+                    break;
+
+                case XmlPullParser.TEXT:
+                    if (currentElement != null && parser.getText() != null) {
+                        String text = parser.getText().trim();
+                        if (!text.isEmpty()) {
+                            currentElement.text = text;
+                        }
+                    }
+                    break;
+
+                case XmlPullParser.END_TAG:
+                    if (!stack.isEmpty()) {
+                        Element finished = stack.remove(stack.size() - 1);
+                        if (stack.isEmpty()) {
+                            return finished;
+                        }
+                    }
+                    currentElement = null;
+                    break;
             }
             eventType = parser.next();
         }
-        return root;
+        return stack.isEmpty() ? null : stack.get(0);
     }
 
-    private static class Tag {
-        final String name;
-        final int index;
-
-        Tag(String name, int index) {
-            this.name = name;
-            this.index = index;
-        }
-    }
-
-    public Map<String, String> obtainPath(String path) throws Exception {
-        XmlPullParserFactory xmlFactoryObject = XmlPullParserFactory.newInstance();
-        XmlPullParser parser = xmlFactoryObject.newPullParser();
-        parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false);
-        parser.setInput(new StringReader(xml));
+    public Map<String, String> obtainPath(String path) {
+        if (root == null) throw new RuntimeException("XML not parsed");
 
         String[] rawTags = path.split("\\.");
-        List<Tag> tags = new ArrayList<>();
-        for (String rawTag : rawTags) {
+        Element current = root;
+
+        String firstPart = rawTags[0];
+        String rootName = firstPart.split("\\[")[0];
+
+        if (!root.name.equals(rootName)) {
+             throw new RuntimeException("Path root mismatch: " + rootName + " vs " + root.name);
+        }
+
+        for (int i = 1; i < rawTags.length; i++) {
+            String rawTag = rawTags[i];
             String[] parts = rawTag.split("\\[");
             String name = parts[0];
             int index = 0;
             if (parts.length > 1) {
                 index = Integer.parseInt(parts[1].replace("]", ""));
             }
-            tags.add(new Tag(name, index));
-        }
 
-        return readData(parser, tags, 0, new HashMap<>());
-    }
-
-    private Map<String, String> readData(XmlPullParser parser, List<Tag> tags, int index,
-                                         Map<String, Integer> tagCounts) throws IOException, XmlPullParserException {
-        while (parser.next() != XmlPullParser.END_DOCUMENT) {
-            if (parser.getEventType() != XmlPullParser.START_TAG) {
-                continue;
+            List<Element> children = current.children.get(name);
+            if (children == null || index >= children.size()) {
+                 throw new RuntimeException("Path not found: " + path);
             }
-
-            String name = parser.getName();
-            Tag currentTag = tags.get(index);
-
-            if (name.equals(currentTag.name)) {
-                if (tagCounts.getOrDefault(name, 0) < currentTag.index) {
-                    tagCounts.put(name, tagCounts.getOrDefault(name, 0) + 1);
-                    return readData(parser, tags, index, tagCounts);
-                } else {
-                    if (index == tags.size() - 1) {
-                        return readAttributes(parser);
-                    } else {
-                        return readData(parser, tags, index + 1, tagCounts);
-                    }
-                }
-            } else {
-                skip(parser);
-            }
+            current = children.get(index);
         }
 
-        throw new XmlPullParserException("Path not found");
-    }
-
-    private Map<String, String> readAttributes(XmlPullParser parser) throws IOException, XmlPullParserException {
-        Map<String, String> attributes = new HashMap<>();
-        for (int i = 0; i < parser.getAttributeCount(); i++) {
-            attributes.put(parser.getAttributeName(i), parser.getAttributeValue(i));
+        Map<String, String> result = new HashMap<>(current.attributes);
+        if (current.text != null) {
+            result.put("text", current.text);
         }
-        if (parser.next() == XmlPullParser.TEXT) {
-            attributes.put("text", parser.getText());
-        }
-        return attributes;
-    }
-
-    private void skip(XmlPullParser parser) throws XmlPullParserException, IOException {
-        if (parser.getEventType() != XmlPullParser.START_TAG) {
-            throw new IllegalStateException();
-        }
-        int depth = 1;
-        while (depth != 0) {
-            switch (parser.next()) {
-                case XmlPullParser.END_TAG:
-                    depth--;
-                    break;
-                case XmlPullParser.START_TAG:
-                    depth++;
-                    break;
-            }
-        }
+        return result;
     }
 }

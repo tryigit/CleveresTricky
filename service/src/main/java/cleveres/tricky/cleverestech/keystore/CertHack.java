@@ -42,6 +42,7 @@ import org.bouncycastle.util.io.pem.PemReader;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.Reader;
 import java.io.StringReader;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
@@ -126,19 +127,24 @@ public final class CertHack {
         return data;
     }
 
-    public static void readFromXml(String data) {
+    public static void readFromXml(Reader reader) {
         keyboxes.clear();
-        if (data == null) {
+        if (reader == null) {
             Logger.i("clear all keyboxes");
             return;
         }
-        XMLParser xmlParser = new XMLParser(data);
 
         try {
-            XMLParser.Node root = xmlParser.parse();
-            if (root == null || !"AndroidAttestation".equals(root.name)) {
-                throw new IOException("Invalid XML root");
-            }
+            XMLParser xmlParser = new XMLParser(reader);
+            int numberOfKeyboxes = Integer.parseInt(Objects.requireNonNull(xmlParser.obtainPath(
+                    "AndroidAttestation.NumberOfKeyboxes").get("text")));
+            for (int i = 0; i < numberOfKeyboxes; i++) {
+                String keyboxAlgorithm = xmlParser.obtainPath(
+                        "AndroidAttestation.Keybox.Key[" + i + "]").get("algorithm");
+                String privateKey = xmlParser.obtainPath(
+                        "AndroidAttestation.Keybox.Key[" + i + "].PrivateKey").get("text");
+                int numberOfCertificates = Integer.parseInt(Objects.requireNonNull(xmlParser.obtainPath(
+                        "AndroidAttestation.Keybox.Key[" + i + "].CertificateChain.NumberOfCertificates").get("text")));
 
             XMLParser.Node keyboxNode = root.getChild("Keybox");
             if (keyboxNode == null) throw new IOException("Keybox node not found");
