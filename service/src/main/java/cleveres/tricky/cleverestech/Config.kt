@@ -56,7 +56,7 @@ object Config {
         val (h, g) = parsePackages(f?.readLines() ?: emptyList(), isTeeBrokenMode)
         hackPackages = h
         generatePackages = g
-        Logger.i("update hack packages: $hackPackages, generate packages=$generatePackages")
+        Logger.i { "update hack packages: $hackPackages, generate packages=$generatePackages" }
     }.onFailure {
         Logger.e("failed to update target files", it)
     }
@@ -97,7 +97,7 @@ object Config {
             }
         }
         buildVars = newVars
-        Logger.i("update build vars: $buildVars")
+        Logger.i { "update build vars: $buildVars" }
     }.onFailure {
         Logger.e("failed to update build vars", it)
     }
@@ -105,7 +105,7 @@ object Config {
     @OptIn(ExperimentalStdlibApi::class)
     private fun updateModuleHash(f: File?) = runCatching {
         moduleHash = f?.readText()?.trim()?.hexToByteArray()
-        Logger.i("update module hash: ${moduleHash?.joinToString("") { "%02x".format(it) }}")
+        Logger.i { "update module hash: ${moduleHash?.joinToString("") { "%02x".format(it) }}" }
     }.onFailure {
         moduleHash = null
         Logger.e("failed to update module hash", it)
