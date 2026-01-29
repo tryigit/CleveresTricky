@@ -118,8 +118,9 @@ PR is welcomed.
 - [BootloaderSpoofer](https://github.com/chiteroman/BootloaderSpoofer)
 - [KeystoreInjection](https://github.com/aviraxp/Zygisk-KeystoreInjection)
 - [LSPosed](https://github.com/LSPosed/LSPosed)
-
+- [TrickyStore]
+- (https://github.com/5ec1cff/TrickyStore)
+  
 ## Credits
 
-**CleveresTricky Team** - AI-Powered Development.
-Original TrickyStore by 5ec1cff.
+**Cleverestech Telegram Group** - AI-Powered Development.
