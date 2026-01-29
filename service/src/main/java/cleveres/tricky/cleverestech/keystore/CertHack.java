@@ -571,6 +571,8 @@ public final class CertHack {
         public int ecCurve;
         public String ecCurveName;
 
+        public boolean isNoAuthRequired = false;
+
         public List<Integer> purpose = new ArrayList<>();
         public List<Integer> digest = new ArrayList<>();
 
@@ -599,6 +601,7 @@ public final class CertHack {
                         ecCurve = p.getEcCurve();
                         ecCurveName = getEcCurveName(ecCurve);
                     }
+                    case Tag.NO_AUTH_REQUIRED -> isNoAuthRequired = true;
                     case Tag.PURPOSE -> {
                         purpose.add(p.getKeyPurpose());
                     }
