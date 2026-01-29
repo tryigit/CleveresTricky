@@ -38,7 +38,7 @@ done
 if [ "$support" == "false" ]; then
   abort "! Unsupported platform: $ARCH"
 else
-  ui_print "- Device platform: $ARCH"
+  ui_print "- Device platform: $ARCH (Supported)"
 fi
 
 # check android
@@ -46,7 +46,7 @@ if [ "$API" -lt $MIN_SDK ]; then
   ui_print "! Unsupported sdk: $API"
   abort "! Minimal supported sdk is $MIN_SDK"
 else
-  ui_print "- Device sdk: $API"
+  ui_print "- Device sdk: $API (Supported)"
 fi
 
 ui_print "- Extracting verify.sh"
@@ -89,7 +89,7 @@ fi
 mv "$MODPATH/libinject.so" "$MODPATH/inject"
 chmod 755 "$MODPATH/inject"
 
-CONFIG_DIR=/data/adb/tricky_store
+CONFIG_DIR=/data/adb/cleveres_tricky
 if [ ! -d "$CONFIG_DIR" ]; then
   ui_print "- Creating configuration directory"
   mkdir -p "$CONFIG_DIR"
@@ -105,3 +105,10 @@ if [ ! -f "$CONFIG_DIR/target.txt" ]; then
   extract "$ZIPFILE" 'target.txt' "$TMPDIR"
   mv "$TMPDIR/target.txt" "$CONFIG_DIR/target.txt"
 fi
+
+ui_print "*********************************************************"
+ui_print "  Tricky Store Installed Successfully!"
+ui_print "  "
+ui_print "  Config files are located at:"
+ui_print "  $CONFIG_DIR"
+ui_print "*********************************************************"

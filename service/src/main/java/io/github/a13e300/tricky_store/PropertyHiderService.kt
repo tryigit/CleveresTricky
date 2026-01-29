@@ -2,7 +2,7 @@ package io.github.a13e300.tricky_store
 
 import android.os.Binder
 import android.os.Parcel
-import io.github.a13e300.tricky_store.Config // Assuming Config stores spoofed values
+import io.github.a13e300.tricky_store.Config
 
 class PropertyHiderService : Binder() {
     companion object {
@@ -19,7 +19,8 @@ class PropertyHiderService : Binder() {
             reply?.writeNoException() // Important: write no exception before writing result
 
             if (propertyName != null) {
-                val spoofedValue = Config.getSpoofedProperty(propertyName)
+                // Use getBuildVar as it holds the loaded properties from spoof_build_vars
+                val spoofedValue = Config.getBuildVar(propertyName)
                 Logger.d("PropertyHiderService: Received request for '$propertyName', spoofed to '$spoofedValue'")
                 reply?.writeString(spoofedValue) // writeString can handle null
             } else {

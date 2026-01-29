@@ -16,15 +16,7 @@ object Config {
         "ro.secure" to "1",
         "ro.debuggable" to "0",
         "ro.oem_unlock_supported" to "0"
-        // Add any other properties from g_target_properties in C++ if they differ
     )
-
-    fun getSpoofedProperty(propertyName: String): String? {
-        // For now, global spoofing if property is in the map.
-        // Future enhancement: check Config.needHack(callingUid) or similar
-        // if per-app spoofing of properties is desired.
-        return spoofedProperties[propertyName]
-    }
 
     private val hackPackages = mutableSetOf<String>()
     private val generatePackages = mutableSetOf<String>()
@@ -115,7 +107,7 @@ object Config {
         Logger.e("failed to update module hash", it)
     }
 
-    private const val CONFIG_PATH = "/data/adb/tricky_store"
+    private const val CONFIG_PATH = "/data/adb/cleveres_tricky"
     private const val TARGET_FILE = "target.txt"
     private const val KEYBOX_FILE = "keybox.xml"
     private const val GLOBAL_MODE_FILE = "global_mode"
@@ -156,6 +148,7 @@ object Config {
         updateGlobalMode(File(root, GLOBAL_MODE_FILE))
         updateTeeBrokenMode(File(root, TEE_BROKEN_MODE_FILE))
         updateBuildVars(File(root, SPOOF_BUILD_VARS_FILE))
+        updateModuleHash(File(root, MODULE_HASH_FILE))
         if (!isGlobalMode) {
             val scope = File(root, TARGET_FILE)
             if (scope.exists()) {
