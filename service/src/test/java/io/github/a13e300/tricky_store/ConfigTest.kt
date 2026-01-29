@@ -56,4 +56,23 @@ class ConfigTest {
         assertTrue(hack.isEmpty())
         assertEquals(setOf("com.example.app1", "com.example.app2"), generate)
     }
+
+    @Test
+    fun testMatchesPackage_exact() {
+        val rules = setOf("com.example.app1", "com.example.app2")
+        assertTrue(Config.matchesPackage("com.example.app1", rules))
+        assertTrue(Config.matchesPackage("com.example.app2", rules))
+        assertTrue(!Config.matchesPackage("com.example.app3", rules))
+    }
+
+    @Test
+    fun testMatchesPackage_wildcard() {
+        val rules = setOf("com.google.*", "com.example.app1")
+        assertTrue(Config.matchesPackage("com.google.android.gms", rules))
+        assertTrue(Config.matchesPackage("com.google.android.gsf", rules))
+        assertTrue(Config.matchesPackage("com.google.something.else", rules))
+        assertTrue(Config.matchesPackage("com.example.app1", rules))
+        assertTrue(!Config.matchesPackage("com.example.app2", rules))
+        assertTrue(!Config.matchesPackage("org.google.fake", rules))
+    }
 }

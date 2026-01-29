@@ -52,6 +52,18 @@ val osVersion by lazy {
     }
 }
 
+val keyMintVersion by lazy {
+    when (Build.VERSION.SDK_INT) {
+        36 -> 400
+        35 -> 400
+        Build.VERSION_CODES.UPSIDE_DOWN_CAKE -> 300
+        Build.VERSION_CODES.TIRAMISU -> 200
+        Build.VERSION_CODES.S_V2 -> 100
+        Build.VERSION_CODES.S -> 100
+        else -> 100
+    }
+}
+
 fun String.convertPatchLevel(long: Boolean) = kotlin.runCatching {
     val l = split("-")
     if (long) l[0].toInt() * 10000 + l[1].toInt() * 100 + l[2].toInt()

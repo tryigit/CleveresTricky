@@ -175,10 +175,20 @@ object Config {
         return iPm
     }
 
+    internal fun matchesPackage(pkgName: String, rules: Set<String>): Boolean {
+        return rules.any { rule ->
+            if (rule.endsWith("*")) {
+                pkgName.startsWith(rule.removeSuffix("*"))
+            } else {
+                pkgName == rule
+            }
+        }
+    }
+
     private fun checkPackages(packages: Set<String>, callingUid: Int) = kotlin.runCatching {
         if (packages.isEmpty()) return false
-        val ps = getPm()?.getPackagesForUid(callingUid)
-        ps?.any { it in packages }
+        val ps = getPm()?.getPackagesForUid(callingUid) ?: return false
+        ps.any { pkgName -> matchesPackage(pkgName, packages) }
     }.onFailure { Logger.e("failed to get packages", it) }.getOrNull() ?: false
 
     fun needHack(callingUid: Int): Boolean {

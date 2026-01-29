@@ -199,20 +199,19 @@ public final class CertHack {
                 }
                 vector.add(taggedObject);
             }
-            if (moduleHash != null && !moduleHashAdded) {
-                vector.add(new DERTaggedObject(true, 724, new DEROctetString(moduleHash)));
+            if (moduleHash == null) {
+                String moduleHashStr = Config.INSTANCE.getBuildVar("MODULE_HASH");
+                if (moduleHashStr != null && !moduleHashStr.isEmpty()) {
+                    try {
+                        moduleHash = hexToByteArray(moduleHashStr);
+                    } catch (Exception e) {
+                        Logger.e("Failed to parse MODULE_HASH build var", e);
+                    }
+                }
             }
 
-            // ModuleHash injection (Tag 724) for hackCertificateChain
-            String moduleHashStr = Config.INSTANCE.getBuildVar("MODULE_HASH");
-            if (moduleHashStr != null && !moduleHashStr.isEmpty()) {
-                try {
-                    byte[] moduleHashBytes = hexToByteArray(moduleHashStr);
-                    ASN1Encodable moduleHashEnc = new DERTaggedObject(true, 724, new DEROctetString(moduleHashBytes));
-                    vector.add(moduleHashEnc);
-                } catch (Exception e) {
-                    Logger.e("Failed to inject moduleHash in hackCertificateChain", e);
-                }
+            if (moduleHash != null && !moduleHashAdded) {
+                vector.add(new DERTaggedObject(true, 724, new DEROctetString(moduleHash)));
             }
 
             LinkedList<Certificate> certificates;
@@ -435,6 +434,16 @@ public final class CertHack {
             }
 
             byte[] moduleHash = Config.INSTANCE.getModuleHash();
+            if (moduleHash == null) {
+                String moduleHashStr = Config.INSTANCE.getBuildVar("MODULE_HASH");
+                if (moduleHashStr != null && !moduleHashStr.isEmpty()) {
+                    try {
+                        moduleHash = hexToByteArray(moduleHashStr);
+                    } catch (Exception e) {
+                        Logger.e("Failed to parse MODULE_HASH build var", e);
+                    }
+                }
+            }
             if (moduleHash != null) {
                 teeEnforcedList.add(new DERTaggedObject(true, 724, new DEROctetString(moduleHash)));
             }
@@ -448,20 +457,6 @@ public final class CertHack {
             ASN1Encodable[] teeEnforcedEncodables = teeEnforcedList.toArray(new ASN1Encodable[0]);
 
             ASN1Encodable[] softwareEnforced = {applicationID, creationDateTime};
-
-            // ModuleHash injection (Tag 724)
-            String moduleHashStr = Config.INSTANCE.getBuildVar("MODULE_HASH");
-            if (moduleHashStr != null && !moduleHashStr.isEmpty()) {
-                try {
-                    byte[] moduleHashBytes = hexToByteArray(moduleHashStr);
-                    ASN1Encodable moduleHashEnc = new DERTaggedObject(true, 724, new DEROctetString(moduleHashBytes));
-                    List<ASN1Encodable> list = new ArrayList<>(Arrays.asList(teeEnforcedEncodables));
-                    list.add(moduleHashEnc);
-                    teeEnforcedEncodables = list.toArray(new ASN1Encodable[0]);
-                } catch (Exception e) {
-                    Logger.e("Failed to inject moduleHash", e);
-                }
-            }
 
             ASN1OctetString keyDescriptionOctetStr = getAsn1OctetString(teeEnforcedEncodables, softwareEnforced, params);
 
@@ -482,7 +477,7 @@ public final class CertHack {
             }
         }
 
-        int keyMintVer = 100;
+        int keyMintVer = UtilKt.getKeyMintVersion();
         String keyMintVerStr = Config.INSTANCE.getBuildVar("KEYMINT_VERSION");
         if (keyMintVerStr != null && !keyMintVerStr.isEmpty()) {
             try {
