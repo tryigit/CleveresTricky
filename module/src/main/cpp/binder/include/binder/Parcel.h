@@ -27,6 +27,8 @@ namespace android {
         class Status {};
     }
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-private-field"
     class Parcel {
     public:
 
@@ -184,6 +186,7 @@ namespace android {
 
         size_t mReserved;
     };
+#pragma clang diagnostic pop
 
 } // namespace android
 

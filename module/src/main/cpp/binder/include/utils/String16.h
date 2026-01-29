@@ -18,6 +18,8 @@
 #define ANDROID_STRING16_H
 
 namespace android {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-private-field"
     class String16 {
     public:
         String16();
@@ -33,6 +35,7 @@ namespace android {
     private:
         const char16_t *mString;
     };
+#pragma clang diagnostic pop
 
 
 }  // namespace android

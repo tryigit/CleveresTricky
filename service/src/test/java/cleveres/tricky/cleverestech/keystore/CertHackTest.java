@@ -9,10 +9,22 @@ import cleveres.tricky.cleverestech.Logger;
 public class CertHackTest {
 
     private static final String EC_KEY = "-----BEGIN EC PRIVATE KEY-----\n" +
-            "MHcCAQEEIBN+UV4uBUNLhszEC84F0PYJ+KUJMTbdUgfbMbG/ayq0oAoGCCqGSM49\n" +
-            "AwEHoUQDQgAEWXMGzZNcUHT4he/QEGCA8WB5LPVSJzpu0Bbqgkk5b3TmzlW0Emqu\n" +
-            "SboYcnWjC9j+RpY0LhI22LR4U5AaFuklSw==\n" +
+            "MHcCAQEEIAcPs+YkQGT6EDkaEH6Z9StSR7mQuKnh49K0DVqB/ZxYoAoGCCqGSM49\n" +
+            "AwEHoUQDQgAEzi23gXvUATkDmPcNPgsqe24eWmSIfuteSk8S5wJxs4ABt+O6QGAO\n" +
+            "XHqvCjNpJSbUxgz3SZefi8TWWQ1t32G/1w==\n" +
             "-----END EC PRIVATE KEY-----";
+
+    private static final String TEST_CERT = "-----BEGIN CERTIFICATE-----\n" +
+            "MIIBfTCCASOgAwIBAgIUBZ47iWGUbx00hmWBPTYkakbXnigwCgYIKoZIzj0EAwIw\n" +
+            "FDESMBAGA1UEAwwJVGVzdCBDZXJ0MB4XDTI2MDEyOTIxNTI0M1oXDTI3MDEyNDIx\n" +
+            "NTI0M1owFDESMBAGA1UEAwwJVGVzdCBDZXJ0MFkwEwYHKoZIzj0CAQYIKoZIzj0D\n" +
+            "AQcDQgAEzi23gXvUATkDmPcNPgsqe24eWmSIfuteSk8S5wJxs4ABt+O6QGAOXHqv\n" +
+            "CjNpJSbUxgz3SZefi8TWWQ1t32G/16NTMFEwHQYDVR0OBBYEFCwifKyDaNaHtKvx\n" +
+            "m+0eLn/LZoTaMB8GA1UdIwQYMBaAFCwifKyDaNaHtKvxm+0eLn/LZoTaMA8GA1Ud\n" +
+            "EwEB/wQFMAMBAf8wCgYIKoZIzj0EAwIDSAAwRQIgT+CWCLXuIN5XY0c3mFN1p1FM\n" +
+            "1KAiK9pMwjbHYxNxDmYCIQDXriCpaafMnkJIqGb8UsI5XlkQD0soXYP7hd9ymW/t\n" +
+            "qg==\n" +
+            "-----END CERTIFICATE-----";
 
     @Test
     public void testReadFromXml() {
@@ -31,7 +43,8 @@ public class CertHackTest {
                 "<Key algorithm=\"ecdsa\">\n" +
                 "<PrivateKey>\n" + EC_KEY + "\n</PrivateKey>\n" +
                 "<CertificateChain>\n" +
-                "<NumberOfCertificates>0</NumberOfCertificates>\n" +
+                "<NumberOfCertificates>1</NumberOfCertificates>\n" +
+                "<Certificate>\n" + TEST_CERT + "\n</Certificate>\n" +
                 "</CertificateChain>\n" +
                 "</Key>\n" +
                 "</Keybox>\n" +
@@ -39,6 +52,6 @@ public class CertHackTest {
 
         CertHack.readFromXml(new StringReader(xml));
 
-        assertTrue(CertHack.canHack());
+        assertTrue("Keybox should be loaded", CertHack.canHack());
     }
 }
