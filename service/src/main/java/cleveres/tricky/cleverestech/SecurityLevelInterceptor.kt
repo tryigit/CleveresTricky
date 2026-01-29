@@ -123,12 +123,14 @@ class SecurityLevelInterceptor(
         a.keyParameter.value = KeyParameterValue.ecCurve(params.ecCurve)
         a.securityLevel = level
         authorizations.add(a)
-        a = Authorization()
-        a.keyParameter = KeyParameter()
-        a.keyParameter.tag = Tag.NO_AUTH_REQUIRED
-        a.keyParameter.value = KeyParameterValue.boolValue(true) // TODO: copy
-        a.securityLevel = level
-        authorizations.add(a)
+        if (params.isNoAuthRequired) {
+            a = Authorization()
+            a.keyParameter = KeyParameter()
+            a.keyParameter.tag = Tag.NO_AUTH_REQUIRED
+            a.keyParameter.value = KeyParameterValue.boolValue(true)
+            a.securityLevel = level
+            authorizations.add(a)
+        }
         // TODO: ORIGIN
         //OS_VERSION
         //OS_PATCHLEVEL
