@@ -6,7 +6,9 @@ import org.xmlpull.v1.XmlPullParserFactory;
 
 import java.io.IOException;
 import java.io.StringReader;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class XMLParser {
@@ -17,18 +19,38 @@ public class XMLParser {
         this.xml = xml;
     }
 
+    private static class Tag {
+        final String name;
+        final int index;
+
+        Tag(String name, int index) {
+            this.name = name;
+            this.index = index;
+        }
+    }
+
     public Map<String, String> obtainPath(String path) throws Exception {
         XmlPullParserFactory xmlFactoryObject = XmlPullParserFactory.newInstance();
         XmlPullParser parser = xmlFactoryObject.newPullParser();
         parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false);
         parser.setInput(new StringReader(xml));
 
-        String[] tags = path.split("\\.");
+        String[] rawTags = path.split("\\.");
+        List<Tag> tags = new ArrayList<>();
+        for (String rawTag : rawTags) {
+            String[] parts = rawTag.split("\\[");
+            String name = parts[0];
+            int index = 0;
+            if (parts.length > 1) {
+                index = Integer.parseInt(parts[1].replace("]", ""));
+            }
+            tags.add(new Tag(name, index));
+        }
 
         return readData(parser, tags, 0, new HashMap<>());
     }
 
-    private Map<String, String> readData(XmlPullParser parser, String[] tags, int index,
+    private Map<String, String> readData(XmlPullParser parser, List<Tag> tags, int index,
                                          Map<String, Integer> tagCounts) throws IOException, XmlPullParserException {
         while (parser.next() != XmlPullParser.END_DOCUMENT) {
             if (parser.getEventType() != XmlPullParser.START_TAG) {
@@ -36,23 +58,14 @@ public class XMLParser {
             }
 
             String name = parser.getName();
+            Tag currentTag = tags.get(index);
 
-            if (name.equals(tags[index].split("\\[")[0])) {
-
-                String[] tagParts = tags[index].split("\\[");
-                if (tagParts.length > 1) {
-                    if (tagCounts.getOrDefault(name, 0) < Integer.parseInt(tagParts[1].replace("]", ""))) {
-                        tagCounts.put(name, tagCounts.getOrDefault(name, 0) + 1);
-                        return readData(parser, tags, index, tagCounts);
-                    } else {
-                        if (index == tags.length - 1) {
-                            return readAttributes(parser);
-                        } else {
-                            return readData(parser, tags, index + 1, tagCounts);
-                        }
-                    }
+            if (name.equals(currentTag.name)) {
+                if (tagCounts.getOrDefault(name, 0) < currentTag.index) {
+                    tagCounts.put(name, tagCounts.getOrDefault(name, 0) + 1);
+                    return readData(parser, tags, index, tagCounts);
                 } else {
-                    if (index == tags.length - 1) {
+                    if (index == tags.size() - 1) {
                         return readAttributes(parser);
                     } else {
                         return readData(parser, tags, index + 1, tagCounts);
