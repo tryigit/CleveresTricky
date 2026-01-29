@@ -103,9 +103,12 @@ object Config {
     }
 
     @OptIn(ExperimentalStdlibApi::class)
+    private val hexFormat = HexFormat { upperCase = false }
+
+    @OptIn(ExperimentalStdlibApi::class)
     private fun updateModuleHash(f: File?) = runCatching {
         moduleHash = f?.readText()?.trim()?.hexToByteArray()
-        Logger.i { "update module hash: ${moduleHash?.joinToString("") { "%02x".format(it) }}" }
+        Logger.i("update module hash: ${moduleHash?.toHexString(hexFormat)}")
     }.onFailure {
         moduleHash = null
         Logger.e("failed to update module hash", it)
