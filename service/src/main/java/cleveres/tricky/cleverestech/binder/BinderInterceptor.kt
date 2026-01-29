@@ -74,6 +74,7 @@ open class BinderInterceptor : Binder() {
 
     open fun onPreTransact(target: IBinder, code: Int, flags: Int, callingUid: Int, callingPid: Int, data: Parcel): Result = Skip
     open fun onPostTransact(target: IBinder, code: Int, flags: Int, callingUid: Int, callingPid: Int, data: Parcel, reply: Parcel?, resultCode: Int): Result = Skip
+    open fun onInterceptorReplaced() {}
 
     override fun onTransact(code: Int, data: Parcel, reply: Parcel?, flags: Int): Boolean {
         val result = when (code) {
@@ -118,6 +119,10 @@ open class BinderInterceptor : Binder() {
                     theData.recycle()
                     theReply?.recycle()
                 }
+            }
+            3 -> { // INTERCEPTOR_REPLACED
+                onInterceptorReplaced()
+                Skip
             }
             else -> return super.onTransact(code, data, reply, flags)
         }

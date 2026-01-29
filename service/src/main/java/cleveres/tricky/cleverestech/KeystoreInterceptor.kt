@@ -33,9 +33,7 @@ object KeystoreInterceptor : BinderInterceptor() {
     ): Result {
         if (code == getKeyEntryTransaction) {
             if (CertHack.canHack()) {
-                if (Logger.isDebugEnabled()) {
-                    Logger.d("intercept pre  $target uid=$callingUid pid=$callingPid dataSz=${data.dataSize()}")
-                }
+                Logger.d { "intercept pre  $target uid=$callingUid pid=$callingPid dataSz=${data.dataSize()}" }
                 if (Config.needGenerate(callingUid))
                     kotlin.runCatching {
                         data.enforceInterface(IKeystoreService.DESCRIPTOR)
@@ -70,9 +68,7 @@ object KeystoreInterceptor : BinderInterceptor() {
         if (target != keystore || code != getKeyEntryTransaction || reply == null) return Skip
         if (kotlin.runCatching { reply.readException() }.exceptionOrNull() != null) return Skip
         val p = Parcel.obtain()
-        if (Logger.isDebugEnabled()) {
-            Logger.d("intercept post $target uid=$callingUid pid=$callingPid dataSz=${data.dataSize()} replySz=${reply.dataSize()}")
-        }
+        Logger.d { "intercept post $target uid=$callingUid pid=$callingPid dataSz=${data.dataSize()} replySz=${reply.dataSize()}" }
         try {
             val response = reply.readTypedObject(KeyEntryResponse.CREATOR)
             val chain = Utils.getCertificateChain(response)

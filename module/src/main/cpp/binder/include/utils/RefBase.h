@@ -126,11 +126,6 @@ inline bool operator _op_ (const U* o) const {                   \
         // The first flags argument is always FIRST_INC_STRONG.
         // TODO: Remove initial flag argument.
         virtual bool            onIncStrongAttempted(uint32_t flags, const void* id);
-        // Invoked in the OBJECT_LIFETIME_WEAK case when the last reference of either
-        // kind goes away.  Unused.
-        // TODO: Remove.
-        virtual void            onLastWeakRef(const void* id);
-
     private:
         friend class weakref_type;
         class weakref_impl;

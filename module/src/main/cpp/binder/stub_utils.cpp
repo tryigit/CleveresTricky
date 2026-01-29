@@ -33,7 +33,6 @@ namespace android {
     void RefBase::onFirstRef() {}
     void RefBase::onLastStrongRef(const void* id) {}
     bool RefBase::onIncStrongAttempted(uint32_t flags, const void* id) { return false; }
-    void RefBase::onLastWeakRef(const void* id) {}
 
     RefBase* RefBase::weakref_type::refBase() const { return nullptr; }
 

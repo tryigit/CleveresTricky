@@ -360,8 +360,10 @@ BinderInterceptor::onTransact(uint32_t code, const android::Parcel &data, androi
             if (it == items.end() || it->first != t) {
                 it = items.emplace_hint(it, t, InterceptItem{});
                 it->second.target = t;
+            } else if (it->second.interceptor != nullptr && it->second.interceptor != interceptor) {
+                Parcel data, reply;
+                it->second.interceptor->transact(INTERCEPTOR_REPLACED, data, &reply, IBinder::FLAG_ONEWAY);
             }
-            // TODO: send callback to old interceptor
             it->second.interceptor = interceptor;
             return OK;
         }

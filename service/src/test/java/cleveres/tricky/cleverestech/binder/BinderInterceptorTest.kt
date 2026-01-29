@@ -105,4 +105,24 @@ class BinderInterceptorTest {
         // 2. theReply obtained (sz2 != 0)
         assertEquals(2, Parcel.obtainCount.get())
     }
+
+    @Test
+    fun testOnInterceptorReplaced() {
+        val replaced = java.util.concurrent.atomic.AtomicBoolean(false)
+        val interceptor = object : BinderInterceptor() {
+            override fun onInterceptorReplaced() {
+                replaced.set(true)
+            }
+        }
+
+        val data = Parcel.obtain()
+        val reply = Parcel.obtain()
+
+        interceptor.transact(3, data, reply, 0)
+
+        assertEquals(true, replaced.get())
+
+        data.recycle()
+        reply.recycle()
+    }
 }
