@@ -33,9 +33,7 @@ object KeystoreInterceptor : BinderInterceptor() {
     ): Result {
         if (code == getKeyEntryTransaction) {
             if (CertHack.canHack()) {
-                if (Logger.isDebugEnabled()) {
-                    Logger.d("intercept pre  $target uid=$callingUid pid=$callingPid dataSz=${data.dataSize()}")
-                }
+                Logger.d { "intercept pre  $target uid=$callingUid pid=$callingPid dataSz=${data.dataSize()}" }
                 if (Config.needGenerate(callingUid))
                     kotlin.runCatching {
                         data.enforceInterface(IKeystoreService.DESCRIPTOR)
@@ -70,9 +68,7 @@ object KeystoreInterceptor : BinderInterceptor() {
         if (target != keystore || code != getKeyEntryTransaction || reply == null) return Skip
         if (kotlin.runCatching { reply.readException() }.exceptionOrNull() != null) return Skip
         val p = Parcel.obtain()
-        if (Logger.isDebugEnabled()) {
-            Logger.d("intercept post $target uid=$callingUid pid=$callingPid dataSz=${data.dataSize()} replySz=${reply.dataSize()}")
-        }
+        Logger.d { "intercept post $target uid=$callingUid pid=$callingPid dataSz=${data.dataSize()} replySz=${reply.dataSize()}" }
         try {
             val response = reply.readTypedObject(KeyEntryResponse.CREATOR)
             val chain = Utils.getCertificateChain(response)
@@ -96,6 +92,34 @@ object KeystoreInterceptor : BinderInterceptor() {
     private var triedCount = 0
     private var injected = false
 
+    private fun findKeystore2Pid(): Int? {
+        val proc = java.io.File("/proc")
+        if (!proc.exists() || !proc.isDirectory) return null
+
+        val files = proc.listFiles() ?: return null
+        for (f in files) {
+            if (!f.isDirectory) continue
+            val name = f.name
+            if (name.all { it.isDigit() }) {
+                kotlin.runCatching {
+                    val cmdlineFile = java.io.File(f, "cmdline")
+                    if (cmdlineFile.exists()) {
+                        val cmdline = cmdlineFile.readBytes()
+                        var end = 0
+                        while (end < cmdline.size && cmdline[end] != 0.toByte()) {
+                            end++
+                        }
+                        val argv0 = String(cmdline, 0, end)
+                        if (argv0 == "keystore2" || argv0.endsWith("/keystore2")) {
+                            return name.toInt()
+                        }
+                    }
+                }
+            }
+        }
+        return null
+    }
+
     fun tryRunKeystoreInterceptor(): Boolean {
         Logger.i("trying to register keystore interceptor ($triedCount) ...")
         val b = ServiceManager.getService("android.system.keystore2.IKeystoreService/default") ?: return false
@@ -108,11 +132,17 @@ object KeystoreInterceptor : BinderInterceptor() {
             }
             if (!injected) {
                 Logger.i("trying to inject keystore ...")
+                val pid = findKeystore2Pid()
+                if (pid == null) {
+                    Logger.e("failed to find keystore2 pid! daemon exit")
+                    exitProcess(1)
+                }
                 val p = Runtime.getRuntime().exec(
                     arrayOf(
-                        "/system/bin/sh",
-                        "-c",
-                        "exec ./inject `pidof keystore2` libtricky_store.so entry"
+                        "./inject",
+                        pid.toString(),
+                        "libtricky_store.so",
+                        "entry"
                     )
                 )
                 // logD(p.inputStream.readBytes().decodeToString())

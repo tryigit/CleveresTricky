@@ -17,19 +17,24 @@ public class Parcel {
     public void recycle() {}
 
     public int dataSize() {
-        return 100; // Simulated size
+        return data.size();
+    }
+
+    public int dataPosition() {
+        return pos;
+    }
+
+    public void setDataPosition(int pos) {
+        this.pos = pos;
     }
 
     public void writeNoException() {}
-
     public void readException() {}
 
     public <T> T readTypedObject(Parcelable.Creator<T> c) {
         return null;
     }
-
     public void writeTypedObject(Parcelable val, int parcelableFlags) {}
-
     public void enforceInterface(String interfaceName) {}
 
     // Mock helper methods

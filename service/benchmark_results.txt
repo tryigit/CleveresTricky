@@ -1,0 +1,3 @@
+Baseline time (100k iters): 49.262705 ms
+Optimized time (Disabled) (100k iters): 1.145129 ms
+Optimized time (Enabled) (100k iters): 34.477916 ms

@@ -7,6 +7,53 @@ import android.system.Os
 import cleveres.tricky.cleverestech.keystore.CertHack
 import java.io.File
 
+class PackageTrie {
+    private class Node {
+        val children = HashMap<Char, Node>()
+        var isLeaf = false
+        var isWildcard = false
+    }
+
+    private val root = Node()
+    var size = 0
+        private set
+
+    fun add(rule: String) {
+        size++
+        var current = root
+        var effectiveRule = rule
+        var isWildcard = false
+        if (rule.endsWith("*")) {
+            effectiveRule = rule.dropLast(1)
+            isWildcard = true
+        }
+
+        for (char in effectiveRule) {
+            current = current.children.computeIfAbsent(char) { Node() }
+        }
+        if (isWildcard) {
+            current.isWildcard = true
+        } else {
+            current.isLeaf = true
+        }
+    }
+
+    fun matches(pkgName: String): Boolean {
+        var current = root
+        if (current.isWildcard) return true
+
+        for (i in pkgName.indices) {
+            val char = pkgName[i]
+            val next = current.children[char] ?: return false
+            current = next
+            if (current.isWildcard) return true
+        }
+        return current.isLeaf
+    }
+
+    fun isEmpty() = size == 0
+}
+
 object Config {
     private val spoofedProperties = mapOf(
         "ro.boot.verifiedbootstate" to "green",
@@ -20,9 +67,9 @@ object Config {
     )
 
     @Volatile
-    private var hackPackages: Set<String> = emptySet()
+    private var hackPackages: PackageTrie = PackageTrie()
     @Volatile
-    private var generatePackages: Set<String> = emptySet()
+    private var generatePackages: PackageTrie = PackageTrie()
     private var isGlobalMode = false
     private var isTeeBrokenMode = false
     @Volatile
@@ -30,9 +77,9 @@ object Config {
 
     fun getModuleHash(): ByteArray? = moduleHash
 
-    fun parsePackages(lines: List<String>, isTeeBrokenMode: Boolean): Pair<Set<String>, Set<String>> {
-        val hackPackages = mutableSetOf<String>()
-        val generatePackages = mutableSetOf<String>()
+    fun parsePackages(lines: List<String>, isTeeBrokenMode: Boolean): Pair<PackageTrie, PackageTrie> {
+        val hackPackages = PackageTrie()
+        val generatePackages = PackageTrie()
         lines.forEach {
             if (it.isNotBlank() && !it.startsWith("#")) {
                 val n = it.trim()
@@ -48,15 +95,15 @@ object Config {
 
     private fun updateTargetPackages(f: File?) = runCatching {
         if (isGlobalMode) {
-            hackPackages = emptySet()
-            generatePackages = emptySet()
+            hackPackages = PackageTrie()
+            generatePackages = PackageTrie()
             Logger.i("Global mode is enabled, skipping updateTargetPackages execution.")
             return@runCatching
         }
         val (h, g) = parsePackages(f?.readLines() ?: emptyList(), isTeeBrokenMode)
         hackPackages = h
         generatePackages = g
-        Logger.i { "update hack packages: $hackPackages, generate packages=$generatePackages" }
+        Logger.i { "update hack packages: ${hackPackages.size}, generate packages=${generatePackages.size}" }
     }.onFailure {
         Logger.e("failed to update target files", it)
     }
@@ -187,17 +234,11 @@ object Config {
         return iPm
     }
 
-    internal fun matchesPackage(pkgName: String, rules: Set<String>): Boolean {
-        return rules.any { rule ->
-            if (rule.endsWith("*")) {
-                pkgName.regionMatches(0, rule, 0, rule.length - 1)
-            } else {
-                pkgName == rule
-            }
-        }
+    internal fun matchesPackage(pkgName: String, rules: PackageTrie): Boolean {
+        return rules.matches(pkgName)
     }
 
-    private fun checkPackages(packages: Set<String>, callingUid: Int) = kotlin.runCatching {
+    private fun checkPackages(packages: PackageTrie, callingUid: Int) = kotlin.runCatching {
         if (packages.isEmpty()) return false
         val ps = getPm()?.getPackagesForUid(callingUid) ?: return false
         ps.any { pkgName -> matchesPackage(pkgName, packages) }
