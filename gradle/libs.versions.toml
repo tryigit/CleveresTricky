@@ -8,6 +8,7 @@ compose-bom = "2024.06.00"
 activity-compose = "1.9.0"
 
 [libraries]
+nanohttpd = { module = "org.nanohttpd:nanohttpd", version = "2.3.1" }
 junit = { module = "junit:junit", version.ref = "junit" }
 annotation = { module = "androidx.annotation:annotation", version.ref = "annotation" }
 bcpkix-jdk18on = { module = "org.bouncycastle:bcpkix-jdk18on", version.ref = "bcpkix-jdk18on" }

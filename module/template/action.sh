@@ -1,11 +1,22 @@
 #!/system/bin/sh
-PKG="cleveres.tricky.cleverestech"
-APK="/data/adb/modules/cleveres_tricky/service.apk"
 
-if ! pm list packages | grep -q "$PKG"; then
-  echo "- Installing CleveresTricky Manager..."
-  pm install -r "$APK"
+PORT_FILE="/data/adb/cleverestricky/web_port"
+
+if [ ! -f "$PORT_FILE" ]; then
+  echo "! Web server port file not found. Is the module running?"
+  exit 1
 fi
 
-echo "- Launching Manager..."
-am start -n "$PKG/.ui.MainActivity"
+CONTENT=$(cat "$PORT_FILE")
+PORT=${CONTENT%|*}
+TOKEN=${CONTENT#*|}
+
+if [ -z "$PORT" ] || [ -z "$TOKEN" ]; then
+    echo "! Invalid port file content."
+    exit 1
+fi
+
+URL="http://localhost:$PORT/?token=$TOKEN"
+
+echo "- Opening WebUI at $URL"
+am start -a android.intent.action.VIEW -d "$URL"
