@@ -111,11 +111,6 @@ inline bool operator _op_ (const U* o) const {                   \
         RefBase();
         virtual                 ~RefBase();
 
-        //! Flags for onIncStrongAttempted()
-        enum {
-            FIRST_INC_STRONG = 0x0001
-        };
-
         // Invoked after creation of initial strong pointer/reference.
         virtual void            onFirstRef();
         // Invoked when either the last strong reference goes away, or we need to undo
@@ -123,9 +118,7 @@ inline bool operator _op_ (const U* o) const {                   \
         virtual void            onLastStrongRef(const void* id);
         // Only called in OBJECT_LIFETIME_WEAK case.  Returns true if OK to promote to
         // strong reference. May have side effects if it returns true.
-        // The first flags argument is always FIRST_INC_STRONG.
-        // TODO: Remove initial flag argument.
-        virtual bool            onIncStrongAttempted(uint32_t flags, const void* id);
+        virtual bool            onIncStrongAttempted(const void* id);
         // Invoked in the OBJECT_LIFETIME_WEAK case when the last reference of either
         // kind goes away.  Unused.
         // TODO: Remove.
