@@ -190,7 +190,7 @@ object Config {
     internal fun matchesPackage(pkgName: String, rules: Set<String>): Boolean {
         return rules.any { rule ->
             if (rule.endsWith("*")) {
-                pkgName.startsWith(rule.removeSuffix("*"))
+                pkgName.regionMatches(0, rule, 0, rule.length - 1)
             } else {
                 pkgName == rule
             }
