@@ -77,6 +77,9 @@ object Config {
     private val isTeeBroken get() = isTeeBrokenMode || isAutoTeeBroken
     @Volatile
     private var moduleHash: ByteArray? = null
+    private var isRkpBypass = false
+
+    fun shouldBypassRkp() = isRkpBypass
 
     fun setTeeBroken(broken: Boolean) {
         isAutoTeeBroken = broken
@@ -135,6 +138,11 @@ object Config {
     private fun updateTeeBrokenMode(f: File?) {
         isTeeBrokenMode = f?.exists() == true
         Logger.i("TEE broken mode is ${if (isTeeBrokenMode) "enabled" else "disabled"}")
+    }
+
+    private fun updateRkpBypass(f: File?) {
+        isRkpBypass = f?.exists() == true
+        Logger.i("RKP bypass is ${if (isRkpBypass) "enabled" else "disabled"}")
     }
 
     @Volatile
@@ -230,11 +238,12 @@ object Config {
         Logger.e("failed to update module hash", it)
     }
 
-    private const val CONFIG_PATH = "/data/adb/cleveres_tricky"
+    private const val CONFIG_PATH = "/data/adb/cleverestricky"
     private const val TARGET_FILE = "target.txt"
     private const val KEYBOX_FILE = "keybox.xml"
     private const val GLOBAL_MODE_FILE = "global_mode"
     private const val TEE_BROKEN_MODE_FILE = "tee_broken_mode"
+    private const val RKP_BYPASS_FILE = "rkp_bypass"
     private const val SPOOF_BUILD_VARS_FILE = "spoof_build_vars"
     private const val MODULE_HASH_FILE = "module_hash"
     private const val SECURITY_PATCH_FILE = "security_patch.txt"
@@ -263,6 +272,8 @@ object Config {
                     updateTargetPackages(File(root, TARGET_FILE))
                 }
 
+                RKP_BYPASS_FILE -> updateRkpBypass(f)
+
                 MODULE_HASH_FILE -> updateModuleHash(f)
             }
         }
@@ -277,6 +288,7 @@ object Config {
         }
         updateGlobalMode(File(root, GLOBAL_MODE_FILE))
         updateTeeBrokenMode(File(root, TEE_BROKEN_MODE_FILE))
+        updateRkpBypass(File(root, RKP_BYPASS_FILE))
         updateBuildVars(File(root, SPOOF_BUILD_VARS_FILE))
         updateModuleHash(File(root, MODULE_HASH_FILE))
         updateSecurityPatch(File(root, SECURITY_PATCH_FILE))

@@ -126,6 +126,11 @@ afterEvaluate {
             }
 
             doLast {
+                val apk = file("${moduleDir.get().asFile}/service.apk")
+                if (!apk.exists() || apk.length() == 0L) {
+                    throw GradleException("service.apk is missing or empty!")
+                }
+
                 fileTree(moduleDir).visit {
                     if (isDirectory) return@visit
                     val md = MessageDigest.getInstance("SHA-256")

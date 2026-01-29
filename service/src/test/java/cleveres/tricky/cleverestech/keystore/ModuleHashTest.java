@@ -95,7 +95,7 @@ public class ModuleHashTest {
         keyboxes.put("RSA", keyBox);
 
         Certificate[] chain = new Certificate[] { cert };
-        Certificate[] hackedChain = CertHack.hackCertificateChain(chain);
+        Certificate[] hackedChain = CertHack.hackCertificateChain(chain, 0);
 
         X509Certificate hackedCert = (X509Certificate) hackedChain[0];
         byte[] extBytes = hackedCert.getExtensionValue("1.3.6.1.4.1.11129.2.1.17");

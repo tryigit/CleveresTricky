@@ -86,7 +86,7 @@ mv "$MODPATH/libinject.so" "$MODPATH/inject"
 [ -f "$MODPATH/libinject.so.sha256" ] && mv "$MODPATH/libinject.so.sha256" "$MODPATH/inject.sha256"
 chmod 755 "$MODPATH/inject"
 
-CONFIG_DIR=/data/adb/cleveres_tricky
+CONFIG_DIR=/data/adb/cleverestricky
 if [ ! -d "$CONFIG_DIR" ]; then
   ui_print "- Creating configuration directory"
   mkdir -p "$CONFIG_DIR"

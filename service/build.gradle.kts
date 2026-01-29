@@ -5,7 +5,6 @@ import java.security.MessageDigest
 plugins {
     alias(libs.plugins.jetbrains.kotlin.android)
     alias(libs.plugins.agp.app)
-    alias(libs.plugins.compose.compiler)
 }
 
 val moduleId: String by rootProject.extra
@@ -76,7 +75,6 @@ android {
 
     buildFeatures {
         buildConfig = true
-        compose = true
     }
 
 }
@@ -87,14 +85,7 @@ dependencies {
     implementation(libs.bcpkix.jdk18on)
     testImplementation(libs.junit)
     testImplementation("net.sf.kxml:kxml2:2.3.0")
-
-    implementation(platform(libs.androidx.compose.bom))
-    implementation(libs.androidx.ui)
-    implementation(libs.androidx.ui.graphics)
-    implementation(libs.androidx.ui.tooling.preview)
-    implementation(libs.androidx.material3)
-    implementation(libs.androidx.activity.compose)
-    debugImplementation(libs.androidx.ui.tooling)
+    implementation(libs.nanohttpd)
 }
 
 afterEvaluate {
