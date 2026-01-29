@@ -108,6 +108,7 @@ object Config {
         Logger.e("failed to update target files", it)
     }
 
+    // Stream file content to avoid large String allocation and explicit GC
     private fun updateKeyBox(f: File?) = runCatching {
         if (f == null) {
             CertHack.readFromXml(null)
