@@ -21,10 +21,14 @@ class PropertyHiderService : Binder() {
             if (propertyName != null) {
                 // Use getBuildVar as it holds the loaded properties from spoof_build_vars
                 val spoofedValue = Config.getBuildVar(propertyName)
-                Logger.d("PropertyHiderService: Received request for '$propertyName', spoofed to '$spoofedValue'")
+                if (BuildConfig.DEBUG) {
+                    Logger.d("PropertyHiderService: Received request for '$propertyName', spoofed to '$spoofedValue'")
+                }
                 reply?.writeString(spoofedValue) // writeString can handle null
             } else {
-                Logger.d("PropertyHiderService: Received request with null property name")
+                if (BuildConfig.DEBUG) {
+                    Logger.d("PropertyHiderService: Received request with null property name")
+                }
                 reply?.writeString(null) // Property name was null
             }
             return true
