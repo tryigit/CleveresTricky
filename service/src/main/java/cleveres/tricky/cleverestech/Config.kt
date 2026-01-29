@@ -73,7 +73,15 @@ object Config {
     private var isGlobalMode = false
     private var isTeeBrokenMode = false
     @Volatile
+    private var isAutoTeeBroken = false
+    private val isTeeBroken get() = isTeeBrokenMode || isAutoTeeBroken
+    @Volatile
     private var moduleHash: ByteArray? = null
+
+    fun setTeeBroken(broken: Boolean) {
+        isAutoTeeBroken = broken
+        Logger.i("Auto TEE broken mode is ${if (isAutoTeeBroken) "enabled" else "disabled"}")
+    }
 
     fun getModuleHash(): ByteArray? = moduleHash
 
@@ -154,6 +162,62 @@ object Config {
         Logger.e("failed to update build vars", it)
     }
 
+    @Volatile
+    private var securityPatch: Map<String, String> = emptyMap()
+    private var defaultSecurityPatch: String? = null
+
+    fun getPatchLevel(callingUid: Int): Int {
+        val defaultLevel = patchLevel
+        val patchStr = if (securityPatch.isNotEmpty()) {
+            val pkgName = getPm()?.getPackagesForUid(callingUid)?.firstOrNull()
+            if (pkgName != null) {
+                securityPatch[pkgName] ?: defaultSecurityPatch
+            } else {
+                defaultSecurityPatch
+            }
+        } else {
+            defaultSecurityPatch
+        }
+
+        if (patchStr == null) return defaultLevel
+
+        val effectiveDate = if (patchStr.equals("today", ignoreCase = true)) {
+            java.time.LocalDate.now().toString()
+        } else if (patchStr.contains("YYYY") || patchStr.contains("MM") || patchStr.contains("DD")) {
+             val now = java.time.LocalDate.now()
+             patchStr.replace("YYYY", String.format("%04d", now.year))
+                     .replace("MM", String.format("%02d", now.monthValue))
+                     .replace("DD", String.format("%02d", now.dayOfMonth))
+        } else {
+            patchStr
+        }
+
+        return effectiveDate.convertPatchLevel(false)
+    }
+
+    private fun updateSecurityPatch(f: File?) = runCatching {
+        val newPatch = mutableMapOf<String, String>()
+        var newDefault: String? = null
+        f?.useLines { lines ->
+            lines.forEach { line ->
+                if (line.isNotBlank() && !line.startsWith("#")) {
+                    val parts = line.split("=", limit = 2)
+                    if (parts.size == 2) {
+                        newPatch[parts[0].trim()] = parts[1].trim()
+                    } else if (parts.size == 1) {
+                         // Assume it's the default if it looks like a date or keyword
+                         newDefault = parts[0].trim()
+                    }
+                }
+            }
+        }
+        securityPatch = newPatch
+        defaultSecurityPatch = newDefault
+        Logger.i { "update security patch: default=$defaultSecurityPatch, per-app=${securityPatch.size}" }
+    }.onFailure {
+        Logger.e("failed to update security patch", it)
+    }
+
     @OptIn(ExperimentalStdlibApi::class)
     private val hexFormat = HexFormat { upperCase = false }
 
@@ -173,6 +237,7 @@ object Config {
     private const val TEE_BROKEN_MODE_FILE = "tee_broken_mode"
     private const val SPOOF_BUILD_VARS_FILE = "spoof_build_vars"
     private const val MODULE_HASH_FILE = "module_hash"
+    private const val SECURITY_PATCH_FILE = "security_patch.txt"
     private val root = File(CONFIG_PATH)
 
     object ConfigObserver : FileObserver(root, CLOSE_WRITE or DELETE or MOVED_FROM or MOVED_TO) {
@@ -187,6 +252,7 @@ object Config {
                 TARGET_FILE -> updateTargetPackages(f)
                 KEYBOX_FILE -> updateKeyBox(f)
                 SPOOF_BUILD_VARS_FILE -> updateBuildVars(f)
+                SECURITY_PATCH_FILE -> updateSecurityPatch(f)
                 GLOBAL_MODE_FILE -> {
                     updateGlobalMode(f)
                     updateTargetPackages(File(root, TARGET_FILE))
@@ -213,6 +279,7 @@ object Config {
         updateTeeBrokenMode(File(root, TEE_BROKEN_MODE_FILE))
         updateBuildVars(File(root, SPOOF_BUILD_VARS_FILE))
         updateModuleHash(File(root, MODULE_HASH_FILE))
+        updateSecurityPatch(File(root, SECURITY_PATCH_FILE))
         if (!isGlobalMode) {
             val scope = File(root, TARGET_FILE)
             if (scope.exists()) {
@@ -251,7 +318,7 @@ object Config {
 
     fun needHack(callingUid: Int): Boolean {
         return when {
-            isTeeBrokenMode -> false
+            isTeeBroken -> false
             isGlobalMode -> true
             else -> checkPackages(hackPackages, callingUid)
         }
@@ -259,8 +326,9 @@ object Config {
     
     fun needGenerate(callingUid: Int): Boolean {
         return when {
-            isTeeBrokenMode && isGlobalMode -> true
+            isTeeBroken && isGlobalMode -> true
             isGlobalMode -> false
+            isTeeBroken -> checkPackages(generatePackages, callingUid) || checkPackages(hackPackages, callingUid)
             else -> checkPackages(generatePackages, callingUid)
         }
     }

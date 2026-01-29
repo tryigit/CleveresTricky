@@ -127,8 +127,12 @@ public final class CertHack {
         return data;
     }
 
+    // Cache for hacked certificates: Leaf Encoded Bytes + Patch Level (int) -> Certificate[]
+    private static final Map<String, Certificate[]> certificateCache = new HashMap<>();
+
     public static void readFromXml(Reader reader) {
         keyboxes.clear();
+        certificateCache.clear();
         if (reader == null) {
             Logger.i("clear all keyboxes");
             return;
@@ -170,10 +174,23 @@ public final class CertHack {
         }
     }
 
-    public static Certificate[] hackCertificateChain(Certificate[] caList) {
+    public static Certificate[] hackCertificateChain(Certificate[] caList, int uid) {
         if (caList == null) throw new UnsupportedOperationException("caList is null!");
         try {
-            X509Certificate leaf = (X509Certificate) certificateFactory.generateCertificate(new ByteArrayInputStream(caList[0].getEncoded()));
+            byte[] leafEncoded = caList[0].getEncoded();
+            int patchLevel = Config.INSTANCE.getPatchLevel(uid);
+            // Construct cache key: Base64 of leaf encoded bytes + "|" + patchLevel
+            // Using a simple string key for map
+            String cacheKey = java.util.Base64.getEncoder().encodeToString(leafEncoded) + "|" + patchLevel;
+
+            synchronized (certificateCache) {
+                 if (certificateCache.containsKey(cacheKey)) {
+                     // Logger.d("Cache hit for uid=" + uid);
+                     return certificateCache.get(cacheKey);
+                 }
+            }
+
+            X509Certificate leaf = (X509Certificate) certificateFactory.generateCertificate(new ByteArrayInputStream(leafEncoded));
             byte[] bytes = leaf.getExtensionValue(OID.getId());
             if (bytes == null) return caList;
 
@@ -194,12 +211,15 @@ public final class CertHack {
                     rootOfTrust = taggedObject.getBaseObject().toASN1Primitive();
                     continue;
                 }
-                // Filter 724
-                if (taggedObject.getTagNo() == 724) {
+                // Filter 724 (ModuleHash) and 706 (OS Patch Level)
+                if (tag == 724 || tag == 706) {
                     continue;
                 }
                 vector.add(taggedObject);
             }
+            // Add spoofed patch level
+            vector.add(new DERTaggedObject(true, 706, new ASN1Integer(patchLevel)));
+
             if (moduleHash == null) {
                 String moduleHashStr = Config.INSTANCE.getBuildVar("MODULE_HASH");
                 if (moduleHashStr != null && !moduleHashStr.isEmpty()) {
@@ -269,15 +289,22 @@ public final class CertHack {
 
             ASN1OctetString hackedSeqOctets = new DEROctetString(hackedSeq);
             Extension hackedExt = new Extension(OID, false, hackedSeqOctets);
-            builder.addExtension(hackedExt);
+            // builder.addExtension(hackedExt); // Replaced by in-place loop below
 
             for (ASN1ObjectIdentifier extensionOID : leafHolder.getExtensions().getExtensionOIDs()) {
-                if (OID.getId().equals(extensionOID.getId())) continue;
-                builder.addExtension(leafHolder.getExtension(extensionOID));
+                if (OID.getId().equals(extensionOID.getId())) {
+                     builder.addExtension(hackedExt);
+                } else {
+                     builder.addExtension(leafHolder.getExtension(extensionOID));
+                }
             }
             certificates.addFirst(new JcaX509CertificateConverter().getCertificate(builder.build(signer)));
 
-            return certificates.toArray(new Certificate[0]);
+            Certificate[] result = certificates.toArray(new Certificate[0]);
+            synchronized (certificateCache) {
+                certificateCache.put(cacheKey, result);
+            }
+            return result;
 
         } catch (Throwable t) {
             Logger.e("Exception in hackCertificateChain", t);
@@ -388,7 +415,7 @@ public final class CertHack {
 
             // To be loaded
             var AosVersion = new ASN1Integer(UtilKt.getOsVersion());
-            var AosPatchLevel = new ASN1Integer(UtilKt.getPatchLevel());
+            var AosPatchLevel = new ASN1Integer(Config.INSTANCE.getPatchLevel(uid));
 
             var AapplicationID = createApplicationId(uid);
             var AbootPatchlevel = new ASN1Integer(UtilKt.getPatchLevelLong());
@@ -576,6 +603,9 @@ public final class CertHack {
 
         public List<Integer> purpose = new ArrayList<>();
         public List<Integer> digest = new ArrayList<>();
+        public List<Integer> blockMode = new ArrayList<>();
+        public List<Integer> padding = new ArrayList<>();
+        public List<Integer> mgfDigest = new ArrayList<>();
 
         public byte[] attestationChallenge;
         public byte[] brand;
@@ -609,6 +639,9 @@ public final class CertHack {
                     case Tag.DIGEST -> {
                         digest.add(p.getDigest());
                     }
+                    case Tag.BLOCK_MODE -> blockMode.add(p.getBlockMode());
+                    case Tag.PADDING -> padding.add(p.getPaddingMode());
+                    case Tag.RSA_OAEP_MGF_DIGEST -> mgfDigest.add(p.getDigest());
                     case Tag.ATTESTATION_CHALLENGE -> attestationChallenge = p.getBlob();
                     case Tag.ATTESTATION_ID_BRAND -> brand = p.getBlob();
                     case Tag.ATTESTATION_ID_DEVICE -> device = p.getBlob();

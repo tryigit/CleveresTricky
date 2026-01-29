@@ -73,7 +73,7 @@ object KeystoreInterceptor : BinderInterceptor() {
             val response = reply.readTypedObject(KeyEntryResponse.CREATOR)
             val chain = Utils.getCertificateChain(response)
             if (chain != null) {
-                val newChain = CertHack.hackCertificateChain(chain)
+                val newChain = CertHack.hackCertificateChain(chain, callingUid)
                 Utils.putCertificateChain(response, newChain)
                 Logger.i("hacked cert of uid=$callingUid")
                 p.writeNoException()
@@ -159,6 +159,11 @@ object KeystoreInterceptor : BinderInterceptor() {
         val ks = IKeystoreService.Stub.asInterface(b)
         val tee = kotlin.runCatching { ks.getSecurityLevel(SecurityLevel.TRUSTED_ENVIRONMENT) }
             .getOrNull()
+        if (tee == null) {
+            Config.setTeeBroken(true)
+        } else {
+            Config.setTeeBroken(false)
+        }
         val strongBox =
             kotlin.runCatching { ks.getSecurityLevel(SecurityLevel.STRONGBOX) }.getOrNull()
         
