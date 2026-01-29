@@ -1,4 +1,4 @@
-package io.github.a13e300.tricky_store;
+package cleveres.tricky.cleverestech;
 
 import android.util.Log;
 

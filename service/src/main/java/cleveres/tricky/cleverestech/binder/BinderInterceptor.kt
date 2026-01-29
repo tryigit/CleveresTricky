@@ -1,9 +1,9 @@
-package io.github.a13e300.tricky_store.binder
+package cleveres.tricky.cleverestech.binder
 
 import android.os.Binder
 import android.os.IBinder
 import android.os.Parcel
-import io.github.a13e300.tricky_store.Logger
+import cleveres.tricky.cleverestech.Logger
 
 open class BinderInterceptor : Binder() {
     sealed class Result

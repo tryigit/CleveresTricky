@@ -1,4 +1,4 @@
-package io.github.a13e300.tricky_store.keystore;
+package cleveres.tricky.cleverestech.keystore;
 
 import android.content.pm.PackageManager;
 import android.hardware.security.keymint.Algorithm;
@@ -68,9 +68,9 @@ import java.util.Set;
 
 import javax.security.auth.x500.X500Principal;
 
-import io.github.a13e300.tricky_store.Config;
-import io.github.a13e300.tricky_store.Logger;
-import io.github.a13e300.tricky_store.UtilKt;
+import cleveres.tricky.cleverestech.Config;
+import cleveres.tricky.cleverestech.Logger;
+import cleveres.tricky.cleverestech.UtilKt;
 
 public final class CertHack {
     private static final ASN1ObjectIdentifier OID = new ASN1ObjectIdentifier("1.3.6.1.4.1.11129.2.1.17");

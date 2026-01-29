@@ -1,4 +1,4 @@
-package io.github.a13e300.tricky_store.keystore;
+package cleveres.tricky.cleverestech.keystore;
 
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;

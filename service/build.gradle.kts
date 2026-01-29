@@ -5,6 +5,7 @@ import java.security.MessageDigest
 plugins {
     alias(libs.plugins.jetbrains.kotlin.android)
     alias(libs.plugins.agp.app)
+    alias(libs.plugins.compose.compiler)
 }
 
 val moduleId: String by rootProject.extra
@@ -29,11 +30,11 @@ fun calculateChecksum(variantLowered: String): String {
 }
 
 android {
-    namespace = "io.github.a13e300.tricky_store"
+    namespace = "cleveres.tricky.cleverestech"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "io.github.a13e300.tricky_store"
+        applicationId = "cleveres.tricky.cleverestech"
     }
 
     buildTypes {
@@ -63,7 +64,8 @@ android {
 
     packaging {
         resources {
-            excludes += "**"
+            excludes += "META-INF/versions/**"
+            excludes += "META-INF/DEPENDENCIES"
         }
     }
 
@@ -74,15 +76,23 @@ android {
 
     buildFeatures {
         buildConfig = true
+        compose = true
     }
-
 }
 
 dependencies {
     compileOnly(project(":stub"))
-    compileOnly(libs.annotation)
+    implementation(libs.annotation)
     implementation(libs.bcpkix.jdk18on)
     testImplementation(libs.junit)
+
+    implementation(platform(libs.androidx.compose.bom))
+    implementation(libs.androidx.ui)
+    implementation(libs.androidx.ui.graphics)
+    implementation(libs.androidx.ui.tooling.preview)
+    implementation(libs.androidx.material3)
+    implementation(libs.androidx.activity.compose)
+    debugImplementation(libs.androidx.ui.tooling)
 }
 
 afterEvaluate {
@@ -106,7 +116,7 @@ afterEvaluate {
                     commandLine(
                         "adb",
                         "shell",
-                        "su -c 'rm /data/adb/modules/tricky_store/service.apk; mv /data/local/tmp/service.apk /data/adb/modules/tricky_store/'"
+                        "su -c 'rm /data/adb/modules/cleveres_tricky/service.apk; mv /data/local/tmp/service.apk /data/adb/modules/cleveres_tricky/'"
                     )
                 }
             }

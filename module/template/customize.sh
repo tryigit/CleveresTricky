@@ -69,6 +69,8 @@ extract "$ZIPFILE" 'service.apk'     "$MODPATH"
 extract "$ZIPFILE" 'sepolicy.rule'   "$MODPATH"
 extract "$ZIPFILE" 'daemon'          "$MODPATH"
 chmod 755 "$MODPATH/daemon"
+extract "$ZIPFILE" 'action.sh'       "$MODPATH"
+chmod 755 "$MODPATH/action.sh"
 
 mkdir "$MODPATH/zygisk"
 

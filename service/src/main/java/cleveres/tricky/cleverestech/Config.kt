@@ -1,10 +1,10 @@
-package io.github.a13e300.tricky_store
+package cleveres.tricky.cleverestech
 
 import android.content.pm.IPackageManager
 import android.os.FileObserver
 import android.os.ServiceManager
 import android.system.Os
-import io.github.a13e300.tricky_store.keystore.CertHack
+import cleveres.tricky.cleverestech.keystore.CertHack
 import java.io.File
 
 object Config {

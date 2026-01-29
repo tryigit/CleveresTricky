@@ -1,6 +1,6 @@
 @file:OptIn(ExperimentalStdlibApi::class)
 
-package io.github.a13e300.tricky_store
+package cleveres.tricky.cleverestech
 
 import android.content.pm.IPackageManager
 import android.os.Build

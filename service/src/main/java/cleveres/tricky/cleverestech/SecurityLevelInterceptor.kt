@@ -1,4 +1,4 @@
-package io.github.a13e300.tricky_store
+package cleveres.tricky.cleverestech
 
 import android.hardware.security.keymint.KeyParameter
 import android.hardware.security.keymint.KeyParameterValue
@@ -10,10 +10,10 @@ import android.system.keystore2.IKeystoreSecurityLevel
 import android.system.keystore2.KeyDescriptor
 import android.system.keystore2.KeyEntryResponse
 import android.system.keystore2.KeyMetadata
-import io.github.a13e300.tricky_store.binder.BinderInterceptor
-import io.github.a13e300.tricky_store.keystore.CertHack
-import io.github.a13e300.tricky_store.keystore.CertHack.KeyGenParameters
-import io.github.a13e300.tricky_store.keystore.Utils
+import cleveres.tricky.cleverestech.binder.BinderInterceptor
+import cleveres.tricky.cleverestech.keystore.CertHack
+import cleveres.tricky.cleverestech.keystore.CertHack.KeyGenParameters
+import cleveres.tricky.cleverestech.keystore.Utils
 import java.security.KeyPair
 import java.security.cert.Certificate
 import java.util.concurrent.ConcurrentHashMap

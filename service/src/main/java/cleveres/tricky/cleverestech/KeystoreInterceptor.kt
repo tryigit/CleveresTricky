@@ -1,4 +1,4 @@
-package io.github.a13e300.tricky_store
+package cleveres.tricky.cleverestech
 
 import android.annotation.SuppressLint
 import android.hardware.security.keymint.SecurityLevel
@@ -8,9 +8,9 @@ import android.os.ServiceManager
 import android.system.keystore2.IKeystoreService
 import android.system.keystore2.KeyDescriptor
 import android.system.keystore2.KeyEntryResponse
-import io.github.a13e300.tricky_store.binder.BinderInterceptor
-import io.github.a13e300.tricky_store.keystore.CertHack
-import io.github.a13e300.tricky_store.keystore.Utils
+import cleveres.tricky.cleverestech.binder.BinderInterceptor
+import cleveres.tricky.cleverestech.keystore.CertHack
+import cleveres.tricky.cleverestech.keystore.Utils
 import kotlin.system.exitProcess
 
 @SuppressLint("BlockedPrivateApi")

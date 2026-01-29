@@ -1,9 +1,9 @@
-package io.github.a13e300.tricky_store.keystore;
+package cleveres.tricky.cleverestech.keystore;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
-import io.github.a13e300.tricky_store.Config;
+import cleveres.tricky.cleverestech.Config;
 import java.lang.reflect.Field;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;

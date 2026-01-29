@@ -1,8 +1,8 @@
-package io.github.a13e300.tricky_store
+package cleveres.tricky.cleverestech
 
 import android.os.Binder
 import android.os.Parcel
-import io.github.a13e300.tricky_store.Config
+import cleveres.tricky.cleverestech.Config
 
 class PropertyHiderService : Binder() {
     companion object {

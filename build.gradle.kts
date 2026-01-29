@@ -45,7 +45,7 @@ tasks.register("Delete", Delete::class) {
 
 fun Project.configureBaseExtension() {
     extensions.findByType(AppExtension::class)?.run {
-        namespace = "io.github.a13e300.tricky_store"
+        namespace = "cleveres.tricky.cleverestech"
         compileSdkVersion(androidCompileSdkVersion)
         ndkVersion = androidCompileNdkVersion
         buildToolsVersion = androidBuildToolsVersion
@@ -64,7 +64,7 @@ fun Project.configureBaseExtension() {
     }
 
     extensions.findByType(LibraryExtension::class)?.run {
-        namespace = "io.github.a13e300.tricky_store"
+        namespace = "cleveres.tricky.cleverestech"
         compileSdk = androidCompileSdkVersion
         ndkVersion = androidCompileNdkVersion
         buildToolsVersion = androidBuildToolsVersion
