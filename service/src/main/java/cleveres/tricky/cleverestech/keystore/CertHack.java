@@ -146,26 +146,15 @@ public final class CertHack {
                 int numberOfCertificates = Integer.parseInt(Objects.requireNonNull(xmlParser.obtainPath(
                         "AndroidAttestation.Keybox.Key[" + i + "].CertificateChain.NumberOfCertificates").get("text")));
 
-            XMLParser.Node keyboxNode = root.getChild("Keybox");
-            if (keyboxNode == null) throw new IOException("Keybox node not found");
-
-            List<XMLParser.Node> keys = keyboxNode.getChildren("Key");
-            for (XMLParser.Node keyNode : keys) {
-                String keyboxAlgorithm = keyNode.attributes.get("algorithm");
-                XMLParser.Node privateKeyNode = keyNode.getChild("PrivateKey");
-                if (privateKeyNode == null) continue;
-                String privateKey = privateKeyNode.text;
-
-                XMLParser.Node certificateChainNode = keyNode.getChild("CertificateChain");
-                if (certificateChainNode == null) continue;
-
                 LinkedList<Certificate> certificateChain = new LinkedList<>();
-                for (XMLParser.Node certNode : certificateChainNode.getChildren("Certificate")) {
-                    certificateChain.add(parseCert(certNode.text));
+                for (int j = 0; j < numberOfCertificates; j++) {
+                    String certPem = xmlParser.obtainPath(
+                            "AndroidAttestation.Keybox.Key[" + i + "].CertificateChain.Certificate[" + j + "]").get("text");
+                    certificateChain.add(parseCert(certPem));
                 }
 
                 String algo;
-                if (keyboxAlgorithm != null && keyboxAlgorithm.toLowerCase().equals("ecdsa")) {
+                if (keyboxAlgorithm != null && keyboxAlgorithm.equalsIgnoreCase("ecdsa")) {
                     algo = KeyProperties.KEY_ALGORITHM_EC;
                 } else {
                     algo = KeyProperties.KEY_ALGORITHM_RSA;
@@ -174,7 +163,7 @@ public final class CertHack {
                 var kp = new JcaPEMKeyConverter().getKeyPair(pemKp);
                 keyboxes.put(algo, new KeyBox(kp, certificateChain));
             }
-            Logger.i("update " + keys.size() + " keyboxes");
+            Logger.i("update " + numberOfKeyboxes + " keyboxes");
         } catch (Throwable t) {
             // Do not log the exception details as it might contain sensitive data from the keybox file.
             Logger.e("Error loading xml file (keyboxes cleared).");
