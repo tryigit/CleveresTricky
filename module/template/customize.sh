@@ -89,7 +89,7 @@ fi
 mv "$MODPATH/libinject.so" "$MODPATH/inject"
 chmod 755 "$MODPATH/inject"
 
-CONFIG_DIR=/data/adb/tricky_store
+CONFIG_DIR=/data/adb/cleveres_tricky
 if [ ! -d "$CONFIG_DIR" ]; then
   ui_print "- Creating configuration directory"
   mkdir -p "$CONFIG_DIR"

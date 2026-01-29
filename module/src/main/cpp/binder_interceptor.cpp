@@ -54,12 +54,64 @@ extern sp<BinderInterceptor> gBinderInterceptor;
 // Define transaction code for fetching spoofed property
 static const uint32_t GET_SPOOFED_PROPERTY_TRANSACTION_CODE = IBinder::FIRST_CALL_TRANSACTION + 0;
 // Define interface token for the property service
-static const String16 PROPERTY_SERVICE_INTERFACE_TOKEN = String16("android.os.IPropertyServiceHider");
+static const char* PROPERTY_SERVICE_INTERFACE_TOKEN = "android.os.IPropertyServiceHider";
+
+// Helper functions for manual Parcel manipulation to avoid ABI issues with String16
+void writeString16_manual(Parcel& p, const char* str) {
+    size_t len = str ? strlen(str) : 0;
+    std::vector<char16_t> u16;
+    u16.reserve(len + 1);
+    for (size_t i = 0; i < len; ++i) {
+        u16.push_back(static_cast<char16_t>(str[i]));
+    }
+    u16.push_back(0); // null terminator
+
+    p.writeInt32(len); // write length (count of char16_t excluding null)
+
+    size_t dataSize = u16.size() * sizeof(char16_t);
+    size_t paddedSize = (dataSize + 3) & ~3;
+    size_t padding = paddedSize - dataSize;
+
+    p.write(u16.data(), dataSize);
+    if (padding > 0) {
+        uint8_t pad[3] = {0};
+        p.write(pad, padding);
+    }
+}
+
+bool readString16_manual(const Parcel& p, std::string& out_str) {
+    int32_t len = p.readInt32();
+    if (len < 0) return false; // null string
+    if (len > 4096) return false; // Sanity check
+
+    size_t byteLen = (len + 1) * sizeof(char16_t);
+    size_t paddedSize = (byteLen + 3) & ~3;
+    size_t padding = paddedSize - byteLen;
+
+    std::vector<char16_t> buf(len + 1);
+    if (p.read(buf.data(), byteLen) != 0) return false;
+
+    if (padding > 0) {
+        p.setDataPosition(p.dataPosition() + padding);
+    }
+
+    out_str.clear();
+    out_str.reserve(len);
+    for (int32_t i = 0; i < len; ++i) {
+         if (buf[i]) out_str += (char)buf[i];
+    }
+    return true;
+}
+
+void writeInterfaceToken_manual(Parcel& p, const char* interface_name) {
+    // Write StrictMode policy (0 for now)
+    p.writeInt32(0);
+    writeString16_manual(p, interface_name);
+}
 
 
 // Implement Hook Function
 int new_system_property_get(const char* name, char* value) {
-    // LOGD("Property get: %s", name); // Too verbose for every property get
     bool found = false;
     if (name != nullptr) {
         std::string_view name_sv(name);
@@ -74,31 +126,14 @@ int new_system_property_get(const char* name, char* value) {
     if (found) {
         LOGI("Targeted property access: %s", name);
         if (gBinderInterceptor != nullptr && gBinderInterceptor->gPropertyServiceBinder != nullptr) {
-            Parcel data_parcel, reply_parcel; // These can be declared
-            status_t status;                 // This can be declared
-
-            // The following block is commented out because the custom Parcel.h and String16.h
-            // in this project's local include directory are minimal and do not support
-            // methods like writeInterfaceToken, readCString, or ways to extract data from String16.
-            // This effectively disables the property spoofing via Binder for now.
-            // A potential fix involves ensuring the build system uses the NDK's standard
-            // headers for libbinder. For now, we fall through to the original function.
-            /*
-            // Original code that causes compilation errors:
-            status = data_parcel.writeString16(PROPERTY_SERVICE_INTERFACE_TOKEN); // Previously writeInterfaceToken
-            if (status != OK) {
-                LOGE("Failed to write interface token for property %s: %d", name, status);
-                return original_system_property_get(name, value);
-            }
-
-            status = data_parcel.writeCString(name); // This line itself is likely fine with NDK headers
-            if (status != OK) {
-                LOGE("Failed to write property name %s to parcel: %d", name, status);
-                return original_system_property_get(name, value);
-            }
+            Parcel data_parcel, reply_parcel;
             
-            LOGD("Transacting with property service for %s", name);
-            status = gBinderInterceptor->gPropertyServiceBinder->transact(
+            // Manual construction of the parcel
+            writeInterfaceToken_manual(data_parcel, PROPERTY_SERVICE_INTERFACE_TOKEN);
+            writeString16_manual(data_parcel, name);
+
+            // LOGD("Transacting with property service for %s", name);
+            status_t status = gBinderInterceptor->gPropertyServiceBinder->transact(
                 GET_SPOOFED_PROPERTY_TRANSACTION_CODE, data_parcel, &reply_parcel, 0);
 
             if (status != OK) {
@@ -106,33 +141,23 @@ int new_system_property_get(const char* name, char* value) {
                 return original_system_property_get(name, value);
             }
 
-            int32_t exception_code = reply_parcel.readExceptionCode(); // This method should exist
+            int32_t exception_code = reply_parcel.readInt32(); // readExceptionCode usually just reads the first int
             if (exception_code != 0) {
                 LOGE("Property service threw exception for %s: %d", name, exception_code);
                 return original_system_property_get(name, value);
             }
 
-            // Read nullable string value - causes error due to readString16 and String8 manipulations
-            String16 spoofed_value_s16 = reply_parcel.readString16(); // Causes error with local String16.h
-            String8 spoofed_value_s8; 
-            if (spoofed_value_s16.size() > 0) { 
-                spoofed_value_s8 = String8(spoofed_value_s16); // String8(String16) might be missing
-            }
-            const char* spoofed_value_cstr = (spoofed_value_s16.size() > 0) ? spoofed_value_s8.string() : nullptr; // .string() might be missing
-
-            if (spoofed_value_cstr != nullptr) {
-                LOGI("Received spoofed value for %s: '%s'", name, spoofed_value_cstr);
-                strncpy(value, spoofed_value_cstr, PROP_VALUE_MAX - 1);
-                value[PROP_VALUE_MAX - 1] = '\0'; // Ensure null termination
+            std::string spoofed_value;
+            if (readString16_manual(reply_parcel, spoofed_value)) {
+                LOGI("Received spoofed value for %s: '%s'", name, spoofed_value.c_str());
+                strncpy(value, spoofed_value.c_str(), PROP_VALUE_MAX - 1);
+                value[PROP_VALUE_MAX - 1] = '\0';
                 return strlen(value);
             } else {
-                LOGD("Property service returned null for %s, using original.", name);
+                // LOGD("Property service returned null or failed to read for %s", name);
             }
-            */
-            // Fall through to original_system_property_get due to commented out section
-            LOGW("Property spoofing via Binder is currently disabled due to incompatible local Binder headers.");
         } else {
-            LOGW("Property service binder not available for %s.", name);
+            // LOGW("Property service binder not available for %s.", name);
         }
     }
     return original_system_property_get(name, value);

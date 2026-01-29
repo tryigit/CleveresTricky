@@ -1,15 +1,33 @@
-# Tricky Store
+# CleveresTricky (Beta)
 
-A trick of keystore. **Android 12 or above is required**.
+**The AI-Powered, Unrestricted, God-Tier Keystore & Attestation Spoofing Module**
+
+*Formerly TrickyStore*
+
+**Android 12 or above is required**.
+
+## Why CleveresTricky?
+
+Compared to the standard TrickyStore, **CleveresTricky** brings:
+- **AI-Powered Continuous Updates:** Leveraging advanced AI to stay ahead of Google's detections.
+- **Unrivaled Security & Stealth:** Implements **Binder-level System Property Spoofing** to hide sensitive props (like `ro.boot.verifiedbootstate`) from deep inspection methods (DroidGuard/GMS) without relying on fragile hooking frameworks for every app.
+- **Peak Performance:** Optimized C++ injection and lightweight Java service.
+- **God-Mode Features:**
+    - **Safe Binder Spoofing:** Bypasses ABI issues to safely spoof system properties at the IPC level.
+    - **KeyMint 4.0 Support:** Ready for the future.
+    - **Module Hash Spoofing:** (Experimental) To match official firmware fingerprints.
 
 ## Usage
 
 1. Flash this module and reboot.  
-2. For more than DEVICE integrity, put an unrevoked hardware keybox.xml at `/data/adb/tricky_store/keybox.xml` (Optional).  
-3. Customize target packages at `/data/adb/tricky_store/target.txt` (Optional).  
+2. For more than DEVICE integrity, put an unrevoked hardware keybox.xml at `/data/adb/cleveres_tricky/keybox.xml` (Optional).
+3. Customize target packages at `/data/adb/cleveres_tricky/target.txt` (Optional).
 4. Enjoy!  
 
 **All configuration files will take effect immediately.**
+
+## Configuration Paths
+**Note:** The configuration directory is now `/data/adb/cleveres_tricky/`.
 
 ## keybox.xml
 
@@ -40,15 +58,15 @@ format:
 </AndroidAttestation>
 ```
 
-## Build Vars Spoofing
+## Build Vars Spoofing (Advanced Privacy)
 
 > **Zygisk (or Zygisk Next) is needed for this feature to work.**
 
-If you still do not pass you can try enabling/disabling Build variable spoofing by creating/deleting the file `/data/adb/tricky_store/spoof_build_vars`.
+CleveresTricky allows you to spoof ANY system property via Binder interception, making it invisible to standard `getprop` checks from targeted apps.
 
-Tricky Store will automatically generate example config props inside `/data/adb/tricky_store/spoof_build_vars` once created, on next reboot, then you may manually edit your spoof config.
+Create/edit `/data/adb/cleveres_tricky/spoof_build_vars`.
 
-Here is an example of a spoof config:
+Example:
 
 ```
 MANUFACTURER=Google
@@ -63,14 +81,17 @@ INCREMENTAL=12094726
 TYPE=user
 TAGS=release-keys
 SECURITY_PATCH=2024-07-05
+# Advanced hidden props
+ro.boot.verifiedbootstate=green
+ro.boot.flash.locked=1
 ```
 
 For Magisk users: if you don't need this feature and zygisk is disabled, please remove or rename the
-folder `/data/adb/modules/tricky_store/zygisk` manually.
+folder `/data/adb/modules/cleveres_tricky/zygisk` manually.
 
 ## Support TEE broken devices
 
-Tricky Store will hack the leaf certificate by default. On TEE broken devices, this will not work because we can't retrieve the leaf certificate from TEE. You can add a `!` after a package name to enable generate certificate support for this package.
+CleveresTricky will hack the leaf certificate by default. On TEE broken devices, this will not work because we can't retrieve the leaf certificate from TEE. You can add a `!` after a package name to enable generate certificate support for this package.
 
 For example:
 
@@ -85,7 +106,7 @@ com.google.android.gms!
 ## TODO
 
 - Support App Attest Key.
-- [Support Android 11 and below.](https://github.com/5ec1cff/TrickyStore/issues/25#issuecomment-2250588463)
+- Support Android 11 and below.
 - Support automatic selection mode.
 
 PR is welcomed.
@@ -97,3 +118,8 @@ PR is welcomed.
 - [BootloaderSpoofer](https://github.com/chiteroman/BootloaderSpoofer)
 - [KeystoreInjection](https://github.com/aviraxp/Zygisk-KeystoreInjection)
 - [LSPosed](https://github.com/LSPosed/LSPosed)
+
+## Credits
+
+**CleveresTricky Team** - AI-Powered Development.
+Original TrickyStore by 5ec1cff.
