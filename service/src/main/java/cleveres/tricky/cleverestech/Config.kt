@@ -73,7 +73,15 @@ object Config {
     private var isGlobalMode = false
     private var isTeeBrokenMode = false
     @Volatile
+    private var isAutoTeeBroken = false
+    private val isTeeBroken get() = isTeeBrokenMode || isAutoTeeBroken
+    @Volatile
     private var moduleHash: ByteArray? = null
+
+    fun setTeeBroken(broken: Boolean) {
+        isAutoTeeBroken = broken
+        Logger.i("Auto TEE broken mode is ${if (isAutoTeeBroken) "enabled" else "disabled"}")
+    }
 
     fun getModuleHash(): ByteArray? = moduleHash
 
@@ -251,7 +259,7 @@ object Config {
 
     fun needHack(callingUid: Int): Boolean {
         return when {
-            isTeeBrokenMode -> false
+            isTeeBroken -> false
             isGlobalMode -> true
             else -> checkPackages(hackPackages, callingUid)
         }
@@ -259,8 +267,9 @@ object Config {
     
     fun needGenerate(callingUid: Int): Boolean {
         return when {
-            isTeeBrokenMode && isGlobalMode -> true
+            isTeeBroken && isGlobalMode -> true
             isGlobalMode -> false
+            isTeeBroken -> checkPackages(generatePackages, callingUid) || checkPackages(hackPackages, callingUid)
             else -> checkPackages(generatePackages, callingUid)
         }
     }

@@ -576,6 +576,9 @@ public final class CertHack {
 
         public List<Integer> purpose = new ArrayList<>();
         public List<Integer> digest = new ArrayList<>();
+        public List<Integer> blockMode = new ArrayList<>();
+        public List<Integer> padding = new ArrayList<>();
+        public List<Integer> mgfDigest = new ArrayList<>();
 
         public byte[] attestationChallenge;
         public byte[] brand;
@@ -609,6 +612,9 @@ public final class CertHack {
                     case Tag.DIGEST -> {
                         digest.add(p.getDigest());
                     }
+                    case Tag.BLOCK_MODE -> blockMode.add(p.getBlockMode());
+                    case Tag.PADDING -> padding.add(p.getPaddingMode());
+                    case Tag.RSA_OAEP_MGF_DIGEST -> mgfDigest.add(p.getDigest());
                     case Tag.ATTESTATION_CHALLENGE -> attestationChallenge = p.getBlob();
                     case Tag.ATTESTATION_ID_BRAND -> brand = p.getBlob();
                     case Tag.ATTESTATION_ID_DEVICE -> device = p.getBlob();

@@ -52,18 +52,18 @@ class SecurityLevelInterceptor(
                 // val entropy = data.createByteArray()
                 val kgp = KeyGenParameters(params)
                 if (kgp.attestationChallenge != null) {
-                    if (attestationKeyDescriptor != null) {
-                        Logger.e("warn: attestation key not supported now")
-                    } else {
-                        val pair = CertHack.generateKeyPair(callingUid, keyDescriptor, kgp)
-                            ?: return@runCatching
-                        val response = buildResponse(pair.second, kgp, keyDescriptor, callingUid)
-                        keys[Key(callingUid, keyDescriptor.alias)] = Info(pair.first, response)
-                        val p = Parcel.obtain()
-                        p.writeNoException()
-                        p.writeTypedObject(response.metadata, 0)
-                        return OverrideReply(0, p)
-                    }
+                    // if (attestationKeyDescriptor != null) {
+                    //    Logger.e("warn: attestation key not supported now")
+                    // } else {
+                    val pair = CertHack.generateKeyPair(callingUid, keyDescriptor, kgp)
+                        ?: return@runCatching
+                    val response = buildResponse(pair.second, kgp, keyDescriptor, callingUid)
+                    keys[Key(callingUid, keyDescriptor.alias)] = Info(pair.first, response)
+                    val p = Parcel.obtain()
+                    p.writeNoException()
+                    p.writeTypedObject(response.metadata, 0)
+                    return OverrideReply(0, p)
+                    // }
                 }
             }.onFailure {
                 Logger.e("parse key gen request", it)
@@ -106,6 +106,21 @@ class SecurityLevelInterceptor(
         for (idx in 0 until digestSize) {
             val i = params.digest[idx]
             addAuth(Tag.DIGEST, KeyParameterValue.digest(i))
+        }
+        val blockModeSize = params.blockMode.size
+        for (idx in 0 until blockModeSize) {
+            val i = params.blockMode[idx]
+            addAuth(Tag.BLOCK_MODE, KeyParameterValue.blockMode(i))
+        }
+        val paddingSize = params.padding.size
+        for (idx in 0 until paddingSize) {
+            val i = params.padding[idx]
+            addAuth(Tag.PADDING, KeyParameterValue.paddingMode(i))
+        }
+        val mgfDigestSize = params.mgfDigest.size
+        for (idx in 0 until mgfDigestSize) {
+            val i = params.mgfDigest[idx]
+            addAuth(Tag.RSA_OAEP_MGF_DIGEST, KeyParameterValue.digest(i))
         }
         addAuth(Tag.ALGORITHM, KeyParameterValue.algorithm(params.algorithm))
         addAuth(Tag.KEY_SIZE, KeyParameterValue.integer(params.keySize))

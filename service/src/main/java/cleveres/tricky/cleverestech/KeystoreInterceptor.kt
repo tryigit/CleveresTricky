@@ -159,6 +159,11 @@ object KeystoreInterceptor : BinderInterceptor() {
         val ks = IKeystoreService.Stub.asInterface(b)
         val tee = kotlin.runCatching { ks.getSecurityLevel(SecurityLevel.TRUSTED_ENVIRONMENT) }
             .getOrNull()
+        if (tee == null) {
+            Config.setTeeBroken(true)
+        } else {
+            Config.setTeeBroken(false)
+        }
         val strongBox =
             kotlin.runCatching { ks.getSecurityLevel(SecurityLevel.STRONGBOX) }.getOrNull()
         
