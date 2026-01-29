@@ -95,20 +95,19 @@ if [ ! -d "$CONFIG_DIR" ]; then
   mkdir -p "$CONFIG_DIR"
   [ ! -f "$CONFIG_DIR/spoof_build_vars" ] && touch "$CONFIG_DIR/spoof_build_vars"
 fi
+chmod 700 "$CONFIG_DIR"
+[ -f "$CONFIG_DIR/spoof_build_vars" ] && chmod 600 "$CONFIG_DIR/spoof_build_vars"
+
 if [ ! -f "$CONFIG_DIR/keybox.xml" ]; then
   ui_print "- Adding default software keybox"
   extract "$ZIPFILE" 'keybox.xml' "$TMPDIR"
   mv "$TMPDIR/keybox.xml" "$CONFIG_DIR/keybox.xml"
 fi
+[ -f "$CONFIG_DIR/keybox.xml" ] && chmod 600 "$CONFIG_DIR/keybox.xml"
+
 if [ ! -f "$CONFIG_DIR/target.txt" ]; then
   ui_print "- Adding default target scope"
   extract "$ZIPFILE" 'target.txt' "$TMPDIR"
   mv "$TMPDIR/target.txt" "$CONFIG_DIR/target.txt"
 fi
-
-ui_print "*********************************************************"
-ui_print "  Tricky Store Installed Successfully!"
-ui_print "  "
-ui_print "  Config files are located at:"
-ui_print "  $CONFIG_DIR"
-ui_print "*********************************************************"
+[ -f "$CONFIG_DIR/target.txt" ] && chmod 600 "$CONFIG_DIR/target.txt"

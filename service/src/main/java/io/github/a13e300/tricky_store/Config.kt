@@ -3,6 +3,7 @@ package io.github.a13e300.tricky_store
 import android.content.pm.IPackageManager
 import android.os.FileObserver
 import android.os.ServiceManager
+import android.system.Os
 import io.github.a13e300.tricky_store.keystore.CertHack
 import java.io.File
 
@@ -145,6 +146,11 @@ object Config {
 
     fun initialize() {
         root.mkdirs()
+        try {
+            Os.chmod(root.absolutePath, 448) // 0700
+        } catch (t: Throwable) {
+            Logger.e("failed to set permissions for config dir", t)
+        }
         updateGlobalMode(File(root, GLOBAL_MODE_FILE))
         updateTeeBrokenMode(File(root, TEE_BROKEN_MODE_FILE))
         updateBuildVars(File(root, SPOOF_BUILD_VARS_FILE))
