@@ -12,7 +12,7 @@ if [ "$BOOTMODE" ] && [ "$KSU" ]; then
   if [ "$(which magisk)" ]; then
     ui_print "*********************************************************"
     ui_print "! Multiple root implementation is NOT supported!"
-    ui_print "! Please uninstall Magisk before installing Zygisk Next"
+    ui_print "! Please uninstall Magisk before installing this module"
     abort    "*********************************************************"
   fi
 elif [ "$BOOTMODE" ] && [ "$MAGISK_VER_CODE" ]; then
@@ -72,22 +72,14 @@ chmod 755 "$MODPATH/daemon"
 extract "$ZIPFILE" 'action.sh'       "$MODPATH"
 chmod 755 "$MODPATH/action.sh"
 
-mkdir "$MODPATH/zygisk"
-
 if [ "$ARCH" = "x64" ]; then
   ui_print "- Extracting x64 libraries"
   extract "$ZIPFILE" "lib/x86_64/lib$SONAME.so" "$MODPATH" true
   extract "$ZIPFILE" "lib/x86_64/libinject.so" "$MODPATH" true
-  extract "$ZIPFILE" "lib/x86_64/libtszygisk.so" "$MODPATH/zygisk" true
-  mv "$MODPATH/zygisk/libtszygisk.so" "$MODPATH/zygisk/x86_64.so"
-  [ -f "$MODPATH/zygisk/libtszygisk.so.sha256" ] && mv "$MODPATH/zygisk/libtszygisk.so.sha256" "$MODPATH/zygisk/x86_64.so.sha256"
 else
   ui_print "- Extracting arm64 libraries"
   extract "$ZIPFILE" "lib/arm64-v8a/lib$SONAME.so" "$MODPATH" true
   extract "$ZIPFILE" "lib/arm64-v8a/libinject.so" "$MODPATH" true
-  extract "$ZIPFILE" "lib/arm64-v8a/libtszygisk.so" "$MODPATH/zygisk" true
-  mv "$MODPATH/zygisk/libtszygisk.so" "$MODPATH/zygisk/arm64-v8a.so"
-  [ -f "$MODPATH/zygisk/libtszygisk.so.sha256" ] && mv "$MODPATH/zygisk/libtszygisk.so.sha256" "$MODPATH/zygisk/arm64-v8a.so.sha256"
 fi
 
 mv "$MODPATH/libinject.so" "$MODPATH/inject"
