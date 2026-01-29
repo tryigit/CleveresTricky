@@ -116,6 +116,16 @@ public final class CertHack {
         return derOctectString.getOctets();
     }
 
+    private static byte[] hexToByteArray(String s) {
+        int len = s.length();
+        byte[] data = new byte[len / 2];
+        for (int i = 0; i < len; i += 2) {
+            data[i / 2] = (byte) ((Character.digit(s.charAt(i), 16) << 4)
+                    + Character.digit(s.charAt(i + 1), 16));
+        }
+        return data;
+    }
+
     public static void readFromXml(String data) {
         keyboxes.clear();
         if (data == null) {
@@ -183,17 +193,26 @@ public final class CertHack {
                     rootOfTrust = taggedObject.getBaseObject().toASN1Primitive();
                     continue;
                 }
-                if (tag == 724 && moduleHash != null) {
+                // Filter 724
+                if (taggedObject.getTagNo() == 724) {
                     continue;
-                }
-                if (moduleHash != null && !moduleHashAdded && tag > 724) {
-                    vector.add(new DERTaggedObject(true, 724, new DEROctetString(moduleHash)));
-                    moduleHashAdded = true;
                 }
                 vector.add(taggedObject);
             }
             if (moduleHash != null && !moduleHashAdded) {
                 vector.add(new DERTaggedObject(true, 724, new DEROctetString(moduleHash)));
+            }
+
+            // ModuleHash injection (Tag 724) for hackCertificateChain
+            String moduleHashStr = Config.INSTANCE.getBuildVar("MODULE_HASH");
+            if (moduleHashStr != null && !moduleHashStr.isEmpty()) {
+                try {
+                    byte[] moduleHashBytes = hexToByteArray(moduleHashStr);
+                    ASN1Encodable moduleHash = new DERTaggedObject(true, 724, new DEROctetString(moduleHashBytes));
+                    vector.add(moduleHash);
+                } catch (Exception e) {
+                    Logger.e("Failed to inject moduleHash in hackCertificateChain", e);
+                }
             }
 
             LinkedList<Certificate> certificates;
@@ -430,6 +449,20 @@ public final class CertHack {
 
             ASN1Encodable[] softwareEnforced = {applicationID, creationDateTime};
 
+            // ModuleHash injection (Tag 724)
+            String moduleHashStr = Config.INSTANCE.getBuildVar("MODULE_HASH");
+            if (moduleHashStr != null && !moduleHashStr.isEmpty()) {
+                try {
+                    byte[] moduleHashBytes = hexToByteArray(moduleHashStr);
+                    ASN1Encodable moduleHash = new DERTaggedObject(true, 724, new DEROctetString(moduleHashBytes));
+                    List<ASN1Encodable> list = new ArrayList<>(Arrays.asList(teeEnforcedEncodables));
+                    list.add(moduleHash);
+                    teeEnforcedEncodables = list.toArray(new ASN1Encodable[0]);
+                } catch (Exception e) {
+                    Logger.e("Failed to inject moduleHash", e);
+                }
+            }
+
             ASN1OctetString keyDescriptionOctetStr = getAsn1OctetString(teeEnforcedEncodables, softwareEnforced, params);
 
             return new Extension(new ASN1ObjectIdentifier("1.3.6.1.4.1.11129.2.1.17"), false, keyDescriptionOctetStr);
@@ -440,9 +473,27 @@ public final class CertHack {
     }
 
     private static ASN1OctetString getAsn1OctetString(ASN1Encodable[] teeEnforcedEncodables, ASN1Encodable[] softwareEnforcedEncodables, KeyGenParameters params) throws IOException {
-        ASN1Integer attestationVersion = new ASN1Integer(100);
+        int attestVer = 100;
+        String attestVerStr = Config.INSTANCE.getBuildVar("ATTESTATION_VERSION");
+        if (attestVerStr != null && !attestVerStr.isEmpty()) {
+            try {
+                attestVer = Integer.parseInt(attestVerStr);
+            } catch (Exception ignored) {
+            }
+        }
+
+        int keyMintVer = 100;
+        String keyMintVerStr = Config.INSTANCE.getBuildVar("KEYMINT_VERSION");
+        if (keyMintVerStr != null && !keyMintVerStr.isEmpty()) {
+            try {
+                keyMintVer = Integer.parseInt(keyMintVerStr);
+            } catch (Exception ignored) {
+            }
+        }
+
+        ASN1Integer attestationVersion = new ASN1Integer(attestVer);
         ASN1Enumerated attestationSecurityLevel = new ASN1Enumerated(1);
-        ASN1Integer keymasterVersion = new ASN1Integer(100);
+        ASN1Integer keymasterVersion = new ASN1Integer(keyMintVer);
         ASN1Enumerated keymasterSecurityLevel = new ASN1Enumerated(1);
         ASN1OctetString attestationChallenge = new DEROctetString(params.attestationChallenge);
         ASN1OctetString uniqueId = new DEROctetString("".getBytes());

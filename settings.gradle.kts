@@ -14,7 +14,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "TrickyStore"
+rootProject.name = "CleveresTricky"
 include(":module")
 include(":service")
 include(":stub")
