@@ -30,6 +30,9 @@ object Config {
     private val generatePackages = mutableSetOf<String>()
     private var isGlobalMode = false
     private var isTeeBrokenMode = false
+    private var moduleHash: ByteArray? = null
+
+    fun getModuleHash(): ByteArray? = moduleHash
 
     fun parsePackages(lines: List<String>, isTeeBrokenMode: Boolean): Pair<Set<String>, Set<String>> {
         val hackPackages = mutableSetOf<String>()
@@ -78,11 +81,21 @@ object Config {
         Logger.i("TEE broken mode is ${if (isTeeBrokenMode) "enabled" else "disabled"}")
     }
 
+    @OptIn(ExperimentalStdlibApi::class)
+    private fun updateModuleHash(f: File?) = runCatching {
+        moduleHash = f?.readText()?.trim()?.hexToByteArray()
+        Logger.i("update module hash: ${moduleHash?.joinToString("") { "%02x".format(it) }}")
+    }.onFailure {
+        moduleHash = null
+        Logger.e("failed to update module hash", it)
+    }
+
     private const val CONFIG_PATH = "/data/adb/tricky_store"
     private const val TARGET_FILE = "target.txt"
     private const val KEYBOX_FILE = "keybox.xml"
     private const val GLOBAL_MODE_FILE = "global_mode"
     private const val TEE_BROKEN_MODE_FILE = "tee_broken_mode"
+    private const val MODULE_HASH_FILE = "module_hash"
     private val root = File(CONFIG_PATH)
 
     object ConfigObserver : FileObserver(root, CLOSE_WRITE or DELETE or MOVED_FROM or MOVED_TO) {
@@ -105,6 +118,8 @@ object Config {
                     updateTeeBrokenMode(f)
                     updateTargetPackages(File(root, TARGET_FILE))
                 }
+
+                MODULE_HASH_FILE -> updateModuleHash(f)
             }
         }
     }
@@ -113,6 +128,7 @@ object Config {
         root.mkdirs()
         updateGlobalMode(File(root, GLOBAL_MODE_FILE))
         updateTeeBrokenMode(File(root, TEE_BROKEN_MODE_FILE))
+        updateModuleHash(File(root, MODULE_HASH_FILE))
         if (!isGlobalMode) {
             val scope = File(root, TARGET_FILE)
             if (scope.exists()) {
