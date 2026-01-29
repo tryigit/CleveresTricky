@@ -87,9 +87,11 @@ class SecurityLevelInterceptor(
         d.domain = descriptor.domain
         d.nspace = descriptor.nspace
         metadata.key = d
-        val authorizations = ArrayList<Authorization>()
+        val authorizations = ArrayList<Authorization>(params.purpose.size + params.digest.size + 6)
         var a: Authorization
-        for (i in params.purpose) {
+        val purposeSize = params.purpose.size
+        for (idx in 0 until purposeSize) {
+            val i = params.purpose[idx]
             a = Authorization()
             a.keyParameter = KeyParameter()
             a.keyParameter.tag = Tag.PURPOSE
@@ -97,7 +99,9 @@ class SecurityLevelInterceptor(
             a.securityLevel = level
             authorizations.add(a)
         }
-        for (i in params.digest) {
+        val digestSize = params.digest.size
+        for (idx in 0 until digestSize) {
+            val i = params.digest[idx]
             a = Authorization()
             a.keyParameter = KeyParameter()
             a.keyParameter.tag = Tag.DIGEST
