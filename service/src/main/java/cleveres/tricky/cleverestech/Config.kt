@@ -151,6 +151,37 @@ object Config {
     @Volatile
     private var buildVars: Map<String, String> = emptyMap()
 
+    private val templates = mapOf(
+        "pixel8pro" to mapOf(
+            "MANUFACTURER" to "Google",
+            "MODEL" to "Pixel 8 Pro",
+            "FINGERPRINT" to "google/husky/husky:14/AP1A.240405.002/11480754:user/release-keys",
+            "BRAND" to "google",
+            "PRODUCT" to "husky",
+            "DEVICE" to "husky",
+            "RELEASE" to "14",
+            "ID" to "AP1A.240405.002",
+            "INCREMENTAL" to "11480754",
+            "TYPE" to "user",
+            "TAGS" to "release-keys",
+            "SECURITY_PATCH" to "2024-04-05"
+        ),
+        "xiaomi14" to mapOf(
+            "MANUFACTURER" to "Xiaomi",
+            "MODEL" to "23127PN0CG",
+            "FINGERPRINT" to "Xiaomi/houji_global/houji:14/UKQ1.230804.001/V816.0.4.0.UNCMIXM:user/release-keys",
+            "BRAND" to "Xiaomi",
+            "PRODUCT" to "houji_global",
+            "DEVICE" to "houji",
+            "RELEASE" to "14",
+            "ID" to "UKQ1.230804.001",
+            "INCREMENTAL" to "V816.0.4.0.UNCMIXM",
+            "TYPE" to "user",
+            "TAGS" to "release-keys",
+            "SECURITY_PATCH" to "2024-03-01"
+        )
+    )
+
     fun getBuildVar(key: String): String? {
         return buildVars[key]
     }
@@ -162,7 +193,13 @@ object Config {
                 if (line.isNotBlank() && !line.startsWith("#")) {
                     val parts = line.split("=", limit = 2)
                     if (parts.size == 2) {
-                        newVars[parts[0].trim()] = parts[1].trim()
+                        val key = parts[0].trim()
+                        val value = parts[1].trim()
+                        if (key == "TEMPLATE") {
+                            templates[value.lowercase()]?.let { newVars.putAll(it) }
+                        } else {
+                            newVars[key] = value
+                        }
                     }
                 }
             }
