@@ -81,24 +81,25 @@ class FilePollerTest {
         poller = FilePoller(testFile, intervalMs) {
             latch.countDown()
         }
-        poller.start()
-
-        Thread.sleep(intervalMs * 2)
+        // Don't start yet, to avoid race conditions with the update below
 
         // Modify file
         testFile.writeText("modified")
         val t = System.currentTimeMillis()
-        // Ensure time moves forward
+        // Ensure time moves forward from the initial create time
         if (t <= testFile.lastModified()) Thread.sleep(100)
         testFile.setLastModified(System.currentTimeMillis())
 
-        // Manually update poller state
+        // Manually update poller state to match the new file time
         poller.updateLastModified()
 
-        // Wait for poller to run cycle
+        // Now start the poller
+        poller.start()
+
+        // Wait for poller to run a cycle or two
         Thread.sleep(intervalMs * 3)
 
-        // Should NOT trigger because we updated state manually
+        // Should NOT trigger because we updated state manually before starting
         assertEquals(1, latch.count)
     }
 }

@@ -310,6 +310,7 @@ object Config {
             updateKeyBox(keybox)
         }
         ConfigObserver.startWatching()
+        keyboxPoller?.stop()
         keyboxPoller = FilePoller(File(root, KEYBOX_FILE), 5000) {
             Logger.i("Detected keybox change via polling")
             updateKeyBox(it)
