@@ -167,22 +167,22 @@ class WebServer(port: Int, private val configDir: File = File("/data/adb/clevere
     <h1>CleveresTricky <span style="font-size: 0.5em; color: gray;">BETA</span></h1>
 
     <div class="section">
-        <div class="row"><span>Global Mode</span><input type="checkbox" id="global_mode" onchange="toggle('global_mode')"></div>
-        <div class="row"><span>TEE Broken Mode</span><input type="checkbox" id="tee_broken_mode" onchange="toggle('tee_broken_mode')"></div>
-        <div class="row"><span>RKP Bypass (Beta)</span><input type="checkbox" id="rkp_bypass" onchange="toggle('rkp_bypass')"></div>
+        <div class="row"><label for="global_mode" style="flex-grow: 1; padding: 10px 0;">Global Mode</label><input type="checkbox" id="global_mode" onchange="toggle('global_mode')"></div>
+        <div class="row"><label for="tee_broken_mode" style="flex-grow: 1; padding: 10px 0;">TEE Broken Mode</label><input type="checkbox" id="tee_broken_mode" onchange="toggle('tee_broken_mode')"></div>
+        <div class="row"><label for="rkp_bypass" style="flex-grow: 1; padding: 10px 0;">RKP Bypass (Beta)</label><input type="checkbox" id="rkp_bypass" onchange="toggle('rkp_bypass')"></div>
         <div class="status" id="keyboxStatus" style="text-align: left; margin-top: 10px; font-weight: bold;">Keybox Status: Loading...</div>
     </div>
 
     <div class="section">
-        <select id="fileSelector" onchange="loadFile()">
+        <select id="fileSelector" onchange="loadFile()" aria-label="Select configuration file">
             <option value="keybox.xml">keybox.xml</option>
             <option value="target.txt">target.txt</option>
             <option value="security_patch.txt">security_patch.txt</option>
             <option value="spoof_build_vars">spoof_build_vars</option>
         </select>
-        <textarea id="editor"></textarea>
+        <textarea id="editor" aria-label="Configuration editor"></textarea>
         <div class="row" style="margin-top: 10px;">
-            <button class="btn-primary" onclick="saveFile()">Save File</button>
+            <button id="saveBtn" class="btn-primary" onclick="saveFile()">Save File</button>
         </div>
     </div>
 
@@ -244,19 +244,32 @@ class WebServer(port: Int, private val configDir: File = File("/data/adb/clevere
         }
 
         async function saveFile() {
-            const filename = document.getElementById('fileSelector').value;
-            const content = document.getElementById('editor').value;
-            const params = new URLSearchParams();
-            params.append('filename', filename);
-            params.append('content', content);
+            const btn = document.getElementById('saveBtn');
+            const originalText = btn.innerText;
+            btn.disabled = true;
+            btn.innerText = 'Saving...';
 
-            const res = await fetch(getAuthUrl(baseUrl + '/save'), {
-                method: 'POST',
-                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-                body: params
-            });
-            if (res.ok) alert('Saved!');
-            else alert('Failed to save');
+            try {
+                const filename = document.getElementById('fileSelector').value;
+                const content = document.getElementById('editor').value;
+                const params = new URLSearchParams();
+                params.append('filename', filename);
+                params.append('content', content);
+
+                const res = await fetch(getAuthUrl(baseUrl + '/save'), {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                    body: params
+                });
+
+                if (res.ok) alert('Saved!');
+                else alert('Failed to save');
+            } catch (e) {
+                alert('Error: ' + e);
+            } finally {
+                btn.disabled = false;
+                btn.innerText = originalText;
+            }
         }
 
         async function reloadConfig() {
