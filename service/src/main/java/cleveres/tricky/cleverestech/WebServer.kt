@@ -3,9 +3,10 @@ package cleveres.tricky.cleverestech
 import cleveres.tricky.cleverestech.keystore.CertHack
 import fi.iki.elonen.NanoHTTPD
 import java.io.File
+import java.security.MessageDigest
 import java.util.UUID
 
-class WebServer(port: Int, private val configDir: File = File("/data/adb/cleverestricky")) : NanoHTTPD(port) {
+class WebServer(port: Int, private val configDir: File = File("/data/adb/cleverestricky")) : NanoHTTPD("127.0.0.1", port) {
 
     val token = UUID.randomUUID().toString()
 
@@ -55,7 +56,7 @@ class WebServer(port: Int, private val configDir: File = File("/data/adb/clevere
 
         // Simple Token Auth
         val requestToken = params["token"]
-        if (requestToken != token) {
+        if (!MessageDigest.isEqual(token.toByteArray(), (requestToken ?: "").toByteArray())) {
              return newFixedLengthResponse(Response.Status.UNAUTHORIZED, "text/plain", "Unauthorized")
         }
 
