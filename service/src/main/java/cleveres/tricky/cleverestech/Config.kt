@@ -6,6 +6,8 @@ import android.os.ServiceManager
 import android.system.Os
 import cleveres.tricky.cleverestech.keystore.CertHack
 import java.io.File
+import java.util.Collections
+import java.util.LinkedHashMap
 
 class PackageTrie {
     private class Node {
@@ -368,9 +370,32 @@ object Config {
         return rules.matches(pkgName)
     }
 
+    // Cache to reduce IPC calls to PackageManager for getPackagesForUid
+    // Key: callingUid, Value: Array of package names
+    private val packageCache = Collections.synchronizedMap(
+        object : LinkedHashMap<Int, Array<String>>(200, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Int, Array<String>>?): Boolean {
+                return size > 200
+            }
+        }
+    )
+
+    /**
+     * Retrieves the list of packages for a given UID, using a cache to avoid frequent IPC calls.
+     * Returns an empty array if the UID has no associated packages or if PackageManager is unavailable.
+     */
+    private fun getPackages(uid: Int): Array<String> {
+        packageCache[uid]?.let { return it }
+        val pm = getPm() ?: return emptyArray()
+        val ps = pm.getPackagesForUid(uid) ?: emptyArray()
+        packageCache[uid] = ps
+        return ps
+    }
+
     private fun checkPackages(packages: PackageTrie, callingUid: Int) = kotlin.runCatching {
         if (packages.isEmpty()) return false
-        val ps = getPm()?.getPackagesForUid(callingUid) ?: return false
+        val ps = getPackages(callingUid)
+        if (ps.isEmpty()) return false
         ps.any { pkgName -> matchesPackage(pkgName, packages) }
     }.onFailure { Logger.e("failed to get packages", it) }.getOrNull() ?: false
 
