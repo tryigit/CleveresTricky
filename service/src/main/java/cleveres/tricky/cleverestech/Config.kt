@@ -119,6 +119,8 @@ object Config {
         Logger.e("failed to update target files", it)
     }
 
+    private var keyboxPoller: FilePoller? = null
+
     // Stream file content to avoid large String allocation and explicit GC
     private fun updateKeyBox(f: File?) = runCatching {
         if (f == null) {
@@ -126,6 +128,7 @@ object Config {
         } else {
             f.bufferedReader().use { CertHack.readFromXml(it) }
         }
+        keyboxPoller?.updateLastModified()
     }.onFailure {
         Logger.e("failed to update keybox", it)
     }
@@ -307,6 +310,12 @@ object Config {
             updateKeyBox(keybox)
         }
         ConfigObserver.startWatching()
+        keyboxPoller?.stop()
+        keyboxPoller = FilePoller(File(root, KEYBOX_FILE), 5000) {
+            Logger.i("Detected keybox change via polling")
+            updateKeyBox(it)
+        }
+        keyboxPoller?.start()
     }
 
     private var iPm: IPackageManager? = null
