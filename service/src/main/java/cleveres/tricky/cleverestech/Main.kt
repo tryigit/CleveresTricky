@@ -10,12 +10,14 @@ fun main(args: Array<String>) {
 
     // Start Web Server
     try {
-        val server = WebServer(0) // Random port
+        val configDir = File("/data/adb/cleverestricky")
+        val server = WebServer(0, configDir) // Random port
         server.start()
         val port = server.listeningPort
         val token = server.token
         Logger.i("Web server started on port $port")
-        val portFile = File("/data/adb/cleverestricky/web_port")
+        val portFile = File(configDir, "web_port")
+        if (!configDir.exists()) configDir.mkdirs()
         portFile.writeText("$port|$token")
         portFile.setReadable(false, false) // Clear all
         portFile.setReadable(true, true) // Owner only (0600)

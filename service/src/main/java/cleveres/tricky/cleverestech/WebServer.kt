@@ -1,13 +1,13 @@
 package cleveres.tricky.cleverestech
 
+import cleveres.tricky.cleverestech.keystore.CertHack
 import fi.iki.elonen.NanoHTTPD
 import java.io.File
 import java.util.UUID
 
-class WebServer(port: Int) : NanoHTTPD(port) {
+class WebServer(port: Int, private val configDir: File = File("/data/adb/cleverestricky")) : NanoHTTPD(port) {
 
     val token = UUID.randomUUID().toString()
-    private val configDir = File("/data/adb/cleverestricky")
 
     private fun readFile(filename: String): String {
         return try {
@@ -69,7 +69,8 @@ class WebServer(port: Int) : NanoHTTPD(port) {
             // For simplicity, let's load text files separately or all at once?
             // Let's load them via separate API calls or just embed them in the HTML initial load?
             // Let's return the toggles here.
-            config.append("\"files\": [\"keybox.xml\", \"target.txt\", \"security_patch.txt\", \"spoof_build_vars\"]")
+            config.append("\"files\": [\"keybox.xml\", \"target.txt\", \"security_patch.txt\", \"spoof_build_vars\"],")
+            config.append("\"keybox_count\": ${CertHack.getKeyboxCount()}")
             config.append("}")
             return newFixedLengthResponse(Response.Status.OK, "application/json", config.toString())
         }
@@ -169,6 +170,7 @@ class WebServer(port: Int) : NanoHTTPD(port) {
         <div class="row"><span>Global Mode</span><input type="checkbox" id="global_mode" onchange="toggle('global_mode')"></div>
         <div class="row"><span>TEE Broken Mode</span><input type="checkbox" id="tee_broken_mode" onchange="toggle('tee_broken_mode')"></div>
         <div class="row"><span>RKP Bypass (Beta)</span><input type="checkbox" id="rkp_bypass" onchange="toggle('rkp_bypass')"></div>
+        <div class="status" id="keyboxStatus" style="text-align: left; margin-top: 10px; font-weight: bold;">Keybox Status: Loading...</div>
     </div>
 
     <div class="section">
@@ -211,6 +213,17 @@ class WebServer(port: Int) : NanoHTTPD(port) {
             document.getElementById('global_mode').checked = data.global_mode;
             document.getElementById('tee_broken_mode').checked = data.tee_broken_mode;
             document.getElementById('rkp_bypass').checked = data.rkp_bypass;
+
+            const count = data.keybox_count;
+            const statusEl = document.getElementById('keyboxStatus');
+            if (count > 0) {
+                statusEl.innerText = 'Keybox Status: Loaded (' + count + ' keys)';
+                statusEl.style.color = '#4caf50';
+            } else {
+                statusEl.innerText = 'Keybox Status: Not Loaded (Check logs/format)';
+                statusEl.style.color = '#f44336';
+            }
+
             loadFile();
         }
 

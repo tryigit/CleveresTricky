@@ -98,6 +98,10 @@ public final class CertHack {
         return !keyboxes.isEmpty();
     }
 
+    public static int getKeyboxCount() {
+        return keyboxes.size();
+    }
+
     private static PEMKeyPair parseKeyPair(String key) throws Throwable {
         try (PEMParser parser = new PEMParser(new StringReader(UtilKt.trimLine(key)))) {
             return (PEMKeyPair) parser.readObject();
@@ -170,7 +174,8 @@ public final class CertHack {
             Logger.i("update " + numberOfKeyboxes + " keyboxes");
         } catch (Throwable t) {
             // Do not log the exception details as it might contain sensitive data from the keybox file.
-            Logger.e("Error loading xml file (keyboxes cleared).");
+            // Only log the exception type to avoid leaking private keys from XML snippets in the message.
+            Logger.e("Error loading xml file (keyboxes cleared): " + t.getClass().getName());
         }
     }
 
