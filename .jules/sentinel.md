@@ -7,3 +7,8 @@
 **Vulnerability:** The configuration directory `/data/adb/tricky_store/` and sensitive files like `keybox.xml` (containing private keys) were created with default permissions (likely 755/644), making them readable by any app on the device.
 **Learning:** Default filesystem operations (`mkdir`, `cp`) in Android/Linux usually respect umask (022 for root), resulting in world-readable files. Sensitive data must always have explicit permission hardening.
 **Prevention:** Always use `chmod 700` for directories and `chmod 600` for files containing secrets immediately after creation. Enforce this in both installation scripts (`customize.sh`) and runtime initialization (Java/Kotlin using `Os.chmod`).
+
+## 2024-05-24 - [Unintended Network Exposure of Local Service]
+**Vulnerability:** The internal configuration web server (`WebServer`) was initialized using `NanoHTTPD(port)`, which defaults to binding on all network interfaces (`0.0.0.0`). This exposed the sensitive configuration API and token auth to the local network (e.g., Wi-Fi).
+**Learning:** Embedded web servers often default to promiscuous binding. For local IPC or configuration tools, explicit binding to loopback (`127.0.0.1`) is mandatory.
+**Prevention:** Always explicitly specify the hostname/IP when initializing network listeners for local services (e.g., `NanoHTTPD("127.0.0.1", port)`).
