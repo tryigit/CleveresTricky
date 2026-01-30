@@ -52,9 +52,9 @@ class SecurityLevelInterceptor(
                 // val entropy = data.createByteArray()
                 val kgp = KeyGenParameters(params)
                 if (kgp.attestationChallenge != null) {
-                    // if (attestationKeyDescriptor != null) {
-                    //    Logger.e("warn: attestation key not supported now")
-                    // } else {
+                    if (attestationKeyDescriptor != null) {
+                        Logger.e("intercept attestation key request alias=${attestationKeyDescriptor.alias}")
+                    }
                     val pair = CertHack.generateKeyPair(callingUid, keyDescriptor, kgp)
                         ?: return@runCatching
                     val response = buildResponse(pair.second, kgp, keyDescriptor, callingUid)
@@ -63,7 +63,6 @@ class SecurityLevelInterceptor(
                     p.writeNoException()
                     p.writeTypedObject(response.metadata, 0)
                     return OverrideReply(0, p)
-                    // }
                 }
             }.onFailure {
                 Logger.e("parse key gen request", it)
