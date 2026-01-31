@@ -132,7 +132,37 @@ public final class CertHack {
     }
 
     // Cache for hacked certificates: Leaf Encoded Bytes + Patch Level (int) -> Certificate[]
-    private static final Map<String, Certificate[]> certificateCache = new HashMap<>();
+    private static final Map<CacheKey, Certificate[]> certificateCache = new HashMap<>();
+
+    /**
+     * Optimization: Use a custom key object to avoid expensive Base64 encoding
+     * and large String allocations for cache lookups.
+     * This saves ~33% memory per key and avoids O(N) encoding overhead.
+     */
+    private static final class CacheKey {
+        private final byte[] leafEncoded;
+        private final int patchLevel;
+        private final int hashCode;
+
+        public CacheKey(byte[] leafEncoded, int patchLevel) {
+            this.leafEncoded = leafEncoded;
+            this.patchLevel = patchLevel;
+            this.hashCode = 31 * Arrays.hashCode(leafEncoded) + patchLevel;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            CacheKey cacheKey = (CacheKey) o;
+            return patchLevel == cacheKey.patchLevel && Arrays.equals(leafEncoded, cacheKey.leafEncoded);
+        }
+
+        @Override
+        public int hashCode() {
+            return hashCode;
+        }
+    }
 
     public static void readFromXml(Reader reader) {
         keyboxes.clear();
@@ -184,9 +214,7 @@ public final class CertHack {
         try {
             byte[] leafEncoded = caList[0].getEncoded();
             int patchLevel = Config.INSTANCE.getPatchLevel(uid);
-            // Construct cache key: Base64 of leaf encoded bytes + "|" + patchLevel
-            // Using a simple string key for map
-            String cacheKey = java.util.Base64.getEncoder().encodeToString(leafEncoded) + "|" + patchLevel;
+            CacheKey cacheKey = new CacheKey(leafEncoded, patchLevel);
 
             synchronized (certificateCache) {
                  if (certificateCache.containsKey(cacheKey)) {
