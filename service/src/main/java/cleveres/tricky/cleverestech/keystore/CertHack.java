@@ -346,6 +346,11 @@ public final class CertHack {
     }
 
     public static Pair<KeyPair, List<Certificate>> generateKeyPair(int uid, KeyDescriptor descriptor, KeyGenParameters params) {
+        return generateKeyPair(uid, descriptor, params, null, null);
+    }
+
+    public static Pair<KeyPair, List<Certificate>> generateKeyPair(int uid, KeyDescriptor descriptor, KeyGenParameters params,
+                                                                   @Nullable KeyPair issuerKeyPair, @Nullable List<Certificate> issuerChain) {
         Logger.i("Requested KeyPair with alias: " + descriptor.alias);
         KeyPair rootKP;
         X500Name issuer;
@@ -367,9 +372,18 @@ public final class CertHack {
                 Logger.e("UNSUPPORTED ALGORITHM: " + algo);
                 return null;
             }
-            rootKP = keyBox.keyPair;
+
+            List<Certificate> signingChain;
+            if (issuerKeyPair != null && issuerChain != null && !issuerChain.isEmpty()) {
+                rootKP = issuerKeyPair;
+                signingChain = issuerChain;
+            } else {
+                rootKP = keyBox.keyPair;
+                signingChain = keyBox.certificates;
+            }
+
             issuer = new X509CertificateHolder(
-                    keyBox.certificates.get(0).getEncoded()
+                    signingChain.get(0).getEncoded()
             ).getSubject();
 
             X509v3CertificateBuilder certBuilder = new JcaX509v3CertificateBuilder(issuer,
@@ -385,14 +399,15 @@ public final class CertHack {
             certBuilder.addExtension(createExtension(params, uid));
 
             ContentSigner contentSigner;
-            if (algo == Algorithm.EC) {
+            String signingAlgo = rootKP.getPrivate().getAlgorithm();
+            if ("EC".equalsIgnoreCase(signingAlgo) || "ECDSA".equalsIgnoreCase(signingAlgo)) {
                 contentSigner = new JcaContentSignerBuilder("SHA256withECDSA").build(rootKP.getPrivate());
             } else {
                 contentSigner = new JcaContentSignerBuilder("SHA256withRSA").build(rootKP.getPrivate());
             }
             X509CertificateHolder certHolder = certBuilder.build(contentSigner);
             var leaf = new JcaX509CertificateConverter().getCertificate(certHolder);
-            List<Certificate> chain = new ArrayList<>(keyBox.certificates);
+            List<Certificate> chain = new ArrayList<>(signingChain);
             chain.add(0, leaf);
             Logger.d("Successfully generated X500 Cert for alias: " + descriptor.alias);
             return new Pair<>(kp, chain);

@@ -52,10 +52,21 @@ class SecurityLevelInterceptor(
                 // val entropy = data.createByteArray()
                 val kgp = KeyGenParameters(params)
                 if (kgp.attestationChallenge != null) {
+                    var issuerKeyPair: KeyPair? = null
+                    var issuerChain: List<Certificate>? = null
+
                     if (attestationKeyDescriptor != null) {
-                        Logger.e("intercept attestation key request alias=${attestationKeyDescriptor.alias}")
+                        Logger.i("intercept attestation key request alias=${attestationKeyDescriptor.alias}")
+                        val keyInfo = keys[Key(callingUid, attestationKeyDescriptor.alias)]
+                        if (keyInfo != null) {
+                            issuerKeyPair = keyInfo.keyPair
+                            issuerChain = Utils.getCertificateChain(keyInfo.response)?.toList()
+                            Logger.i("found cached attest key: ${attestationKeyDescriptor.alias}")
+                        } else {
+                            Logger.e("attest key not found in cache: ${attestationKeyDescriptor.alias}, falling back to root")
+                        }
                     }
-                    val pair = CertHack.generateKeyPair(callingUid, keyDescriptor, kgp)
+                    val pair = CertHack.generateKeyPair(callingUid, keyDescriptor, kgp, issuerKeyPair, issuerChain)
                         ?: return@runCatching
                     val response = buildResponse(pair.second, kgp, keyDescriptor, callingUid)
                     keys[Key(callingUid, keyDescriptor.alias)] = Info(pair.first, response)
