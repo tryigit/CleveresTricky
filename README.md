@@ -188,7 +188,6 @@ Supports both standard TrickyStore and James fork formats.
 ## Roadmap
 
 - App Attest Key support
-- Android 10/11 support
 - Automatic mode selection
 
 Contributions welcome.
