@@ -58,5 +58,8 @@ class WebServerHtmlTest {
 
         // Verify save button ID
         assertTrue("Missing id for saveBtn", html.contains("id=\"saveBtn\""))
+
+        // Verify reload button ID
+        assertTrue("Missing id for reloadBtn", html.contains("id=\"reloadBtn\""))
     }
 }

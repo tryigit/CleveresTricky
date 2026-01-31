@@ -204,7 +204,7 @@ class WebServer(port: Int, private val configDir: File = File("/data/adb/clevere
     </div>
 
     <div class="section" style="text-align: center;">
-        <button class="btn-success" onclick="reloadConfig()">Reload Config</button>
+        <button id="reloadBtn" class="btn-success" onclick="reloadConfig()">Reload Config</button>
     </div>
 
     <script>
@@ -322,9 +322,33 @@ class WebServer(port: Int, private val configDir: File = File("/data/adb/clevere
         }
 
         async function reloadConfig() {
-            const res = await fetch(getAuthUrl(baseUrl + '/reload'), { method: 'POST' });
-            if (res.ok) alert('Reloaded!');
-            else alert('Failed to reload');
+            const btn = document.getElementById('reloadBtn');
+            const originalText = btn.innerText;
+            btn.disabled = true;
+            btn.innerText = 'Reloading...';
+
+            try {
+                const res = await fetch(getAuthUrl(baseUrl + '/reload'), { method: 'POST' });
+                if (res.ok) {
+                    btn.innerText = 'Reloaded!';
+                    setTimeout(function() {
+                        btn.innerText = originalText;
+                        btn.disabled = false;
+                    }, 2000);
+                } else {
+                    btn.innerText = 'Failed';
+                    setTimeout(function() {
+                        btn.innerText = originalText;
+                        btn.disabled = false;
+                    }, 2000);
+                }
+            } catch (e) {
+                btn.innerText = 'Error';
+                setTimeout(function() {
+                    btn.innerText = originalText;
+                    btn.disabled = false;
+                }, 2000);
+            }
         }
 
         init();
