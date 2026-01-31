@@ -62,7 +62,11 @@ public class XMLParser {
                     if (currentElement != null && parser.getText() != null) {
                         String text = parser.getText().trim();
                         if (!text.isEmpty()) {
-                            currentElement.text = text;
+                            if (currentElement.text == null) {
+                                currentElement.text = text;
+                            } else {
+                                currentElement.text += text;
+                            }
                         }
                     }
                     break;
@@ -73,8 +77,8 @@ public class XMLParser {
                         if (stack.isEmpty()) {
                             return finished;
                         }
+                        currentElement = stack.get(stack.size() - 1);
                     }
-                    currentElement = null;
                     break;
             }
             eventType = parser.next();
