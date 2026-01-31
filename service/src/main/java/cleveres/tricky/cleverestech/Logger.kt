@@ -45,6 +45,11 @@ object Logger {
     }
 
     @JvmStatic
+    fun d(tag: String, msg: String) {
+        impl.d(tag, msg)
+    }
+
+    @JvmStatic
     inline fun d(msg: () -> String) {
         if (isDebugEnabled()) {
             d(msg())
@@ -57,13 +62,28 @@ object Logger {
     }
 
     @JvmStatic
+    fun e(tag: String, msg: String) {
+        impl.e(tag, msg)
+    }
+
+    @JvmStatic
     fun e(msg: String, t: Throwable?) {
         impl.e(TAG, msg, t)
     }
 
     @JvmStatic
+    fun e(tag: String, msg: String, t: Throwable?) {
+        impl.e(tag, msg, t)
+    }
+
+    @JvmStatic
     fun i(msg: String) {
         impl.i(TAG, msg)
+    }
+
+    @JvmStatic
+    fun i(tag: String, msg: String) {
+        impl.i(tag, msg)
     }
 
     @JvmStatic

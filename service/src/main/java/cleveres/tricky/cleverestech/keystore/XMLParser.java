@@ -37,6 +37,14 @@ public class XMLParser {
         XmlPullParserFactory xmlFactoryObject = XmlPullParserFactory.newInstance();
         XmlPullParser parser = xmlFactoryObject.newPullParser();
         parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false);
+        try {
+            parser.setFeature(XmlPullParser.FEATURE_PROCESS_DOCDECL, false);
+        } catch (Exception ignored) {
+            // Ignore if feature not supported (though it should be for security)
+        }
+        try {
+            parser.setFeature(XmlPullParser.FEATURE_VALIDATION, false);
+        } catch (Exception ignored) {}
         parser.setInput(reader);
 
         Element currentElement = null;
