@@ -38,7 +38,7 @@ class RkpInterceptorTest {
         keyPairGen.initialize(ECGenParameterSpec("secp256r1"))
         val keyPair = keyPairGen.generateKeyPair()
         
-        val macedKey = CertHack.generateMacedPublicKey(keyPair)
+        val macedKey = CertHack.generateMacedPublicKey(keyPair, ByteArray(32))
         
         assertNotNull("macedKey should not be null", macedKey)
         assertTrue("macedKey should have content", macedKey!!.isNotEmpty())
@@ -56,7 +56,7 @@ class RkpInterceptorTest {
         val keys = mutableListOf<ByteArray>()
         repeat(5) {
             val keyPair = keyPairGen.generateKeyPair()
-            val macedKey = CertHack.generateMacedPublicKey(keyPair)
+            val macedKey = CertHack.generateMacedPublicKey(keyPair, ByteArray(32))
             assertNotNull(macedKey)
             keys.add(macedKey!!)
         }
@@ -76,7 +76,7 @@ class RkpInterceptorTest {
         keyPairGen.initialize(ECGenParameterSpec("secp256r1"))
         val keyPair = keyPairGen.generateKeyPair()
         
-        val macedKey = CertHack.generateMacedPublicKey(keyPair)
+        val macedKey = CertHack.generateMacedPublicKey(keyPair, ByteArray(32))
         assertNotNull(macedKey)
         
         val publicKeys = listOf(macedKey!!)
@@ -102,7 +102,7 @@ class RkpInterceptorTest {
         val publicKeys = mutableListOf<ByteArray>()
         repeat(3) {
             val keyPair = keyPairGen.generateKeyPair()
-            val macedKey = CertHack.generateMacedPublicKey(keyPair)
+            val macedKey = CertHack.generateMacedPublicKey(keyPair, ByteArray(32))
             assertNotNull(macedKey)
             publicKeys.add(macedKey!!)
         }
@@ -124,7 +124,7 @@ class RkpInterceptorTest {
         keyPairGen.initialize(ECGenParameterSpec("secp256r1"))
         val keyPair = keyPairGen.generateKeyPair()
         
-        val macedKey = CertHack.generateMacedPublicKey(keyPair)
+        val macedKey = CertHack.generateMacedPublicKey(keyPair, ByteArray(32))
         val deviceInfo = CertHack.createDeviceInfoCbor("google", "Google", "generic", "Pixel", "generic")
         
         // empty challenge should still work
@@ -205,7 +205,7 @@ class RkpInterceptorTest {
         keyPairGen.initialize(ECGenParameterSpec("secp256r1"))
         val keyPair = keyPairGen.generateKeyPair()
         
-        val macedKey = CertHack.generateMacedPublicKey(keyPair)
+        val macedKey = CertHack.generateMacedPublicKey(keyPair, ByteArray(32))
         val deviceInfo = CertHack.createDeviceInfoCbor("google", "Google", "generic", "Pixel", "generic")
         
         // large challenge (1KB)
@@ -250,7 +250,7 @@ class RkpInterceptorTest {
         
         repeat(10) {
             val keyPair = keyPairGen.generateKeyPair()
-            CertHack.generateMacedPublicKey(keyPair)
+            CertHack.generateMacedPublicKey(keyPair, ByteArray(32))
         }
         
         val elapsed = System.currentTimeMillis() - startTime

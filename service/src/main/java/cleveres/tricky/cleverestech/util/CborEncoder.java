@@ -35,7 +35,7 @@ public class CborEncoder {
 
     public static void encodeItem(ByteArrayOutputStream os, Object value) throws IOException {
         if (value == null) {
-            writeTypeAndArgument(os, MT_SIMPLE, 22); // null
+            encodeTypeAndLength(os, MT_SIMPLE, 22); // null
         } else if (value instanceof Integer) {
             encodeInteger(os, (Integer) value);
         } else if (value instanceof Long) {
