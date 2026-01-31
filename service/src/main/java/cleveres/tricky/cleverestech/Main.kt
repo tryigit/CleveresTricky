@@ -1,5 +1,6 @@
 package cleveres.tricky.cleverestech
 
+import android.system.Os
 import java.io.File
 import java.security.MessageDigest
 import kotlin.system.exitProcess
@@ -18,6 +19,12 @@ fun main(args: Array<String>) {
         Logger.i("Web server started on port $port")
         val portFile = File(configDir, "web_port")
         if (!configDir.exists()) configDir.mkdirs()
+        // Secure directory before writing sensitive file
+        try {
+            Os.chmod(configDir.absolutePath, 448) // 0700
+        } catch (t: Throwable) {
+            Logger.e("failed to set permissions for config dir", t)
+        }
         portFile.writeText("$port|$token")
         portFile.setReadable(false, false) // Clear all
         portFile.setReadable(true, true) // Owner only (0600)
