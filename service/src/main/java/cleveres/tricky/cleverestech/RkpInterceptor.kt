@@ -252,7 +252,22 @@ class RkpInterceptor(
     }
 
     private fun createProtectedData(): ByteArray {
-        // empty for now, only needed if endpoint encryption is used
-        return ByteArray(0)
+        // COSE_Encrypt = [protected, unprotected, ciphertext, recipients]
+        try {
+            val protectedMap = java.util.HashMap<Int, Any>()
+            protectedMap[1] = 3 // A256GCM
+            val protHeader = cleveres.tricky.cleverestech.util.CborEncoder.encode(protectedMap)
+            
+            val coseEncrypt = java.util.ArrayList<Any>()
+            coseEncrypt.add(protHeader)
+            coseEncrypt.add(java.util.HashMap<Any, Any>()) // unprotected
+            coseEncrypt.add(ByteArray(16)) // dummy ciphertext
+            coseEncrypt.add(java.util.ArrayList<Any>()) // recipients
+            
+            return cleveres.tricky.cleverestech.util.CborEncoder.encode(coseEncrypt)
+        } catch (e: Throwable) {
+            Logger.e("failed to create protected data", e)
+            return ByteArray(0)
+        }
     }
 }
