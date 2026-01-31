@@ -52,7 +52,7 @@ object BetaFetcher {
      */
     fun startBackgroundService(intervalHours: Int = 24) {
         if (scheduler != null) {
-            Logger.d(TAG, "Background service already running")
+            Logger.d("[$TAG] Background service already running")
             return
         }
         
@@ -72,11 +72,11 @@ object BetaFetcher {
                     fetchAndApply(null)
                 }
             } catch (e: Exception) {
-                Logger.e(TAG, "Background fetch failed", e)
+                Logger.e("[$TAG] Background fetch failed", e)
             }
         }, safeInterval, safeInterval, TimeUnit.HOURS)
         
-        Logger.i(TAG, "Background service started, interval: ${safeInterval}h")
+        Logger.i("[$TAG] Background service started, interval: ${safeInterval}h")
     }
     
     /**
@@ -85,7 +85,7 @@ object BetaFetcher {
     fun stopBackgroundService() {
         scheduler?.shutdown()
         scheduler = null
-        Logger.i(TAG, "Background service stopped")
+        Logger.i("[$TAG] Background service stopped")
     }
     
     /**
@@ -101,7 +101,7 @@ object BetaFetcher {
      * @param preferredDevice Optional device to prefer (e.g., "husky" for Pixel 8 Pro)
      */
     fun fetchAndApply(preferredDevice: String?): FetchResult {
-        Logger.i(TAG, "Fetching latest Pixel Beta profile...")
+        Logger.i("[$TAG] Fetching latest Pixel Beta profile...")
         
         try {
             // 1. Get available devices
@@ -125,12 +125,12 @@ object BetaFetcher {
             applyProfile(profile)
             
             lastFetchTime = System.currentTimeMillis()
-            Logger.i(TAG, "Applied profile: ${profile.model} (${profile.fingerprint})")
+            Logger.i("[$TAG] Applied profile: ${profile.model} (${profile.fingerprint})")
             
             return FetchResult(true, profile = profile, availableDevices = devices)
             
         } catch (e: Exception) {
-            Logger.e(TAG, "Fetch failed", e)
+            Logger.e("[$TAG] Fetch failed", e)
             return FetchResult(false, error = e.message)
         }
     }
@@ -166,7 +166,7 @@ object BetaFetcher {
                     )
                 }
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to fetch device list", e)
+            Logger.e("[$TAG] Failed to fetch device list", e)
             return emptyList()
         }
     }
@@ -226,7 +226,7 @@ object BetaFetcher {
                 incremental = incrementalMatch
             )
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to fetch profile for $product", e)
+            Logger.e("[$TAG] Failed to fetch profile for $product", e)
             return null
         }
     }
@@ -275,7 +275,7 @@ $userOverrides
         """.trimIndent()
         
         varsFile.writeText(content)
-        Logger.i(TAG, "Profile applied to ${varsFile.absolutePath}")
+        Logger.i("[$TAG] Profile applied to ${varsFile.absolutePath}")
     }
     
     /**

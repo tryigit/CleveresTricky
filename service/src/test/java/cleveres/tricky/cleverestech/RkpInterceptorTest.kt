@@ -22,9 +22,9 @@ class RkpInterceptorTest {
         Logger.setImpl(object : Logger.LogImpl {
             override fun d(tag: String, msg: String) = println("D/$tag: $msg")
             override fun e(tag: String, msg: String) = println("E/$tag: $msg")
-            override fun e(tag: String, msg: String, t: Throwable) {
+            override fun e(tag: String, msg: String, t: Throwable?) {
                 println("E/$tag: $msg")
-                t.printStackTrace()
+                t?.printStackTrace()
             }
             override fun i(tag: String, msg: String) = println("I/$tag: $msg")
         })
