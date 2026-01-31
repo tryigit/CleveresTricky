@@ -93,11 +93,11 @@ class WebServer(port: Int, private val configDir: File = File("/data/adb/clevere
         if (uri == "/api/save" && method == Method.POST) {
              val map = HashMap<String, String>()
              try { session.parseBody(map) } catch(e:Exception){}
-             val filename = params["filename"]
+             val filename = session.parms["filename"]
              // nanohttpd puts body content in map["postData"] usually, or mix params.
              // When parsing body, map contains temp file paths for uploads, but for form data it puts in parms?
              // Actually parseBody populates map with temp files, and parms with fields.
-             val content = params["content"] // This might be limited in size?
+             val content = session.parms["content"] // This might be limited in size?
              // For large content (keybox), we might need to read from map if it's treated as file?
              // But usually standard form post puts it in parms.
              // Let's assume text/plain body or form-url-encoded.
@@ -118,8 +118,8 @@ class WebServer(port: Int, private val configDir: File = File("/data/adb/clevere
         if (uri == "/api/toggle" && method == Method.POST) {
              val map = HashMap<String, String>()
              try { session.parseBody(map) } catch(e:Exception){}
-             val setting = params["setting"]
-             val value = params["value"]
+             val setting = session.parms["setting"]
+             val value = session.parms["value"]
 
              if (setting != null && value != null) {
                  if (toggleFile(setting, value.toBoolean())) {
