@@ -11,7 +11,9 @@ CleveresTricky provides comprehensive keystore spoofing with the following capab
 **Core Features:**
 - Binder level system property spoofing (invisible to DroidGuard/GMS)
 - KeyMint 4.0 support
-- Remote Key Provisioning (RKP) spoofing for STRONG integrity
+- KeyMint 4.0 support
+- **Advanced RKP Emulation** for MEETS_STRONG_INTEGRITY
+- **Dynamic Identity Mutation** (Anti-Fingerprinting)
 - Automatic Pixel Beta fingerprint fetching
 - Security patch level customization
 - Low memory footprint with immediate config release
@@ -120,6 +122,12 @@ touch /data/adb/cleverestricky/rkp_bypass
 ```bash
 rm /data/adb/cleverestricky/rkp_bypass
 ```
+
+**How it works (The Truth):**
+This module uses a sophisticated "Local RKP Proxy" to emulate a secure hardware element. It generates valid, RFC-compliant COSE/CBOR cryptographic proofs signed by a local authority.
+- **Goal:** To trick Google's backend into accepting the device as a new, unprovisioned unit or a trusted generic implementation.
+- **Reality Check:** This is a "Cat & Mouse" game. While the implementation is technically robust (canonical CBOR, correct P-256 math), Google can theoretically ban the specific implementation pattern or require hardware-root verification.
+- **Counter-Measure:** The module features "Dynamic Identity Mutation". The internal root secret rotates automatically every 24 hours, ensuring you don't get stuck with a banned "digital fingerprint".
 
 **Custom keys (optional):**
 Place custom remote keys at `/data/adb/cleverestricky/remote_keys.xml`.
