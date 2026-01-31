@@ -4,6 +4,7 @@ import android.content.pm.PackageManager;
 import android.hardware.security.keymint.Algorithm;
 import android.hardware.security.keymint.EcCurve;
 import android.hardware.security.keymint.KeyParameter;
+import android.hardware.security.keymint.KeyPurpose;
 import android.hardware.security.keymint.Tag;
 import android.security.keystore.KeyProperties;
 import android.system.keystore2.KeyDescriptor;
@@ -420,8 +421,22 @@ public final class CertHack {
     private static KeyPair buildECKeyPair(KeyGenParameters params) throws Exception {
         Security.removeProvider(BouncyCastleProvider.PROVIDER_NAME);
         Security.addProvider(new BouncyCastleProvider());
-        ECGenParameterSpec spec = new ECGenParameterSpec(params.ecCurveName);
-        KeyPairGenerator kpg = KeyPairGenerator.getInstance("ECDSA", BouncyCastleProvider.PROVIDER_NAME);
+
+        String algo = "ECDSA";
+        String curveName = params.ecCurveName;
+
+        if (params.ecCurve == EcCurve.CURVE_25519) {
+            if (params.purpose.contains(KeyPurpose.SIGN) || params.purpose.contains(KeyPurpose.ATTEST_KEY)) {
+                algo = "Ed25519";
+                curveName = "Ed25519";
+            } else {
+                algo = "XDH";
+                curveName = "X25519";
+            }
+        }
+
+        ECGenParameterSpec spec = new ECGenParameterSpec(curveName);
+        KeyPairGenerator kpg = KeyPairGenerator.getInstance(algo, BouncyCastleProvider.PROVIDER_NAME);
         kpg.initialize(spec);
         return kpg.generateKeyPair();
     }
@@ -703,7 +718,7 @@ public final class CertHack {
         private static String getEcCurveName(int curve) {
             String res;
             switch (curve) {
-                case EcCurve.CURVE_25519 -> res = "CURVE_25519";
+                case EcCurve.CURVE_25519 -> res = "X25519";
                 case EcCurve.P_224 -> res = "secp224r1";
                 case EcCurve.P_256 -> res = "secp256r1";
                 case EcCurve.P_384 -> res = "secp384r1";
