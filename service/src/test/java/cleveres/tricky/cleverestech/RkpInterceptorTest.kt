@@ -149,7 +149,7 @@ class RkpInterceptorTest {
         
         assertNotNull("deviceInfo should not be null", deviceInfo)
         assertTrue("deviceInfo should have content", deviceInfo!!.isNotEmpty())
-        assertEquals("should start with CBOR map header", 0xAA.toByte(), deviceInfo[0])
+        assertEquals("should start with CBOR map header", 0xAB.toByte(), deviceInfo[0])
         
         // check that it contains expected values
         val content = String(deviceInfo, Charsets.UTF_8)
