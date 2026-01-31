@@ -6,7 +6,7 @@ import java.security.MessageDigest
 import kotlin.system.exitProcess
 
 fun main(args: Array<String>) {
-    Logger.i("Welcome to TrickyStore!")
+    Logger.i("Welcome to CleveresTricky!")
     Verification.check()
 
     // Start Web Server

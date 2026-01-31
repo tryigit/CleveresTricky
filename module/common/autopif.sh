@@ -3,7 +3,7 @@
 # Goal: MEETS_STRONG_INTEGRITY
 # Battery-optimized background updates
 
-MODDIR="${MODDIR:-/data/adb/modules/cleveres_tricky}"
+MODDIR="${MODDIR:-/data/adb/modules/cleverestricky}"
 DATADIR="/data/adb/cleverestricky"
 VERSION=$(grep "^version=" "$MODDIR/module.prop" 2>/dev/null | sed 's/version=//g')
 
@@ -185,7 +185,7 @@ EOF
     log "Saved to $output"
 }
 
-# Update security patch for TrickyStore compatibility
+# Update security patch
 update_security_patch() {
     local target="$DATADIR/security_patch.txt"
     

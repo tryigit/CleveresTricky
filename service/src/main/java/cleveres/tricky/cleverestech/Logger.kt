@@ -3,7 +3,7 @@ package cleveres.tricky.cleverestech
 import android.util.Log
 
 object Logger {
-    const val TAG = "TrickyStore"
+    const val TAG = "CleveresTricky"
 
     interface LogImpl {
         fun d(tag: String, msg: String)

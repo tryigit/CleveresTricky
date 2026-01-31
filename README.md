@@ -2,8 +2,6 @@
 
 **Advanced Keystore and Attestation Spoofing Module for Android**
 
-*Formerly TrickyStore*
-
 **Requires Android 12+**
 
 ## Features
@@ -83,7 +81,7 @@ ro.boot.verifiedbootstate=green
 ro.boot.flash.locked=1
 ```
 
-For Magisk users without Zygisk, remove `/data/adb/modules/cleveres_tricky/zygisk`.
+For Magisk users without Zygisk, remove `/data/adb/modules/cleverestricky/zygisk`.
 
 ### Device Templates
 
@@ -174,6 +172,15 @@ Special values:
 - `no` disables patching for that component
 - `prop` keeps system prop consistent
 
+**Security Patch sync:**
+```bash
+# Enable sync
+sh /data/adb/modules/cleverestricky/security_patch.sh --enable
+
+# Disable sync
+sh /data/adb/modules/cleverestricky/security_patch.sh --disable
+```
+
 ## Roadmap
 
 Contributions welcome.
@@ -185,7 +192,6 @@ Contributions welcome.
 - [BootloaderSpoofer](https://github.com/chiteroman/BootloaderSpoofer)
 - [KeystoreInjection](https://github.com/aviraxp/Zygisk-KeystoreInjection)
 - [LSPosed](https://github.com/LSPosed/LSPosed)
-- TrickyStore
 
 ## Credits
 

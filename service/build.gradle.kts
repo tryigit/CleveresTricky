@@ -109,7 +109,7 @@ afterEvaluate {
                     commandLine(
                         "adb",
                         "shell",
-                        "su -c 'rm /data/adb/modules/cleveres_tricky/service.apk; mv /data/local/tmp/service.apk /data/adb/modules/cleveres_tricky/'"
+                        "su -c 'rm /data/adb/modules/cleverestricky/service.apk; mv /data/local/tmp/service.apk /data/adb/modules/cleverestricky/'"
                     )
                 }
             }

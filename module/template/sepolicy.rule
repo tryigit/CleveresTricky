@@ -1,8 +1,8 @@
-# Define a type for the TrickyStore daemon and its executable files
+# Define a type for the CleveresTricky daemon and its executable files
 type tricky_store_daemon;
 type tricky_store_exec, exec_type, file_type, system_file_type;
 
-# Define a type for TrickyStore's data files in /data/adb/tricky_store
+# Define a type for CleveresTricky's data files in /data/adb/cleverestricky
 type tricky_store_data_file, file_type, data_file_type;
 
 # Allow init or zygote to transition the daemon executable to tricky_store_daemon type
@@ -25,8 +25,8 @@ allow tricky_store_daemon keystore_server:process { ptrace };
 allow keystore_server tricky_store_daemon:binder { call transfer };
 allow tricky_store_daemon keystore_server:binder { transfer }; # For replies and C++ calling back to Java interceptors
 
-# Permissions for tricky_store_daemon to read its config files in /data/adb/tricky_store
-# Assumes files in /data/adb/tricky_store are (or can be) labeled tricky_store_data_file.
+# Permissions for tricky_store_daemon to read its config files in /data/adb/cleverestricky
+# Assumes files in /data/adb/cleverestricky are (or can be) labeled tricky_store_data_file.
 # Alternatively, use a broader context like 'adb_data_file' if managed by Magisk that way.
 allow tricky_store_daemon tricky_store_data_file:dir { search read open getattr };
 allow tricky_store_daemon tricky_store_data_file:file { read open getattr };

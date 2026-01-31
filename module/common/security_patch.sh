@@ -1,9 +1,9 @@
 #!/system/bin/sh
 # CleveresTricky Security Patch Utility
-# Syncs security patch level with TrickyStore/other modules
+# Syncs security patch level
 
 DATADIR="/data/adb/cleverestricky"
-MODDIR="${MODDIR:-/data/adb/modules/cleveres_tricky}"
+MODDIR="${MODDIR:-/data/adb/modules/cleverestricky}"
 
 # Config flags
 AUTO_FLAG="$DATADIR/auto_security_patch"
@@ -95,47 +95,6 @@ EOF
     log "system.prop written with patch: $patch"
 }
 
-# Sync with TrickyStore if installed
-sync_trickystore() {
-    local ts_mod="/data/adb/modules/tricky_store"
-    
-    if [ ! -d "$ts_mod" ]; then
-        return 0
-    fi
-    
-    log "Syncing with TrickyStore..."
-    
-    # Detect TrickyStore variant
-    local config_file
-    if grep -q "James" "$ts_mod/module.prop" 2>/dev/null; then
-        config_file="/data/adb/tricky_store/devconfig.toml"
-    else
-        config_file="/data/adb/tricky_store/security_patch.txt"
-    fi
-    
-    local patch=$(get_security_patch)
-    local short_patch=$(echo "$patch" | tr -d '-')
-    
-    if [ "$config_file" = "/data/adb/tricky_store/security_patch.txt" ]; then
-        # Standard format
-        mkdir -p "$(dirname "$config_file")"
-        cat > "$config_file" << EOF
-system=$short_patch
-boot=$patch
-vendor=$patch
-EOF
-    elif [ -f "$config_file" ]; then
-        # TOML format (James fork)
-        if grep -q "^securityPatch" "$config_file"; then
-            sed -i "s/^securityPatch.*/securityPatch = \"$patch\"/" "$config_file"
-        else
-            echo "securityPatch = \"$patch\"" >> "$config_file"
-        fi
-    fi
-    
-    log "TrickyStore synced: $patch"
-}
-
 # Main
 main() {
     log "Security Patch Utility"
@@ -162,9 +121,6 @@ main() {
     
     # Write props
     write_system_prop "$SYSTEM_PATCH"
-    
-    # Sync with TrickyStore
-    sync_trickystore
     
     log "Done!"
 }

@@ -22,7 +22,7 @@ val gitCommitCount = "git rev-list HEAD --count".execute().toInt()
 val gitCommitHash = "git rev-parse --verify --short HEAD".execute()
 
 // also the soname
-val moduleId by extra("cleveres_tricky")
+val moduleId by extra("cleverestricky")
 val moduleName by extra("CleveresTricky Beta")
 val author by extra("tryigitx")
 val description by extra("AI Powered trick of keystore. See GitHub for changelog details.")
