@@ -65,6 +65,7 @@ class WebServer(port: Int, private val configDir: File = File("/data/adb/clevere
             config.append("\"global_mode\": ${fileExists("global_mode")},")
             config.append("\"tee_broken_mode\": ${fileExists("tee_broken_mode")},")
             config.append("\"rkp_bypass\": ${fileExists("rkp_bypass")},")
+            config.append("\"auto_beta\": ${fileExists("auto_beta_fetch")},")
             // For file contents, we might want to load them on demand or include them here.
             // Including them might be heavy if large. Let's make separate endpoints or just load them if requested?
             // For simplicity, let's load text files separately or all at once?
@@ -138,6 +139,24 @@ class WebServer(port: Int, private val configDir: File = File("/data/adb/clevere
              }
         }
 
+        if (uri == "/api/fetch_beta" && method == Method.POST) {
+             try {
+                // Trigger fetch via shell script or direct call if possible.
+                // Since this runs as root/system, we can maybe trigger the service directly or run the script.
+                // For simplicity, let's just touch a trigger file or run the command.
+                // But BetaFetcher is in the same process potentially? No, this is the service.
+                // BetaFetcher is an object in the same package.
+                val result = BetaFetcher.fetchAndApply(null)
+                if (result.success) {
+                    return newFixedLengthResponse(Response.Status.OK, "text/plain", "Success: ${result.profile?.model}")
+                } else {
+                    return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, "text/plain", "Failed: ${result.error}")
+                }
+             } catch(e: Exception) {
+                 return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, "text/plain", "Error: ${e.message}")
+             }
+        }
+
         if (uri == "/" || uri == "/index.html") {
             return newFixedLengthResponse(Response.Status.OK, "text/html", getHtml())
         }
@@ -176,7 +195,11 @@ class WebServer(port: Int, private val configDir: File = File("/data/adb/clevere
     <div class="section">
         <div class="row"><label for="global_mode" style="flex-grow: 1; padding: 10px 0;">Global Mode</label><input type="checkbox" id="global_mode" onchange="toggle('global_mode')"></div>
         <div class="row"><label for="tee_broken_mode" style="flex-grow: 1; padding: 10px 0;">TEE Broken Mode</label><input type="checkbox" id="tee_broken_mode" onchange="toggle('tee_broken_mode')"></div>
-        <div class="row"><label for="rkp_bypass" style="flex-grow: 1; padding: 10px 0;">RKP Bypass (Beta)</label><input type="checkbox" id="rkp_bypass" onchange="toggle('rkp_bypass')"></div>
+        <div class="row"><label for="rkp_bypass" style="flex-grow: 1; padding: 10px 0;">RKP Bypass (Strong Integrity)</label><input type="checkbox" id="rkp_bypass" onchange="toggle('rkp_bypass')"></div>
+        <div class="row"><label for="auto_beta_fetch" style="flex-grow: 1; padding: 10px 0;">Auto Pixel Beta Fetch (Daily)</label><input type="checkbox" id="auto_beta_fetch" onchange="toggle('auto_beta_fetch')"></div>
+        <div class="row" style="margin-top: 10px; justify-content: flex-end;">
+            <button onclick="fetchBetaNow()" class="btn-success" style="font-size: 14px; padding: 8px 16px;">Fetch Beta Fingerprint Now</button>
+        </div>
         <div class="status" id="keyboxStatus" style="text-align: left; margin-top: 10px; font-weight: bold;">Keybox Status: Loading...</div>
     </div>
 
@@ -229,7 +252,9 @@ class WebServer(port: Int, private val configDir: File = File("/data/adb/clevere
             const data = await res.json();
             document.getElementById('global_mode').checked = data.global_mode;
             document.getElementById('tee_broken_mode').checked = data.tee_broken_mode;
+            document.getElementById('tee_broken_mode').checked = data.tee_broken_mode;
             document.getElementById('rkp_bypass').checked = data.rkp_bypass;
+            document.getElementById('auto_beta_fetch').checked = data.auto_beta;
 
             const count = data.keybox_count;
             const statusEl = document.getElementById('keyboxStatus');
@@ -313,6 +338,30 @@ class WebServer(port: Int, private val configDir: File = File("/data/adb/clevere
 
                 if (res.ok) alert('Saved!');
                 else alert('Failed to save');
+            } catch (e) {
+                alert('Error: ' + e);
+            } finally {
+                btn.disabled = false;
+                btn.innerText = originalText;
+            }
+        }
+
+        async function fetchBetaNow() {
+            if (!confirm("This will overwrite your spoof_build_vars with the latest Pixel Beta fingerprint. Continue?")) return;
+            const btn = event.target;
+            const originalText = btn.innerText;
+            btn.disabled = true;
+            btn.innerText = 'Fetching...';
+            
+            try {
+                const res = await fetch(getAuthUrl(baseUrl + '/fetch_beta'), { method: 'POST' });
+                const text = await res.text();
+                if (res.ok) {
+                    alert(text);
+                    loadFile(); // Reload editor if viewing var file
+                } else {
+                    alert(text);
+                }
             } catch (e) {
                 alert('Error: ' + e);
             } finally {

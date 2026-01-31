@@ -2,6 +2,7 @@ package cleveres.tricky.cleverestech
 
 import android.annotation.SuppressLint
 import android.hardware.security.keymint.SecurityLevel
+import android.hardware.security.rkp.IRemotelyProvisionedComponent
 import android.os.IBinder
 import android.os.Parcel
 import android.os.ServiceManager
@@ -22,6 +23,7 @@ object KeystoreInterceptor : BinderInterceptor() {
 
     private var teeInterceptor: SecurityLevelInterceptor? = null
     private var strongBoxInterceptor: SecurityLevelInterceptor? = null
+    private var rkpInterceptor: RkpInterceptor? = null
 
     override fun onPreTransact(
         target: IBinder,
@@ -191,7 +193,47 @@ object KeystoreInterceptor : BinderInterceptor() {
         } else {
             Logger.i("no StrongBox SecurityLevel found!")
         }
+        
+        // Register RKP interceptor for STRONG integrity
+        if (Config.shouldBypassRkp()) {
+            val rkp = findRemotelyProvisionedComponent()
+            if (rkp != null) {
+                Logger.i("register for RemotelyProvisionedComponent!")
+                val interceptor = RkpInterceptor(rkp, SecurityLevel.TRUSTED_ENVIRONMENT)
+                registerBinderInterceptor(bd, rkp.asBinder(), interceptor)
+                rkpInterceptor = interceptor
+            } else {
+                Logger.i("no RemotelyProvisionedComponent found (RKP bypass enabled but HAL not available)")
+            }
+        }
+        
         return true
+    }
+    
+    /**
+     * Finds the RemotelyProvisionedComponent HAL service.
+     * Required for RKP spoofing to achieve MEETS_STRONG_INTEGRITY.
+     */
+    private fun findRemotelyProvisionedComponent(): IRemotelyProvisionedComponent? {
+        return kotlin.runCatching {
+            // Try default instance first
+            var b = ServiceManager.getService(
+                "android.hardware.security.keymint.IRemotelyProvisionedComponent/default"
+            )
+            if (b == null) {
+                // Try TEE instance
+                b = ServiceManager.getService(
+                    "android.hardware.security.keymint.IRemotelyProvisionedComponent/strongbox"
+                )
+            }
+            if (b != null) {
+                IRemotelyProvisionedComponent.Stub.asInterface(b)
+            } else {
+                null
+            }
+        }.onFailure {
+            Logger.e("Failed to find RemotelyProvisionedComponent", it)
+        }.getOrNull()
     }
 
     object Killer : IBinder.DeathRecipient {

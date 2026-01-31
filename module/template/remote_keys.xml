@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Remote Key Provisioning Configuration Template
+    
+    This file configures remote key spoofing for MEETS_STRONG_INTEGRITY.
+    Place at: /data/adb/cleverestricky/remote_keys.xml
+    
+    Note: This is an optional configuration. When not present, the module
+    will generate keys on-the-fly. Providing pre-generated keys can improve
+    consistency across attestation requests.
+-->
+<RemoteKeyProvisioning>
+    <Version>1</Version>
+    
+    <!-- 
+        Keys section contains EC P-256 key pairs for RKP.
+        Multiple keys can be provided for rotation.
+    -->
+    <Keys>
+        <!-- 
+            Example EC P-256 key for attestation.
+            Replace with your own keys for production use.
+        -->
+        <Key algorithm="ecdsa_p256">
+            <PrivateKey format="pem">
+-----BEGIN EC PRIVATE KEY-----
+MHQCAQEEIBYwEr8xXEqpGBFBPH8qHJFzSkYAKU3NpPDuKj1kpz0OoAcGBSuBBAAK
+oUQDQgAE... (replace with actual key)
+-----END EC PRIVATE KEY-----
+            </PrivateKey>
+            
+            <!-- 
+                Optional: Pre-generated COSE_Key format public key.
+                If not provided, will be derived from private key.
+            -->
+            <PublicKeyCose>
+                <!-- Base64 encoded COSE_Key -->
+            </PublicKeyCose>
+            
+            <!-- 
+                Optional: Custom device info to use in attestation.
+                If not provided, will be derived from spoof_build_vars.
+            -->
+            <DeviceInfo>
+                <!-- Base64 encoded CBOR device info map -->
+            </DeviceInfo>
+        </Key>
+    </Keys>
+    
+    <!-- 
+        Optional: Override RPC Hardware Info
+        Customize the values returned by getHardwareInfo()
+    -->
+    <HardwareInfo>
+        <VersionNumber>3</VersionNumber>
+        <RpcAuthorName>Google</RpcAuthorName>
+        <SupportedEekCurve>2</SupportedEekCurve>
+        <!-- Curve 2 = P-256 -->
+        <SupportedNumKeysInCsr>20</SupportedNumKeysInCsr>
+    </HardwareInfo>
+</RemoteKeyProvisioning>

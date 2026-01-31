@@ -1,35 +1,40 @@
-# CleveresTricky (Beta)
+# CleveresTricky
 
-**The AI-Powered, Unrestricted, God-Tier Keystore & Attestation Spoofing Module**
+**Advanced Keystore and Attestation Spoofing Module for Android**
 
 *Formerly TrickyStore*
 
-**Android 12 or above is required**.
+**Requires Android 12+**
 
-## Why CleveresTricky?
+## Features
 
-Compared to the standard TrickyStore, **CleveresTricky** brings:
-- **AI-Powered Continuous Updates:** Leveraging advanced AI to stay ahead of Google's detections. More security vulnerabilities are being fixed.
-- **Unrivaled Security & Stealth:** Implements **Binder-level System Property Spoofing** to hide sensitive props (like `ro.boot.verifiedbootstate`) from deep inspection methods (DroidGuard/GMS) without relying on fragile hooking frameworks for every app.
-- **Peak Performance:** Optimized C++ injection and lightweight Java service.
-- **Low RAM Usage:** CleveresTricky is optimized for low RAM devices. It automatically releases memory used by configuration files (like `keybox.xml`) immediately after parsing.
-- **God-Mode Features:**
-    - **Safe Binder Spoofing:** Bypasses ABI issues to safely spoof system properties at the IPC level.
-    - **KeyMint 4.0 Support:** Ready for the future.
-    - **Module Hash Spoofing:** (Experimental) To match official firmware fingerprints. ... more
+CleveresTricky provides comprehensive keystore spoofing with the following capabilities:
 
-## Usage
+**Core Features:**
+- Binder level system property spoofing (invisible to DroidGuard/GMS)
+- KeyMint 4.0 support
+- Remote Key Provisioning (RKP) spoofing for STRONG integrity
+- Automatic Pixel Beta fingerprint fetching
+- Security patch level customization
+- Low memory footprint with immediate config release
 
-1. Flash this module and reboot.  
-2. For more than DEVICE integrity, put an unrevoked hardware keybox.xml at `/data/adb/cleverestricky/keybox.xml` (Optional).
-3. Customize target packages at `/data/adb/cleverestricky/target.txt` (Optional).
-4. Enjoy!  
+**Integrity Support:**
+- MEETS_BASIC_INTEGRITY
+- MEETS_DEVICE_INTEGRITY
+- MEETS_STRONG_INTEGRITY (via RKP spoofing)
 
-**All configuration files will take effect immediately.**
+## Quick Start
 
-## keybox.xml
+1. Flash the module and reboot
+2. Place keybox.xml at `/data/adb/cleverestricky/keybox.xml` (optional, for hardware attestation)
+3. Configure target packages in `/data/adb/cleverestricky/target.txt` (optional)
+4. Enable RKP bypass for STRONG integrity: `touch /data/adb/cleverestricky/rkp_bypass`
 
-format:
+Configuration changes take effect immediately.
+
+## Configuration
+
+### keybox.xml
 
 ```xml
 <?xml version="1.0"?>
@@ -44,27 +49,22 @@ format:
             </PrivateKey>
             <CertificateChain>
                 <NumberOfCertificates>...</NumberOfCertificates>
-                    <Certificate format="pem">
+                <Certificate format="pem">
 -----BEGIN CERTIFICATE-----
 ...
 -----END CERTIFICATE-----
-                    </Certificate>
-                ... more certificates
+                </Certificate>
             </CertificateChain>
-        </Key>...
+        </Key>
     </Keybox>
 </AndroidAttestation>
 ```
 
-## Build Vars Spoofing (Advanced Privacy)
+### Build Vars Spoofing
 
-> **Zygisk (or Zygisk Next) is needed for this feature to work.**
+> Requires Zygisk or Zygisk Next
 
-CleveresTricky allows you to spoof ANY system property via Binder interception, making it invisible to standard `getprop` checks from targeted apps.
-
-Create/edit `/data/adb/cleverestricky/spoof_build_vars`.
-
-Example:
+Create/edit `/data/adb/cleverestricky/spoof_build_vars`:
 
 ```
 MANUFACTURER=Google
@@ -79,64 +79,120 @@ INCREMENTAL=12094726
 TYPE=user
 TAGS=release-keys
 SECURITY_PATCH=2024-07-05
-# Advanced hidden props
 ro.boot.verifiedbootstate=green
 ro.boot.flash.locked=1
 ```
 
-For Magisk users: if you don't need this feature and zygisk is disabled, please remove or rename the
-folder `/data/adb/modules/cleveres_tricky/zygisk` manually.
+For Magisk users without Zygisk, remove `/data/adb/modules/cleveres_tricky/zygisk`.
 
-## Device Templates
+### Device Templates
 
-CleveresTricky includes built-in templates for popular devices to make spoofing easier. You can apply these templates via the Web UI or by adding `TEMPLATE=<name>` to your `spoof_build_vars` file.
+Built-in templates available:
+- `pixel8pro`, `pixel7pro`, `pixel6pro`
+- `xiaomi14`, `s23ultra`, `oneplus11`
 
-**Available Templates:**
-*   `pixel8pro` (Google Pixel 8 Pro)
-*   `pixel7pro` (Google Pixel 7 Pro)
-*   `pixel6pro` (Google Pixel 6 Pro)
-*   `xiaomi14` (Xiaomi 14)
-*   `s23ultra` (Samsung Galaxy S23 Ultra)
-*   `oneplus11` (OnePlus 11)
-
-**Usage via Web UI:**
-1.  Open the Web UI.
-2.  Select `spoof_build_vars` from the file selector.
-3.  Choose a device from the "Select a device template..." dropdown.
-4.  Click "Load Template".
-5.  Click "Save File".
-
-**Usage via File:**
-Edit `/data/adb/cleverestricky/spoof_build_vars`:
-```text
-TEMPLATE=pixel7pro
-# You can override specific variables if needed
-MODEL=My Custom Model
+Usage in spoof_build_vars:
+```
+TEMPLATE=pixel8pro
+MODEL=Custom Override
 ```
 
-## Support TEE broken devices
+### Target Configuration
 
-CleveresTricky will hack the leaf certificate by default. On TEE broken devices, this will not work because we can't retrieve the leaf certificate from TEE. You can add a `!` after a package name to enable generate certificate support for this package.
-
-For example:
+In `/data/adb/cleverestricky/target.txt`:
 
 ```
-# target.txt
-# use leaf certificate hacking mode for KeyAttestation App
+# Standard mode (leaf certificate hack)
 io.github.vvb2060.keyattestation
-# use certificate generating mode for gms
+
+# Generate mode for TEE broken devices (append !)
 com.google.android.gms!
 ```
 
-## TODO
+## RKP Spoofing (STRONG Integrity)
 
-- Support App Attest Key.
-- Support Android 11 and below.
-- Support automatic selection mode.
+Remote Key Provisioning spoofing enables MEETS_STRONG_INTEGRITY.
 
-PR is welcomed.
+**Enable:**
+```bash
+touch /data/adb/cleverestricky/rkp_bypass
+```
 
-## Acknowledgement
+**Disable:**
+```bash
+rm /data/adb/cleverestricky/rkp_bypass
+```
+
+**Custom keys (optional):**
+Place custom remote keys at `/data/adb/cleverestricky/remote_keys.xml`.
+
+**Verification:**
+Use [Play Integrity API Checker](https://play.google.com/store/apps/details?id=gr.nickas.playintegrity) to confirm all three integrity levels pass.
+
+## AutoPIF (Automatic Fingerprint Updates)
+
+Fetches latest Pixel Beta/Canary fingerprints from Google servers.
+
+**Manual execution:**
+```bash
+# Random device
+sh /data/adb/modules/cleveres_tricky/autopif.sh
+
+# Specific device
+sh /data/adb/modules/cleveres_tricky/autopif.sh --device husky
+
+# List devices
+sh /data/adb/modules/cleveres_tricky/autopif.sh --list
+```
+
+**Background updates (24 hour interval, battery optimized):**
+```bash
+# Enable
+touch /data/adb/cleverestricky/auto_beta_fetch
+
+# Disable
+rm /data/adb/cleverestricky/auto_beta_fetch
+```
+
+## Security Patch Customization
+
+Create `/data/adb/cleverestricky/security_patch.txt`:
+
+**Simple format:**
+```
+20241101
+```
+
+**Advanced format:**
+```
+system=202411
+boot=2024-11-01
+vendor=2024-11-01
+```
+
+Special values:
+- `no` disables patching for that component
+- `prop` keeps system prop consistent
+
+**TrickyStore sync:**
+```bash
+# Enable sync
+sh /data/adb/modules/cleveres_tricky/security_patch.sh --enable
+
+# Disable sync
+sh /data/adb/modules/cleveres_tricky/security_patch.sh --disable
+```
+
+Supports both standard TrickyStore and James fork formats.
+
+## Roadmap
+
+- App Attest Key support
+- Automatic mode selection
+
+Contributions welcome.
+
+## Acknowledgements
 
 - [PlayIntegrityFix](https://github.com/chiteroman/PlayIntegrityFix)
 - [FrameworkPatch](https://github.com/chiteroman/FrameworkPatch)
@@ -144,7 +200,7 @@ PR is welcomed.
 - [KeystoreInjection](https://github.com/aviraxp/Zygisk-KeystoreInjection)
 - [LSPosed](https://github.com/LSPosed/LSPosed)
 - TrickyStore
-  
+
 ## Credits
 
-**Cleverestech Telegram Group** - AI-Powered Development.
+Cleverestech Telegram Group
