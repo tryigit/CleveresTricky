@@ -251,7 +251,17 @@ class WebServer(
                          val tmpl = obj.optString("template", "null").ifEmpty { "null" }
                          val kb = obj.optString("keybox", "null").ifEmpty { "null" }
 
-                         if (pkg.contains(Regex("\\s")) || tmpl.contains(Regex("\\s")) || kb.contains(Regex("\\s"))) {
+                         // Security: Validate inputs to prevent XSS/Injection
+                         // Package: Alphanumeric, dot, underscore
+                         if (!pkg.matches(Regex("^[a-zA-Z0-9_.]+$"))) {
+                             return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid input: invalid characters")
+                         }
+                         // Template: Alphanumeric, underscore (or "null")
+                         if (tmpl != "null" && !tmpl.matches(Regex("^[a-zA-Z0-9_]+$"))) {
+                             return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid input: invalid characters")
+                         }
+                         // Keybox: No whitespace allowed (filename)
+                         if (kb.contains(Regex("\\s"))) {
                              return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid input: whitespace not allowed")
                          }
 
