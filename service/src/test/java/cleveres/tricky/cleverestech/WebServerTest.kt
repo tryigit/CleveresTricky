@@ -95,8 +95,9 @@ class WebServerTest {
 
         // Assertions
         assertEquals(NanoHTTPD.Response.Status.OK, response.status)
-        assertTrue("HTML should contain <select id=\"appKeybox\">", html.contains("<select id=\"appKeybox\">"))
-        assertTrue("HTML should NOT contain <input type=\"text\" id=\"appKeybox\"", !html.contains("<input type=\"text\" id=\"appKeybox\""))
+        // Updated to reflect UI change: appKeybox is now an INPUT (text) to allow custom filenames
+        assertTrue("HTML should contain <input type=\"text\" id=\"appKeybox\"", html.contains("<input type=\"text\" id=\"appKeybox\""))
+        assertTrue("HTML should NOT contain <select id=\"appKeybox\">", !html.contains("<select id=\"appKeybox\">"))
 
         // Cleanup
         tempDir.deleteRecursively()
