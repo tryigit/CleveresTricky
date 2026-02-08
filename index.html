@@ -132,6 +132,7 @@
         input[type="checkbox"].toggle:checked { background: var(--accent); }
         input[type="checkbox"].toggle:checked::after { transform: translateX(18px); }
         input[type="checkbox"].toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+        input[type="checkbox"].toggle:disabled { opacity: 0.5; cursor: not-allowed; }
 
         table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.9em; }
         th { text-align: left; padding: 10px; border-bottom: 1px solid var(--border); color: #888; font-weight: 500; }
@@ -321,7 +322,7 @@
             <h3>New Rule</h3>
             <div style="margin-bottom:10px;">
                 <label for="appPkg" style="display:block; font-size:0.8em; margin-bottom:5px; color:#888;">Target Package</label>
-                <input type="text" id="appPkg" list="pkgList" placeholder="Package Name (com.example...)" onchange="this.value=this.value.trim()">
+                <input type="text" id="appPkg" list="pkgList" placeholder="Package Name (com.example...)" onchange="this.value=this.value.trim()" onkeydown="if(event.key==='Enter') addAppRule()">
                 <datalist id="pkgList"></datalist>
             </div>
             <div class="grid-2" style="margin-bottom:10px;">
@@ -333,7 +334,7 @@
                 </div>
                 <div>
                     <label for="appKeybox" style="display:block; font-size:0.8em; margin-bottom:5px; color:#888;">Keybox XML</label>
-                    <input type="text" id="appKeybox" placeholder="Custom Keybox (Optional)">
+                    <input type="text" id="appKeybox" placeholder="Custom Keybox (Optional)" onkeydown="if(event.key==='Enter') addAppRule()">
                 </div>
             </div>
 
@@ -525,6 +526,17 @@
                 });
             });
 
+            // Load Keyboxes
+            fetch(getAuthUrl('/api/keyboxes')).then(r => r.json()).then(kbs => {
+                const sel = document.getElementById('appKeybox');
+                kbs.forEach(k => {
+                    const opt = document.createElement('option');
+                    opt.value = k;
+                    opt.text = k;
+                    sel.appendChild(opt);
+                });
+            });
+
             // Init Editor
             currentFile = document.getElementById('fileSelector').value;
             await loadFile();
@@ -693,7 +705,7 @@
                 tr.innerHTML = `
                     <td>${rule.package}</td>
                     <td>${rule.template === 'null' ? 'Default' : rule.template}</td>
-                    <td>${rule.keybox && rule.keybox !== 'null' ? '<span class="tag">KEYBOX</span>' : ''}</td>
+                    <td>${rule.keybox && rule.keybox !== 'null' ? rule.keybox : ''}</td>
                     <td style="text-align:right;">
                         <button class="danger" onclick="removeAppRule(${idx})" aria-label="Remove rule for ${rule.package}">×</button>
                     </td>
@@ -709,13 +721,18 @@
         }
 
         function addAppRule() {
-            const pkg = document.getElementById('appPkg').value;
+            const pkgInput = document.getElementById('appPkg');
+            const pkg = pkgInput.value.trim();
             const tmpl = document.getElementById('appTemplate').value;
             const kb = document.getElementById('appKeybox').value;
             const pContacts = document.getElementById('permContacts').checked;
             const pMedia = document.getElementById('permMedia').checked;
 
-            if (!pkg) { notify('Package required'); return; }
+            if (!pkg) {
+                notify('Package required');
+                pkgInput.focus();
+                return;
+            }
 
             // TODO: Serialize blank permissions into the rule
             // Current backend supports: package template keybox
@@ -723,7 +740,10 @@
 
             appRules.push({ package: pkg, template: tmpl === 'null' ? '' : tmpl, keybox: kb });
             renderAppTable();
-            document.getElementById('appPkg').value = '';
+            pkgInput.value = '';
+            document.getElementById('appKeybox').value = '';
+            pkgInput.focus();
+            notify('Rule Added');
         }
 
         function removeAppRule(idx) {
@@ -748,9 +768,26 @@
         let currentFile = '';
         async function loadFile() {
             const f = document.getElementById('fileSelector').value;
+            const editor = document.getElementById('fileEditor');
             currentFile = f;
-            const res = await fetch(getAuthUrl('/api/file?filename=' + f));
-            document.getElementById('fileEditor').value = await res.text();
+
+            editor.disabled = true;
+            editor.value = 'Loading...';
+
+            try {
+                const res = await fetch(getAuthUrl('/api/file?filename=' + f));
+                if (res.ok) {
+                    editor.value = await res.text();
+                } else {
+                    editor.value = 'Error loading file';
+                    notify('Load Failed', 'error');
+                }
+            } catch (e) {
+                editor.value = 'Error loading file';
+                notify('Connection Error', 'error');
+            } finally {
+                editor.disabled = false;
+            }
         }
 
         async function saveFile() {

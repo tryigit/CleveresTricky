@@ -15,3 +15,7 @@
 ## 2026-05-21 - [Repeated Allocations in Comparators]
 **Learning:** `CborEncoder` was repeatedly calling `String.getBytes` inside the `Map` key comparator, leading to O(N log N) allocations and encoding operations. Pre-computing the UTF-8 bytes for keys reduced this to O(N) and improved map encoding speed by >50%.
 **Action:** When sorting objects based on a property that requires computation (like encoding or hashing), pre-compute that property once and store it, or use a wrapper object, to avoid repeated work during comparisons.
+
+## 2024-05-27 - [Lazy Initialization of Static Assets]
+**Learning:** `WebServer.getHtml()` was reconstructing a large static HTML string (and allocating char arrays) on every request. This caused unnecessary garbage collection pressure.
+**Action:** Cache static response content (like HTML templates) in lazy properties or static constants to avoid re-allocation.
