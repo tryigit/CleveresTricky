@@ -601,6 +601,14 @@ object Config {
         } catch (t: Throwable) {
             Logger.e("failed to set permissions for config dir", t)
         }
+
+        // Initialize Templates FIRST (needed for randomization)
+        DeviceTemplateManager.initialize(root)
+        updateCustomTemplates(File(root, CUSTOM_TEMPLATES_FILE))
+
+        // Check Randomization (may overwrite spoof_build_vars)
+        checkRandomizeOnBoot()
+
         updateGlobalMode(File(root, GLOBAL_MODE_FILE))
         updateTeeBrokenMode(File(root, TEE_BROKEN_MODE_FILE))
         updateRkpBypass(File(root, RKP_BYPASS_FILE))
@@ -611,10 +619,6 @@ object Config {
         RemoteKeyManager.update(File(root, REMOTE_KEYS_FILE))
         updateAppConfigs(File(root, APP_CONFIG_FILE))
 
-        DeviceTemplateManager.initialize(root)
-        updateCustomTemplates(File(root, CUSTOM_TEMPLATES_FILE))
-
-        checkRandomizeOnBoot()
         checkRandomDrm()
 
         if (!isGlobalMode) {
