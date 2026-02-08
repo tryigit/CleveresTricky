@@ -1,20 +1,25 @@
 import re
 
-with open("service/src/main/java/cleveres/tricky/cleverestech/WebServer.kt", "r") as f:
+with open('service/src/main/java/cleveres/tricky/cleverestech/WebServer.kt', 'r') as f:
     content = f.read()
 
-match = re.search(r'private val htmlContent by lazy \{\s*"""(.*?)"""\.trimIndent\(\)', content, re.DOTALL)
+# Extract content between triple quotes in getHtml()
+# The kotlin code is: private fun getHtml(): String {\n        return """\n...
+match = re.search(r'private fun getHtml\(\): String \{\s+return """(.*?)""".trimIndent\(\)', content, re.DOTALL)
+
 if match:
     html = match.group(1)
-    # The variable ${getAppName()} needs to be replaced or it will show literally.
-    # In Kotlin """ string, ${getAppName()} is interpolated.
-    # I should replace it with "CleveresTricky" to emulate the server.
-    html = html.replace("${getAppName()}", "CleveresTricky")
-    # Also replace ${'$'} with $ because Kotlin source escapes $ as ${'$'}.
+
+    # Handle Kotlin string templates
+    # ${getAppName()} -> CleveresTricky
+    html = html.replace('${getAppName()}', 'CleveresTricky')
+
+    # The file uses ${'$'} to escape $ in JS template literals
+    # We want to convert ${'$'} back to $
     html = html.replace("${'$'}", "$")
 
-    with open("index.html", "w") as out:
-        out.write(html)
-    print("Extracted HTML")
+    with open('index.html', 'w') as f:
+        f.write(html)
+    print("HTML extracted to index.html")
 else:
-    print("Could not find HTML")
+    print("Could not find HTML content")

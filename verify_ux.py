@@ -1,74 +1,44 @@
-import sys
-import subprocess
-import time
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import sync_playwright, expect
 
-# Start HTTP server
-server = subprocess.Popen(["python3", "-m", "http.server", "8000"])
-time.sleep(2)
+def run(playwright):
+    browser = playwright.chromium.launch(headless=True)
+    page = browser.new_page()
+    page.goto("http://localhost:8000/index.html")
 
-def verify_ux():
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        context = browser.new_context()
-        page = context.new_page()
+    # verify title
+    expect(page).to_have_title("CleveresTricky")
 
-        # Mock APIs
-        def handle_config(route):
-            route.fulfill(json={
-                "global_mode": False,
-                "tee_broken_mode": False,
-                "rkp_bypass": False,
-                "auto_beta_fetch": False,
-                "auto_keybox_check": False,
-                "random_on_boot": False,
-                "drm_fix": False,
-                "random_drm_on_boot": False,
-                "keybox_count": 5
-            })
-        page.route("**/api/config**", handle_config)
+    # verify focus style on Global Mode toggle
+    # Click on the tab to ensure focus is near
+    page.click("#tab_dashboard")
+    # Tab to the first toggle
+    # The structure is: div.row > label, input.toggle
+    # Input is after label.
+    # We can just focus it directly using locator
+    toggle = page.locator("#global_mode")
+    toggle.focus()
 
-        page.route("**/api/stats**", lambda route: route.fulfill(json={"members": "1234"}))
+    # Take screenshot of dashboard with focus
+    page.screenshot(path="verification_dashboard_focus.png")
 
-        page.route("**/api/templates**", lambda route: route.fulfill(json=[
-            {"id": "tmpl1", "model": "Pixel 7", "manufacturer": "Google", "fingerprint": "fp1", "securityPatch": "2023-01-01"}
-        ]))
+    # Go to Apps tab
+    page.click("#tab_apps")
 
-        page.route("**/api/packages**", lambda route: route.fulfill(json=["com.android.vending", "com.google.android.gms"]))
+    # Verify Blank Permissions section
+    expect(page.get_by_text("Blank Permissions (Privacy)")).to_be_visible()
 
-        page.route("**/api/keyboxes**", lambda route: route.fulfill(json=["keybox1.xml", "keybox2.xml"]))
+    contacts_cb = page.locator("#permContacts")
+    expect(contacts_cb).to_be_disabled()
+    expect(contacts_cb).to_have_attribute("title", "Coming Soon")
 
-        page.route("**/api/app_config_structured**", lambda route: route.fulfill(json=[
-            {"package": "com.example.app", "template": "tmpl1", "keybox": "keybox1.xml"}
-        ]))
+    media_cb = page.locator("#permMedia")
+    expect(media_cb).to_be_disabled()
+    expect(media_cb).to_have_attribute("title", "Coming Soon")
 
-        # Navigate
-        page.goto("http://localhost:8000/index.html?token=test-token")
+    # Take screenshot of Apps tab
+    page.screenshot(path="verification_apps_disabled.png")
 
-        # Verify UI loaded
-        page.wait_for_selector("h1:has-text('CleveresTricky')")
+    browser.close()
 
-        # Click on Apps tab
-        page.click("#tab_apps")
-
-        # Verify Keybox Selector exists
-        page.wait_for_selector("#appKeybox")
-
-        # Verify it is an input element
-        element = page.locator("#appKeybox")
-        tag_name = element.evaluate("el => el.tagName")
-        print(f"Keybox element tag name: {tag_name}")
-
-        if tag_name.lower() != "input":
-             print("ERROR: expected input, got", tag_name)
-             sys.exit(1)
-
-        # Take screenshot
-        page.screenshot(path="verification_apps.png")
-
-        browser.close()
-
-try:
-    verify_ux()
-finally:
-    server.terminate()
+with sync_playwright() as playwright:
+    run(playwright)
