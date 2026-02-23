@@ -541,6 +541,7 @@ BinderInterceptor::handleIntercept(sp<BBinder> target, uint32_t code, const Parc
 static void kick_handler(int) {}
 
 void kick_already_blocked_ioctls() {
+    int chosen_sig = -1;
     struct sigaction sa;
     struct sigaction old_sa;
     memset(&sa, 0, sizeof(sa));
@@ -548,15 +549,36 @@ void kick_already_blocked_ioctls() {
     sa.sa_flags = 0; // No SA_RESTART
     sigemptyset(&sa.sa_mask);
 
-    if (sigaction(SIGWINCH, &sa, &old_sa) == 0) {
-        // If the old handler was not default or ignore, restore it and skip kicking
-        if (old_sa.sa_handler != SIG_DFL && old_sa.sa_handler != SIG_IGN) {
-            sigaction(SIGWINCH, &old_sa, NULL);
-            LOGW("SIGWINCH handler already set, skipping kick");
-            return;
+    // Try multiple signals to find one that is safe to use
+    // We prefer SIGWINCH as it's the original choice, but fallback to others if occupied
+    static const int kKickSignals[] = {SIGWINCH, SIGURG, SIGIO, SIGPWR};
+
+    for (int sig : kKickSignals) {
+        if (sigaction(sig, NULL, &old_sa) == 0) {
+            // If handler is default or ignore, we can install ours temporarily (or permanently as it's just ignore + interrupt)
+            if (old_sa.sa_handler == SIG_DFL || old_sa.sa_handler == SIG_IGN) {
+                if (sigaction(sig, &sa, NULL) == 0) {
+                    chosen_sig = sig;
+                    LOGI("Using signal %d for kicking ioctls (was DFL/IGN)", sig);
+                    break;
+                }
+            } else {
+                // Custom handler exists. Check if it allows interruption.
+                if (!(old_sa.sa_flags & SA_RESTART)) {
+                    // SA_RESTART is NOT set, so syscalls will be interrupted.
+                    // We can use this signal without installing our handler!
+                    chosen_sig = sig;
+                    LOGI("Using signal %d for kicking ioctls (custom handler allows interrupt)", sig);
+                    break;
+                } else {
+                    LOGW("Signal %d handler set with SA_RESTART, skipping", sig);
+                }
+            }
         }
-    } else {
-        LOGE("Failed to set SIGWINCH handler");
+    }
+
+    if (chosen_sig == -1) {
+        LOGE("No suitable signal found to kick blocked ioctls! Hooking may be incomplete.");
         return;
     }
 
@@ -575,7 +597,7 @@ void kick_already_blocked_ioctls() {
                 long syscall_nr;
                 if (fscanf(fp, "%ld", &syscall_nr) == 1) {
                     if (syscall_nr == SYS_ioctl) {
-                        syscall(SYS_tgkill, getpid(), tid, SIGWINCH);
+                        syscall(SYS_tgkill, getpid(), tid, chosen_sig);
                     }
                 }
                 fclose(fp);
