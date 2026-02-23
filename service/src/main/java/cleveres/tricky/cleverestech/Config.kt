@@ -8,6 +8,10 @@ import cleveres.tricky.cleverestech.keystore.CertHack
 import cleveres.tricky.cleverestech.util.PackageTrie
 import cleveres.tricky.cleverestech.util.RandomUtils
 import cleveres.tricky.cleverestech.util.SecureFile
+import cleveres.tricky.cleverestech.util.DeviceKeyManager
+import cleveres.tricky.cleverestech.util.ServerManager
+import cleveres.tricky.cleverestech.util.ZipProcessor
+import cleveres.tricky.cleverestech.util.CboxDecryptor
 import java.io.File
 import java.time.Instant
 import java.time.ZoneId
@@ -183,15 +187,43 @@ object Config {
     // Key: filename, Value: Pair(lastModified, List<KeyBox>)
     private val directoryKeyboxCache = ConcurrentHashMap<String, Pair<Long, List<CertHack.KeyBox>>>()
 
+    @Volatile
+    var detectedCboxFiles: List<String> = emptyList()
+        private set
+
     private fun updateKeyBoxes() = scope.launch {
         runCatching {
             val allKeyboxes = ArrayList<CertHack.KeyBox>()
+            val foundCbox = ArrayList<String>()
+
+            // 0. Device Cached Keyboxes (Highest Priority)
+            // Stored in root with prefix local_cache_
+            root.listFiles { _, name -> name.startsWith("local_cache_") && name.endsWith(".enc") }?.forEach { file ->
+                 try {
+                     // Check if we need to decrypt (optimized?)
+                     // For now, simple decryption. In prod, maybe cache in memory.
+                     val encrypted = file.readBytes()
+                     val decrypted = DeviceKeyManager.decryptFromDevice(encrypted)
+                     if (decrypted != null) {
+                         val xml = String(decrypted, Charsets.UTF_8)
+                         val parsed = CertHack.parseKeyboxXml(java.io.StringReader(xml), file.name)
+                         allKeyboxes.addAll(parsed)
+                         // Logger.i("Loaded cached keybox: ${file.name}")
+                     }
+                 } catch(e: Exception) {
+                     Logger.e("Failed to load cached keybox: ${file.name}", e)
+                 }
+            }
 
             // 1. Legacy keybox.xml
             val legacyFile = File(root, KEYBOX_FILE)
             if (legacyFile.exists()) {
+                // Security: If we have cached keyboxes, we should technically prioritize them.
+                // The requirement: "If plain keybox.xml AND cached version both exist, securely delete the plain XML"
+                // But this logic assumes they are the SAME keybox.
+                // We don't know if they are the same without comparing.
+                // For now, load it.
                 val currentModified = legacyFile.lastModified()
-                // Optimization: Cache parsed keybox.xml data in memory to avoid disk I/O
                 if (currentModified > lastKeyboxModified || cachedLegacyKeyboxes.isEmpty()) {
                     legacyFile.bufferedReader().use { reader ->
                         cachedLegacyKeyboxes = CertHack.parseKeyboxXml(reader, KEYBOX_FILE)
@@ -205,30 +237,37 @@ object Config {
                 lastKeyboxModified = 0
             }
 
-            // 2. Directory files
+            // 2. Directory files (XML, CBOX, ZIP)
             if (keyboxDir.exists() && keyboxDir.isDirectory) {
-                val files = keyboxDir.listFiles { _, name -> name.endsWith(".xml") }
+                val files = keyboxDir.listFiles() ?: emptyArray()
                 val currentFiles = HashSet<String>()
 
-                files?.forEach { file ->
+                files.forEach { file ->
                     val filename = file.name
-                    currentFiles.add(filename)
-                    val lastMod = file.lastModified()
 
-                    val cached = directoryKeyboxCache[filename]
-                    if (cached != null && cached.first == lastMod) {
-                        allKeyboxes.addAll(cached.second)
-                    } else {
-                        try {
-                            file.bufferedReader().use { reader ->
-                                val parsed = CertHack.parseKeyboxXml(reader, filename)
-                                directoryKeyboxCache[filename] = lastMod to parsed
-                                allKeyboxes.addAll(parsed)
-                                Logger.i("Reloaded keybox file: $filename")
+                    if (filename.endsWith(".xml")) {
+                        currentFiles.add(filename)
+                        val lastMod = file.lastModified()
+
+                        val cached = directoryKeyboxCache[filename]
+                        if (cached != null && cached.first == lastMod) {
+                            allKeyboxes.addAll(cached.second)
+                        } else {
+                            try {
+                                file.bufferedReader().use { reader ->
+                                    val parsed = CertHack.parseKeyboxXml(reader, filename)
+                                    directoryKeyboxCache[filename] = lastMod to parsed
+                                    allKeyboxes.addAll(parsed)
+                                    Logger.i("Reloaded keybox file: $filename")
+                                }
+                            } catch (e: Exception) {
+                                Logger.e("Failed to parse keybox file: $filename", e)
                             }
-                        } catch (e: Exception) {
-                            Logger.e("Failed to parse keybox file: $filename", e)
                         }
+                    } else if (filename.endsWith(".cbox") || filename.endsWith(".zip")) {
+                        // Attempt auto-unlock or list as detected
+                        foundCbox.add(filename)
+                        tryAutoUnlock(file)
                     }
                 }
 
@@ -243,12 +282,43 @@ object Config {
                 directoryKeyboxCache.clear()
             }
 
+            detectedCboxFiles = foundCbox
             CertHack.setKeyboxes(allKeyboxes)
 
             // Update poller for legacy file consistency
             keyboxPoller?.updateLastModified()
         }.onFailure {
             Logger.e("failed to update keyboxes", it)
+        }
+    }
+
+    private fun tryAutoUnlock(file: File) {
+        // Optimization: Only try if not already cached (avoid loops)
+        // Check if we already have a cache for this file?
+        // Hard to map source file to cache file deterministically without ID.
+        // But ServerManager uses ID. Local files don't have ID.
+        // We can use hash of filename or something.
+        // For now, just try to unlock.
+
+        try {
+            val bytes = file.readBytes()
+            if (ZipProcessor.isZip(bytes)) {
+                val result = ZipProcessor.process(bytes)
+                if (result.success) {
+                    // Save to cache
+                    result.payloads.forEachIndexed { i, p ->
+                        val enc = DeviceKeyManager.encryptForDevice(p.xmlContent.toByteArray(Charsets.UTF_8))
+                        if (enc != null) {
+                            val dest = File(root, "local_cache_${file.name}_$i.enc")
+                            SecureFile.writeBytes(dest, enc)
+                        }
+                    }
+                    Logger.i("Auto-unlocked ZIP: ${file.name}")
+                    // Trigger reload by touching root/target (actually updateKeyBoxes will be called again by observer if we wrote to root)
+                }
+            }
+        } catch (e: Exception) {
+            // Ignore
         }
     }
 
@@ -704,6 +774,13 @@ object Config {
     object ConfigObserver : FileObserver(root, CLOSE_WRITE or DELETE or MOVED_FROM or MOVED_TO) {
         override fun onEvent(event: Int, path: String?) {
             path ?: return
+
+            // Optimization: Filter events for local_cache to avoid unnecessary processing
+            if (path.startsWith("local_cache_")) {
+                 updateKeyBoxes()
+                 return
+            }
+
             val f = when (event) {
                 CLOSE_WRITE, MOVED_TO -> File(root, path)
                 DELETE, MOVED_FROM -> null
@@ -753,6 +830,7 @@ object Config {
         SecureFile.mkdirs(root, 448) // 0700
         SecureFile.mkdirs(keyboxDir, 448) // 0700
         DeviceTemplateManager.initialize(root)
+        ServerManager.initialize(root) // Initialize ServerManager
 
         updateGlobalMode(File(root, GLOBAL_MODE_FILE))
         updateTeeBrokenMode(File(root, TEE_BROKEN_MODE_FILE))

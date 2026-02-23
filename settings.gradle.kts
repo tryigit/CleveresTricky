@@ -18,3 +18,4 @@ rootProject.name = "CleveresTricky"
 include(":module")
 include(":service")
 include(":stub")
+include(":encryptor-app")

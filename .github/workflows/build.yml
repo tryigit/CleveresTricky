@@ -87,9 +87,15 @@ jobs:
         run: ./gradlew testDebugUnitTest
 
       - name: Build with Gradle
+        env:
+          ENCRYPTOR_KEYSTORE_BASE64: ${{ secrets.ENCRYPTOR_KEYSTORE_BASE64 }}
+          ENCRYPTOR_KEYSTORE_PASSWORD: ${{ secrets.ENCRYPTOR_KEYSTORE_PASSWORD }}
+          ENCRYPTOR_KEY_ALIAS: ${{ secrets.ENCRYPTOR_KEY_ALIAS }}
+          ENCRYPTOR_KEY_PASSWORD: ${{ secrets.ENCRYPTOR_KEY_PASSWORD }}
         run: |
           ./gradlew zipRelease
           ./gradlew zipDebug
+          ./gradlew :encryptor-app:assembleRelease
 
       - name: Prepare artifact
         if: success()
@@ -102,6 +108,11 @@ jobs:
           debugPath=$(ls module/release/*-debug.zip)
           debugName=$(basename "$debugPath" .zip)
           echo "debugName=$debugName" >> $GITHUB_OUTPUT
+
+          encryptorPath=$(ls encryptor-app/build/outputs/apk/release/*.apk)
+          encryptorName=$(basename "$encryptorPath")
+          echo "encryptorName=$encryptorName" >> $GITHUB_OUTPUT
+          echo "encryptorPath=$encryptorPath" >> $GITHUB_OUTPUT
 
           unzip "$releasePath" -d module-release
           unzip "$debugPath" -d module-debug
@@ -117,6 +128,12 @@ jobs:
         with:
           name: ${{ steps.prepareArtifact.outputs.debugName }}
           path: "./module-debug/*"
+
+      - name: Upload encryptor app
+        uses: actions/upload-artifact@v4
+        with:
+          name: EncryptorApp
+          path: ${{ steps.prepareArtifact.outputs.encryptorPath }}
 
       - name: Upload release mappings
         uses: actions/upload-artifact@v4
@@ -171,3 +188,4 @@ jobs:
           files: |
             module/release/*-release.zip
             module/release/*-debug.zip
+            encryptor-app/build/outputs/apk/release/*.apk

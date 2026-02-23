@@ -10,3 +10,5 @@
 local.properties
 *.nogit
 .env
+encryptor-app/build/
+found_apks.txt
