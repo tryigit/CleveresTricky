@@ -1043,6 +1043,11 @@ class WebServer(
         .drag-over { border-color: var(--accent) !important; background: rgba(255,255,255,0.05); }
         #dropZone:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
+        input.invalid { border-color: var(--danger) !important; background: rgba(239, 68, 68, 0.1); }
+        input.valid { border-color: var(--success) !important; background: rgba(52, 211, 153, 0.1); }
+        .input-error { color: var(--danger); font-size: 0.8em; margin-top: 4px; animation: slideDown 0.2s ease-out; }
+        @keyframes slideDown { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+
         ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: var(--bg); }
         ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
@@ -1194,17 +1199,17 @@ class WebServer(
             <div class="grid-2">
                 <div>
                     <label for="inputImei" style="display:block; font-size:0.8em; margin-bottom:5px; color:#888;">IMEI (Slot 1)</label>
-                    <input type="text" id="inputImei" placeholder="35..." style="font-family:monospace;" inputmode="numeric">
+                    <input type="text" id="inputImei" placeholder="35..." style="font-family:monospace;" inputmode="numeric" oninput="validateRealtime(this, 'imei')">
                 </div>
                 <div>
                     <label for="inputImsi" style="display:block; font-size:0.8em; margin-bottom:5px; color:#888;">IMSI (Subscriber ID)</label>
-                    <input type="text" id="inputImsi" placeholder="310..." style="font-family:monospace;" inputmode="numeric">
+                    <input type="text" id="inputImsi" placeholder="310..." style="font-family:monospace;" inputmode="numeric" oninput="validateRealtime(this, 'imsi')">
                 </div>
             </div>
             <div class="grid-2" style="margin-top:10px;">
                 <div>
                     <label for="inputIccid" style="display:block; font-size:0.8em; margin-bottom:5px; color:#888;">ICCID (Sim Serial)</label>
-                    <input type="text" id="inputIccid" placeholder="89..." style="font-family:monospace;" inputmode="numeric">
+                    <input type="text" id="inputIccid" placeholder="89..." style="font-family:monospace;" inputmode="numeric" oninput="validateRealtime(this, 'iccid')">
                 </div>
                 <div>
                     <label for="inputSerial" style="display:block; font-size:0.8em; margin-bottom:5px; color:#888;">Device Serial No</label>
@@ -1216,11 +1221,11 @@ class WebServer(
             <div class="grid-2">
                 <div>
                     <label for="inputWifiMac" style="display:block; font-size:0.8em; margin-bottom:5px; color:#888;">WiFi MAC</label>
-                    <input type="text" id="inputWifiMac" placeholder="00:11:22:33:44:55" style="font-family:monospace;" autocapitalize="characters">
+                    <input type="text" id="inputWifiMac" placeholder="00:11:22:33:44:55" style="font-family:monospace;" autocapitalize="characters" oninput="validateRealtime(this, 'mac')">
                 </div>
                 <div>
                     <label for="inputBtMac" style="display:block; font-size:0.8em; margin-bottom:5px; color:#888;">BT MAC</label>
-                    <input type="text" id="inputBtMac" placeholder="00:11:22:33:44:55" style="font-family:monospace;" autocapitalize="characters">
+                    <input type="text" id="inputBtMac" placeholder="00:11:22:33:44:55" style="font-family:monospace;" autocapitalize="characters" oninput="validateRealtime(this, 'mac')">
                 </div>
             </div>
 
@@ -1228,7 +1233,7 @@ class WebServer(
             <div class="grid-2">
                  <div>
                     <label for="inputSimIso" style="display:block; font-size:0.8em; margin-bottom:5px; color:#888;">SIM Country ISO</label>
-                    <input type="text" id="inputSimIso" placeholder="us">
+                    <input type="text" id="inputSimIso" placeholder="us" oninput="validateRealtime(this, 'simiso')">
                  </div>
                  <div>
                     <label for="inputSimOp" style="display:block; font-size:0.8em; margin-bottom:5px; color:#888;">Operator Name</label>
@@ -1616,6 +1621,55 @@ class WebServer(
             const sel = document.getElementById('templateSelect');
             sel.dataset.generated = JSON.stringify(t);
             notify('Identity Generated');
+        }
+
+        function validateRealtime(el, type) {
+            const val = el.value.trim();
+            const errId = el.id + '_error';
+            let errEl = document.getElementById(errId);
+
+            if (!errEl) {
+                errEl = document.createElement('div');
+                errEl.id = errId;
+                errEl.className = 'input-error';
+                el.parentNode.appendChild(errEl);
+            }
+
+            if (!val) {
+                el.classList.remove('invalid', 'valid');
+                errEl.style.display = 'none';
+                return;
+            }
+
+            let error = null;
+            if (type === 'imei') {
+                if (!/^\d{15}$/.test(val)) error = 'Must be 15 digits';
+                else if (!luhnCheck(val)) error = 'Invalid Checksum (Luhn)';
+            }
+            else if (type === 'imsi') {
+                 if (!/^\d{14,15}$/.test(val)) error = 'Must be 14-15 digits';
+            }
+            else if (type === 'iccid') {
+                 if (!/^\d{19,20}$/.test(val)) error = 'Must be 19-20 digits';
+                 else if (!luhnCheck(val)) error = 'Invalid Checksum (Luhn)';
+            }
+            else if (type === 'mac') {
+                 if (!/^([0-9A-Fa-f]{2}[:]){5}([0-9A-Fa-f]{2})$/.test(val)) error = 'Format: XX:XX:XX:XX:XX:XX';
+            }
+            else if (type === 'simiso') {
+                 if (!/^[a-z]{2}$/.test(val)) error = 'Must be 2 lowercase letters';
+            }
+
+            if (error) {
+                el.classList.add('invalid');
+                el.classList.remove('valid');
+                errEl.innerText = error;
+                errEl.style.display = 'block';
+            } else {
+                el.classList.add('valid');
+                el.classList.remove('invalid');
+                errEl.style.display = 'none';
+            }
         }
 
         function luhnCheck(value) {
