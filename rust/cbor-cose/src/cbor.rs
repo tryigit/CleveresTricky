@@ -6,6 +6,7 @@
 //! - Arrays and maps (with deterministic key ordering)
 //! - Simple values (null, true, false)
 
+use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::io::{self, Write};
 
@@ -21,31 +22,31 @@ const MT_SIMPLE: u8 = 7;
 
 /// A CBOR value that can be encoded.
 #[derive(Debug, Clone, PartialEq)]
-pub enum CborValue {
+pub enum CborValue<'a> {
     /// Unsigned integer (major type 0).
     UnsignedInt(u64),
     /// Negative integer (major type 1). Stored as the positive magnitude - 1.
     NegativeInt(i64),
     /// Byte string (major type 2).
-    ByteString(Vec<u8>),
+    ByteString(Cow<'a, [u8]>),
     /// Text string (major type 3).
-    TextString(String),
+    TextString(Cow<'a, str>),
     /// Array of CBOR values (major type 4).
-    Array(Vec<CborValue>),
+    Array(Vec<CborValue<'a>>),
     /// Map of CBOR key-value pairs (major type 5).
     /// Keys are sorted in canonical order during encoding.
-    Map(Vec<(CborValue, CborValue)>),
+    Map(Vec<(CborValue<'a>, CborValue<'a>)>),
     /// CBOR tag (major type 6).
-    Tag(u64, Box<CborValue>),
+    Tag(u64, Box<CborValue<'a>>),
     /// Boolean value.
     Bool(bool),
     /// Null value.
     Null,
     /// Raw encoded CBOR bytes (embedded directly).
-    Raw(Vec<u8>),
+    Raw(Cow<'a, [u8]>),
 }
 
-impl CborValue {
+impl<'a> CborValue<'a> {
     /// Create from a signed integer, choosing unsigned or negative encoding.
     pub fn from_int(value: i64) -> Self {
         if value >= 0 {
@@ -320,7 +321,7 @@ mod tests {
     fn test_encode_byte_string() {
         let bytes = vec![0x01, 0x02, 0x03];
         assert_eq!(
-            encode(&CborValue::ByteString(bytes)),
+            encode(&CborValue::ByteString(Cow::Owned(bytes))),
             vec![0x43, 0x01, 0x02, 0x03]
         );
     }
@@ -408,7 +409,7 @@ mod tests {
     #[test]
     fn test_encode_large_byte_string() {
         let bytes = vec![0xAB; 300];
-        let encoded = encode(&CborValue::ByteString(bytes.clone()));
+        let encoded = encode(&CborValue::ByteString(Cow::Owned(bytes.clone())));
         // 300 = 0x012C => MT_BYTE_STRING | 25, then 0x01, 0x2C
         assert_eq!(encoded[0], 0x59); // 0x40 | 25
         assert_eq!(encoded[1], 0x01);
