@@ -54,7 +54,8 @@ class FilePollerTest {
         while (newTime <= oldTime) {
             Thread.sleep(100)
             testFile.writeText("modified")
-            testFile.setLastModified(System.currentTimeMillis())
+            // Provide a new time to setLastModified
+            testFile.setLastModified(System.currentTimeMillis() + 1000)
             newTime = testFile.lastModified()
         }
 
