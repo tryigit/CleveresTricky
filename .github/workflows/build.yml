@@ -18,13 +18,13 @@ jobs:
         working-directory: rust/cbor-cose
     steps:
       - name: Check out
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache cargo registry and build
-        uses: actions/cache@v5
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
@@ -62,19 +62,19 @@ jobs:
           sudo udevadm trigger --name-match=kvm
 
       - name: Check out
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
           submodules: "recursive"
           fetch-depth: 0
 
       - name: Setup Java
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 21
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v5
+        uses: gradle/actions/setup-gradle@v4
         with:
           gradle-home-cache-cleanup: true
 
@@ -103,19 +103,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
           submodules: "recursive"
           fetch-depth: 0
 
       - name: Setup Java
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 21
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v5
+        uses: gradle/actions/setup-gradle@v4
         with:
           gradle-home-cache-cleanup: true
 
@@ -152,25 +152,25 @@ jobs:
           unzip "$debugPath" -d module-debug
 
       - name: Upload release
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.prepareArtifact.outputs.releaseName }}
           path: "./module-release/*"
 
       - name: Upload debug
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.prepareArtifact.outputs.debugName }}
           path: "./module-debug/*"
 
       - name: Upload release mappings
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: release-mappings
           path: "./service/build/outputs/mapping/release"
 
       - name: Upload Encryptor App
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: EncryptorApp
           path: "./encryptor-app/build/outputs/apk/release/*.apk"
