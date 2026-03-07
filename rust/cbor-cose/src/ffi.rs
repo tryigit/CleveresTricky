@@ -707,8 +707,8 @@ pub unsafe extern "C" fn rust_prop_get(name_ptr: *const u8, name_len: usize) -> 
             Err(_) => return RustBuffer::empty(),
         };
 
-        if let Some(val) = crate::properties::get_property(name_str) {
-            let mut vec = val.into_bytes();
+        crate::properties::get_property(name_str, |val| {
+            let mut vec = val.as_bytes().to_vec();
             // Ensure null termination is NOT added unless needed, the C++ side expects exact string length usually.
             // Wait, readString16_manual expects length or null terminated?
             // "Returns a RustBuffer containing the spoofed value"
@@ -716,9 +716,7 @@ pub unsafe extern "C" fn rust_prop_get(name_ptr: *const u8, name_len: usize) -> 
             let data = vec.as_mut_ptr();
             std::mem::forget(vec);
             RustBuffer { data, len }
-        } else {
-            RustBuffer::empty()
-        }
+        }).unwrap_or(RustBuffer::empty())
     }))
     .unwrap_or(RustBuffer::empty())
 }

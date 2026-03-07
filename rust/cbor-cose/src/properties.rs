@@ -3,10 +3,13 @@ use std::sync::RwLock;
 
 static PROPERTIES: RwLock<Option<AHashMap<String, String>>> = RwLock::new(None);
 
-pub fn get_property(name: &str) -> Option<String> {
+pub fn get_property<F, R>(name: &str, f: F) -> Option<R>
+where
+    F: FnOnce(&str) -> R,
+{
     // Avoid panics inside Zygote
     if let Ok(cache) = PROPERTIES.read() {
-        cache.as_ref().and_then(|c| c.get(name).cloned())
+        cache.as_ref().and_then(|c| c.get(name).map(|s| f(s.as_str())))
     } else {
         None
     }
