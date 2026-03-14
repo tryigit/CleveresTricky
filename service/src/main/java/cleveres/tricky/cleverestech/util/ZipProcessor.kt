@@ -88,15 +88,8 @@ object ZipProcessor {
     }
 
     private fun readEntry(zis: ZipInputStream): ByteArray? {
-        val buffer = java.io.ByteArrayOutputStream()
-        val data = ByteArray(4096)
-        var count = 0
-        var total = 0
-        while (zis.read(data).also { count = it } != -1) {
-            total += count
-            if (total > MAX_ENTRY_SIZE) return null
-            buffer.write(data, 0, count)
-        }
-        return buffer.toByteArray()
+        val bytes = zis.readBytes()
+        if (bytes.size > MAX_ENTRY_SIZE) return null
+        return bytes
     }
 }

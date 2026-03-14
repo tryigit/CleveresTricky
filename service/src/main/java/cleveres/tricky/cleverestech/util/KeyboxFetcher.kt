@@ -35,21 +35,12 @@ class KeyboxFetcher(private val networkClient: NetworkClient = DefaultNetworkCli
                         return null
                     }
 
-                    val sb = StringBuilder()
-                    val buffer = CharArray(8192)
-                    var read: Int
-                    var total = 0
-                    conn.inputStream.bufferedReader().use { reader ->
-                        while (reader.read(buffer).also { read = it } != -1) {
-                            total += read
-                            if (total > MAX_FILE_SIZE) {
-                                Logger.e("Fetcher: File exceeds size limit")
-                                return null
-                            }
-                            sb.append(buffer, 0, read)
-                        }
+                    val bytes = conn.inputStream.readBytes()
+                    if (bytes.size > MAX_FILE_SIZE) {
+                        Logger.e("Fetcher: File exceeds size limit")
+                        return null
                     }
-                    sb.toString()
+                    String(bytes, Charsets.UTF_8)
                 } else {
                     Logger.e("Fetcher: Failed to fetch $url: ${conn.responseCode}")
                     null

@@ -162,17 +162,19 @@ fn get_thread_blocked_signals(pid: libc::pid_t, tid: libc::pid_t) -> Option<u64>
     // Given this isn't a tight loop, format is okay, but `String::with_capacity` is slightly better.
     let mut status_path = String::with_capacity(64);
     let _ = write!(status_path, "/proc/{}/task/{}/status", pid, tid);
-    let mut content = String::with_capacity(512);
+    let mut buf = [0u8; 1024]; // Stack-allocated buffer to avoid heap allocation
     if let Ok(mut file) = fs::File::open(&status_path) {
         use std::io::Read;
-        let _ = file.read_to_string(&mut content);
-    }
-
-    for line in content.lines() {
-        if line.starts_with("SigBlk:") {
-            // Format is "SigBlk:\t0000000000000000"
-            if let Some(hex_str) = line.split_whitespace().nth(1) {
-                return u64::from_str_radix(hex_str, 16).ok();
+        if let Ok(bytes_read) = file.read(&mut buf) {
+            if let Ok(content_str) = std::str::from_utf8(&buf[..bytes_read]) {
+                for line in content_str.lines() {
+                    if line.starts_with("SigBlk:") {
+                        // Format is "SigBlk:\t0000000000000000"
+                        if let Some(hex_str) = line.split_whitespace().nth(1) {
+                            return u64::from_str_radix(hex_str, 16).ok();
+                        }
+                    }
+                }
             }
         }
     }
