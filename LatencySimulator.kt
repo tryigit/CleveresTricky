@@ -3,6 +3,7 @@ package com.android.keystore
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Process
+import kotlinx.coroutines.delay
 
 class LatencySimulator(private val context: Context) {
     // LATENCY EMULATION LAYER
@@ -16,33 +17,33 @@ class LatencySimulator(private val context: Context) {
         const val CANNOT_ATTEST_IDS = -66
     }
 
-    fun emulateTeeOperation(action: () -> Unit) {
+    suspend fun emulateTeeOperation(action: () -> Unit) {
         val start = System.nanoTime()
         action()
         val elapsedMs = (System.nanoTime() - start) / 1_000_000
 
         if (elapsedMs < MIN_TEE_WAIT_MS) {
-            Thread.sleep(MIN_TEE_WAIT_MS - elapsedMs)
+            delay(MIN_TEE_WAIT_MS - elapsedMs)
         }
     }
 
-    fun emulateStrongBoxGenerateKey(action: () -> Unit) {
+    suspend fun emulateStrongBoxGenerateKey(action: () -> Unit) {
         val start = System.nanoTime()
         action()
         val elapsedMs = (System.nanoTime() - start) / 1_000_000
 
         if (elapsedMs < STRONGBOX_GENERATE_WAIT_MS) {
-            Thread.sleep(STRONGBOX_GENERATE_WAIT_MS - elapsedMs)
+            delay(STRONGBOX_GENERATE_WAIT_MS - elapsedMs)
         }
     }
 
-    fun emulateStrongBoxCreateOperation(action: () -> Unit) {
+    suspend fun emulateStrongBoxCreateOperation(action: () -> Unit) {
         val start = System.nanoTime()
         action()
         val elapsedMs = (System.nanoTime() - start) / 1_000_000
 
         if (elapsedMs < STRONGBOX_CREATE_WAIT_MS) {
-            Thread.sleep(STRONGBOX_CREATE_WAIT_MS - elapsedMs)
+            delay(STRONGBOX_CREATE_WAIT_MS - elapsedMs)
         }
     }
 
