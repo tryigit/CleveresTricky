@@ -47,3 +47,6 @@
 ## 2024-03-19 - [Repeated Allocations in /proc Parsing]
 **Learning:** `WebServer.getCpuUsagePercent` was reading `/proc/self/stat` and `/proc/stat` using `File.readText().split(Regex)`. `readText` allocates a `String` for the entire file (which for `/proc/stat` can be large) and `split` creates multiple objects. This adds unnecessary memory pressure for a simple stats read.
 **Action:** Use a pre-allocated `ByteArray` and `FileInputStream.read()` to process just the first line without loading the entire file into a `String`.
+## 2025-10-18 - String and array allocations optimization in WebServer and AutoCleaner
+**Learning:** Replacing String.split() and regex processing with lineSequence() and manual index-based parsing via substring() or indexOf() severely drops array/List allocations in large file validation.
+**Action:** Always prefer manual parsing without allocations in string hot-paths, especially File validation code, instead of split() or Regexes.

@@ -94,9 +94,9 @@ object KeyboxAutoCleaner {
     private fun readWebUiUrl(): String {
         return try {
             val raw = webPortFile.readText().trim()
-            val parts = raw.split('|', limit = 2)
-            val port = parts.getOrNull(0)?.toIntOrNull()
-            val token = parts.getOrNull(1)?.trim().orEmpty()
+            val idx = raw.indexOf('|')
+            val port = if (idx != -1) raw.substring(0, idx).toIntOrNull() else raw.toIntOrNull()
+            val token = if (idx != -1) raw.substring(idx + 1).trim() else ""
             if (port == null || port !in 1..65535 || token.isBlank() || !WEB_UI_TOKEN_REGEX.matches(token)) {
                 Logger.e("AutoCleaner: Invalid web_port content '$raw'")
                 "http://$WEB_UI_LOOPBACK_HOST:$WEB_UI_PORT"
