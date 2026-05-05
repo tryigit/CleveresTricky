@@ -24,14 +24,14 @@ gradle.rootProject {
     allprojects {
         buildscript.configurations.all {
             resolutionStrategy {
-                force("io.netty:netty-codec-http:4.2.12.Final")
-                force("io.netty:netty-codec-http2:4.2.12.Final")
+                force("io.netty:netty-codec-http:4.2.13.Final")
+                force("io.netty:netty-codec-http2:4.2.13.Final")
             }
         }
         configurations.all {
             resolutionStrategy {
-                force("io.netty:netty-codec-http:4.2.12.Final")
-                force("io.netty:netty-codec-http2:4.2.12.Final")
+                force("io.netty:netty-codec-http:4.2.13.Final")
+                force("io.netty:netty-codec-http2:4.2.13.Final")
             }
         }
     }
