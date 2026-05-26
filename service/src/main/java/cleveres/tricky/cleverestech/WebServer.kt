@@ -807,20 +807,28 @@ class WebServer(
                          val tmpl = obj.optString("template", "null").ifEmpty { "null" }
                          val kb = obj.optString("keybox", "null").ifEmpty { "null" }
                          val permsArr = obj.optJSONArray("permissions")
+
                          var permsStr = "null"
-                         if (permsArr != null && permsArr.length() > 0) {
-                             val list = ArrayList<String>()
-                             for (j in 0 until permsArr.length()) {
-                                 list.add(permsArr.getString(j))
+                         val len = permsArr?.length() ?: 0
+                         if (len > 0) {
+                             val pSb = StringBuilder()
+                             pSb.append(permsArr!!.getString(0))
+                             for (j in 1 until len) {
+                                 pSb.append(',').append(permsArr.getString(j))
                              }
-                             permsStr = list.joinToString(",")
+                             permsStr = pSb.toString()
                          }
+
                          if (!pkg.matches(PKG_NAME_REGEX)) return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid input: invalid characters")
                          if (tmpl != "null" && !tmpl.matches(TEMPLATE_NAME_REGEX)) return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid input")
                          if (kb != "null" && !kb.matches(KEYBOX_FILENAME_REGEX)) return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid input")
                          if (permsStr != "null" && !permsStr.matches(PERMISSIONS_REGEX)) return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid input")
                          if (pkg.contains(WHITESPACE_FIND_REGEX)) return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid input")
-                         sb.append("$pkg $tmpl $kb $permsStr\n")
+
+                         sb.append(pkg).append(' ')
+                           .append(tmpl).append(' ')
+                           .append(kb).append(' ')
+                           .append(permsStr).append('\n')
                      }
                      synchronized(fileLock) {
                          try {
