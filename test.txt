@@ -1,0 +1,2 @@
+Wait, if I grep for `.matches(` and I get nothing, then my patch replaced ALL occurrences of `.matches(`.
+Let me check the diff of my first commit (or current state).
