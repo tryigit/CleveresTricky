@@ -181,7 +181,8 @@ object TelephonyInterceptor : BinderInterceptor() {
         val pids = proc.list() ?: return null
         val buf = ByteArray(1024)
         for (pidStr in pids) {
-            if (pidStr.all { it.isDigit() }) {
+            val c = pidStr[0]
+            if (c in '1'..'9') {
                 kotlin.runCatching {
                     val stream = java.io.FileInputStream("/proc/$pidStr/cmdline")
                     val length = try {
