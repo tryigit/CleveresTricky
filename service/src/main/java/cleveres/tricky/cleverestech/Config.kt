@@ -107,13 +107,15 @@ object Config {
             return if (cached === NULL_CONFIG) null else cached as AppSpoofConfig
         }
 
-        val pkgs = getPackages(uid)
         var result: AppSpoofConfig? = null
-        for (pkg in pkgs) {
-            val config = state.configs.get(pkg)
-            if (config != null) {
-                result = config
-                break
+        if (!state.configs.isEmpty()) {
+            val pkgs = getPackages(uid)
+            for (pkg in pkgs) {
+                val config = state.configs.get(pkg)
+                if (config != null) {
+                    result = config
+                    break
+                }
             }
         }
         state.cache[uid] = result ?: NULL_CONFIG
@@ -628,38 +630,7 @@ object Config {
     private val dynamicPatchCache = ConcurrentHashMap<String, Pair<Long, Int>>()
     private const val DYNAMIC_PATCH_TTL = 3600 * 1000L // 1 hour
 
-    fun getPatchLevel(callingUid: Int): Int {
-        val defaultLevel = patchLevel
-        val state = securityPatchState
-        val cached = state.cache[callingUid]
-
-        val patchVal = if (cached != null) {
-            if (cached === NULL_PATCH) null else cached
-        } else {
-            val patches = state.patches
-            val found = if (patches.isNotEmpty()) {
-                // Use cached getPackages to avoid expensive IPC call
-                val pkgs = getPackages(callingUid)
-                var f: Any? = null
-                for (pkg in pkgs) {
-                    f = patches[pkg]
-                    if (f != null) break
-                }
-                f ?: state.defaultPatch
-            } else {
-                state.defaultPatch
-            }
-            state.cache[callingUid] = found ?: NULL_PATCH
-            found
-        }
-
-        if (patchVal == null) return defaultLevel
-
-        if (patchVal is Int) return patchVal
-
-        val patchStr = patchVal as String
-
-        // Optimization: Check cache for dynamic strings to avoid expensive date/string operations
+    private fun calculateDynamicPatchLevel(patchStr: String): Int {
         val nowMs = clockSource()
         val cachedDyn = dynamicPatchCache[patchStr]
         if (cachedDyn != null && (nowMs - cachedDyn.first) < DYNAMIC_PATCH_TTL) {
@@ -680,6 +651,38 @@ object Config {
         val result = effectiveDate.convertPatchLevel(false)
         dynamicPatchCache[patchStr] = nowMs to result
         return result
+    }
+
+    fun getPatchLevel(callingUid: Int): Int {
+        val defaultLevel = patchLevel
+        val state = securityPatchState
+        val cached = state.cache[callingUid]
+
+        if (cached != null) {
+            val patchVal = if (cached === NULL_PATCH) null else cached
+            if (patchVal == null) return defaultLevel
+            if (patchVal is Int) return patchVal
+            return calculateDynamicPatchLevel(patchVal as String)
+        }
+
+        val patches = state.patches
+        val found = if (patches.isNotEmpty()) {
+            // Use cached getPackages to avoid expensive IPC call
+            val pkgs = getPackages(callingUid)
+            var f: Any? = null
+            for (pkg in pkgs) {
+                f = patches[pkg]
+                if (f != null) break
+            }
+            f ?: state.defaultPatch
+        } else {
+            state.defaultPatch
+        }
+        state.cache[callingUid] = found ?: NULL_PATCH
+
+        if (found == null) return defaultLevel
+        if (found is Int) return found
+        return calculateDynamicPatchLevel(found as String)
     }
 
     private fun updateSecurityPatch(f: File?) = runCatching {
