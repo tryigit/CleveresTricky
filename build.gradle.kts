@@ -7,7 +7,7 @@ plugins {
     alias(libs.plugins.agp.app) apply false
     alias(libs.plugins.jetbrains.kotlin.android) apply false
     alias(libs.plugins.android.library) apply false
-    id("org.jlleitschuh.gradle.ktlint") version "12.1.1" apply false
+    id("org.jlleitschuh.gradle.ktlint") version "14.2.0" apply false
 }
 
 fun String.execute(currentWorkingDir: File = file("./")): String {
