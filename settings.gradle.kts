@@ -30,8 +30,8 @@ gradle.rootProject {
                 force("io.netty:netty-handler-proxy:4.1.118.Final")
                 force("org.bouncycastle:bcpkix-jdk18on:1.80")
                 force("org.bouncycastle:bcprov-jdk18on:1.80")
-                force("ch.qos.logback:logback-core:1.5.16")
-                force("ch.qos.logback:logback-classic:1.5.16")
+                force("ch.qos.logback:logback-core:1.5.37")
+                force("ch.qos.logback:logback-classic:1.5.37")
             }
         }
         configurations.all {
@@ -42,8 +42,8 @@ gradle.rootProject {
                 force("io.netty:netty-handler-proxy:4.1.118.Final")
                 force("org.bouncycastle:bcpkix-jdk18on:1.80")
                 force("org.bouncycastle:bcprov-jdk18on:1.80")
-                force("ch.qos.logback:logback-core:1.5.16")
-                force("ch.qos.logback:logback-classic:1.5.16")
+                force("ch.qos.logback:logback-core:1.5.37")
+                force("ch.qos.logback:logback-classic:1.5.37")
             }
         }
     }
