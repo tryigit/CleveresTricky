@@ -14,7 +14,7 @@ default = ["fingerprint"]
 fingerprint = ["dep:minreq"]
 
 [dependencies]
-hmac = "0.12"
+hmac = "0.13"
 sha2 = "0.10"
 minreq = { version = "3.0", features = ["https-rustls"], optional = true }
 coset = "0.3"
