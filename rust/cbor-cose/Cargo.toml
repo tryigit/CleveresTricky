@@ -16,7 +16,7 @@ fingerprint = ["dep:minreq"]
 [dependencies]
 hmac = "0.12"
 digest = "0.10"
-sha2 = "0.10"
+sha2 = "0.11"
 minreq = { version = "3.0", features = ["https-rustls"], optional = true }
 coset = "0.4"
 p256 = { version = "0.13", features = ["arithmetic", "ecdsa", "std"] }
