@@ -19,7 +19,7 @@ digest = "0.10"
 sha2 = "0.10"
 minreq = { version = "3.0", features = ["https-rustls"], optional = true }
 coset = "0.4"
-p256 = { version = "0.13", features = ["arithmetic", "ecdsa", "std"] }
+p256 = { version = "0.14", features = ["arithmetic", "ecdsa", "std"] }
 rand_core = { version = "0.6", features = ["std"] }
 libc = "0.2"
 rustc-hash = "2.1.2"
