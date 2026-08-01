@@ -11,11 +11,15 @@ import kotlin.concurrent.withLock
 
 interface SecureFileOperations {
     fun writeText(file: File, content: String)
+
     fun writeBytes(file: File, content: ByteArray) {
         throw UnsupportedOperationException("writeBytes not implemented in mock")
     }
+
     fun writeStream(file: File, inputStream: InputStream, limit: Long = -1L) {}
+
     fun mkdirs(file: File, mode: Int)
+
     fun touch(file: File, mode: Int)
 }
 
@@ -28,6 +32,7 @@ object SecureFile {
         lock.withLock {
             impl.writeText(file, content)
         }
+        ConfigCommandDispatcher.onTextWritten(file, content)
     }
 
     fun writeBytes(file: File, content: ByteArray) {
@@ -91,7 +96,8 @@ object SecureFile {
 
                 if (bytesWritten < content.size) {
                     // Incomplete write — clean up temp file and throw
-                    runCatching { Os.close(fd); fd = null }
+                    runCatching { Os.close(fd) }
+                    fd = null
                     runCatching { Os.remove(tmpPath) }
                     throw java.io.IOException("SecureFile: Incomplete write to $path ($bytesWritten/${content.size} bytes)")
                 }
@@ -100,13 +106,13 @@ object SecureFile {
                 runCatching { Os.fsync(fd) }
 
                 // Close before rename
-                runCatching { Os.close(fd); fd = null }
+                runCatching { Os.close(fd) }
+                fd = null
 
                 // Atomic rename
                 runCatching { Os.rename(tmpPath, path) }.onFailure {
                     file.writeBytes(content)
                 }
-
             } catch (e: Exception) {
                 Logger.e("SecureFile: Failed to write to $path", e)
                 runCatching { Os.remove(tmpPath) }
@@ -139,7 +145,7 @@ object SecureFile {
 
                 val buffer = ByteArray(8192) // 8KB buffer
                 var bytesRead: Int
-                var totalBytesWritten: Long = 0
+                var totalBytesWritten = 0L
 
                 while (inputStream.read(buffer).also { bytesRead = it } != -1) {
                     if (limit > 0 && totalBytesWritten + bytesRead > limit) {
@@ -156,7 +162,8 @@ object SecureFile {
                         chunkWritten += w
                     }
                     if (chunkWritten < bytesRead) {
-                        runCatching { Os.close(fd); fd = null }
+                        runCatching { Os.close(fd) }
+                        fd = null
                         runCatching { Os.remove(tmpPath) }
                         throw java.io.IOException("SecureFile: Incomplete stream write to $path")
                     }
@@ -167,13 +174,13 @@ object SecureFile {
                 runCatching { Os.fsync(fd) }
 
                 // Close before rename
-                runCatching { Os.close(fd); fd = null }
+                runCatching { Os.close(fd) }
+                fd = null
 
                 // Atomic rename
                 runCatching { Os.rename(tmpPath, path) }.onFailure {
                     file.outputStream().use { inputStream.copyTo(it) }
                 }
-
             } catch (e: Exception) {
                 Logger.e("SecureFile: Failed to write stream to $path", e)
                 runCatching { Os.remove(tmpPath) }
@@ -214,11 +221,11 @@ object SecureFile {
                 if (!file.exists()) {
                     Logger.e("SecureFile: Failed to mkdirs $file", e)
                 } else {
-                     runCatching { Os.chmod(file.absolutePath, mode) }.onFailure {
-                         file.setExecutable(true, false)
-                         file.setReadable(true, false)
-                         file.setWritable(true, false)
-                     }
+                    runCatching { Os.chmod(file.absolutePath, mode) }.onFailure {
+                        file.setExecutable(true, false)
+                        file.setReadable(true, false)
+                        file.setWritable(true, false)
+                    }
                 }
             }
         }
