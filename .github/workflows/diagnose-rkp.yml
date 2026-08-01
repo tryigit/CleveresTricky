@@ -1,0 +1,23 @@
+name: Diagnose RKP Sources
+
+on:
+  pull_request:
+    branches: ["master"]
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+      - name: Locate RKP implementation and tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "=== Files with RKP or attestation names ==="
+          find service/src -type f | sort | grep -Ei 'rkp|attestation|remote.*provision' || true
+          echo "=== Matching implementation strings ==="
+          grep -R -n -E 'generatedEekChainIsValid|generateEekChain|Failed to retrieve attestation certificates|KeyPairGenerator|ECDH|RSA keys' service/src || true
