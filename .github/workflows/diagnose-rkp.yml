@@ -13,11 +13,28 @@ jobs:
     steps:
       - name: Check out
         uses: actions/checkout@v7
-      - name: Locate RKP implementation and tests
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+      - name: Locate generated RKP test and implementation
         shell: bash
         run: |
-          set -euo pipefail
-          echo "=== Files with RKP or attestation names ==="
-          find service/src -type f | sort | grep -Ei 'rkp|attestation|remote.*provision' || true
-          echo "=== Matching implementation strings ==="
-          grep -R -n -E 'generatedEekChainIsValid|generateEekChain|Failed to retrieve attestation certificates|KeyPairGenerator|ECDH|RSA keys' service/src || true
+          set -uo pipefail
+          echo "=== Matching tracked files ==="
+          find . -type f -not -path './.git/*' | sort | grep -Ei 'rkp|attestation|remote.*provision' || true
+          echo "=== Matching tracked strings ==="
+          grep -R -n -E 'RkpAttestationGenerator|generatedEekChainIsValid|generateEekChain|Failed to retrieve attestation certificates|ECDH' . --exclude-dir=.git --exclude-dir=.gradle --exclude-dir=build || true
+          echo "=== Service source sets ==="
+          ./gradlew :service:sourceSets --no-build-cache || true
+          echo "=== Re-run service tests without build cache ==="
+          ./gradlew :service:testDebugUnitTest --no-build-cache --rerun-tasks || true
+          echo "=== Matching files after compilation ==="
+          find service -type f | sort | grep -Ei 'RkpAttestation|RkpInterceptor|LocalRkp' || true
+          echo "=== Compiled test bytecode ==="
+          if [ -f service/build/classes/kotlin/testDebugUnitTest/cleveres/tricky/cleverestech/RkpAttestationGeneratorTest.class ]; then
+            javap -classpath service/build/classes/kotlin/testDebugUnitTest -c -p cleveres.tricky.cleverestech.RkpAttestationGeneratorTest || true
+          fi
