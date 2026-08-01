@@ -153,10 +153,10 @@ jobs:
         uses: android-actions/setup-android@v4
 
       - name: Run Module Tests
-        run: ./gradlew :module:testDebugUnitTest
+        run: ./gradlew clean :module:testDebugUnitTest --no-build-cache
 
       - name: Run Unit Tests
-        run: ./gradlew testDebugUnitTest
+        run: ./gradlew testDebugUnitTest --no-build-cache
 
       - name: Print Failed Tests
         if: failure()
