@@ -30,9 +30,7 @@ android {
                     "-DANDROID_CPP_FEATURES=exceptions",
                     "-Wno-dev",
                     "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON",
-                    "-DANDROID_ALLOW_UNDEFINED_SYMBOLS=ON",
                     "-DANDROID_USE_LEGACY_TOOLCHAIN_FILE=OFF",
-                    "-DMODULE_NAME=$moduleId",
                     "-DCMAKE_CXX_STANDARD=23",
                     "-DCMAKE_C_STANDARD=23",
                     "-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON",
@@ -47,13 +45,22 @@ android {
     buildFeatures {
         prefab = true
     }
+
+    externalNativeBuild {
+        cmake {
+            version = "3.22.1"
+            path("src/main/cpp/CMakeLists.txt")
+        }
+    }
 }
 
 dependencies {}
 
 evaluationDependsOn(":service")
 
-// Rust Build Integration
+// Rust Binder interceptor build integration. The process injector is built by
+// CMake from module/src/main/cpp/inject; it must not be replaced by the Rust
+// monitoring daemon because that program does not implement remote dlopen.
 val isWindowsHost = org.gradle.internal.os.OperatingSystem.current().isWindows
 
 fun commandExists(command: String): Boolean {
@@ -76,7 +83,6 @@ fun commandExists(command: String): Boolean {
     }
 }
 
-// Ensure cargo-ndk is installed
 tasks.register<Exec>("installCargoNdk") {
     group = "rust"
     description = "Installs cargo-ndk if not present"
@@ -88,50 +94,23 @@ tasks.register<Exec>("installCargoNdk") {
     }
 }
 
-// Ensure Rust Android targets are installed
 tasks.register<Exec>("installRustTargets") {
     group = "rust"
     description = "Installs Android Rust targets via rustup"
     onlyIf { commandExists("rustup") }
-    // We run rustup target add for all required targets.
-    // Ideally we should check if they are installed, but `rustup target add` is idempotent and fast if already installed.
-    commandLine(
-        "rustup",
-        "target",
-        "add",
-        "aarch64-linux-android",
-        "armv7-linux-androideabi",
-        "x86_64-linux-android",
-        "i686-linux-android",
-    )
-    // Ensure cargo-ndk is installed first (though not strictly dependent, good for ordering)
+    commandLine("rustup", "target", "add", "aarch64-linux-android")
     dependsOn("installCargoNdk")
 }
 
 tasks.register<Exec>("cargoBuild") {
     group = "rust"
-    description = "Builds the Rust static library for all Android targets using cargo-ndk"
+    description = "Builds the Rust Binder interceptor for supported Android ABIs"
     workingDir = file("../rust")
     onlyIf { commandExists("cargo") && commandExists("rustup") }
 
     dependsOn("installRustTargets")
-
-    // Treat Rust warnings as errors
     environment("RUSTFLAGS", "-D warnings")
 
-    doFirst {
-        if (!isWindowsHost) {
-            Runtime.getRuntime().exec(
-                arrayOf(
-                    "sh",
-                    "-c",
-                    "find ~/.cargo/registry/src/ -name lib.rs | grep frida-build | xargs sed -i 's/armhf/arm/g' || true",
-                ),
-            ).waitFor()
-        }
-    }
-
-    // Using cargo-ndk to build the interceptor lib for all supported ABIs.
     commandLine(
         "cargo",
         "ndk",
@@ -141,41 +120,22 @@ tasks.register<Exec>("cargoBuild") {
         "--release",
         "-p",
         "interceptor",
-        "-p",
-        "daemon",
     )
 
     doLast {
-        // Since we removed CMake, we copy the .so files directly to where the module zipper expects them
-        // The zip task expects libraries in build/intermediates/stripped_native_libs/.../out/lib/
-        // For simplicity, we can copy them to a known directory and adjust the zip task, or
-        // since CMake is completely gone, we can place them directly in the jniLibs equivalent or custom lib dir
-        // Let's copy the interceptor .so to where prepareModuleFiles task picks them up
-        val abiMap =
-            mapOf(
-                "aarch64-linux-android" to "arm64-v8a",
-            )
-
+        val abiMap = mapOf("aarch64-linux-android" to "arm64-v8a")
         val baseTarget = "../rust/target"
 
         abiMap.forEach { (rustAbi, androidAbi) ->
-            // Copy interceptor .so
             copy {
                 from("$baseTarget/$rustAbi/release/libinterceptor.so")
                 into(layout.buildDirectory.dir("rust_outputs/lib/$androidAbi"))
                 rename { "libcleverestricky.so" }
             }
-            // Copy daemon executable
-            copy {
-                from("$baseTarget/$rustAbi/release/daemon")
-                into(layout.buildDirectory.dir("rust_outputs/lib/$androidAbi"))
-                rename { "inject" }
-            }
         }
     }
 }
 
-// Hook into preBuild to ensure Rust libs are ready before CMake runs
 tasks.named("preBuild") {
     dependsOn("cargoBuild")
 }
@@ -187,7 +147,7 @@ afterEvaluate {
         val buildTypeCapped = buildType.name.replaceFirstChar { it.uppercase() }
         val buildTypeLowered = buildType.name.lowercase()
         val supportedAbis =
-            listOf("arm64-v8a", "x86_64").map {
+            abiList.map {
                 when (it) {
                     "arm64-v8a" -> "arm64"
                     "armeabi-v7a" -> "arm"
@@ -211,7 +171,14 @@ afterEvaluate {
                 into(moduleDir)
                 from(rootProject.layout.projectDirectory.file("README.md"))
                 from(layout.projectDirectory.file("template")) {
-                    exclude("module.prop", "customize.sh", "post-fs-data.sh", "service.sh", "daemon", "provision_attestation.sh")
+                    exclude(
+                        "module.prop",
+                        "customize.sh",
+                        "post-fs-data.sh",
+                        "service.sh",
+                        "daemon",
+                        "provision_attestation.sh",
+                    )
                     filter<FixCrLfFilter>("eol" to FixCrLfFilter.CrLf.newInstance("lf"))
                 }
                 from(layout.projectDirectory.file("template")) {
@@ -226,7 +193,13 @@ afterEvaluate {
                     )
                 }
                 from(layout.projectDirectory.file("template")) {
-                    include("customize.sh", "post-fs-data.sh", "service.sh", "daemon", "provision_attestation.sh")
+                    include(
+                        "customize.sh",
+                        "post-fs-data.sh",
+                        "service.sh",
+                        "daemon",
+                        "provision_attestation.sh",
+                    )
                     val tokens =
                         mapOf(
                             "DEBUG" to if (buildTypeLowered == "debug") "true" else "false",
@@ -244,6 +217,28 @@ afterEvaluate {
                 from(layout.buildDirectory.dir("rust_outputs/lib")) {
                     into("lib")
                 }
+                from(layout.buildDirectory.dir("intermediates/cxx")) {
+                    include("**/inject")
+                    eachFile {
+                        val segments = relativePath.segments
+                        if (buildTypeLowered == "release" && segments.contains("Debug")) {
+                            exclude()
+                            return@eachFile
+                        }
+                        if (buildTypeLowered == "debug" && !segments.contains("Debug")) {
+                            exclude()
+                            return@eachFile
+                        }
+
+                        val abi = segments.find { it in abiList }
+                        if (abi != null) {
+                            relativePath = RelativePath(true, "lib", abi, "inject")
+                        } else {
+                            exclude()
+                        }
+                    }
+                    includeEmptyDirs = false
+                }
 
                 doLast {
                     val apk = file("${moduleDir.get().asFile}/service.apk")
@@ -252,8 +247,12 @@ afterEvaluate {
                     }
 
                     abiList.forEach { abi ->
+                        val libraryPath = file("${moduleDir.get().asFile}/lib/$abi/lib$moduleId.so")
+                        if (!libraryPath.exists() || libraryPath.length() == 0L) {
+                            throw GradleException("Binder interceptor for $abi is missing at $libraryPath")
+                        }
                         val injectPath = file("${moduleDir.get().asFile}/lib/$abi/inject")
-                        if (!injectPath.exists()) {
+                        if (!injectPath.exists() || injectPath.length() == 0L) {
                             throw GradleException("inject binary for $abi is missing at $injectPath")
                         }
                     }
@@ -265,9 +264,7 @@ afterEvaluate {
                             md.update(bytes, 0, size)
                         }
                         file(file.path + ".sha256").writeText(
-                            org.apache.commons.codec.binary.Hex.encodeHexString(
-                                md.digest(),
-                            ),
+                            org.apache.commons.codec.binary.Hex.encodeHexString(md.digest()),
                         )
                     }
                 }
