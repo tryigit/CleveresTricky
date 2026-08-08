@@ -21,7 +21,8 @@ using InjectorRegisters = struct user_regs_struct;
 #define REG_IP rip
 #define REG_RET rax
 #elif defined(__aarch64__)
-using InjectorRegisters = struct user_regs;
+#include <asm/ptrace.h>
+using InjectorRegisters = struct user_pt_regs;
 #define REG_SP sp
 #define REG_IP pc
 #define REG_RET regs[0]
