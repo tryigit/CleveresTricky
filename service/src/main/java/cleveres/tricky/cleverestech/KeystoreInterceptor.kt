@@ -5,6 +5,7 @@ import android.hardware.security.keymint.SecurityLevel
 import android.os.IBinder
 import android.os.Parcel
 import android.os.ServiceManager
+import android.os.SystemClock
 import android.system.keystore2.IKeystoreService
 import android.system.keystore2.KeyEntryResponse
 import cleveres.tricky.cleverestech.binder.BinderInterceptor
@@ -14,6 +15,8 @@ import kotlin.system.exitProcess
 
 @SuppressLint("BlockedPrivateApi")
 object KeystoreInterceptor : BinderInterceptor() {
+    private const val INJECTION_RETRY_INTERVAL_MS = 15_000L
+
     private val getKeyEntryTransaction =
         getTransactCode(IKeystoreService.Stub::class.java, "getKeyEntry") // 2
 
@@ -46,7 +49,16 @@ object KeystoreInterceptor : BinderInterceptor() {
         reply: Parcel?,
         resultCode: Int,
     ): Result {
-        if (target != keystore || code != getKeyEntryTransaction || reply == null) return Skip
+        if (
+            target != keystore ||
+            code != getKeyEntryTransaction ||
+            reply == null ||
+            resultCode != 0 ||
+            !CertHack.canHack() ||
+            !Config.needHack(callingUid)
+        ) {
+            return Skip
+        }
         // Optimization: Replace runCatching with try-catch to avoid Result object allocation in hot path
         try {
             reply.readException()
@@ -57,16 +69,17 @@ object KeystoreInterceptor : BinderInterceptor() {
         Logger.d { "intercept post $target uid=$callingUid pid=$callingPid dataSz=${data.dataSize()} replySz=${reply.dataSize()}" }
         try {
             val response = reply.readTypedObject(KeyEntryResponse.CREATOR)
-            val leafEncoded = response?.metadata?.certificate
-            val cachedChain = CertHack.getCachedCertificateChain(leafEncoded, callingUid)
-            val originalChain = if (cachedChain == null) Utils.getCertificateChain(response) else null
-            val rewrittenChain =
-                if (originalChain == null) null else CertHack.hackCertificateChain(originalChain, callingUid)
-            val newChain = cachedChain ?: rewrittenChain?.takeUnless { it === originalChain }
+            val originalChain = Utils.getCertificateChain(response)
+            val newChain =
+                if (originalChain == null) {
+                    null
+                } else {
+                    CertHack.hackCertificateChain(originalChain, callingUid).takeUnless { it === originalChain }
+                }
 
             if (newChain != null) {
                 Utils.putCertificateChain(response, newChain)
-                Logger.i("hacked cert of uid=$callingUid")
+                Logger.d { "Rewrote stored attestation chain for uid=$callingUid" }
                 p.writeNoException()
                 p.writeTypedObject(response, 0)
                 return OverrideReply(0, p)
@@ -85,6 +98,10 @@ object KeystoreInterceptor : BinderInterceptor() {
     @Volatile private var injected = false
 
     @Volatile private var cachedKeystorePid: Int? = null
+
+    @Volatile private var injectedPid: Int? = null
+
+    @Volatile private var lastInjectionAttemptMs = 0L
 
     private fun findKeystore2Pid(): Int? {
         val cachedPid = cachedKeystorePid
@@ -157,7 +174,7 @@ object KeystoreInterceptor : BinderInterceptor() {
     }
 
     fun tryRunKeystoreInterceptor(): Boolean {
-        Logger.i("trying to register keystore interceptor (attempt=${triedCount.get()}) ...")
+        Logger.d("trying to register keystore interceptor (attempt=${triedCount.get()}) ...")
         val b =
             ServiceManager.getService("android.system.keystore2.IKeystoreService/default") ?: run {
                 Logger.d("keystore2 service not yet available, will retry")
@@ -166,19 +183,26 @@ object KeystoreInterceptor : BinderInterceptor() {
         val bd = getBinderControlEndpoint(b)
         binderBackdoor = bd
         if (bd == null) {
-            // no binder hook, try inject
-            if (triedCount.get() >= 3) {
-                Logger.e("tried injection ${triedCount.get()} times but the native control endpoint is still unavailable; retrying")
+            val pid = findKeystore2Pid()
+            if (pid == null) {
+                Logger.e("failed to find keystore2 pid! will retry (attempt=${triedCount.get()})")
+                triedCount.incrementAndGet()
                 return false
             }
-            if (!injected) {
-                Logger.i("trying to inject keystore (native Binder control endpoint unavailable) ...")
-                val pid = findKeystore2Pid()
-                if (pid == null) {
-                    Logger.e("failed to find keystore2 pid! will retry (attempt=${triedCount.get()})")
-                    triedCount.incrementAndGet()
-                    return false
-                }
+            if (injected && injectedPid == pid) {
+                Logger.d("Waiting for the injected keystore control endpoint")
+                return false
+            }
+            val now = SystemClock.elapsedRealtime()
+            if (
+                lastInjectionAttemptMs != 0L &&
+                now - lastInjectionAttemptMs < INJECTION_RETRY_INTERVAL_MS
+            ) {
+                return false
+            }
+            lastInjectionAttemptMs = now
+            Logger.i("trying to inject keystore (native Binder control endpoint unavailable) ...")
+            try {
                 Logger.i("found keystore2 at pid=$pid, injecting libcleverestricky.so ...")
                 val modulePath = getModuleDir()
                 val injectPath = "$modulePath/inject"
@@ -206,12 +230,15 @@ object KeystoreInterceptor : BinderInterceptor() {
                 } else {
                     Logger.i("injected keystore successfully")
                     injected = true
+                    injectedPid = pid
                 }
                 triedCount.incrementAndGet()
                 return false
+            } catch (error: Exception) {
+                triedCount.incrementAndGet()
+                Logger.e("failed to run the keystore injector", error)
+                return false
             }
-            triedCount.incrementAndGet()
-            return false
         }
         val ks = IKeystoreService.Stub.asInterface(b)
         val tee =
@@ -270,6 +297,7 @@ object KeystoreInterceptor : BinderInterceptor() {
         }
 
         keystore.linkToDeath(Killer, 0)
+        triedCount.set(0)
         return true
     }
 

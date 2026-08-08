@@ -20,6 +20,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.security.cert.X509Certificate
 import java.util.concurrent.TimeUnit
 
@@ -280,25 +281,67 @@ class ActionTest {
 
     @Test
     fun testUserCanToggleFeaturesOffAndOnAndConfigReflectsState() {
-        assertFalse(getConfig().getBoolean("telephony"))
+        val settings =
+            listOf(
+                "global_mode",
+                "tee_broken_mode",
+                "auto_keybox_check",
+                "random_on_boot",
+                "hide_sensitive_props",
+                "spoof_region_cn",
+                "telephony",
+                "rkp_passthrough",
+                "drm_passthrough",
+            )
 
-        assertEquals(200, postForm("/api/toggle", mapOf("setting" to "telephony", "value" to "true")).first)
+        settings.forEach { setting ->
+            assertFalse(getConfig().getBoolean(setting))
+            assertEquals(200, postForm("/api/toggle", mapOf("setting" to setting, "value" to "true")).first)
+            assertTrue(getConfig().getBoolean(setting))
+            assertTrue(File(configDir, setting).isFile)
+        }
         assertEquals(400, postForm("/api/toggle", mapOf("setting" to "rkp_bypass", "value" to "true")).first)
         assertEquals(400, postForm("/api/toggle", mapOf("setting" to "spoof_props", "value" to "true")).first)
 
         var config = getConfig()
-        assertTrue(config.getBoolean("telephony"))
         assertFalse(config.has("rkp_bypass"))
         assertFalse(config.has("spoof_props"))
-        assertTrue(File(configDir, "telephony").exists())
         assertFalse(File(configDir, "rkp_bypass").exists())
         assertFalse(File(configDir, "spoof_props").exists())
 
-        assertEquals(200, postForm("/api/toggle", mapOf("setting" to "telephony", "value" to "false")).first)
+        settings.forEach { setting ->
+            assertEquals(200, postForm("/api/toggle", mapOf("setting" to setting, "value" to "false")).first)
+            assertFalse(getConfig().getBoolean(setting))
+            assertFalse(File(configDir, setting).exists())
+        }
 
         config = getConfig()
-        assertFalse(config.getBoolean("telephony"))
-        assertFalse(File(configDir, "telephony").exists())
+        settings.forEach { setting -> assertFalse(config.getBoolean(setting)) }
+    }
+
+    @Test
+    fun testToggleRejectsSymbolicLinkMarker() {
+        val outside = tempFolder.newFile("outside-marker").apply { writeText("unchanged") }
+        Files.createSymbolicLink(File(configDir, "telephony").toPath(), outside.toPath())
+
+        assertEquals(400, postForm("/api/toggle", mapOf("setting" to "telephony", "value" to "true")).first)
+        assertFalse(getConfig().getBoolean("telephony"))
+        assertEquals("unchanged", outside.readText())
+    }
+
+    @Test
+    fun testKeyboxListIncludesXmlAndCboxOnly() {
+        val keyboxDir = File(configDir, "keyboxes").apply { mkdirs() }
+        File(keyboxDir, "first.xml").writeText("xml")
+        File(keyboxDir, "encrypted.cbox").writeText("cbox")
+        File(keyboxDir, "encrypted.cbox.cache").writeText("cache")
+        File(keyboxDir, "notes.txt").writeText("notes")
+        File(keyboxDir, "directory.xml").mkdir()
+
+        val listed = getKeyboxes()
+        assertEquals(2, listed.length())
+        assertEquals("encrypted.cbox", listed.getString(0))
+        assertEquals("first.xml", listed.getString(1))
     }
 
     @Test

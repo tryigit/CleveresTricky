@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
- * binder_trace.c — CO-RE-compatible eBPF binder tracing program
+ * binder_trace.c: CO-RE-compatible eBPF binder tracing program
  *
  * Design goals:
  *  1. CO-RE (Compile Once – Run Everywhere): every kernel struct access goes
@@ -35,7 +35,7 @@ struct {
     __uint(max_entries, 1024);
 } ioctl_counts SEC(".maps");
 
-/* Perf-event ring buffer — streams binder_event records to user space.
+/* Perf-event ring buffer streams binder_event records to user space.
  * Using a perf array avoids the need to share data through hash maps,
  * reducing contention and preventing map-full drops. */
 struct {
@@ -58,7 +58,7 @@ struct binder_event {
 };
 
 /* -------------------------------------------------------------------------
- * kprobe/binder_ioctl — fires on every binder ioctl call
+ * kprobe/binder_ioctl fires on every binder ioctl call
  *
  * We count ioctls per PID (as before) and, when the call is a
  * BINDER_WRITE_READ ioctl (cmd == 0xc0306201 on 64-bit), we read the
@@ -93,7 +93,7 @@ int trace_binder_ioctl(struct pt_regs *ctx) {
     }
 
     /*
-     * Read the third argument — pointer to a user-space binder_write_read.
+     * Read the third argument, a pointer to a user-space binder_write_read.
      * Use bpf_probe_read_user (kernel >= 5.5) to safely copy from user space.
      * Fall back to bpf_probe_read on older kernels via the vmlinux_compat alias.
      */
@@ -102,7 +102,7 @@ int trace_binder_ioctl(struct pt_regs *ctx) {
     if (!bwr_ptr) return 0;
 
     /*
-     * Read binder_write_read from USER space — the ioctl argument is a
+     * Read binder_write_read from USER space; the ioctl argument is a
      * pointer into the calling process's address space, not kernel memory.
      * Use bpf_probe_read_user (kernel >= 5.5) or the unqualified
      * bpf_probe_read on older kernels (aliased via bpf_helpers.h).
@@ -151,7 +151,7 @@ int trace_binder_ioctl(struct pt_regs *ctx) {
     evt.data_size = BPF_CORE_READ(&txd, data_size);
     bpf_get_current_comm(evt.comm, sizeof(evt.comm));
 
-    /* Submit to perf ring buffer — user-space daemon reads this */
+    /* Submit to the perf ring buffer for the user-space daemon. */
     bpf_perf_event_output(ctx, &binder_events, BPF_F_CURRENT_CPU,
                           &evt, sizeof(evt));
 

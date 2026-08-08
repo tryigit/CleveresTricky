@@ -9,6 +9,8 @@ import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URI
 import java.net.URL
+import java.nio.file.Files
+import java.nio.file.LinkOption
 import java.security.MessageDigest
 import java.security.cert.X509Certificate
 
@@ -30,6 +32,8 @@ object KeyboxVerifier {
     private const val DEFAULT_CRL_URL = "https://android.googleapis.com/attestation/status"
     private const val MAX_CRL_BYTES = 8L * 1024 * 1024
     private const val MAX_CRL_ENTRIES = 1_000_000
+    private const val MAX_KEYBOX_XML_BYTES = 10L * 1024 * 1024
+    private const val MAX_KEYBOX_FILES = 64
 
     @Volatile
     private var crlUrl = DEFAULT_CRL_URL
@@ -89,20 +93,27 @@ object KeyboxVerifier {
             return listOf(Result(File(""), "Global", Status.ERROR, "Failed to fetch CRL from Google"))
         }
 
-        if (!configDir.exists() || !configDir.isDirectory) {
+        if (!Files.isDirectory(configDir.toPath(), LinkOption.NOFOLLOW_LINKS)) {
             return listOf(Result(File(""), "Global", Status.ERROR, "Config directory not found"))
         }
 
         // Check legacy keybox.xml
         val legacyFile = File(configDir, "keybox.xml")
-        if (legacyFile.exists()) {
+        if (isSafeKeyboxFile(legacyFile)) {
             results.add(checkFile(legacyFile, revokedSerials))
         }
 
         // Check jukebox files
         val keyboxDir = File(configDir, "keyboxes")
-        if (keyboxDir.exists() && keyboxDir.isDirectory) {
-            val files = keyboxDir.listFiles { _, name -> name.endsWith(".xml") } ?: emptyArray()
+        if (Files.isDirectory(keyboxDir.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+            val files =
+                keyboxDir
+                    .listFiles { file ->
+                        file.name.endsWith(".xml", ignoreCase = true) && isSafeKeyboxFile(file)
+                    }.orEmpty()
+            if (files.size > MAX_KEYBOX_FILES) {
+                return listOf(Result(File(""), "Global", Status.ERROR, "Too many keybox files"))
+            }
             for (file in files) {
                 results.add(checkFile(file, revokedSerials))
             }
@@ -356,6 +367,9 @@ object KeyboxVerifier {
         revokedSerials: Set<String>,
     ): Result {
         return try {
+            if (!isSafeKeyboxFile(file)) {
+                return Result(file, file.name, Status.ERROR, "Unsafe or oversized keybox file")
+            }
             val keyboxes =
                 file.bufferedReader().use { reader ->
                     CertHack.parseKeyboxXml(reader)
@@ -386,6 +400,10 @@ object KeyboxVerifier {
             Result(file, file.name, Status.ERROR, "Error: ${e.javaClass.simpleName}")
         }
     }
+
+    private fun isSafeKeyboxFile(file: File): Boolean =
+        Files.isRegularFile(file.toPath(), LinkOption.NOFOLLOW_LINKS) &&
+            file.length() in 1..MAX_KEYBOX_XML_BYTES
 
     @JvmStatic
     fun verifyKeybox(

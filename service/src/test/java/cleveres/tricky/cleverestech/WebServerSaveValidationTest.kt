@@ -255,15 +255,32 @@ class WebServerSaveValidationTest {
 
     @Test
     fun testTemplatesJsonValidation() {
-        // Valid JSON
-        val valid = "[{\"id\":\"test\",\"model\":\"Test\"}]"
+        val valid =
+            """
+            [{
+              "id":"test",
+              "manufacturer":"Example",
+              "model":"Test",
+              "fingerprint":"example/test/test:14/BUILD/1:user/release-keys",
+              "brand":"example",
+              "product":"test",
+              "device":"test",
+              "release":"14",
+              "buildId":"BUILD",
+              "incremental":"1",
+              "securityPatch":"2024-01-01"
+            }]
+            """.trimIndent()
         assertEquals(NanoHTTPD.Response.Status.OK, webServer.serve(mockSession("templates.json", valid)).status)
 
-        // Invalid JSON
         val invalid1 = "NOT JSON"
-        val invalid3 = "[}" // definitely invalid
+        val invalid2 = "[{\"id\":\"test\",\"model\":\"missing required fields\"}]"
+        val invalid3 = "[}"
+        val invalidObject = "{\"id\":\"test\"}"
 
         assertEquals(NanoHTTPD.Response.Status.BAD_REQUEST, webServer.serve(mockSession("templates.json", invalid1)).status)
+        assertEquals(NanoHTTPD.Response.Status.BAD_REQUEST, webServer.serve(mockSession("templates.json", invalid2)).status)
         assertEquals(NanoHTTPD.Response.Status.BAD_REQUEST, webServer.serve(mockSession("templates.json", invalid3)).status)
+        assertEquals(NanoHTTPD.Response.Status.BAD_REQUEST, webServer.serve(mockSession("templates.json", invalidObject)).status)
     }
 }

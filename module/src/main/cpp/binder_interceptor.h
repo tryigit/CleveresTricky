@@ -32,7 +32,7 @@ using namespace android;
 // =============================================================================
 
 // ---------------------------------------------------------------------------
-// OffsetCache — Singleton that holds dynamically discovered struct offsets.
+// OffsetCache holds dynamically discovered struct offsets.
 // Populated once during module init; read-only afterward.
 // ---------------------------------------------------------------------------
 struct OffsetCache {
@@ -76,7 +76,7 @@ struct OffsetCache {
 };
 
 // ---------------------------------------------------------------------------
-// BtfProvider — Reads BTF (BPF Type Format) data from the running kernel
+// BtfProvider reads BTF (BPF Type Format) data from the running kernel
 // to discover struct field offsets without any compile-time assumptions.
 // Available on kernel 5.4+ with CONFIG_DEBUG_INFO_BTF=y.
 // ---------------------------------------------------------------------------
@@ -101,7 +101,7 @@ private:
 };
 
 // ---------------------------------------------------------------------------
-// RuntimeOffsetDiscovery — Sends a dummy PING_TRANSACTION through the binder
+// RuntimeOffsetDiscovery sends a PING_TRANSACTION through the binder
 // driver and observes memory patterns to discover struct field positions.
 // ---------------------------------------------------------------------------
 class RuntimeOffsetDiscovery {
@@ -123,7 +123,7 @@ private:
 };
 
 // ---------------------------------------------------------------------------
-// FallbackDatabase — Static offset maps for known Android/Kernel combinations.
+// FallbackDatabase provides static offset maps for supported platform combinations.
 // Indexed by (API level, kernel major, kernel minor).
 // ---------------------------------------------------------------------------
 struct FallbackOffsetEntry {
@@ -159,7 +159,7 @@ private:
 };
 
 // ---------------------------------------------------------------------------
-// BinderStreamParser — bounded Rust parser plus checked C++ write-back.
+// BinderStreamParser combines a bounded Rust parser with checked C++ write-back.
 // ---------------------------------------------------------------------------
 class BinderStreamParser {
 public:
@@ -196,7 +196,7 @@ private:
 };
 
 // ---------------------------------------------------------------------------
-// AdaptiveBinderInterceptor — Top-level orchestrator. Initializes the offset
+// AdaptiveBinderInterceptor is the top-level orchestrator. It initializes the offset
 // discovery pipeline (live validation → stable-UAPI fallback) and wires up the
 // bounded parser for all ioctl interception.
 // ---------------------------------------------------------------------------
@@ -224,7 +224,7 @@ private:
 
 // ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
-// BinderInterceptor — The Binder-level intercept handler (unchanged API).
+// BinderInterceptor is the Binder-level intercept handler.
 // Manages registered interceptor items and dispatches pre/post transact.
 // ---------------------------------------------------------------------------
 struct WpIBinderHash {

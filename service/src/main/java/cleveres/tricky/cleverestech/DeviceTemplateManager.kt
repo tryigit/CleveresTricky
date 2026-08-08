@@ -202,10 +202,12 @@ object DeviceTemplateManager {
                 val array = JSONArray(json)
                 require(array.length() <= MAX_TEMPLATES) { "templates.json contains too many templates" }
                 val list = ArrayList<DeviceTemplate>()
+                val seenIds = HashSet<String>()
                 for (i in 0 until array.length()) {
                     val obj = array.getJSONObject(i)
-                    val t = parseJson(obj)
-                    if (t != null) list.add(t)
+                    val template = requireNotNull(parseJson(obj)) { "templates.json contains an invalid template" }
+                    require(seenIds.add(template.id)) { "templates.json contains duplicate template IDs" }
+                    list.add(template)
                 }
                 synchronized(this) {
                     if (initializationGeneration.get() != generation) return

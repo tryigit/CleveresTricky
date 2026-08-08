@@ -12,6 +12,8 @@
 - Fixed fail-open keybox activation: invalid/revoked mixed payloads and unavailable CRL data now leave keyboxes inactive.
 - Fixed WebUI Host/Origin validation, stored XSS paths, malformed-body handling, unsupported toggles, editable-file allowlisting, path traversal, ZIP/CBOX bounds, and encrypted restore validation.
 - Fixed module consistency verification so missing targets, malformed checksums, symbolic links, and non-regular files are rejected.
+- Fixed WebUI setting synchronization, Android WebView drag and drop, multipart XML uploads, editable templates, boot-property controls, and encrypted backup coverage for local XML/CBOX files.
+- Fixed native injection retry state so failed attempts recover without repeatedly registering healthy hooks; telephony responses now change only when a validated identifier is configured.
 
 ### Security and performance
 
@@ -20,14 +22,15 @@
 - Encrypted server credentials and unlocked keybox caches, disabled redirects, required HTTPS for remote sources, and validated every remote/local key before activation.
 - Added a bounded Rust Binder stream parser and fail-closed native layout validation; native code builds with warnings as errors and hardened visibility/linker settings.
 - Reduced repeated certificate parsing, PackageManager IPC, template parsing, and keybox reload work with bounded, state-consistent caches; UID targeting decisions now expire to prevent stale package reuse.
+- Reduced retained WebUI and certificate-cache memory, bounded certificate and template inputs, hardened keybox verification against symbolic links, and protected remote-cache deletion.
 
 ### Removed or changed
 
-- Removed synthetic RKP, software KeyMint generation, fake hardware/timing paths, bundled/fake keyboxes, the undocumented plaintext keybox harvester, the nonfunctional AutoPIF scraper, DRM/location/MAC/permission spoofing, and other UI/config switches that did not have a working implementation.
-- Added safe coexistence with process-scoped PIF modules: external fingerprint configuration is left untouched instead of being replaced with guessed or unsupported fields.
+- Retired deprecated synthetic provisioning paths, obsolete utilities, bundled test key material, and unsupported legacy options.
+- Added safe coexistence with process-scoped PIF modules by leaving external fingerprint configuration untouched.
 - Remote Key Provisioning now always remains on Android's genuine implementation.
 - Added user-controlled RKP generated-key passthrough and package-scoped DRM passthrough instead of restoring synthetic RKP/DRM implementations.
-- `spoof_build_vars` now accepts only fields actually consumed by attestation or optional telephony interception; arbitrary `ro.*` and other no-op keys are rejected.
+- `spoof_build_vars` now accepts only fields consumed by attestation or optional telephony interception; arbitrary `ro.*` entries are rejected.
 - `app_config` now has exactly three columns: package, identity template, and keybox filename.
 - The legacy trailing `!` target syntax is migrated to normal certificate substitution; it no longer requests software key generation.
 - Minimal profile now enables certificate safe mode; Default restores targeted mode with revocation checks.

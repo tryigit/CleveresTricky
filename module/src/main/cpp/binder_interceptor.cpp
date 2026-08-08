@@ -5,13 +5,13 @@
 // framework with runtime layout validation for supported Android releases.
 //
 // Core Design Principles:
-//   1. Live UAPI Validation — A PING_TRANSACTION confirms that the driver and
+//   1. Live UAPI Validation: A PING_TRANSACTION confirms that the driver and
 //      packaged architecture-specific Binder header agree at runtime.
-//   2. Memory-Safe Binder Stream Parser — Rust validates every command and
+//   2. Memory-Safe Binder Stream Parser: Rust validates every command and
 //      field before C++ performs a bounded write-back.
-//   3. Stable-UAPI Fallback — If the live probe is unavailable during process
+//   3. Stable-UAPI Fallback: If the live probe is unavailable during process
 //      startup, compiler-calculated layouts are used on Android 12–16.
-//   4. Bounds Checking & Safety — Every buffer access is bounds-checked.
+//   4. Bounds Checking and Safety: Every buffer access is bounds-checked.
 //      Unrecognized layouts fail closed instead of guessing offsets.
 // =============================================================================
 
@@ -56,7 +56,7 @@
 using namespace android;
 
 // =============================================================================
-// Section 1: OffsetCache Singleton — Stores discovered struct offsets
+// Section 1: OffsetCache Singleton
 // =============================================================================
 OffsetCache& OffsetCache::instance() {
   static OffsetCache cache;
@@ -111,7 +111,7 @@ bool OffsetCache::validateOffsets() const {
 }
 
 // =============================================================================
-// Section 2: BTF Provider — Kernel Introspection (Kernel 5.4+)
+// Section 2: BTF Provider and Kernel Introspection (Kernel 5.4+)
 // =============================================================================
 
 bool BtfProvider::isAvailable() {
@@ -887,7 +887,7 @@ bool BinderStreamParser::writeBack(uintptr_t buffer_ptr, size_t consumed,
 }
 
 // =============================================================================
-// Section 6: AdaptiveBinderInterceptor — Orchestrator
+// Section 6: AdaptiveBinderInterceptor Orchestrator
 // =============================================================================
 
 int AdaptiveBinderInterceptor::detectApiLevel() {
@@ -970,7 +970,7 @@ bool AdaptiveBinderInterceptor::initialize() {
   }
 
   LOGE("AdaptiveBinderInterceptor: ALL strategies failed! "
-       "Using graceful degradation — interception disabled.");
+       "Using graceful degradation; interception disabled.");
   cache.valid = false;
   return false;
 }
@@ -1087,7 +1087,7 @@ static bool is_binder_fd(int fd) {
 }
 
 // =============================================================================
-// Section 10: Hooked Functions (ioctl, close) — Adaptive Stream Parsing
+// Section 10: Hooked Functions (ioctl, close) and Adaptive Stream Parsing
 // =============================================================================
 
 int (*old_ioctl)(int fd, unsigned long request, ...) = nullptr;
@@ -1113,7 +1113,7 @@ int new_ioctl(int fd, unsigned long request, ...) {
 
     const OffsetCache &cache = OffsetCache::instance();
     if (!cache.valid) {
-      // Adaptive system not initialized — cannot safely parse
+      // The adaptive system is not initialized, so parsing is disabled.
       return result;
     }
 

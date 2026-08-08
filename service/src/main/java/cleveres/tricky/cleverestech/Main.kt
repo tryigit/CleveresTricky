@@ -31,7 +31,7 @@ fun main(args: Array<String>) {
                 server.startAsync()
                 Logger.d("Main: WebUI server readiness probe succeeded on $WEB_UI_LOOPBACK_HOST:${server.listeningPort}")
             } catch (e: Exception) {
-                // Readiness probe timed out — the server thread may still be
+                // Readiness probe timed out; the server thread may still be
                 // binding.  Log and continue; the port file will be written below
                 // if listeningPort > 0 (i.e. NanoHTTPD opened the ServerSocket).
                 Logger.e("WebServer readiness probe failed; will write port file if server bound (port > 0)", e)
@@ -71,7 +71,7 @@ fun main(args: Array<String>) {
         // === Config Initialization ===
         // Load keyboxes and all settings before the interceptor loop.  This
         // guarantees that CertHack.canHack() returns true as soon as the
-        // first attestation request arrives — even if injection is delayed or
+        // first attestation request arrives, even if injection is delayed or
         // permanently blocked by a ptrace conflict with another module.
         try {
             SecureFile.mkdirs(configDir, CONFIG_DIR_MODE)

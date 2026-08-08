@@ -88,6 +88,17 @@ class WebServerZipBombTest {
         assertFalse(writeStreamCalled)
     }
 
+    @Test
+    fun malformedCboxBackupEntryIsRejectedBeforeWrite() {
+        val zip = zipOf("keyboxes/bad.cbox", "not-a-cbox".toByteArray())
+
+        assertThrows(IOException::class.java) {
+            WebServer.restoreBackupZip(configDir, ByteArrayInputStream(zip))
+        }
+
+        assertFalse(writeStreamCalled)
+    }
+
     private fun zipOf(
         name: String,
         content: ByteArray,

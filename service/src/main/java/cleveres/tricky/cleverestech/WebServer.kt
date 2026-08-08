@@ -8,9 +8,7 @@ import cleveres.tricky.cleverestech.util.KeyboxVerifier
 import cleveres.tricky.cleverestech.util.RandomUtils
 import cleveres.tricky.cleverestech.util.SecureFile
 import fi.iki.elonen.NanoHTTPD
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -23,6 +21,8 @@ import java.io.InputStream
 import java.io.StringReader
 import java.net.InetSocketAddress
 import java.net.Socket
+import java.nio.ByteBuffer
+import java.nio.charset.CodingErrorAction
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.security.MessageDigest
@@ -34,10 +34,8 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 
-private val SAFE_BUILD_VAR_VALUE_REGEX = Regex("^[a-zA-Z0-9_\\-\\.\\s/:,+=()@]*$")
-
 private fun isValidPkgName(s: String): Boolean {
-    if (s.isEmpty()) return false
+    if (s.length !in 1..255) return false
     for (i in 0 until s.length) {
         val c = s[i]
         if (!(c in 'a'..'z' || c in 'A'..'Z' || c in '0'..'9' || c == '_' || c == '.' || c == '*')) return false
@@ -46,7 +44,7 @@ private fun isValidPkgName(s: String): Boolean {
 }
 
 private fun isValidTemplateName(s: String): Boolean {
-    if (s.isEmpty()) return false
+    if (s.length !in 1..64) return false
     for (i in 0 until s.length) {
         val c = s[i]
         if (!(c in 'a'..'z' || c in 'A'..'Z' || c in '0'..'9' || c == '_' || c == '-')) return false
@@ -55,12 +53,13 @@ private fun isValidTemplateName(s: String): Boolean {
 }
 
 private fun isValidKeyboxFilename(s: String): Boolean {
-    if (s.isEmpty()) return false
+    if (s.length !in 5..128 || s.startsWith('.')) return false
     for (i in 0 until s.length) {
         val c = s[i]
         if (!(c in 'a'..'z' || c in 'A'..'Z' || c in '0'..'9' || c == '_' || c == '.' || c == '-')) return false
     }
-    return true
+    val lower = s.lowercase()
+    return lower.endsWith(".xml") || lower.endsWith(".cbox")
 }
 
 private fun isValidKeyValue(s: String): Boolean {
@@ -88,7 +87,7 @@ private fun isValidSafeBuildVarValue(s: String): Boolean {
 }
 
 private fun isValidTargetPkg(s: String): Boolean {
-    if (s.isEmpty()) return false
+    if (s.length !in 1..255) return false
     for (i in 0 until s.length) {
         val c = s[i]
         if (!(c in 'a'..'z' || c in 'A'..'Z' || c in '0'..'9' || c == '_' || c == '.' || c == '*' || c == '!')) return false
@@ -199,7 +198,10 @@ class WebServer(
     val token: String by lazy {
         val tokenFile = File(configDir, "web_token.txt")
         val existing =
-            if (tokenFile.isFile && tokenFile.length() in 32..256) {
+            if (
+                Files.isRegularFile(tokenFile.toPath(), LinkOption.NOFOLLOW_LINKS) &&
+                tokenFile.length() in 32..256
+            ) {
                 tokenFile.readText().trim()
             } else {
                 ""
@@ -221,7 +223,6 @@ class WebServer(
     private val requestCounts = java.util.concurrent.ConcurrentHashMap<String, RateLimitEntry>()
 
     private val fileLock = Any()
-    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     @Suppress("DEPRECATION")
     private fun getParam(
@@ -249,16 +250,6 @@ class WebServer(
         return current!!.count > RATE_LIMIT
     }
 
-    private fun isSafePath(file: File): Boolean {
-        return try {
-            val configCanonical = configDir.canonicalPath
-            val fileCanonical = file.canonicalPath
-            fileCanonical.equals(configCanonical) || fileCanonical.startsWith(configCanonical + File.separator)
-        } catch (e: Exception) {
-            false
-        }
-    }
-
     private fun readFile(filename: String): String {
         synchronized(fileLock) {
             return try {
@@ -267,7 +258,10 @@ class WebServer(
                     Logger.e("Path traversal attempt detected: $filename")
                     return ""
                 }
-                if (!f.isFile || f.length() > MAX_CONFIG_FILE_SIZE) {
+                if (
+                    !Files.isRegularFile(f.toPath(), LinkOption.NOFOLLOW_LINKS) ||
+                    f.length() > MAX_CONFIG_FILE_SIZE
+                ) {
                     Logger.e("Refusing oversized or non-regular config file: $filename")
                     return ""
                 }
@@ -289,6 +283,10 @@ class WebServer(
                     Logger.e("Path traversal attempt detected during save: $filename")
                     return false
                 }
+                if (Files.isSymbolicLink(f.toPath())) {
+                    Logger.e("Refusing symbolic-link config destination: $filename")
+                    return false
+                }
                 if (content.toByteArray(Charsets.UTF_8).size > MAX_CONFIG_FILE_SIZE) return false
                 SecureFile.writeText(f, content)
                 true
@@ -302,15 +300,18 @@ class WebServer(
     private fun fileExists(filename: String): Boolean {
         synchronized(fileLock) {
             val f = getSafeFile(configDir, filename)
-            return f != null && f.exists()
+            return f != null && Files.isRegularFile(f.toPath(), LinkOption.NOFOLLOW_LINKS)
         }
     }
 
     private fun listKeyboxes(): List<String> {
         synchronized(fileLock) {
             val keyboxDir = File(configDir, "keyboxes")
-            if (keyboxDir.exists() && keyboxDir.isDirectory) {
-                return keyboxDir.listFiles { _, name -> name.endsWith(".xml") }
+            if (Files.isDirectory(keyboxDir.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+                return keyboxDir.listFiles { file ->
+                    (file.name.endsWith(".xml", ignoreCase = true) || file.name.endsWith(".cbox", ignoreCase = true)) &&
+                        Files.isRegularFile(file.toPath(), LinkOption.NOFOLLOW_LINKS)
+                }
                     ?.map { it.name }
                     ?.sorted()
                     ?: emptyList()
@@ -319,6 +320,43 @@ class WebServer(
             }
         }
     }
+
+    private enum class KeyboxUploadValidation {
+        VALID,
+        INVALID,
+        REVOCATION_UNAVAILABLE,
+    }
+
+    private fun validateUploadedKeyboxXml(
+        content: String,
+        filename: String,
+    ): KeyboxUploadValidation {
+        return try {
+            val keyboxes = CertHack.parseKeyboxXml(StringReader(content), filename)
+            if (keyboxes.isEmpty()) return KeyboxUploadValidation.INVALID
+            val revoked = crlFetcher() ?: return KeyboxUploadValidation.REVOCATION_UNAVAILABLE
+            if (keyboxes.all { KeyboxVerifier.verifyKeybox(it, revoked) == KeyboxVerifier.Status.VALID }) {
+                KeyboxUploadValidation.VALID
+            } else {
+                KeyboxUploadValidation.INVALID
+            }
+        } catch (error: Exception) {
+            KeyboxUploadValidation.INVALID
+        }
+    }
+
+    private fun keyboxValidationError(validation: KeyboxUploadValidation): Response? =
+        when (validation) {
+            KeyboxUploadValidation.VALID -> null
+            KeyboxUploadValidation.INVALID ->
+                secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Revoked or invalid keybox")
+            KeyboxUploadValidation.REVOCATION_UNAVAILABLE ->
+                secureResponse(
+                    Response.Status.SERVICE_UNAVAILABLE,
+                    "text/plain",
+                    "Revocation service unavailable; keybox was not saved",
+                )
+        }
 
     private fun getModuleDir(): File {
         val paths =
@@ -353,18 +391,7 @@ class WebServer(
     }
 
     private fun isValidSetting(name: String): Boolean {
-        return name in
-            setOf(
-                "global_mode",
-                "tee_broken_mode",
-                "auto_keybox_check",
-                "random_on_boot",
-                "hide_sensitive_props",
-                "spoof_region_cn",
-                "telephony",
-                "rkp_passthrough",
-                "drm_passthrough",
-            )
+        return name in WEB_UI_SETTINGS
     }
 
     private fun isValidProfile(name: String): Boolean = name.lowercase() in setOf("maximum", "daily", "minimal", "default")
@@ -378,13 +405,21 @@ class WebServer(
             val f = getSafeFile(configDir, filename)
             if (f == null) return false
             return try {
+                val path = f.toPath()
+                if (Files.isSymbolicLink(path)) return false
                 if (enable) {
-                    if (!f.exists()) {
+                    if (Files.exists(path, LinkOption.NOFOLLOW_LINKS)) {
+                        if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) return false
+                    } else {
                         SecureFile.touch(f, 384)
                     }
                 } else {
-                    if (Files.isSymbolicLink(f.toPath())) return false
-                    Files.deleteIfExists(f.toPath())
+                    if (Files.exists(path, LinkOption.NOFOLLOW_LINKS) &&
+                        !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)
+                    ) {
+                        return false
+                    }
+                    Files.deleteIfExists(path)
                 }
                 true
             } catch (e: Exception) {
@@ -606,27 +641,27 @@ class WebServer(
         }
         if (authToken == null) authToken = getParam(session, "token")
 
-        if (authToken == null || !MessageDigest.isEqual(token.toByteArray(), authToken.toByteArray())) {
+        if (
+            authToken == null ||
+            authToken.length != token.length ||
+            !MessageDigest.isEqual(
+                token.toByteArray(Charsets.US_ASCII),
+                authToken.toByteArray(Charsets.US_ASCII),
+            )
+        ) {
             return secureResponse(Response.Status.UNAUTHORIZED, "text/plain", "Unauthorized")
         }
 
         if (uri == "/api/config" && method == Method.GET) {
             val json = JSONObject()
-            json.put("global_mode", fileExists("global_mode"))
-            json.put("tee_broken_mode", fileExists("tee_broken_mode"))
-            json.put("auto_keybox_check", fileExists("auto_keybox_check"))
-            json.put("random_on_boot", fileExists("random_on_boot"))
-            json.put("hide_sensitive_props", fileExists("hide_sensitive_props"))
-            json.put("spoof_region_cn", fileExists("spoof_region_cn"))
-            json.put("telephony", fileExists("telephony"))
-            json.put("rkp_passthrough", fileExists("rkp_passthrough"))
-            json.put("drm_passthrough", fileExists("drm_passthrough"))
+            WEB_UI_SETTINGS.forEach { setting -> json.put(setting, fileExists(setting)) }
             val files = JSONArray()
             files.put("keybox.xml")
             files.put("target.txt")
             files.put("security_patch.txt")
             files.put("spoof_build_vars")
             files.put("app_config")
+            files.put("templates.json")
             files.put("drm_packages.txt")
             files.put("boot_props_mode")
             json.put("files", files)
@@ -835,10 +870,22 @@ class WebServer(
             val file = File(configDir, "app_config")
             val array = JSONArray()
             synchronized(fileLock) {
-                if (file.exists()) {
+                if (Files.exists(file.toPath(), LinkOption.NOFOLLOW_LINKS) &&
+                    !Files.isRegularFile(file.toPath(), LinkOption.NOFOLLOW_LINKS)
+                ) {
+                    return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid app configuration")
+                }
+                if (file.length() > MAX_CONFIG_FILE_SIZE) {
+                    return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "App configuration is too large")
+                }
+                if (Files.isRegularFile(file.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+                    var ruleCount = 0
                     file.useLines { lines ->
                         lines.forEach { line ->
                             if (line.isNotBlank() && !line.startsWith("#")) {
+                                if (++ruleCount > MAX_APP_CONFIG_RULES) {
+                                    return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Too many app rules")
+                                }
                                 val trimmed = line.trim()
                                 if (trimmed.isEmpty()) return@forEach
 
@@ -900,7 +947,11 @@ class WebServer(
             if (jsonStr != null) {
                 try {
                     val array = JSONArray(jsonStr)
+                    if (array.length() > MAX_APP_CONFIG_RULES) {
+                        return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Too many app rules")
+                    }
                     val sb = StringBuilder()
+                    val seenPackages = HashSet<String>()
                     sb.append("# Generated by WebUI\n")
                     for (i in 0 until array.length()) {
                         val obj = array.getJSONObject(i)
@@ -934,7 +985,13 @@ class WebServer(
                                 "Invalid input",
                             )
                         }
+                        if (!seenPackages.add(pkg)) {
+                            return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Duplicate app rule")
+                        }
                         sb.append("$pkg $tmpl $kb\n")
+                        if (sb.length.toLong() > MAX_CONFIG_FILE_SIZE) {
+                            return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "App configuration is too large")
+                        }
                     }
                     synchronized(fileLock) {
                         try {
@@ -1003,58 +1060,57 @@ class WebServer(
                     if (tmpFile.exists()) tmpFile.delete()
                     return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid upload size")
                 }
-                if (!isValidFilename(originalName) || extension != "cbox") {
+                if (!isValidKeyboxFilename(originalName) || (extension != "xml" && extension != "cbox")) {
                     tmpFile.delete()
                     return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid upload filename")
                 }
                 val bytes = tmpFile.readBytes()
                 try {
-                    if (!CboxDecryptor.hasSupportedEnvelopeHeader(bytes)) {
-                        return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid CBOX envelope")
+                    synchronized(fileLock) {
+                        val keyboxDir = File(configDir, "keyboxes")
+                        SecureFile.mkdirs(keyboxDir, 448)
+                        val dest = getSafeFile(keyboxDir, originalName)
+                        if (dest == null) {
+                            return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid upload path")
+                        }
+                        if (extension == "cbox") {
+                            if (!CboxDecryptor.hasSupportedEnvelopeHeader(bytes)) {
+                                return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid CBOX envelope")
+                            }
+                            SecureFile.writeBytes(dest, bytes)
+                            CboxManager.refresh()
+                        } else {
+                            val xml =
+                                try {
+                                    Charsets.UTF_8.newDecoder()
+                                        .onMalformedInput(CodingErrorAction.REPORT)
+                                        .onUnmappableCharacter(CodingErrorAction.REPORT)
+                                        .decode(ByteBuffer.wrap(bytes))
+                                        .toString()
+                                } catch (error: Exception) {
+                                    return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Keybox XML is not valid UTF-8")
+                                }
+                            keyboxValidationError(validateUploadedKeyboxXml(xml, originalName))?.let { return it }
+                            SecureFile.writeBytes(dest, bytes)
+                        }
+                        Config.updateKeyBoxesSync(crlFetcher())
+                        val count = CertHack.getKeyboxCount()
+                        return secureResponse(Response.Status.OK, "application/json", """{"status":"ok","keybox_count":$count}""")
                     }
-                    val keyboxDir = File(configDir, "keyboxes")
-                    SecureFile.mkdirs(keyboxDir, 448)
-                    val dest = getSafeFile(keyboxDir, originalName)
-                    if (dest == null) {
-                        return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid upload path")
-                    }
-                    SecureFile.writeBytes(dest, bytes)
-                    CboxManager.refresh()
-                    Config.updateKeyBoxesSync(crlFetcher())
-                    val count = CertHack.getKeyboxCount()
-                    return secureResponse(Response.Status.OK, "application/json", """{"status":"ok","keybox_count":$count}""")
                 } finally {
                     bytes.fill(0)
                     if (tmpFile.exists() && !tmpFile.delete()) Logger.w("Failed to clean upload temp file")
                 }
             }
 
-            // Legacy XML upload
-            if (filename != null && content != null && filename.endsWith(".xml") && isValidFilename(filename)) {
+            if (
+                filename != null &&
+                content != null &&
+                filename.endsWith(".xml", ignoreCase = true) &&
+                isValidKeyboxFilename(filename)
+            ) {
                 synchronized(fileLock) {
-                    try {
-                        val keyboxes = CertHack.parseKeyboxXml(StringReader(content), filename)
-                        if (keyboxes.isEmpty()) return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid Keybox XML")
-                        val revoked =
-                            crlFetcher()
-                                ?: return secureResponse(
-                                    Response.Status.SERVICE_UNAVAILABLE,
-                                    "text/plain",
-                                    "Revocation service unavailable; keybox was not saved",
-                                )
-                        if (keyboxes.any {
-                                KeyboxVerifier.verifyKeybox(it, revoked) != KeyboxVerifier.Status.VALID
-                            }
-                        ) {
-                            return secureResponse(
-                                Response.Status.BAD_REQUEST,
-                                "text/plain",
-                                "Revoked or invalid keybox",
-                            )
-                        }
-                    } catch (e: Exception) {
-                        return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid Keybox XML")
-                    }
+                    keyboxValidationError(validateUploadedKeyboxXml(content, filename))?.let { return it }
                     val keyboxDir = File(configDir, "keyboxes")
                     SecureFile.mkdirs(keyboxDir, 448)
                     val file = getSafeFile(keyboxDir, filename)
@@ -1083,15 +1139,17 @@ class WebServer(
                 return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Failed to parse body")
             }
             val filename = getParam(session, "filename")
-            if (filename != null && isValidFilename(filename)) {
+            if (filename != null && isValidKeyboxFilename(filename)) {
                 synchronized(fileLock) {
                     val keyboxDir = File(configDir, "keyboxes")
                     val f = getSafeFile(keyboxDir, filename)
-                    if (f != null && f.exists()) {
+                    if (f != null && Files.isRegularFile(f.toPath(), LinkOption.NOFOLLOW_LINKS)) {
                         if (f.delete()) {
-                            if (filename.endsWith(".cbox")) {
+                            if (filename.endsWith(".cbox", ignoreCase = true)) {
                                 val cacheFile = File(keyboxDir, "$filename.cache")
-                                if (cacheFile.exists()) cacheFile.delete()
+                                if (Files.isRegularFile(cacheFile.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+                                    Files.deleteIfExists(cacheFile.toPath())
+                                }
                                 CboxManager.refresh()
                             }
                             Config.updateKeyBoxesSync(crlFetcher())
@@ -1170,7 +1228,12 @@ class WebServer(
                             "ATTESTATION_ID_IMSI" to RandomUtils.generateDigits(15, "310260"),
                             "ATTESTATION_ID_ICCID" to RandomUtils.generateLuhn(20, "8901"),
                         )
-                    val lines = if (spoofFile.isFile) spoofFile.readLines().toMutableList() else mutableListOf()
+                    val lines =
+                        if (Files.isRegularFile(spoofFile.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+                            spoofFile.readLines().toMutableList()
+                        } else {
+                            mutableListOf()
+                        }
                     val processed = mutableSetOf<String>()
                     for (index in lines.indices) {
                         val key = lines[index].substringBefore('=', "").trim()
@@ -1183,7 +1246,9 @@ class WebServer(
                     SecureFile.writeText(spoofFile, lines.joinToString("\n", postfix = "\n"))
                     Config.updateBuildVars(spoofFile)
                     val target = File(configDir, "target.txt")
-                    if (target.exists()) target.setLastModified(System.currentTimeMillis())
+                    if (Files.isRegularFile(target.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+                        target.setLastModified(System.currentTimeMillis())
+                    }
                     Config.updateKeyBoxesSync(crlFetcher())
                     return secureResponse(Response.Status.OK, "text/plain", "Environment Reset")
                 }
@@ -1196,7 +1261,13 @@ class WebServer(
         if (uri == "/api/reload" && method == Method.POST) {
             try {
                 synchronized(fileLock) {
-                    File(configDir, "target.txt").setLastModified(System.currentTimeMillis())
+                    val target = File(configDir, "target.txt")
+                    if (Files.isSymbolicLink(target.toPath())) {
+                        return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid target file")
+                    }
+                    if (Files.isRegularFile(target.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+                        target.setLastModified(System.currentTimeMillis())
+                    }
                     return secureResponse(Response.Status.OK, "text/plain", "Reloaded")
                 }
             } catch (e: Exception) {
@@ -1235,9 +1306,7 @@ class WebServer(
             val map = HashMap<String, String>()
             try {
                 session.parseBody(map)
-            } catch (
-                e: Exception,
-            ) {
+            } catch (e: Exception) {
                 return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Failed to parse body")
             }
             val password = getParam(session, "pw")
@@ -1260,6 +1329,7 @@ class WebServer(
                         encBytes.size.toLong(),
                     )
                 response.addHeader("Content-Disposition", "attachment; filename=\"cleverestricky_backup.ctsb\"")
+                addSecurityHeaders(response)
                 response
             } catch (e: Exception) {
                 Logger.e("Failed to create encrypted backup", e)
@@ -1269,7 +1339,7 @@ class WebServer(
 
         if (uri == "/api/language" && method == Method.GET) {
             val langFile = File(configDir, "lang.json")
-            if (langFile.exists()) {
+            if (Files.isRegularFile(langFile.toPath(), LinkOption.NOFOLLOW_LINKS)) {
                 return secureResponse(Response.Status.OK, "application/json", readFile("lang.json"))
             } else {
                 return secureResponse(Response.Status.NOT_FOUND, "application/json", "{}")
@@ -1280,11 +1350,15 @@ class WebServer(
             val json = JSONObject()
             val keyboxCount = CertHack.getKeyboxCount()
             json.put("keybox_count", keyboxCount)
-            val appConfigSize = File(configDir, "app_config").length()
+            val appConfig = File(configDir, "app_config")
+            val appConfigSize =
+                if (Files.isRegularFile(appConfig.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+                    appConfig.length()
+                } else {
+                    0L
+                }
             json.put("app_config_size", appConfigSize)
-            json.put("global_mode", fileExists("global_mode"))
-            json.put("tee_broken_mode", fileExists("tee_broken_mode"))
-            json.put("telephony", fileExists("telephony"))
+            WEB_UI_SETTINGS.forEach { setting -> json.put(setting, fileExists(setting)) }
             json.put("real_ram_kb", getRamUsageKb())
             json.put("real_cpu", getCpuUsagePercent())
             json.put("environment", getEnvironmentInfo())
@@ -1295,9 +1369,7 @@ class WebServer(
             val files = HashMap<String, String>()
             try {
                 session.parseBody(files)
-            } catch (
-                e: Exception,
-            ) {
+            } catch (e: Exception) {
                 return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Failed to parse body")
             }
             val tmpFilePath = files["file"]
@@ -1305,7 +1377,10 @@ class WebServer(
                 val tmpFile = File(tmpFilePath)
                 var uploadedBytes: ByteArray? = null
                 return try {
-                    if (!tmpFile.isFile || tmpFile.length() !in 1..MAX_UPLOAD_SIZE) {
+                    if (
+                        !Files.isRegularFile(tmpFile.toPath(), LinkOption.NOFOLLOW_LINKS) ||
+                        tmpFile.length() !in 1..MAX_UPLOAD_SIZE
+                    ) {
                         return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid backup size")
                     }
                     val encryptedBytes = tmpFile.readBytes()
@@ -1322,7 +1397,9 @@ class WebServer(
                         synchronized(fileLock) {
                             restoreBackupZip(configDir, ByteArrayInputStream(decrypted))
                             val target = File(configDir, "target.txt")
-                            if (target.exists()) target.setLastModified(System.currentTimeMillis())
+                            if (Files.isRegularFile(target.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+                                target.setLastModified(System.currentTimeMillis())
+                            }
                             secureResponse(Response.Status.OK, "text/plain", "Restore Successful")
                         }
                     } finally {
@@ -1400,20 +1477,21 @@ class WebServer(
         )
     }
 
-    private val htmlBytes by lazy { htmlContent.toByteArray() }
+    private val htmlBytes by lazy { buildHtmlContent().toByteArray(Charsets.UTF_8) }
 
-    private val htmlContent by lazy {
-        """
+    private fun buildHtmlContent(): String {
+        return """
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
     <title>${getAppName()}</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <style>
         :root { --bg: #0B0B0C; --fg: #E5E7EB; --accent: #D1D5DB; --panel: #161616; --border: #333; --input-bg: #1A1A1A; --success: #34D399; --danger: #EF4444; }
-        body { background-color: var(--bg); color: var(--fg); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; }
-        .island-container { display: flex; justify-content: center; position: fixed; top: 20px; width: 100%; z-index: 1000; pointer-events: none; }
+        html { color-scheme: dark; background: var(--bg); }
+        body { background-color: var(--bg); color: var(--fg); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; min-height: 100dvh; overscroll-behavior-y: contain; -webkit-tap-highlight-color: transparent; }
+        .island-container { display: flex; justify-content: center; position: fixed; top: max(12px, env(safe-area-inset-top)); left: 0; right: 0; padding: 0 max(12px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left)); box-sizing: border-box; z-index: 1000; pointer-events: none; }
         .island { background: #000; color: #fff; border-radius: 30px; min-height: 35px; width: auto; max-width: 90%; display: flex; align-items: center; justify-content: center; transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); box-shadow: 0 4px 15px rgba(0,0,0,0.5); font-size: 0.8em; font-weight: 500; opacity: 0; transform: translateY(-20px) scale(0.9); pointer-events: auto; padding: 0; white-space: nowrap; }
         .island.active { min-width: 250px; padding: 8px 12px 8px 24px; opacity: 1; transform: translateY(0) scale(1); font-size: 0.9em; min-height: 44px; }
         .island.error { background: #330000; border: 1px solid var(--danger); }
@@ -1430,12 +1508,12 @@ class WebServer(
         #islandText { flex: 1; }
         @keyframes spin { to { transform: rotate(360deg); } }
         h1 { text-align: center; font-weight: 200; letter-spacing: 2px; margin: 25px 0; color: var(--accent); font-size: 1.5em; text-transform: uppercase; }
-        .tabs { display: flex; justify-content: flex-start; border-bottom: 1px solid var(--border); background: var(--panel); overflow-x: auto; position: sticky; top: 0; z-index: 100; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+        .tabs { display: flex; justify-content: flex-start; border-bottom: 1px solid var(--border); background: var(--panel); overflow-x: auto; position: sticky; top: 0; z-index: 100; -webkit-overflow-scrolling: touch; scrollbar-width: none; scroll-snap-type: x proximity; touch-action: pan-x; padding-top: env(safe-area-inset-top); }
         .tabs::-webkit-scrollbar { display: none; }
         .tab { padding: 15px 20px; cursor: pointer; border-bottom: 2px solid transparent; opacity: 0.6; transition: all 0.2s; white-space: nowrap; font-size: 0.9em; letter-spacing: 1px; min-height: 48px; min-width: 48px; align-items: center; justify-content: center; box-sizing: border-box; display: inline-flex; flex-shrink: 0; }
         .tab:hover { opacity: 0.9; }
         .tab.active { border-bottom-color: var(--accent); opacity: 1; color: var(--accent); }
-        .content { display: none; padding: 20px; max-width: 800px; margin: 0 auto; padding-bottom: 80px; }
+        .content { display: none; padding: 20px; max-width: 800px; margin: 0 auto; padding-bottom: max(80px, calc(48px + env(safe-area-inset-bottom))); }
         .content.active { display: block; animation: fadeIn 0.3s ease; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
         .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
@@ -1443,8 +1521,8 @@ class WebServer(
         .row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; min-height: 48px; }
         .row.wrap { flex-wrap: wrap; }
         label { font-size: 0.95em; color: #BBB; cursor: pointer; }
-        input[type="text"], input[type="password"], input[type="search"], textarea, select { background: var(--input-bg); border: 1px solid var(--border); color: #fff; padding: 12px 14px; border-radius: 6px; width: 100%; box-sizing: border-box; font-family: inherit; transition: border-color 0.2s; font-size: 0.95em; min-height: 44px; min-width: 44px; }
-        input[type="text"]:focus, input[type="password"]:focus, input[type="search"]:focus, textarea:focus, select:focus { border-color: var(--accent); outline: none; }
+        input[type="text"], input[type="password"], input[type="search"], input[type="number"], textarea, select { background: var(--input-bg); border: 1px solid var(--border); color: #fff; padding: 12px 14px; border-radius: 6px; width: 100%; box-sizing: border-box; font-family: inherit; transition: border-color 0.2s; font-size: 0.95em; min-height: 44px; min-width: 44px; }
+        input[type="text"]:focus, input[type="password"]:focus, input[type="search"]:focus, input[type="number"]:focus, textarea:focus, select:focus { border-color: var(--accent); outline: none; }
         button { background: var(--border); border: none; color: var(--fg); padding: 12px 24px; border-radius: 6px; cursor: pointer; font-family: inherit; font-weight: 500; font-size: 0.95em; transition: all 0.2s; text-transform: uppercase; letter-spacing: 0.5px; min-height: 44px; min-width: 44px; touch-action: manipulation; }
         button:hover { background: #444; }
         button:active { transform: scale(0.98); }
@@ -1452,6 +1530,7 @@ class WebServer(
         button.primary:hover { background: #fff; box-shadow: 0 0 10px rgba(255,255,255,0.2); }
         button.danger { background: rgba(239, 68, 68, 0.2); color: var(--danger); border: 1px solid var(--danger); }
         button.danger:hover { background: var(--danger); color: #fff; }
+        button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         input[type="checkbox"].toggle { appearance: none; width: 52px; height: 32px; background: #333; border-radius: 16px; position: relative; cursor: pointer; transition: background 0.3s; border: 6px solid transparent; background-clip: padding-box; box-sizing: content-box; margin: -6px; }
         input[type="checkbox"].toggle::after { content: ''; position: absolute; top: 3px; left: 3px; width: 26px; height: 26px; background: #fff; border-radius: 50%; transition: transform 0.3s; }
         input[type="checkbox"].toggle:checked { background: var(--accent); }
@@ -1504,14 +1583,19 @@ class WebServer(
         .resource-summary { display: flex; justify-content: space-around; align-items: center; background: #1a1a1a; padding: 20px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.2); }
         .resource-stat { text-align: center; padding: 10px; flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; }
         .resource-stat-mid { border-left: 1px solid var(--border); border-right: 1px solid var(--border); }
+        #fileEditor { height: min(500px, 60dvh) !important; resize: vertical; }
+        #logViewer { height: min(400px, 55dvh) !important; resize: vertical; }
         @media screen and (max-width: 600px) {
             .grid-2 { grid-template-columns: 1fr; }
-            .content { padding: 12px; padding-bottom: 100px; }
+            .content { padding: 12px max(12px, env(safe-area-inset-right)) max(100px, calc(64px + env(safe-area-inset-bottom))) max(12px, env(safe-area-inset-left)); }
             .panel { padding: 16px; margin-bottom: 16px; border-radius: 16px; }
             h1 { font-size: 1.2em; margin: 15px 0; }
             .tabs { gap: 0; padding: 0; }
-            .tab { scroll-snap-align: start; padding: 16px; font-size: 0.9em; min-width: 60px; border-bottom-width: 3px; }
+            .tabs { padding-top: env(safe-area-inset-top); }
+            .tab { scroll-snap-align: start; padding: 16px; font-size: 0.9em; min-width: 60px; min-height: 52px; border-bottom-width: 3px; }
             .row { flex-wrap: wrap; gap: 10px; }
+            .row > label, .row > span, .row > h3 { flex: 1; min-width: 0; line-height: 1.4; }
+            .row > input[type="checkbox"].toggle { flex: 0 0 auto; }
             .responsive-table thead { display: none; }
             .responsive-table tr { display: flex; flex-direction: column; border: 1px solid var(--border); margin-bottom: 16px; border-radius: 12px; background: #1a1a1a; overflow: hidden; }
             .responsive-table td { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #2a2a2a; padding: 16px; min-height: 48px; }
@@ -1520,10 +1604,19 @@ class WebServer(
             .responsive-table td > div, .responsive-table td > span { text-align: right; flex: 1; word-break: break-word; }
             .server-item { flex-direction: column; align-items: flex-start; gap: 12px; padding: 14px; }
             .server-item > div:last-child { width: 100%; display: flex; justify-content: space-between; align-items: center; }
-            input[type="text"], input[type="password"], input[type="search"], textarea, select, button { font-size: 16px; } /* Prevents iOS zoom */
+            input[type="text"], input[type="password"], input[type="search"], input[type="number"], textarea, select, button { font-size: 16px; min-height: 48px; } /* Prevents mobile browser zoom */
+            .island { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+            .island.active { min-width: 0; width: 100%; padding-left: 16px; }
             .resource-summary { flex-direction: column; gap: 10px; background: transparent; border: none; padding: 0; box-shadow: none; }
             .resource-stat { width: 100%; padding: 15px; background: #1a1a1a; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 5px; flex-direction: row; justify-content: space-between; }
             .resource-stat-mid { border-left: none; border-right: none; }
+        }
+        @media screen and (max-height: 520px) and (orientation: landscape) {
+            #fileEditor, #logViewer { height: 48dvh !important; }
+            .content { padding-bottom: max(64px, env(safe-area-inset-bottom)); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
         }
     </style>
 </head>
@@ -1565,19 +1658,20 @@ class WebServer(
         </div>
         <div class="panel">
             <h3>System Control</h3>
-            <div class="row"><label for="global_mode">Global Mode</label><input type="checkbox" class="toggle" id="global_mode" onchange="toggle('global_mode')"></div>
-            <div class="row"><label for="tee_broken_mode">Disable Certificate Substitution (Safe Mode)</label><input type="checkbox" class="toggle" id="tee_broken_mode" onchange="toggle('tee_broken_mode')"></div>
-            <div class="row"><label for="auto_keybox_check">Auto Keybox Check</label><input type="checkbox" class="toggle" id="auto_keybox_check" onchange="toggle('auto_keybox_check')"></div>
-            <div class="row"><label for="random_on_boot">Refresh Identity on Boot</label><input type="checkbox" class="toggle" id="random_on_boot" onchange="toggle('random_on_boot')"></div>
-            <div class="row"><label for="telephony">Telephony Identifier Interception</label><input type="checkbox" class="toggle" id="telephony" onchange="toggle('telephony')"></div>
+            <div class="row"><label for="global_mode">Global Mode</label><input type="checkbox" class="toggle" id="global_mode" data-setting="global_mode" onchange="toggle('global_mode', this)"></div>
+            <div class="row"><label for="tee_broken_mode">Disable Certificate Substitution (Safe Mode)</label><input type="checkbox" class="toggle" id="tee_broken_mode" data-setting="tee_broken_mode" onchange="toggle('tee_broken_mode', this)"></div>
+            <div class="row"><label for="auto_keybox_check">Auto Keybox Check</label><input type="checkbox" class="toggle" id="auto_keybox_check" data-setting="auto_keybox_check" onchange="toggle('auto_keybox_check', this)"></div>
+            <div class="row"><label for="random_on_boot">Refresh Identity on Boot</label><input type="checkbox" class="toggle" id="random_on_boot" data-setting="random_on_boot" onchange="toggle('random_on_boot', this)"></div>
+            <div class="row"><label for="telephony">Telephony Identifier Interception</label><input type="checkbox" class="toggle" id="telephony" data-setting="telephony" onchange="toggle('telephony', this)"></div>
             <div class="section-header">Compatibility passthrough</div>
-            <div class="row"><label for="rkp_passthrough">RKP Passthrough</label><input type="checkbox" class="toggle" id="rkp_passthrough" onchange="toggle('rkp_passthrough')"></div>
-            <div class="row"><label for="drm_passthrough">DRM App Passthrough</label><input type="checkbox" class="toggle" id="drm_passthrough" onchange="toggle('drm_passthrough')"></div>
+            <div class="row"><label for="rkp_passthrough">RKP Passthrough</label><input type="checkbox" class="toggle" id="rkp_passthrough" data-setting="rkp_passthrough" onchange="toggle('rkp_passthrough', this)"></div>
+            <div class="row"><label for="drm_passthrough">DRM App Passthrough</label><input type="checkbox" class="toggle" id="drm_passthrough" data-setting="drm_passthrough" onchange="toggle('drm_passthrough', this)"></div>
             <div style="font-size:0.8em; color:#888; margin-top:5px;">RKP passthrough preserves generated-key responses. DRM passthrough excludes packages in drm_packages.txt from certificate substitution.</div>
             <div class="section-header">Boot Properties</div>
-            <div class="row"><label for="hide_sensitive_props">Hide Sensitive Props</label><input type="checkbox" class="toggle" id="hide_sensitive_props" onchange="toggle('hide_sensitive_props')"></div>
-            <div class="row"><label for="spoof_region_cn">Spoof Region (CN)</label><input type="checkbox" class="toggle" id="spoof_region_cn" onchange="toggle('spoof_region_cn')"></div>
-            <div style="font-size:0.8em; color:#888; margin-top:5px;">Boot-property changes require a reboot. boot_props_mode supports auto, force, or disable; auto avoids known vendor/overlay conflicts.</div>
+            <div class="row"><label for="hide_sensitive_props">Hide Sensitive Props</label><input type="checkbox" class="toggle" id="hide_sensitive_props" data-setting="hide_sensitive_props" onchange="toggle('hide_sensitive_props', this)"></div>
+            <div class="row"><label for="spoof_region_cn">Spoof Region (CN)</label><input type="checkbox" class="toggle" id="spoof_region_cn" data-setting="spoof_region_cn" onchange="toggle('spoof_region_cn', this)"></div>
+            <div class="row"><label for="bootPropsMode">Boot Property Policy</label><select id="bootPropsMode" style="width:auto; min-width:150px;" onchange="saveBootPropsMode(this)"><option value="auto">Automatic</option><option value="force">Always apply</option><option value="disable">Disabled</option></select></div>
+            <div style="font-size:0.8em; color:#888; margin-top:5px;">Boot-property changes require a reboot. Automatic mode avoids known vendor and overlay conflicts.</div>
             <div style="margin-top:20px; border-top: 1px solid var(--border); padding-top: 15px;">
                 <div class="row"><span id="keyboxStatus" style="font-size:0.9em; color:var(--success);">Active</span><button onclick="runWithState(this, 'Reloading...', reloadConfig)">Reload Config</button></div>
             </div>
@@ -1654,9 +1748,16 @@ class WebServer(
                     <option value="API_KEY">API Key</option>
                 </select>
                 <div id="authFields"></div>
+                <div class="grid-2" style="margin-top:5px;">
+                    <div><label for="srvPriority">Priority</label><input type="number" id="srvPriority" value="0" min="-1000000" max="1000000" inputmode="numeric"></div>
+                    <div><label for="srvRefreshHours">Refresh interval (hours)</label><input type="number" id="srvRefreshHours" value="24" min="1" max="720" inputmode="numeric"></div>
+                </div>
+                <div class="row" style="margin-top:8px;"><label for="srvAutoRefresh">Automatic refresh</label><input type="checkbox" class="toggle" id="srvAutoRefresh" checked></div>
+                <div class="pwd-wrapper"><input type="password" id="srvContentPassword" placeholder="CBOX content password (optional)" maxlength="1024" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"><button type="button" class="pwd-toggle" onclick="togglePassword(this)">Show</button></div>
+                <textarea id="srvContentPublicKey" placeholder="CBOX signature public key (optional)" maxlength="16384" style="height:90px; margin-bottom:5px;" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
                 <div style="display: flex; gap: 10px; margin-top: 10px;">
                     <button onclick="runWithState(this, 'Saving...', addServer)" class="primary" style="flex: 1;">Save Server</button>
-                    <button onclick="document.getElementById('addServerForm').style.display='none'; document.getElementById('srvName').value=''; document.getElementById('srvUrl').value=''; document.getElementById('srvAuthType').value='NONE'; document.getElementById('authFields').innerHTML='';" style="flex: 1;">Cancel</button>
+                    <button onclick="resetServerForm()" style="flex: 1;">Cancel</button>
                 </div>
             </div>
         </div>
@@ -1671,8 +1772,8 @@ class WebServer(
                 </div>
                 <div>
                     <label for="kbContent" style="display:block; font-size:0.85em; color:#888; margin-bottom:4px;">Manual Paste (XML)</label>
-                    <textarea id="kbContent" placeholder="Paste Keybox XML Content Here" style="height:100px; font-family:monospace; font-size:0.8em; margin-bottom:10px;" aria-label="Keybox XML Content" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
-                    <input type="text" id="kbFilenameInput" placeholder="keybox.xml" style="margin-bottom:10px;" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off">
+                    <textarea id="kbContent" placeholder="Paste Keybox XML Content Here" maxlength="5242880" style="height:100px; font-family:monospace; font-size:0.8em; margin-bottom:10px;" aria-label="Keybox XML Content" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
+                    <input type="text" id="kbFilenameInput" placeholder="keybox.xml" maxlength="128" style="margin-bottom:10px;" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off">
                     <button id="saveKeyboxBtn" class="primary" style="width:100%;" onclick="runWithState(this, 'Saving...', savePastedKeybox)">Save Pasted XML</button>
                 </div>
             </div>
@@ -1770,7 +1871,7 @@ class WebServer(
 
     <div id="editor" class="content" role="tabpanel" aria-labelledby="tab_editor">
         <div class="panel">
-            <div class="row"><select id="fileSelector" onchange="loadFile()" style="width:70%;" aria-label="Select file to edit"><option value="target.txt">target.txt</option><option value="security_patch.txt">security_patch.txt</option><option value="spoof_build_vars">spoof_build_vars</option><option value="app_config">app_config</option><option value="drm_packages.txt">drm_packages.txt</option><option value="boot_props_mode">boot_props_mode</option></select><button id="revertBtn" class="danger" onclick="const btn = this; requireConfirm(btn, () => revertEditor(), 'Confirm Revert')" style="display:none; margin-right:10px;" title="Revert Changes">Revert</button><button id="saveBtn" onclick="handleSave(this)" title="Ctrl+S">Save</button></div>
+            <div class="row"><select id="fileSelector" onchange="loadFile()" style="width:70%;" aria-label="Select file to edit"><option value="target.txt">target.txt</option><option value="security_patch.txt">security_patch.txt</option><option value="spoof_build_vars">spoof_build_vars</option><option value="app_config">app_config</option><option value="templates.json">templates.json</option><option value="drm_packages.txt">drm_packages.txt</option><option value="boot_props_mode">boot_props_mode</option></select><button id="revertBtn" class="danger" onclick="const btn = this; requireConfirm(btn, () => revertEditor(), 'Confirm Revert')" style="display:none; margin-right:10px;" title="Revert Changes">Revert</button><button id="saveBtn" onclick="handleSave(this)" title="Ctrl+S">Save</button></div>
             <textarea id="fileEditor" style="height:500px; font-family:monospace; margin-top:10px; line-height:1.4;" aria-label="File Content" onclick="editorUnsavedBypass = false;" oninput="editorUnsavedBypass = false; updateSaveButtonState()" onkeydown="if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='s'){event.preventDefault();handleSave(document.getElementById('saveBtn'));}" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
         </div>
     </div>
@@ -1795,8 +1896,8 @@ class WebServer(
             <h3>Platforms</h3>
             <div style="display:flex; flex-direction:column; gap:12px;">
                 <div class="row"><span style="font-weight:bold;">Binance User ID</span><span style="font-family:monospace;">114574830 <button onclick="copyToClipboard('114574830','Copied Binance ID',this)" style="padding:8px 16px; font-size:0.85em; margin-left:5px; min-height:44px;">Copy</button></span></div>
-                <div class="row"><span style="font-weight:bold;">PayPal</span><a href="https://www.paypal.me/tryigitx" target="_blank" style="display:inline-flex; align-items:center; justify-content:center; min-height:44px; min-width:44px; color:var(--accent); text-decoration:none;">paypal.me/tryigitx</a></div>
-                <div class="row"><span style="font-weight:bold;">BuyMeACoffee</span><a href="https://buymeacoffee.com/yigitx" target="_blank" style="display:inline-flex; align-items:center; justify-content:center; min-height:44px; min-width:44px; color:var(--accent); text-decoration:none;">buymeacoffee.com/yigitx</a></div>
+                <div class="row"><span style="font-weight:bold;">PayPal</span><a href="https://www.paypal.me/tryigitx" target="_blank" rel="noopener noreferrer" style="display:inline-flex; align-items:center; justify-content:center; min-height:44px; min-width:44px; color:var(--accent); text-decoration:none;">paypal.me/tryigitx</a></div>
+                <div class="row"><span style="font-weight:bold;">BuyMeACoffee</span><a href="https://buymeacoffee.com/yigitx" target="_blank" rel="noopener noreferrer" style="display:inline-flex; align-items:center; justify-content:center; min-height:44px; min-width:44px; color:var(--accent); text-decoration:none;">buymeacoffee.com/yigitx</a></div>
             </div>
         </div>
         <div class="panel" style="text-align:center;">
@@ -1965,19 +2066,76 @@ class WebServer(
         }
         async function fetchAuth(url, options = {}) {
             if (!token) throw new Error('No token');
-            const headers = options.headers || {};
-            headers['X-Auth-Token'] = token;
-            return fetch(url, { ...options, headers });
+            const requestOptions = { ...options };
+            const requestedTimeout = Number(requestOptions.timeoutMs ?? 60000);
+            delete requestOptions.timeoutMs;
+            const timeoutMs = Number.isFinite(requestedTimeout) ? Math.min(Math.max(requestedTimeout, 1000), 120000) : 60000;
+            const upstreamSignal = requestOptions.signal;
+            const controller = new AbortController();
+            const forwardAbort = () => controller.abort();
+            if (upstreamSignal) {
+                if (upstreamSignal.aborted) controller.abort();
+                else upstreamSignal.addEventListener('abort', forwardAbort, { once: true });
+            }
+            const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+            const headers = new Headers(requestOptions.headers || {});
+            headers.set('X-Auth-Token', token);
+            try {
+                return await fetch(url, {
+                    ...requestOptions,
+                    headers,
+                    signal: controller.signal,
+                    credentials: 'same-origin',
+                    cache: 'no-store',
+                    redirect: 'error'
+                });
+            } catch (error) {
+                if (error && error.name === 'AbortError' && !(upstreamSignal && upstreamSignal.aborted)) {
+                    throw new Error('Request timed out');
+                }
+                throw error;
+            } finally {
+                clearTimeout(timeoutId);
+                if (upstreamSignal) upstreamSignal.removeEventListener('abort', forwardAbort);
+            }
         }
-        function copyToClipboard(text, msg, btn) {
+        function downloadBlob(blob, filename) {
+            const url = URL.createObjectURL(blob);
+            const anchor = document.createElement('a');
+            anchor.href = url;
+            anchor.download = filename;
+            anchor.style.display = 'none';
+            document.body.appendChild(anchor);
+            anchor.click();
+            anchor.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 1500);
+        }
+
+        async function copyToClipboard(text, msg, btn) {
             const originalHtml = btn.innerHTML;
-            navigator.clipboard.writeText(text).then(() => {
+            try {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    await navigator.clipboard.writeText(text);
+                } else {
+                    const fallback = document.createElement('textarea');
+                    fallback.value = text;
+                    fallback.setAttribute('readonly', '');
+                    fallback.style.position = 'fixed';
+                    fallback.style.opacity = '0';
+                    document.body.appendChild(fallback);
+                    fallback.select();
+                    const copied = document.execCommand('copy');
+                    fallback.remove();
+                    if (!copied) throw new Error('Clipboard unavailable');
+                }
                 btn.innerText = 'Copied';
                 btn.classList.add('valid');
                 notify(msg, 'normal');
                 setTimeout(() => btn.innerHTML = originalHtml, 2000);
                 setTimeout(() => btn.classList.remove('valid'), 2000);
-            }).catch(() => { notify('Copy failed. Check permissions.', 'error'); });
+            } catch (error) {
+                notify('Copy failed. Check permissions.', 'error');
+            }
         }
         let notifyTimeout;
         function notify(msg, type = 'normal') {
@@ -2080,10 +2238,21 @@ class WebServer(
             }
         }
         async function runWithState(btn, text, task) {
-             const orig = btn.innerText; btn.disabled = true; btn.innerText = text;
+             if (!btn || btn.disabled) return;
+             const orig = btn.innerText;
+             btn.disabled = true;
+             btn.setAttribute('aria-busy', 'true');
+             btn.innerText = text;
              notify(text, 'working');
-             try { await task(); } finally {
-                 btn.disabled = false; btn.innerText = orig;
+             try {
+                 await task();
+             } catch (error) {
+                 console.error(error);
+                 notify('Error: ' + (error && error.message ? error.message : 'Operation failed'), 'error');
+             } finally {
+                 btn.disabled = false;
+                 btn.removeAttribute('aria-busy');
+                 btn.innerText = orig;
                  const island = document.getElementById('island');
                  if (island.classList.contains('working')) {
                      island.classList.remove('active');
@@ -2116,7 +2285,8 @@ class WebServer(
             if (id === 'apps') loadAppConfig();
             if (id === 'keys') loadKeyInfo();
             if (id === 'info') loadResourceUsage();
-            window.scrollTo({ top: 0, behavior: 'smooth' });
+            const reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            window.scrollTo({ top: 0, behavior: reducedMotion ? 'auto' : 'smooth' });
         }
 
         function handleTabNavigation(e, id) {
@@ -2156,33 +2326,24 @@ class WebServer(
                 return;
             }
             const blob = new Blob([content], {type: "text/plain"});
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = "cleverestricky_logs.txt";
-            a.click();
-            URL.revokeObjectURL(url);
+            downloadBlob(blob, 'cleverestricky_logs.txt');
             notify('Download started', 'normal');
         }
 
-        // --- Keys Tab Logic ---
         async function loadKeyInfo() {
-            loadKeyboxes(); // existing
-
-            // Refresh keybox count on dashboard
+            const keyboxListPromise = loadKeyboxes();
+            const serverListPromise = loadServers();
             try {
-                const configRes = await fetchAuth(getAuthUrl('/api/config'));
+                const [configRes, statusRes] = await Promise.all([
+                    fetchAuth('/api/config'),
+                    fetchAuth('/api/cbox_status')
+                ]);
+                if (!configRes.ok) throw new Error(await configRes.text());
+                if (!statusRes.ok) throw new Error(await statusRes.text());
                 const configData = await configRes.json();
                 document.getElementById('keyboxStatus').innerText = `${'$'}{configData.keybox_count} Keys Loaded`;
-            } catch(e) { console.error(e); notify('Error: ' + e.message, 'error'); return; }
+                const data = await statusRes.json();
 
-            // Load CBOX Status
-            try {
-                const res = await fetchAuth('/api/cbox_status');
-                if (!res.ok) throw new Error(await res.text());
-                const data = await res.json();
-
-                // Locked
                 const lockedList = document.getElementById('lockedList');
                 lockedList.innerHTML = '';
                 if (data.locked.length > 0) {
@@ -2224,16 +2385,11 @@ class WebServer(
                     document.getElementById('lockedSection').style.display = 'none';
                 }
 
-                // Servers
-                const srvList = document.getElementById('serverList');
-                srvList.innerHTML = '';
-                if (data.server_status && data.server_status.length > 0) {
-                    data.server_status.forEach(s => {
-                       // We reload full server list from /api/servers usually, this just has status
-                    });
-                }
-                loadServers();
-            } catch(e) { console.error(e); notify('Error: ' + e.message, 'error'); return; }
+                await Promise.allSettled([keyboxListPromise, serverListPromise]);
+            } catch(e) {
+                console.error(e);
+                notify('Error: ' + e.message, 'error');
+            }
         }
 
         async function unlockCbox(filename, controlId) {
@@ -2302,27 +2458,55 @@ class WebServer(
             }
         }
 
+        function resetServerForm() {
+            document.getElementById('addServerForm').style.display = 'none';
+            document.getElementById('srvName').value = '';
+            document.getElementById('srvUrl').value = '';
+            document.getElementById('srvAuthType').value = 'NONE';
+            document.getElementById('authFields').innerHTML = '';
+            document.getElementById('srvPriority').value = '0';
+            document.getElementById('srvRefreshHours').value = '24';
+            document.getElementById('srvAutoRefresh').checked = true;
+            document.getElementById('srvContentPassword').value = '';
+            document.getElementById('srvContentPublicKey').value = '';
+        }
+
         async function addServer() {
             const name = document.getElementById('srvName').value;
             const url = document.getElementById('srvUrl').value;
-            if (!name.trim() || !url.trim()) { notify('Name and URL required', 'error'); throw new Error('Validation failed'); }
+            if (!name.trim() || !url.trim()) throw new Error('Name and URL are required');
             let parsedUrl;
-            try { parsedUrl = new URL(url); } catch (_) { notify('A valid HTTPS URL is required', 'error'); throw new Error('Validation failed'); }
-            if (parsedUrl.protocol !== 'https:' || parsedUrl.username || parsedUrl.password || parsedUrl.hash) { notify('A credential-free HTTPS URL is required', 'error'); throw new Error('Validation failed'); }
+            try { parsedUrl = new URL(url); } catch (_) { throw new Error('A valid HTTPS URL is required'); }
+            if (parsedUrl.protocol !== 'https:' || parsedUrl.username || parsedUrl.password || parsedUrl.hash) throw new Error('A credential-free HTTPS URL is required');
             const authType = document.getElementById('srvAuthType').value;
             const authData = {};
             if (authType === 'BEARER') authData.token = document.getElementById('srvAuthToken')?.value || '';
             else if (authType === 'BASIC') { authData.username = document.getElementById('srvAuthUser')?.value || ''; authData.password = document.getElementById('srvAuthPass')?.value || ''; }
             else if (authType === 'API_KEY') { authData.headerName = document.getElementById('srvApiKeyName')?.value || 'X-API-Key'; authData.key = document.getElementById('srvApiKeyValue')?.value || ''; }
-            const data = { name, url, authType, authData };
+            const priority = Number.parseInt(document.getElementById('srvPriority').value, 10);
+            const refreshIntervalHours = Number.parseInt(document.getElementById('srvRefreshHours').value, 10);
+            if (!Number.isInteger(priority) || priority < -1000000 || priority > 1000000) throw new Error('Priority is out of range');
+            if (!Number.isInteger(refreshIntervalHours) || refreshIntervalHours < 1 || refreshIntervalHours > 720) throw new Error('Refresh interval is out of range');
+            const data = {
+                name: name.trim(),
+                url: parsedUrl.toString(),
+                authType,
+                authData,
+                priority,
+                enabled: true,
+                autoRefresh: document.getElementById('srvAutoRefresh').checked,
+                refreshIntervalHours,
+                contentPassword: document.getElementById('srvContentPassword').value || '',
+                contentPublicKey: document.getElementById('srvContentPublicKey').value.trim()
+            };
 
-            try {
-                const formData = new FormData();
-                formData.append('data', JSON.stringify(data));
-                const res = await fetchAuth('/api/server/add', { method: 'POST', body: formData });
-                if (res.ok) { notify('Server Added'); document.getElementById('addServerForm').style.display='none'; document.getElementById('srvName').value=''; document.getElementById('srvUrl').value=''; document.getElementById('srvAuthType').value='NONE'; document.getElementById('authFields').innerHTML=''; loadServers(); }
-                else { const msg = await res.text(); notify('Error: ' + msg, 'error'); }
-            } catch(e) { notify('Error: ' + e.message, 'error'); throw e; }
+            const formData = new FormData();
+            formData.append('data', JSON.stringify(data));
+            const res = await fetchAuth('/api/server/add', { method: 'POST', body: formData });
+            if (!res.ok) throw new Error(await res.text());
+            notify('Server Added');
+            resetServerForm();
+            await loadServers();
         }
 
         async function deleteServer(id) {
@@ -2346,19 +2530,16 @@ class WebServer(
         }
 
         async function loadFileContent(input) {
-            if (input.files && input.files[0]) {
-                const file = input.files[0];
-
-                // 1. Preview content
-                if (!file.name.endsWith('.cbox')) {
-                    const reader = new FileReader();
-                    reader.onload = (e) => document.getElementById('kbContent').value = e.target.result;
-                    reader.readAsText(file);
-                } else {
-                    document.getElementById('kbContent').value = 'Binary file (' + file.name + ') selected. Preview unavailable.';
+            const file = input instanceof File ? input : (input && input.files ? input.files[0] : null);
+            if (file) {
+                const lowerName = file.name.toLowerCase();
+                if ((!lowerName.endsWith('.xml') && !lowerName.endsWith('.cbox')) || file.size <= 0 || file.size > 10 * 1024 * 1024) {
+                    notify('Select a non-empty XML or CBOX file up to 10 MB', 'error');
+                    if (!(input instanceof File)) input.value = '';
+                    resetDropZone();
+                    return;
                 }
 
-                // 2. Upload
                 const dz = document.getElementById('dropZoneContent');
                 const tempDiv = document.createElement('div'); tempDiv.innerText = file.name; const safeFileName = tempDiv.innerHTML;
                 dz.innerHTML = '<div style="font-size: 1.2em; margin-bottom: 10px; color:var(--accent); font-weight:bold; display: flex; align-items: center; justify-content: center;"><div class="inline-spinner"></div>Uploading: ' + safeFileName + '...</div>';
@@ -2370,7 +2551,7 @@ class WebServer(
 
                 notify('Uploading...', 'working');
                 try {
-                    const res = await fetchAuth('/api/upload_keybox', { method: 'POST', body: formData });
+                    const res = await fetchAuth('/api/upload_keybox', { method: 'POST', body: formData, timeoutMs: 120000 });
                     if (!res.ok) {
                         const msg = await res.text();
                         notify('Error: ' + msg, 'error');
@@ -2397,6 +2578,7 @@ class WebServer(
             const dz = document.getElementById('dropZoneContent');
             dz.innerHTML = '<div style="font-size: 1.5em; margin-bottom: 10px; color: #888;">[ Drag &amp; Drop ]</div><div style="font-size: 0.9em; color: #888;">Select .xml or .cbox</div>';
             document.getElementById('dropZone').style.borderColor = 'var(--border)';
+            document.getElementById('kbFilePicker').value = '';
         }
 
         async function savePastedKeybox() {
@@ -2407,13 +2589,17 @@ class WebServer(
             }
             let filenameInput = document.getElementById('kbFilenameInput').value.trim();
             let filename = filenameInput || 'keybox.xml';
-            if (!filename.endsWith('.xml')) filename += '.xml';
+            if (!filename.toLowerCase().endsWith('.xml')) filename += '.xml';
 
             notify('Saving...', 'working');
             try {
+                const formData = new FormData();
+                formData.append('filename', filename);
+                formData.append('content', content);
                 const res = await fetchAuth('/api/upload_keybox', {
                     method: 'POST',
-                    body: new URLSearchParams({ filename: filename, content: content })
+                    body: formData,
+                    timeoutMs: 120000
                 });
                 if (!res.ok) {
                     const msg = await res.text();
@@ -2435,7 +2621,24 @@ class WebServer(
             }
         }
 
-        // Rest of existing JS (simplified/merged)
+        const WEB_UI_SETTINGS = ['global_mode', 'tee_broken_mode', 'auto_keybox_check', 'random_on_boot', 'hide_sensitive_props', 'spoof_region_cn', 'telephony', 'rkp_passthrough', 'drm_passthrough'];
+
+        function updateGlobalStatus(enabled) {
+            const status = document.getElementById('status_global');
+            if (!status) return;
+            status.innerText = enabled ? 'ACTIVE' : 'INACTIVE';
+            status.style.color = enabled ? 'var(--success)' : 'var(--danger)';
+            status.style.background = enabled ? 'rgba(74, 222, 128, 0.1)' : 'rgba(239, 68, 68, 0.1)';
+        }
+
+        function syncSettingControls(setting, enabled, disabled = false) {
+            document.querySelectorAll('[data-setting="' + setting + '"]').forEach(control => {
+                control.checked = Boolean(enabled);
+                control.disabled = disabled;
+            });
+            if (setting === 'global_mode') updateGlobalStatus(Boolean(enabled));
+        }
+
         async function init() {
             if (!token) return;
             console.log('[CleveresTricky] init: loading config...');
@@ -2444,17 +2647,9 @@ class WebServer(
                     if (!res.ok) throw new Error(await res.text());
                 const data = await res.json();
                 console.log('[CleveresTricky] config loaded:', JSON.stringify({global_mode: data.global_mode, keybox_count: data.keybox_count, tee_broken_mode: data.tee_broken_mode, telephony: data.telephony}));
-                ['global_mode', 'tee_broken_mode', 'auto_keybox_check', 'random_on_boot', 'hide_sensitive_props', 'spoof_region_cn', 'telephony', 'rkp_passthrough', 'drm_passthrough'].forEach(k => {
-                    if(document.getElementById(k)) document.getElementById(k).checked = data[k];
-                });
+                WEB_UI_SETTINGS.forEach(k => syncSettingControls(k, Boolean(data[k])));
                 determineActiveProfile(data);
                 document.getElementById('keyboxStatus').innerText = `${'$'}{data.keybox_count} Keys Loaded`;
-
-                const globalStatus = document.getElementById('status_global');
-                if (globalStatus) {
-                    if (data.global_mode) { globalStatus.innerHTML = 'ACTIVE'; globalStatus.style.color = 'var(--success)'; globalStatus.style.background = 'rgba(74, 222, 128, 0.1)'; }
-                    else { globalStatus.innerHTML = 'INACTIVE'; globalStatus.style.color = 'var(--danger)'; globalStatus.style.background = 'rgba(239, 68, 68, 0.1)'; }
-                }
             } catch(e) { console.error(e); notify('Error: ' + e.message, 'error'); }
 
             try {
@@ -2476,31 +2671,88 @@ class WebServer(
             }).catch(e => { notify('Error: ' + e.message, 'error'); });
             loadKeyboxes();
             currentFile = document.getElementById('fileSelector').value;
-            await loadFile();
+            await Promise.all([loadFile(), loadBootPropsMode()]);
 
         }
 
-        async function toggle(setting) {
-            notify('Updating...', 'working');
-            const el = document.getElementById(setting);
+        async function loadBootPropsMode() {
+            const select = document.getElementById('bootPropsMode');
+            if (!select) return;
             try {
-                const res = await fetchAuth('/api/toggle', {method:'POST', body: new URLSearchParams({setting, value: el.checked})});
+                const res = await fetchAuth('/api/file?filename=boot_props_mode');
+                if (!res.ok) throw new Error(await res.text());
+                const value = (await res.text()).trim().toLowerCase();
+                const mode = ['auto', 'force', 'disable'].includes(value) ? value : 'auto';
+                select.value = mode;
+                select.dataset.savedValue = mode;
+            } catch (error) {
+                console.error(error);
+                select.value = 'auto';
+                select.dataset.savedValue = 'auto';
+                notify('Could not load boot property policy', 'error');
+            }
+        }
+
+        async function saveBootPropsMode(select) {
+            const previous = select.dataset.savedValue || 'auto';
+            const mode = select.value;
+            if (!['auto', 'force', 'disable'].includes(mode)) {
+                select.value = previous;
+                return;
+            }
+            select.disabled = true;
+            notify('Saving boot property policy...', 'working');
+            try {
+                const content = mode + '\n';
+                const res = await fetchAuth('/api/save', {
+                    method: 'POST',
+                    body: new URLSearchParams({ filename: 'boot_props_mode', content })
+                });
+                if (!res.ok) throw new Error(await res.text());
+                select.dataset.savedValue = mode;
+                const editor = document.getElementById('fileEditor');
+                if (currentFile === 'boot_props_mode' && editor && editor.value === originalContent) {
+                    editor.value = content;
+                    originalContent = content;
+                    updateSaveButtonState();
+                }
+                notify('Boot property policy saved');
+            } catch (error) {
+                select.value = previous;
+                notify('Error: ' + error.message, 'error');
+            } finally {
+                select.disabled = false;
+            }
+        }
+
+        async function toggle(setting, sourceElement) {
+            if (!WEB_UI_SETTINGS.includes(setting)) {
+                notify('Invalid setting', 'error');
+                return;
+            }
+            const el = sourceElement || document.getElementById(setting);
+            if (!el) {
+                notify('Setting control is unavailable', 'error');
+                return;
+            }
+            const requestedValue = Boolean(el.checked);
+            syncSettingControls(setting, requestedValue, true);
+            notify('Updating...', 'working');
+            try {
+                const res = await fetchAuth('/api/toggle', {method:'POST', body: new URLSearchParams({setting, value: requestedValue})});
                 if (!res.ok) {
                     const message = await res.text();
                     throw new Error('Server returned ' + res.status + ': ' + message);
                 }
+                syncSettingControls(setting, requestedValue);
                 notify('Setting Updated');
-                if (setting === 'global_mode') {
-                    const status = document.getElementById('status_global');
-                    if (status) {
-                        status.innerHTML = el.checked ? 'ACTIVE' : 'INACTIVE';
-                        status.style.color = el.checked ? 'var(--success)' : 'var(--danger)';
-                        status.style.background = el.checked ? 'rgba(74, 222, 128, 0.1)' : 'rgba(239, 68, 68, 0.1)';
-                    }
-                }
             } catch(e) {
-                el.checked = !el.checked;
+                syncSettingControls(setting, !requestedValue);
                 notify('Error: ' + e.message, 'error');
+            } finally {
+                document.querySelectorAll('[data-setting="' + setting + '"]').forEach(control => {
+                    control.disabled = false;
+                });
             }
         }
         function previewTemplate() {
@@ -2932,7 +3184,14 @@ class WebServer(
         }
 
         async function reloadConfig() {
-            try { await fetchAuth(getAuthUrl('/api/reload'), { method: 'POST' }); notify('Reloaded'); setTimeout(() => window.location.reload(), 1000); } catch(e) { notify('Error: ' + e.message, 'error'); return; }
+            try {
+                const res = await fetchAuth('/api/reload', { method: 'POST' });
+                if (!res.ok) throw new Error(await res.text());
+                notify('Reloaded');
+                setTimeout(() => window.location.reload(), 1000);
+            } catch(e) {
+                notify('Error: ' + e.message, 'error');
+            }
         }
         async function resetEnvironment() {
             notify('Resetting...', 'working');
@@ -2953,12 +3212,11 @@ class WebServer(
             notify('Creating encrypted backup...', 'working');
             try {
                 const formData = new FormData(); formData.append('pw', pw);
-                const res = await fetchAuth(getAuthUrl('/api/backup'), { method: 'POST', body: formData });
+                const res = await fetchAuth('/api/backup', { method: 'POST', body: formData, timeoutMs: 120000 });
                 if (res.ok) {
                     const blob = await res.blob();
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a'); a.href = url; a.download = 'cleverestricky_backup.ctsb'; a.click();
-                    URL.revokeObjectURL(url); notify('Encrypted backup saved');
+                    downloadBlob(blob, 'cleverestricky_backup.ctsb');
+                    notify('Encrypted backup saved');
                 } else { notify('Backup failed: ' + await res.text(), 'error'); }
             } catch(e) { notify('Error: ' + e.message, 'error'); return; }
         }
@@ -2972,7 +3230,7 @@ class WebServer(
                 if (pw) formData.append('pw', pw);
                 notify('Restoring...', 'working');
                 try {
-                    const res = await fetchAuth(getAuthUrl('/api/restore'), { method: 'POST', body: formData });
+                    const res = await fetchAuth('/api/restore', { method: 'POST', body: formData, timeoutMs: 120000 });
                     if (res.ok) { notify('Success'); setTimeout(() => window.location.reload(), 1000); } else notify('Failed: ' + await res.text(), 'error');
                 } catch (e) { notify('Error: ' + e.message, 'error'); }
                 input.value = '';
@@ -3135,19 +3393,25 @@ class WebServer(
             const features = [
                 { id: 'global_mode', name: 'Global Mode', ram: 'Negligible', cpu: 'Conditional', sec: 'Medium', desc: 'Applies the attestation policy to every calling UID instead of target.txt rules.' },
                 { id: 'tee_broken_mode', name: 'Certificate Safe Mode', ram: 'Negligible', cpu: 'Lower', sec: 'High', desc: 'Disables certificate substitution while leaving genuine KeyMint and RKP behavior intact.' },
+                { id: 'auto_keybox_check', name: 'Automatic Keybox Check', ram: 'Small worker', cpu: 'Periodic', sec: 'High', desc: 'Checks active key material and revocation state in the background.' },
+                { id: 'random_on_boot', name: 'Identity Refresh on Boot', ram: 'None retained', cpu: 'Boot only', sec: 'Medium', desc: 'Refreshes configured attestation and telephony identifiers during boot.' },
                 { id: 'telephony', name: 'Telephony Interception', ram: 'Process dependent', cpu: 'Low', sec: 'Medium', desc: 'Optionally intercepts supported telephony identifier calls; requires a reboot.' },
+                { id: 'rkp_passthrough', name: 'RKP Passthrough', ram: 'Negligible', cpu: 'Lower', sec: 'High', desc: 'Leaves generated-key responses on the original platform path.' },
+                { id: 'drm_passthrough', name: 'DRM App Passthrough', ram: 'Bounded UID cache', cpu: 'Low', sec: 'High', desc: 'Excludes packages in drm_packages.txt from certificate substitution.' },
+                { id: 'hide_sensitive_props', name: 'Hide Sensitive Properties', ram: 'None retained', cpu: 'Boot only', sec: 'Medium', desc: 'Applies the selected boot-property policy after reboot.' },
+                { id: 'spoof_region_cn', name: 'CN Region Compatibility', ram: 'None retained', cpu: 'Boot only', sec: 'Medium', desc: 'Applies the optional region property set after reboot.' },
                 { id: 'keybox_storage', name: 'Keybox Storage', ram: 'Bounded cache', cpu: 'Low', sec: 'Sensitive', desc: data.keybox_count + ' authorized keyboxes loaded from root-only storage.' },
                 { id: 'app_rules', name: 'App Rules', ram: data.app_config_size + ' B config', cpu: 'Low', sec: 'Low', desc: 'Target-specific identity and keybox selection rules.' }
             ];
 
             features.forEach(f => {
                 const tr = document.createElement('tr');
-                const isToggleable = ['global_mode', 'tee_broken_mode', 'telephony'].includes(f.id);
+                const isToggleable = WEB_UI_SETTINGS.includes(f.id);
                 let statusHtml = '';
 
                 if (isToggleable) {
                     const isChecked = data[f.id] ? 'checked' : '';
-                    statusHtml = '<input type="checkbox" class="toggle" id="res_toggle_' + f.id + '" ' + isChecked + ' onchange="toggle(\'' + f.id + '\')">';
+                    statusHtml = '<input type="checkbox" class="toggle" id="res_toggle_' + f.id + '" data-setting="' + f.id + '" aria-label="Toggle ' + escapeHtml(f.name) + '" ' + isChecked + ' onchange="toggle(\'' + f.id + '\', this)">';
                 } else {
                     statusHtml = '<span style="color:#888;">Info Only</span>';
                 }
@@ -3185,11 +3449,7 @@ class WebServer(
                 "tab_log": "Logs"
             };
             const blob = new Blob([JSON.stringify(template, null, 2)], {type: "application/json"});
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = "lang.json";
-            a.click();
+            downloadBlob(blob, 'lang.json');
         }
 
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
@@ -3229,8 +3489,7 @@ class WebServer(
         function handleDrop(e) {
             const dt = e.dataTransfer;
             const files = dt.files;
-            document.getElementById('kbFilePicker').files = files; // Sync with input
-            loadFileContent(document.getElementById('kbFilePicker'));
+            if (files && files[0]) loadFileContent(files[0]);
         }
 
         window.addEventListener('beforeunload', function (e) {
@@ -3253,7 +3512,7 @@ class WebServer(
             devFooter.style.backgroundColor = "var(--panel-bg)";
             devFooter.style.borderRadius = "var(--radius)";
             devFooter.style.border = "1px solid var(--accent)";
-            devFooter.innerHTML = `<span style="color:var(--accent); font-weight:bold;">BETA / DEV BUILD</span><br><br>This module is currently a development build. For the stable version, please download the <a href="https://github.com/tryigit/CleveresTricky/releases" style="display:inline-flex; align-items:center; justify-content:center; min-height:44px; min-width:44px; color:var(--accent);" target="_blank">Stable Build (GitHub Releases)</a>.`;
+            devFooter.innerHTML = `<span style="color:var(--accent); font-weight:bold;">BETA / DEV BUILD</span><br><br>This module is currently a development build. For the stable version, please download the <a href="https://github.com/tryigit/CleveresTricky/releases" style="display:inline-flex; align-items:center; justify-content:center; min-height:44px; min-width:44px; color:var(--accent);" target="_blank" rel="noopener noreferrer">Stable Build (GitHub Releases)</a>.`;
             document.body.appendChild(devFooter);
         }
     </script>
@@ -3271,12 +3530,30 @@ class WebServer(
         private const val RATE_WINDOW = 60 * 1000L
         private const val MAX_BACKUP_ENTRIES = 128
         private const val MAX_BACKUP_KEYBOXES = 64
-        private const val MAX_BACKUP_ENTRY_BYTES = 1024 * 1024
+        private const val MAX_BACKUP_CONFIG_ENTRY_BYTES = 1024 * 1024
+        private const val MAX_BACKUP_KEYBOX_ENTRY_BYTES = 10 * 1024 * 1024
         private const val MAX_BACKUP_UNCOMPRESSED_BYTES = 16 * 1024 * 1024
         private const val MAX_SECURITY_PATCH_RULES = 512
         private const val MAX_DRM_PACKAGE_RULES = 256
+        private const val MAX_APP_CONFIG_RULES = 1024
+        private const val MAX_TARGET_RULES = 2048
+        private const val MAX_TEMPLATES = 128
+        private const val MAX_TEMPLATE_FIELD_LENGTH = 512
         private const val MAX_DRM_PACKAGES_BYTES = 64 * 1024
         private val SECURITY_PATCH_COMPONENTS = setOf("all", "system", "vendor", "boot")
+        private val VALID_TEMPLATE_ID = Regex("[a-z0-9_-]{1,64}")
+        private val WEB_UI_SETTINGS =
+            linkedSetOf(
+                "global_mode",
+                "tee_broken_mode",
+                "auto_keybox_check",
+                "random_on_boot",
+                "hide_sensitive_props",
+                "spoof_region_cn",
+                "telephony",
+                "rkp_passthrough",
+                "drm_passthrough",
+            )
         private val EDITABLE_CONFIG_FILES =
             setOf(
                 "target.txt",
@@ -3328,7 +3605,7 @@ class WebServer(
         }
 
         fun isValidPkg(s: String): Boolean {
-            if (s.isEmpty()) return false
+            if (s.length !in 1..255) return false
             for (i in 0 until s.length) {
                 val c = s[i]
                 if (!(c in 'a'..'z' || c in 'A'..'Z' || c in '0'..'9' || c == '_' || c == '.' || c == '*')) {
@@ -3339,7 +3616,7 @@ class WebServer(
         }
 
         fun isValidTemplate(s: String): Boolean {
-            if (s.isEmpty()) return false
+            if (s.length !in 1..64) return false
             for (i in 0 until s.length) {
                 val c = s[i]
                 if (!(c in 'a'..'z' || c in 'A'..'Z' || c in '0'..'9' || c == '_' || c == '-')) {
@@ -3350,7 +3627,7 @@ class WebServer(
         }
 
         fun isValidKeybox(s: String): Boolean {
-            if (s.isEmpty()) return false
+            if (s.length !in 1..128) return false
             for (i in 0 until s.length) {
                 val c = s[i]
                 if (!(c in 'a'..'z' || c in 'A'..'Z' || c in '0'..'9' || c == '_' || c == '.' || c == '-')) {
@@ -3414,8 +3691,12 @@ class WebServer(
         ): Boolean {
             // Basic validation based on known file types
             if (filename == "target.txt") {
+                var ruleCount = 0
                 val lines = content.lineSequence()
-                return lines.all { it.isEmpty() || it.startsWith("#") || isValidTargetPkg(it) }
+                return lines.all {
+                    it.isEmpty() || it.startsWith("#") ||
+                        (++ruleCount <= MAX_TARGET_RULES && isValidTargetPkg(it))
+                }
             }
             if (filename == "drm_packages.txt") {
                 if (content.toByteArray(Charsets.UTF_8).size > MAX_DRM_PACKAGES_BYTES) return false
@@ -3478,9 +3759,11 @@ class WebServer(
                 }
             }
             if (filename == "app_config") {
+                var ruleCount = 0
                 val lines = content.lineSequence()
                 return lines.all { line ->
                     if (line.isBlank() || line.startsWith("#")) return@all true
+                    if (++ruleCount > MAX_APP_CONFIG_RULES) return@all false
 
                     val trimmed = line.trim()
                     if (trimmed.isEmpty()) return@all true
@@ -3517,12 +3800,48 @@ class WebServer(
                 }
             }
             if (filename == "templates.json") {
-                try {
-                    val json = org.json.JSONTokener(content).nextValue()
-                    return json is org.json.JSONObject || json is org.json.JSONArray
-                } catch (e: Exception) {
-                    return false
-                }
+                return runCatching {
+                    val array = JSONArray(content)
+                    require(array.length() <= MAX_TEMPLATES)
+                    val requiredFields =
+                        listOf(
+                            "id",
+                            "manufacturer",
+                            "model",
+                            "fingerprint",
+                            "brand",
+                            "product",
+                            "device",
+                            "release",
+                            "buildId",
+                            "incremental",
+                            "securityPatch",
+                        )
+                    val seenIds = HashSet<String>()
+                    for (index in 0 until array.length()) {
+                        val template = array.getJSONObject(index)
+                        val id = template.getString("id").trim().lowercase()
+                        require(VALID_TEMPLATE_ID.matches(id) && seenIds.add(id))
+                        requiredFields.forEach { field ->
+                            val value = template.getString(field)
+                            require(
+                                value.isNotBlank() &&
+                                    value.length <= MAX_TEMPLATE_FIELD_LENGTH &&
+                                    value.none(Char::isISOControl),
+                            )
+                        }
+                        listOf("type", "tags").forEach { field ->
+                            val value = template.optString(field, "user")
+                            require(
+                                value.isNotBlank() &&
+                                    value.length <= MAX_TEMPLATE_FIELD_LENGTH &&
+                                    value.none(Char::isISOControl),
+                            )
+                        }
+                        template.getString("securityPatch").convertPatchLevel(false)
+                    }
+                    true
+                }.getOrDefault(false)
             }
             return false
         }
@@ -3535,7 +3854,7 @@ class WebServer(
                     val file = File(configDir, name)
                     if (!Files.isRegularFile(file.toPath(), LinkOption.NOFOLLOW_LINKS)) return@forEach
                     val size = file.length()
-                    if (size !in 0..MAX_BACKUP_ENTRY_BYTES.toLong()) {
+                    if (size !in 0..MAX_BACKUP_CONFIG_ENTRY_BYTES.toLong()) {
                         throw IOException("Backup entry exceeds size limit: $name")
                     }
                     totalBytes += size
@@ -3551,7 +3870,8 @@ class WebServer(
                 if (Files.isDirectory(keyboxDir.toPath(), LinkOption.NOFOLLOW_LINKS)) {
                     val keyboxes =
                         keyboxDir.listFiles { file ->
-                            file.name.endsWith(".xml") &&
+                            (file.name.endsWith(".xml", ignoreCase = true) ||
+                                file.name.endsWith(".cbox", ignoreCase = true)) &&
                                 isValidKeyboxBackupPath("keyboxes/${file.name}") &&
                                 Files.isRegularFile(file.toPath(), LinkOption.NOFOLLOW_LINKS)
                         }?.sortedBy { it.name }.orEmpty()
@@ -3560,7 +3880,7 @@ class WebServer(
                     }
                     keyboxes.forEach { keybox ->
                         val size = keybox.length()
-                        if (size !in 1..MAX_BACKUP_ENTRY_BYTES.toLong()) {
+                        if (size !in 1..MAX_BACKUP_KEYBOX_ENTRY_BYTES.toLong()) {
                             throw IOException("Keybox exceeds size limit: ${keybox.name}")
                         }
                         totalBytes += size
@@ -3611,7 +3931,13 @@ class WebServer(
                             throw IOException("Backup contains too many keyboxes")
                         }
 
-                        val bytes = readZipEntry(zis, MAX_BACKUP_ENTRY_BYTES)
+                        val entryLimit =
+                            if (isValidKeyboxBackupPath(name)) {
+                                MAX_BACKUP_KEYBOX_ENTRY_BYTES
+                            } else {
+                                MAX_BACKUP_CONFIG_ENTRY_BYTES
+                            }
+                        val bytes = readZipEntry(zis, entryLimit)
                         totalBytes += bytes.size
                         if (totalBytes > MAX_BACKUP_UNCOMPRESSED_BYTES) {
                             bytes.fill(0)
@@ -3638,7 +3964,11 @@ class WebServer(
                     SecureFile.writeStream(
                         file,
                         ByteArrayInputStream(bytes),
-                        MAX_BACKUP_ENTRY_BYTES.toLong(),
+                        if (isValidKeyboxBackupPath(name)) {
+                            MAX_BACKUP_KEYBOX_ENTRY_BYTES.toLong()
+                        } else {
+                            MAX_BACKUP_CONFIG_ENTRY_BYTES.toLong()
+                        },
                     )
                 }
             } finally {
@@ -3649,7 +3979,8 @@ class WebServer(
         private fun isValidKeyboxBackupPath(name: String): Boolean {
             if (!name.startsWith("keyboxes/") || name.count { it == '/' } != 1) return false
             val filename = name.substringAfter('/')
-            return filename.endsWith(".xml") &&
+            val lower = filename.lowercase()
+            return (lower.endsWith(".xml") || lower.endsWith(".cbox")) &&
                 filename.length in 5..128 &&
                 !filename.startsWith('.') &&
                 filename.all { it.isLetterOrDigit() || it == '_' || it == '-' || it == '.' }
@@ -3677,6 +4008,12 @@ class WebServer(
             name: String,
             bytes: ByteArray,
         ) {
+            if (name.endsWith(".cbox", ignoreCase = true)) {
+                if (!CboxDecryptor.hasSupportedEnvelopeHeader(bytes)) {
+                    throw IOException("Backup CBOX has an invalid envelope: $name")
+                }
+                return
+            }
             val content = bytes.toString(Charsets.UTF_8)
             if (!content.toByteArray(Charsets.UTF_8).contentEquals(bytes)) {
                 throw IOException("Backup entry is not valid UTF-8: $name")

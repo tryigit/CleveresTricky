@@ -4,6 +4,8 @@ package cleveres.tricky.cleverestech
 
 import cleveres.tricky.cleverestech.keystore.CertHack
 import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -119,5 +121,91 @@ class WebServerUXTest {
                 "onkeydown=\"if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='s'){event.preventDefault();handleSave(document.getElementById('saveBtn'));}\"",
             ),
         )
+    }
+
+    @Test
+    fun testMobileAndSettingContracts() {
+        val html = fetchHtml()
+        val settings =
+            listOf(
+                "global_mode",
+                "tee_broken_mode",
+                "auto_keybox_check",
+                "random_on_boot",
+                "hide_sensitive_props",
+                "spoof_region_cn",
+                "telephony",
+                "rkp_passthrough",
+                "drm_passthrough",
+            )
+
+        assertTrue(html.contains("viewport-fit=cover"))
+        assertTrue(html.contains("env(safe-area-inset-bottom)"))
+        assertTrue(html.contains("@media (prefers-reduced-motion: reduce)"))
+        assertTrue(html.contains("min-height: 48px"))
+        assertTrue(html.contains("height: min(500px, 60dvh) !important"))
+        assertTrue(html.contains("async function fetchAuth"))
+        assertTrue(html.contains("const timeoutId = setTimeout"))
+        assertTrue(html.contains("function downloadBlob"))
+        assertTrue(html.contains("if (files && files[0]) loadFileContent(files[0]);"))
+        assertFalse(html.contains("kbFilePicker').files = files"))
+        assertTrue(html.contains("rel=\"noopener noreferrer\""))
+        assertTrue(html.contains("id=\"bootPropsMode\""))
+        assertTrue(html.contains("saveBootPropsMode(this)"))
+        assertTrue(html.contains("<option value=\"templates.json\">templates.json</option>"))
+
+        settings.forEach { setting ->
+            assertTrue("Missing synchronized control for $setting", html.contains("data-setting=\"$setting\""))
+            assertTrue("Missing source-aware toggle for $setting", html.contains("toggle('$setting', this)"))
+        }
+        assertTrue(html.contains("WEB_UI_SETTINGS.includes(f.id)"))
+        assertTrue(html.contains("syncSettingControls(setting, !requestedValue)"))
+        assertFalse(html.contains(0x2014.toChar()))
+    }
+
+    @Test
+    fun testWebUiApiRouteContract() {
+        val html = fetchHtml()
+        val clientRoutes =
+            Regex("""['\"](/api/[a-z_/]+)""")
+                .findAll(html)
+                .map { it.groupValues[1] }
+                .toSet()
+        val expectedRoutes =
+            setOf(
+                "/api/config",
+                "/api/keyboxes",
+                "/api/cbox_status",
+                "/api/unlock_cbox",
+                "/api/servers",
+                "/api/server/add",
+                "/api/server/delete",
+                "/api/server/refresh",
+                "/api/templates",
+                "/api/random_identity",
+                "/api/packages",
+                "/api/app_config_structured",
+                "/api/file",
+                "/api/save",
+                "/api/upload_keybox",
+                "/api/delete_keybox",
+                "/api/verify_keyboxes",
+                "/api/apply_profile",
+                "/api/toggle",
+                "/api/reset_environment",
+                "/api/reload",
+                "/api/logs",
+                "/api/backup",
+                "/api/language",
+                "/api/resource_usage",
+                "/api/restore",
+            )
+        assertEquals(expectedRoutes, clientRoutes)
+    }
+
+    private fun fetchHtml(): String {
+        val url = URL("http://localhost:${server.listeningPort}/?token=${server.token}")
+        val conn = url.openConnection() as HttpURLConnection
+        return conn.inputStream.bufferedReader().readText()
     }
 }

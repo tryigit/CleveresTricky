@@ -3,11 +3,13 @@ package cleveres.tricky.cleverestech
 import cleveres.tricky.cleverestech.util.SecureFile
 import cleveres.tricky.cleverestech.util.SecureFileOperations
 import org.junit.After
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
@@ -62,6 +64,14 @@ class WebServerUploadTest {
                     file.writeText(content)
                 }
 
+                override fun writeBytes(
+                    file: File,
+                    content: ByteArray,
+                ) {
+                    file.parentFile?.mkdirs()
+                    file.writeBytes(content)
+                }
+
                 override fun mkdirs(
                     file: File,
                     mode: Int,
@@ -111,6 +121,34 @@ class WebServerUploadTest {
         return conn.responseCode
     }
 
+    private fun uploadMultipartKeybox(
+        filename: String,
+        content: ByteArray,
+    ): Int {
+        val boundary = "CleveresTrickyUploadBoundary"
+        val output = ByteArrayOutputStream()
+        fun write(value: String) = output.write(value.toByteArray(StandardCharsets.UTF_8))
+
+        write("--$boundary\r\n")
+        write("Content-Disposition: form-data; name=\"filename\"\r\n\r\n")
+        write("$filename\r\n")
+        write("--$boundary\r\n")
+        write("Content-Disposition: form-data; name=\"file\"; filename=\"$filename\"\r\n")
+        write("Content-Type: application/octet-stream\r\n\r\n")
+        output.write(content)
+        write("\r\n--$boundary--\r\n")
+        val body = output.toByteArray()
+
+        val url = URL("http://localhost:${server.listeningPort}/api/upload_keybox?token=${server.token}")
+        val conn = url.openConnection() as HttpURLConnection
+        conn.requestMethod = "POST"
+        conn.doOutput = true
+        conn.setFixedLengthStreamingMode(body.size)
+        conn.setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+        conn.outputStream.use { it.write(body) }
+        return conn.responseCode.also { conn.disconnect() }
+    }
+
     @Test
     fun testUploadKeyboxValidFilename() {
         val validXml = TestKeyboxFixtures.validEcKeyboxXml
@@ -120,6 +158,14 @@ class WebServerUploadTest {
 
         val f = File(configDir, "keyboxes/valid_keybox.xml")
         assert(f.exists())
+    }
+
+    @Test
+    fun testMultipartXmlUploadIsValidatedAndStored() {
+        val content = TestKeyboxFixtures.validEcKeyboxXml.toByteArray(StandardCharsets.UTF_8)
+
+        assertEquals(200, uploadMultipartKeybox("multipart.xml", content))
+        assertArrayEquals(content, File(configDir, "keyboxes/multipart.xml").readBytes())
     }
 
     @Test

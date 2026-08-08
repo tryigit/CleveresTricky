@@ -169,7 +169,7 @@ class WebServerHtmlTest {
         assertTrue(
             "Keybox Content missing aria-label",
             html.contains(
-                "id=\"kbContent\" placeholder=\"Paste Keybox XML Content Here\" style=\"height:100px; font-family:monospace; font-size:0.8em; margin-bottom:10px;\" aria-label=\"Keybox XML Content\"",
+                "id=\"kbContent\" placeholder=\"Paste Keybox XML Content Here\" maxlength=\"5242880\" style=\"height:100px; font-family:monospace; font-size:0.8em; margin-bottom:10px;\" aria-label=\"Keybox XML Content\"",
             ),
         )
 

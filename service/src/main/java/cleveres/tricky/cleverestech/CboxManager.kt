@@ -33,7 +33,8 @@ object CboxManager {
 
     private val unlockedCache = ConcurrentHashMap<String, UnlockedEntry>()
     private val lockedFiles: MutableSet<String> = ConcurrentHashMap.newKeySet()
-    private val validFilename = Regex("[A-Za-z0-9_.-]{1,128}\\.cbox")
+    private val validFilename =
+        Regex("[A-Za-z0-9][A-Za-z0-9_.-]{0,122}\\.cbox", RegexOption.IGNORE_CASE)
 
     fun initialize() {
         refresh()
@@ -264,10 +265,12 @@ object CboxManager {
         directory: File,
         currentFiles: Set<String>,
     ) {
-        directory.listFiles { file -> file.name.endsWith(".cbox.cache") }?.forEach { cache ->
-            val sourceName = cache.name.removeSuffix(".cache")
-            if (sourceName !in currentFiles) deleteCacheSafely(cache)
-        }
+        directory
+            .listFiles { file -> file.name.endsWith(".cbox.cache", ignoreCase = true) }
+            ?.forEach { cache ->
+                val sourceName = cache.name.removeSuffix(".cache")
+                if (sourceName !in currentFiles) deleteCacheSafely(cache)
+            }
     }
 
     private fun deleteCacheSafely(file: File) {

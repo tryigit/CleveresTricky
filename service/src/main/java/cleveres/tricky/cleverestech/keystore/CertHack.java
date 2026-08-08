@@ -33,6 +33,7 @@ import java.io.Reader;
 import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
+import java.security.MessageDigest;
 import java.security.PublicKey;
 import java.security.Security;
 import java.security.Signature;
@@ -43,6 +44,7 @@ import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
@@ -61,8 +63,15 @@ public final class CertHack {
     private static final int MAX_KEYBOXES_PER_FILE = 64;
     private static final int MAX_KEYS_PER_KEYBOX = 4;
     private static final int MAX_CERTIFICATES_PER_CHAIN = 16;
-    private static final int MAX_PEM_CHARS = 2 * 1024 * 1024;
-    private static final int MAX_CERTIFICATE_CACHE_ENTRIES = 512;
+    private static final int MAX_PEM_CHARS = 256 * 1024;
+    private static final int MAX_CERTIFICATE_CACHE_ENTRIES = 128;
+    private static final int MAX_LEAF_CERTIFICATE_BYTES = 64 * 1024;
+    private static final int MAX_ATTESTATION_EXTENSION_BYTES = 64 * 1024;
+    private static final String[] ATTESTATION_ID_NAMES =
+            {"BRAND", "DEVICE", "PRODUCT", "SERIAL", "IMEI", "MEID", "MANUFACTURER", "MODEL"};
+    private static final int[] ATTESTATION_ID_TAGS = {710, 711, 712, 713, 714, 715, 716, 717};
+    private static final Comparator<ASN1TaggedObject> TAG_COMPARATOR =
+            Comparator.comparingInt(ASN1TaggedObject::getTagNo);
 
     private static final ThreadLocal<CertificateFactory> CERTIFICATE_FACTORY =
             new ThreadLocal<CertificateFactory>() {
@@ -72,6 +81,17 @@ public final class CertHack {
                         return CertificateFactory.getInstance("X.509");
                     } catch (Exception e) {
                         throw new IllegalStateException("X.509 certificate factory is unavailable", e);
+                    }
+                }
+            };
+    private static final ThreadLocal<MessageDigest> SHA256_DIGEST =
+            new ThreadLocal<MessageDigest>() {
+                @Override
+                protected MessageDigest initialValue() {
+                    try {
+                        return MessageDigest.getInstance("SHA-256");
+                    } catch (Exception e) {
+                        throw new IllegalStateException("SHA-256 digest is unavailable", e);
                     }
                 }
             };
@@ -153,22 +173,18 @@ public final class CertHack {
         return derOctectString.getOctets();
     }
 
-    /**
-     * Optimization: Use a custom key object to avoid expensive Base64 encoding
-     * and large String allocations for cache lookups.
-     * This saves ~33% memory per key and avoids O(N) encoding overhead.
-     */
+    /** Stores a fixed-size leaf digest so cache keys do not retain full certificates. */
     private static final class CacheKey {
-        private final byte[] leafEncoded;
+        private final byte[] leafDigest;
         private final Config.AttestationPatchLevels patchLevels;
         private final int uid;
         private final int hashCode;
 
         public CacheKey(byte[] leafEncoded, Config.AttestationPatchLevels patchLevels, int uid) {
-            this.leafEncoded = leafEncoded.clone();
+            this.leafDigest = SHA256_DIGEST.get().digest(leafEncoded);
             this.patchLevels = Objects.requireNonNull(patchLevels, "patchLevels");
             this.uid = uid;
-            this.hashCode = 31 * (31 * Arrays.hashCode(leafEncoded) + patchLevels.hashCode()) + uid;
+            this.hashCode = 31 * (31 * Arrays.hashCode(leafDigest) + patchLevels.hashCode()) + uid;
         }
 
         @Override
@@ -177,7 +193,7 @@ public final class CertHack {
             if (o == null || getClass() != o.getClass()) return false;
             CacheKey cacheKey = (CacheKey) o;
             return uid == cacheKey.uid && patchLevels.equals(cacheKey.patchLevels) &&
-                    Arrays.equals(leafEncoded, cacheKey.leafEncoded);
+                    MessageDigest.isEqual(leafDigest, cacheKey.leafDigest);
         }
 
         @Override
@@ -381,25 +397,6 @@ public final class CertHack {
         }
     }
 
-    /**
-     * Optimization: Checks if the certificate chain for the given leaf and UID is already cached.
-     * This allows avoiding expensive certificate parsing if we have a cache hit.
-     */
-    public static Certificate[] getCachedCertificateChain(byte[] leafEncoded, int uid) {
-        if (leafEncoded == null) return null;
-        try {
-            State currentState = state;
-            Config.AttestationPatchLevels patchLevels = Config.INSTANCE.getAttestationPatchLevels(uid);
-            CacheKey cacheKey = new CacheKey(leafEncoded, patchLevels, uid);
-            // Thread-safe map, no synchronization needed for get
-            Certificate[] cached = currentState.certificateCache.get(cacheKey);
-            return cached == null ? null : cached.clone();
-        } catch (Throwable t) {
-            Logger.e("Exception in getCachedCertificateChain", t);
-        }
-        return null;
-    }
-
     public static Certificate[] hackCertificateChain(Certificate[] caList, int uid) {
         if (caList == null || caList.length == 0 || caList[0] == null) {
             throw new UnsupportedOperationException("Certificate chain is empty");
@@ -407,6 +404,10 @@ public final class CertHack {
         try {
             State currentState = state;
             byte[] leafEncoded = caList[0].getEncoded();
+            if (leafEncoded.length == 0 || leafEncoded.length > MAX_LEAF_CERTIFICATE_BYTES) {
+                Logger.e("Attestation leaf certificate has an invalid size");
+                return caList;
+            }
             Config.AttestationPatchLevels patchLevels = Config.INSTANCE.getAttestationPatchLevels(uid);
             CacheKey cacheKey = new CacheKey(leafEncoded, patchLevels, uid);
 
@@ -427,16 +428,24 @@ public final class CertHack {
 
             byte[] bytes = leaf.getExtensionValue(OID.getId());
             if (bytes == null) return caList;
+            if (bytes.length > MAX_ATTESTATION_EXTENSION_BYTES) {
+                Logger.e("Attestation extension exceeds the safety limit");
+                return caList;
+            }
 
             // Optimization: Use original encoded bytes to avoid copy/re-encoding
             X509CertificateHolder leafHolder = new X509CertificateHolder(leafEncoded);
             Extension ext = leafHolder.getExtension(OID);
             if (ext == null || ext.getExtnValue() == null) {
-                Logger.e("Attestation extension present but holder returned null — skipping hack");
+                Logger.e("Attestation extension present but holder returned null; skipping rewrite");
                 return caList;
             }
             ASN1Sequence sequence = ASN1Sequence.getInstance(ext.getExtnValue().getOctets());
             ASN1Encodable[] encodables = sequence.toArray();
+            if (encodables.length <= 7 || !(encodables[7] instanceof ASN1Sequence)) {
+                Logger.e("Attestation record is missing the TEE-enforced authorization list");
+                return caList;
+            }
             ASN1Sequence teeEnforced = (ASN1Sequence) encodables[7];
 
             // List to collect all tags for sorting
@@ -446,14 +455,12 @@ public final class CertHack {
 
             // Check for ID Attestation overrides
             Map<Integer, byte[]> idAttestationTags = new HashMap<>();
-            String[] tags = {"BRAND", "DEVICE", "PRODUCT", "SERIAL", "IMEI", "MEID", "MANUFACTURER", "MODEL"};
-            int[] tagIds = {710, 711, 712, 713, 714, 715, 716, 717};
             boolean hasIdAttestation = false;
 
-            for (int i = 0; i < tags.length; i++) {
-                byte[] val = Config.INSTANCE.getAttestationId(tags[i], uid);
+            for (int i = 0; i < ATTESTATION_ID_NAMES.length; i++) {
+                byte[] val = Config.INSTANCE.getAttestationId(ATTESTATION_ID_NAMES[i], uid);
                 if (val != null) {
-                    idAttestationTags.put(tagIds[i], val);
+                    idAttestationTags.put(ATTESTATION_ID_TAGS[i], val);
                     hasIdAttestation = true;
                 }
             }
@@ -506,12 +513,10 @@ public final class CertHack {
             X509v3CertificateBuilder builder;
             ContentSigner signer;
 
-            String leafAlgo = leaf.getPublicKey().getAlgorithm();
-            // Normalize algorithm name: JCA may return "ECDSA" instead of "EC"
-            if ("ECDSA".equalsIgnoreCase(leafAlgo) || "EC".equalsIgnoreCase(leafAlgo)) {
-                leafAlgo = KeyProperties.KEY_ALGORITHM_EC;
-            } else {
-                leafAlgo = KeyProperties.KEY_ALGORITHM_RSA;
+            String leafAlgo = normalizeAlgorithm(leaf.getPublicKey().getAlgorithm());
+            if (leafAlgo == null) {
+                Logger.e("Unsupported attestation leaf algorithm");
+                return caList;
             }
 
             // App-specific keybox selection
@@ -586,7 +591,7 @@ public final class CertHack {
             allTags.add(rootOfTrustTagObj);
 
             // Sort tags by tag number to ensure ASN.1 compliance (and correct order for injection)
-            Collections.sort(allTags, (a, b) -> Integer.compare(a.getTagNo(), b.getTagNo()));
+            allTags.sort(TAG_COMPARATOR);
 
             ASN1EncodableVector vector = new ASN1EncodableVector();
             for(ASN1TaggedObject t : allTags) vector.add(t);

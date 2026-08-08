@@ -3,12 +3,15 @@ package cleveres.tricky.cleverestech
 import cleveres.tricky.cleverestech.util.SecureFile
 import cleveres.tricky.cleverestech.util.SecureFileOperations
 import org.junit.After
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import java.io.ByteArrayInputStream
 import java.io.File
+import java.nio.ByteBuffer
+import java.nio.charset.StandardCharsets
 
 class WebServerBackupTest {
     private lateinit var testDir: File
@@ -87,6 +90,11 @@ class WebServerBackupTest {
         val kbDir = File(configDir, "keyboxes")
         kbDir.mkdirs()
         File(kbDir, "kb1.xml").writeText(TestKeyboxFixtures.validEcKeyboxXml)
+        val cboxBytes = ByteArray(1024 * 1024 + 1)
+        ByteBuffer.wrap(cboxBytes)
+            .put("CBOX".toByteArray(StandardCharsets.US_ASCII))
+            .putInt(2)
+        File(kbDir, "encrypted.cbox").writeBytes(cboxBytes)
         File(kbDir, "invalid.txt").writeText("ignore me")
 
         // Create Backup
@@ -109,6 +117,7 @@ class WebServerBackupTest {
 
         assertTrue(File(configDir, "keyboxes/kb1.xml").exists())
         assertEquals(TestKeyboxFixtures.validEcKeyboxXml, File(configDir, "keyboxes/kb1.xml").readText())
+        assertArrayEquals(cboxBytes, File(configDir, "keyboxes/encrypted.cbox").readBytes())
 
         // Verify ignored files are NOT restored
         assertTrue("Ignored file should not be restored", !File(configDir, "ignored_file.txt").exists())

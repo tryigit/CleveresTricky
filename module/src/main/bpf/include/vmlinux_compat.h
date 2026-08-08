@@ -1,14 +1,14 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
- * vmlinux_compat.h — CO-RE-compatible kernel struct definitions for binder eBPF
+ * vmlinux_compat.h: CO-RE-compatible kernel struct definitions for binder eBPF
  *
  * Problem:
  *   Different kernel versions (GKI 5.10, 5.15, 6.1, 6.6 and vendor forks used
  *   by HyperOS / OneUI) may shift fields inside binder_write_read and
  *   binder_transaction_data.  A BPF program compiled against a fixed struct
- *   layout will read garbage — or panic — on a device with a different layout.
+ *   layout will read garbage or panic on a device with a different layout.
  *
- * Solution — CO-RE (Compile Once – Run Everywhere):
+ * Solution: CO-RE (Compile Once, Run Everywhere):
  *   Mark every struct with __attribute__((preserve_access_index)).  The clang
  *   BPF backend then emits BTF relocation records for every field access.  The
  *   kernel's BPF loader (or libbpf at load time) fixes up each access to the
@@ -77,7 +77,7 @@
  * ---------------------------------------------------------------------- */
 
 /*
- * binder_uintptr_t — matches the kernel typedef (binder_uintptr_t).
+ * binder_uintptr_t matches the kernel typedef (binder_uintptr_t).
  * On 32-bit kernels this is __u32; on 64-bit kernels it is __u64.
  * We use __u64 here; the CO-RE relocation will widen/narrow as needed.
  */
@@ -120,7 +120,7 @@ struct binder_write_read_core {
 } __attribute__((preserve_access_index));
 
 /*
- * struct task_struct (minimal, CO-RE annotated) — used to read pid/tgid
+ * struct task_struct (minimal, CO-RE annotated) is used to read pid/tgid
  */
 struct task_struct_core {
     volatile long state;

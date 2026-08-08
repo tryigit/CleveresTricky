@@ -17,8 +17,8 @@ import cleveres.tricky.cleverestech.util.FastByteArrayOutputStream;
 
 public final class Utils {
     private static final String TAG = "Utils";
-    private static final int MAX_CERTIFICATE_BYTES = 1024 * 1024;
-    private static final int MAX_CHAIN_BYTES = 8 * 1024 * 1024;
+    private static final int MAX_CERTIFICATE_BYTES = 64 * 1024;
+    private static final int MAX_CHAIN_BYTES = 512 * 1024;
     private static final int MAX_CERTIFICATES = 16;
 
     private static final ThreadLocal<CertificateFactory> CERTIFICATE_FACTORY =
@@ -63,7 +63,7 @@ public final class Utils {
             if (factory == null) return List.of();
             Collection<? extends Certificate> parsed = factory.generateCertificates(
                     new ByteArrayInputStream(encoded));
-            if (parsed.size() >= MAX_CERTIFICATES) return List.of();
+            if (parsed.size() > MAX_CERTIFICATES) return List.of();
 
             List<X509Certificate> certificates = new ArrayList<>(parsed.size());
             for (Certificate certificate : parsed) {

@@ -220,7 +220,7 @@ object ServerManager {
             throw error
         }
         val cacheFile = File(Config.keyboxDirectory.parentFile, "server_cache_$id.enc")
-        if (cacheFile.exists() && !cacheFile.delete()) Logger.w("Could not delete removed server cache")
+        deleteCacheFile(cacheFile, "removed")
         return true
     }
 
@@ -681,8 +681,22 @@ object ServerManager {
         serverKeyboxes.remove(serverId)
         if (!deleteCache) return
         val cacheFile = File(Config.keyboxDirectory.parentFile, "server_cache_$serverId.enc")
-        if (cacheFile.exists() && !cacheFile.delete()) {
-            Logger.w("Could not delete rejected server cache")
+        deleteCacheFile(cacheFile, "rejected")
+    }
+
+    private fun deleteCacheFile(
+        cacheFile: File,
+        reason: String,
+    ) {
+        val path = cacheFile.toPath()
+        try {
+            if (Files.isSymbolicLink(path)) {
+                Logger.w("Refusing symbolic-link $reason server cache")
+                return
+            }
+            Files.deleteIfExists(path)
+        } catch (error: Exception) {
+            Logger.w("Could not delete $reason server cache")
         }
     }
 

@@ -54,7 +54,9 @@ class SecurityLevelInterceptor : BinderInterceptor() {
             code != generateKeyTransaction ||
                 Config.isRkpPassthroughEnabled ||
                 reply == null ||
-                resultCode != 0
+                resultCode != 0 ||
+                !CertHack.canHack() ||
+                !Config.needHack(callingUid)
         ) {
             return Skip
         }
@@ -72,10 +74,8 @@ class SecurityLevelInterceptor : BinderInterceptor() {
                 replacement.recycle()
                 return Skip
             }
-            val leaf = metadata.certificate
-            val cached = CertHack.getCachedCertificateChain(leaf, callingUid)
-            val rewritten = cached ?: CertHack.hackCertificateChain(originalChain, callingUid)
-            if (cached == null && rewritten === originalChain) {
+            val rewritten = CertHack.hackCertificateChain(originalChain, callingUid)
+            if (rewritten === originalChain) {
                 replacement.recycle()
                 return Skip
             }
@@ -83,7 +83,7 @@ class SecurityLevelInterceptor : BinderInterceptor() {
             Utils.putCertificateChain(metadata, rewritten)
             replacement.writeNoException()
             replacement.writeTypedObject(metadata, 0)
-            Logger.i("Rewrote generated attestation chain for uid=$callingUid")
+            Logger.d { "Rewrote generated attestation chain for uid=$callingUid" }
             OverrideReply(0, replacement)
         } catch (error: Throwable) {
             replacement.recycle()

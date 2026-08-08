@@ -2,7 +2,7 @@
 
 [![Build](https://github.com/tryigit/CleveresTricky/actions/workflows/build.yml/badge.svg)](https://github.com/tryigit/CleveresTricky/actions/workflows/build.yml)
 
-CleveresTricky is a modern KernelSU/APatch module for Android keystore and attestation compatibility. It is designed to give rooted-device users the best result their device, firmware, key material, and current server policy can support—without filling the module with fake switches or silent no-op scripts.
+CleveresTricky is a KernelSU/APatch module for Android keystore and attestation compatibility. It provides app-scoped certificate handling, keybox management, patch-level controls, boot-property compatibility, and an on-device WebUI.
 
 ## Features
 
@@ -143,7 +143,7 @@ DEVICE=husky
 ATTESTATION_ID_SERIAL=ABC123XYZ789
 ```
 
-Bootloader-related userspace properties are controlled by **Hide Sensitive Props**, not by placing arbitrary `ro.*` lines in this file. Unsupported entries are rejected instead of pretending they worked.
+Bootloader-related userspace properties are controlled by **Hide Sensitive Props**, not by placing arbitrary `ro.*` lines in this file. The file accepts only fields supported by the module.
 
 ### DRM passthrough packages
 
@@ -174,7 +174,7 @@ Prefer CBOX for storage and transfer. Plain XML contains root-readable private k
 
 KernelSU recognizes the module through `module.prop`. The boot scripts, policy, Action script, and other module files are included in the ZIP root as documented by KernelSU.
 
-`service.apk`, `inject`, and `libcleverestricky.so` are real build outputs. Gradle compiles them for each supported ABI, checks that they exist and are non-empty, then places them in the release ZIP with SHA-256 files. They are intentionally not stored as stale prebuilt binaries under `module/template`.
+`service.apk`, `inject`, and `libcleverestricky.so` are build outputs. Gradle compiles them for each supported ABI, verifies them, and places them in the release ZIP with SHA-256 files. `module/template` contains the source-controlled scripts and configuration templates.
 
 A recovery-style `META-INF/com/google/android/update-binary` is not required by KernelSU and is not included because recovery and legacy Magisk installation are unsupported. See the official [KernelSU module guide](https://kernelsu.org/guide/module.html).
 
@@ -190,7 +190,6 @@ Common checks:
 
 - **No keybox active:** open Keyboxes, run verification, and check network access to the revocation list.
 - **An app behaves differently after property changes:** disable Hide Sensitive Props and reboot.
-- **Streaming or DRM playback regressed:** enable DRM App Passthrough and add the app to `drm_packages.txt`.
 - **Key generation or provisioning regressed:** enable RKP Passthrough.
 - **Native endpoint unavailable:** disable other ptrace/injection modules and inspect SELinux logs.
 - **Tamper warning:** reinstall the complete ZIP; a payload or checksum is missing or changed.

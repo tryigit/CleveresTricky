@@ -306,7 +306,9 @@ object Config {
 
             // 2. Directory files (Plain XML)
             if (Files.isDirectory(keyboxDir.toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
-                val files = keyboxDir.listFiles { _, name -> name.endsWith(".xml") }?.sortedBy { it.name }
+                val files =
+                    keyboxDir.listFiles { _, name -> name.endsWith(".xml", ignoreCase = true) }
+                        ?.sortedBy { it.name }
                 require(files.orEmpty().size <= MAX_KEYBOX_FILES) { "Too many keybox files" }
                 Logger.d("updateKeyBoxes: scanning keybox dir ${keyboxDir.absolutePath} (${files?.size ?: 0} xml files)")
                 val currentFiles = HashSet<String>()
@@ -1386,13 +1388,15 @@ object Config {
         keyboxPoller?.start()
     }
 
+    @Volatile
     private var iPm: IPackageManager? = null
 
     fun getPm(): IPackageManager? {
-        if (iPm == null) {
-            iPm = IPackageManager.Stub.asInterface(ServiceManager.getService("package"))
-        }
-        return iPm
+        val cached = iPm
+        if (cached != null) return cached
+        val resolved = IPackageManager.Stub.asInterface(ServiceManager.getService("package"))
+        if (resolved != null) iPm = resolved
+        return resolved
     }
 
     internal fun matchesPackage(
@@ -1411,6 +1415,7 @@ object Config {
 
     internal var clockSource: () -> Long = { System.currentTimeMillis() }
     private const val CACHE_TTL_MS = 60 * 1000L // 1 minute
+    private const val MAX_PACKAGES_PER_UID = 128
 
     /**
      * Retrieves the list of packages for a given UID, using a cache to avoid frequent IPC calls.
@@ -1437,9 +1442,22 @@ object Config {
             return if (pm == null) {
                 emptyArray()
             } else {
-                val pkgs = pm.getPackagesForUid(uid) ?: emptyArray()
-                putBoundedUidCache(packageCache, uid, CachedPackage(pkgs, now))
-                pkgs
+                try {
+                    val resolved = pm.getPackagesForUid(uid) ?: emptyArray()
+                    val packages =
+                        if (resolved.size <= MAX_PACKAGES_PER_UID) {
+                            resolved
+                        } else {
+                            Logger.w("PackageManager returned too many packages for one UID; truncating")
+                            resolved.copyOf(MAX_PACKAGES_PER_UID)
+                        }
+                    putBoundedUidCache(packageCache, uid, CachedPackage(packages, now))
+                    packages
+                } catch (error: Exception) {
+                    if (iPm === pm) iPm = null
+                    Logger.e("Failed to resolve packages for uid=$uid", error)
+                    emptyArray()
+                }
             }
         }
     }

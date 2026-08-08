@@ -3,12 +3,14 @@ package cleveres.tricky.cleverestech
 import android.os.IBinder
 import android.os.Parcel
 import android.os.ServiceManager
+import android.os.SystemClock
 import cleveres.tricky.cleverestech.binder.BinderInterceptor
 import com.android.internal.telephony.IPhoneSubInfo
 import java.io.File
 
 object TelephonyInterceptor : BinderInterceptor() {
     private const val PHONE_SUB_INFO_DESCRIPTOR = "com.android.internal.telephony.IPhoneSubInfo"
+    private const val INJECTION_RETRY_INTERVAL_MS = 30_000L
 
     private val getDeviceIdTransaction = getTransactCode(IPhoneSubInfo.Stub::class.java, "getDeviceId")
     private val getDeviceIdForPhoneTransaction =
@@ -52,22 +54,14 @@ object TelephonyInterceptor : BinderInterceptor() {
     @Volatile
     private var injected = false
 
-    private val fallbackImei by lazy { generateFallbackImei() }
-    private val fallbackImei2 by lazy { generateFallbackImei() }
-    private val fallbackImsi by lazy { generateFallbackImsi() }
-    private val fallbackIccid by lazy { generateFallbackIccid() }
+    @Volatile
+    private var registered = false
 
-    private fun generateFallbackImei(): String {
-        return cleveres.tricky.cleverestech.util.RandomUtils.generateLuhn(15, "35")
-    }
+    @Volatile
+    private var injectedPid: Int? = null
 
-    private fun generateFallbackImsi(): String {
-        return cleveres.tricky.cleverestech.util.RandomUtils.generateDigits(15, "310260")
-    }
-
-    private fun generateFallbackIccid(): String {
-        return cleveres.tricky.cleverestech.util.RandomUtils.generateLuhn(20, "8901")
-    }
+    @Volatile
+    private var lastInjectionAttemptMs = 0L
 
     override fun onPreTransact(
         target: IBinder,
@@ -118,49 +112,42 @@ object TelephonyInterceptor : BinderInterceptor() {
             return Skip
         }
 
-        var spoofedVal: String? = null
-
-        when (code) {
-            getDeviceIdTransaction -> spoofedVal = Config.getBuildVar("ATTESTATION_ID_IMEI") ?: fallbackImei
-            getDeviceIdForPhoneTransaction -> {
-                val phoneId = readLeadingIntArgument(data) ?: 0
-                spoofedVal =
+        val spoofedVal =
+            when (code) {
+                getDeviceIdTransaction -> Config.getBuildVar("ATTESTATION_ID_IMEI")
+                getDeviceIdForPhoneTransaction -> {
+                    val phoneId = readLeadingIntArgument(data) ?: 0
                     if (phoneId > 0) {
-                        Config.getBuildVar("ATTESTATION_ID_IMEI2") ?: fallbackImei2
+                        Config.getBuildVar("ATTESTATION_ID_IMEI2") ?: Config.getBuildVar("ATTESTATION_ID_IMEI")
                     } else {
-                        Config.getBuildVar("ATTESTATION_ID_IMEI") ?: fallbackImei
+                        Config.getBuildVar("ATTESTATION_ID_IMEI")
                     }
-            }
-            getImeiForSubscriberTransaction -> {
-                val subscriptionId = readLeadingIntArgument(data) ?: 0
-                spoofedVal =
+                }
+                getImeiForSubscriberTransaction -> {
+                    val subscriptionId = readLeadingIntArgument(data) ?: 0
                     if (subscriptionId > 0) {
-                        Config.getBuildVar("ATTESTATION_ID_IMEI2") ?: fallbackImei2
+                        Config.getBuildVar("ATTESTATION_ID_IMEI2") ?: Config.getBuildVar("ATTESTATION_ID_IMEI")
                     } else {
-                        Config.getBuildVar("ATTESTATION_ID_IMEI") ?: fallbackImei
+                        Config.getBuildVar("ATTESTATION_ID_IMEI")
                     }
+                }
+                getSubscriberIdTransaction,
+                getSubscriberIdForSubscriberTransaction,
+                -> Config.getBuildVar("ATTESTATION_ID_IMSI")
+                getIccSerialNumberTransaction,
+                getIccSerialNumberForSubscriberTransaction,
+                -> Config.getBuildVar("ATTESTATION_ID_ICCID")
+                getLine1NumberTransaction, getLine1NumberForSubscriberTransaction ->
+                    Config.getBuildVar("ATTESTATION_ID_PHONE_NUMBER")
+                getMeidForSubscriberTransaction -> Config.getBuildVar("ATTESTATION_ID_MEID")
+                else -> null
             }
-            getSubscriberIdTransaction,
-            getSubscriberIdForSubscriberTransaction,
-            -> spoofedVal = Config.getBuildVar("ATTESTATION_ID_IMSI") ?: fallbackImsi
-            getIccSerialNumberTransaction,
-            getIccSerialNumberForSubscriberTransaction,
-            -> spoofedVal = Config.getBuildVar("ATTESTATION_ID_ICCID") ?: fallbackIccid
-            getLine1NumberTransaction, getLine1NumberForSubscriberTransaction -> {
-                val phoneNumber = Config.getBuildVar("ATTESTATION_ID_PHONE_NUMBER") ?: ""
-                spoofedVal = if (phoneNumber.isNotEmpty()) phoneNumber else ""
-            }
-            getMeidForSubscriberTransaction -> {
-                val meid = Config.getBuildVar("ATTESTATION_ID_MEID") ?: ""
-                spoofedVal = if (meid.isNotEmpty()) meid else ""
-            }
-        }
 
         if (spoofedVal != null) {
-            Logger.i(
+            Logger.d {
                 "Intercepted Telephony: code=$code uid=$callingUid pid=$callingPid " +
-                    "-> Spoofed value (len=${spoofedVal.length})",
-            )
+                    "valueLength=${spoofedVal.length}"
+            }
             val p = Parcel.obtain()
             p.writeNoException()
             p.writeString(spoofedVal)
@@ -256,7 +243,9 @@ object TelephonyInterceptor : BinderInterceptor() {
     }
 
     fun tryRunTelephonyInterceptor(): Boolean {
-        Logger.i("trying to register telephony interceptor (${triedCount.get()}) ...")
+        if (registered && ::iphonesubinfo.isInitialized && iphonesubinfo.isBinderAlive) return true
+        registered = false
+        Logger.d("trying to register telephony interceptor (${triedCount.get()}) ...")
 
         val b = ServiceManager.getService("iphonesubinfo")
         if (b == null) {
@@ -267,20 +256,26 @@ object TelephonyInterceptor : BinderInterceptor() {
 
         val bd = getBinderControlEndpoint(b)
         if (bd == null) {
-            if (triedCount.get() >= 3) {
-                Logger.e("Telephony: native Binder control endpoint is unavailable after injection")
+            val pid = findPhoneProcessPid()
+            if (pid == null) {
+                Logger.e("Telephony: failed to find com.android.phone pid!")
+                triedCount.incrementAndGet()
                 return false
             }
-
-            if (!injected) {
-                Logger.i("Telephony: trying to inject com.android.phone ...")
-                val pid = findPhoneProcessPid()
-                if (pid == null) {
-                    Logger.e("Telephony: failed to find com.android.phone pid!")
-                    triedCount.incrementAndGet()
-                    return false
-                }
-
+            if (injected && injectedPid == pid) {
+                Logger.d("Telephony: waiting for the injected control endpoint")
+                return false
+            }
+            val now = SystemClock.elapsedRealtime()
+            if (
+                lastInjectionAttemptMs != 0L &&
+                now - lastInjectionAttemptMs < INJECTION_RETRY_INTERVAL_MS
+            ) {
+                return false
+            }
+            lastInjectionAttemptMs = now
+            Logger.i("Telephony: trying to inject com.android.phone ...")
+            try {
                 val modulePath = getModuleDir()
                 val p =
                     ProcessBuilder(
@@ -297,11 +292,14 @@ object TelephonyInterceptor : BinderInterceptor() {
                     Logger.e("Telephony: inject timed out after 30s, killing process")
                     p.destroyForcibly()
                 } else if (p.exitValue() != 0) {
-                    Logger.e("Telephony: failed to inject!")
+                    Logger.e("Telephony: failed to inject (exit=${p.exitValue()})")
                 } else {
                     Logger.i("Telephony: injected successfully")
                     injected = true
+                    injectedPid = pid
                 }
+            } catch (error: Exception) {
+                Logger.e("Telephony: injector failed", error)
             }
             triedCount.incrementAndGet()
             return false
@@ -317,11 +315,15 @@ object TelephonyInterceptor : BinderInterceptor() {
         iphonesubinfo.linkToDeath(
             {
                 Logger.e("iphonesubinfo died! Resetting injection state.")
+                registered = false
                 injected = false
+                injectedPid = null
                 triedCount.set(0)
             },
             0,
         )
+        registered = true
+        triedCount.set(0)
 
         return true
     }

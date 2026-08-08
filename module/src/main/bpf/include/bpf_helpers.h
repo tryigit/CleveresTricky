@@ -45,13 +45,13 @@ static int (*bpf_clone_redirect)(void *skb, int ifindex, int flags) =
 static int (*bpf_redirect)(int ifindex, int flags) =
     (void *) 23;
 
-/* bpf_perf_event_output — helper 25 — streams data to user space via perf ring */
+/* bpf_perf_event_output: helper 25, streams data to user space via perf ring */
 static int (*bpf_perf_event_output)(void *ctx, void *map,
                                     unsigned long long flags,
                                     void *data, unsigned long long size) =
     (void *) 25;
 
-/* bpf_probe_read_user — helper 112 (kernel >= 5.5); reads from user-space.
+/* bpf_probe_read_user: helper 112 (kernel >= 5.5); reads from user-space.
  * On kernels < 5.5 both user and kernel reads use the same bpf_probe_read. */
 #ifndef bpf_probe_read_user
 # if defined(bpf_probe_read_kernel)
@@ -64,7 +64,7 @@ static int (*bpf_probe_read_user)(void *dst, int size, const void *unsafe_ptr) =
 # endif
 #endif
 
-/* PT_REGS helpers — provide argument accessors for kprobes */
+/* PT_REGS helpers provide argument accessors for kprobes */
 #ifndef PT_REGS_PARM2
 # if defined(__TARGET_ARCH_arm64) || defined(__aarch64__)
 #  define PT_REGS_PARM1(x) ((x)->regs[0])
