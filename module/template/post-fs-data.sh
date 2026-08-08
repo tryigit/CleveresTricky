@@ -92,9 +92,13 @@ apply_early_properties() {
   if [ "$boot_mode" = auto ]; then
     identity_conflict=false
     for module_root in /data/adb/modules /data/adb/ksu/modules /data/adb/ap/modules; do
-      [ -d "$module_root" ] && [ ! -L "$module_root" ] || continue
+      if [ ! -d "$module_root" ] || [ -L "$module_root" ]; then
+        continue
+      fi
       for candidate in "$module_root"/*; do
-        [ -d "$candidate" ] && [ ! -L "$candidate" ] && [ ! -f "$candidate/disable" ] || continue
+        if [ ! -d "$candidate" ] || [ -L "$candidate" ] || [ -f "$candidate/disable" ]; then
+          continue
+        fi
         module_id=${candidate##*/}
         module_id=$(printf '%s' "$module_id" | tr '[:upper:]' '[:lower:]')
         case "$module_id" in
