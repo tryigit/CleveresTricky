@@ -231,14 +231,25 @@ object Config {
         }
 
     fun updateKeyBoxesSync() {
-        updateKeyBoxesSyncWith { KeyboxVerifier.fetchCrl() }
+        updateKeyBoxesSyncWith(revocationProvider = { KeyboxVerifier.fetchCrl() })
     }
 
     fun updateKeyBoxesSync(revokedSerials: Set<String>?) {
-        updateKeyBoxesSyncWith { revokedSerials }
+        updateKeyBoxesSyncWith(revocationProvider = { revokedSerials })
     }
 
-    private fun updateKeyBoxesSyncWith(revocationProvider: () -> Set<String>?) {
+    @androidx.annotation.VisibleForTesting
+    internal fun updateKeyBoxesSync(
+        revokedSerials: Set<String>?,
+        verifier: (CertHack.KeyBox, Set<String>) -> KeyboxVerifier.Status,
+    ) {
+        updateKeyBoxesSyncWith({ revokedSerials }, verifier)
+    }
+
+    private fun updateKeyBoxesSyncWith(
+        revocationProvider: () -> Set<String>?,
+        verifier: (CertHack.KeyBox, Set<String>) -> KeyboxVerifier.Status = KeyboxVerifier::verifyKeybox,
+    ) {
         runCatching {
             Logger.d("updateKeyBoxes: starting keybox scan (root=${root.absolutePath})")
             val allKeyboxes = ArrayList<CertHack.KeyBox>()
@@ -333,7 +344,7 @@ object Config {
                     } else {
                         val statuses =
                             allKeyboxes.map { keybox ->
-                                KeyboxVerifier.verifyKeybox(keybox, revokedSerials)
+                                verifier(keybox, revokedSerials)
                             }
                         if (statuses.all { it == KeyboxVerifier.Status.VALID }) {
                             allKeyboxes.toList()

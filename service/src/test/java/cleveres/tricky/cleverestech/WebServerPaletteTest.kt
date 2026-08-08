@@ -138,9 +138,10 @@ class WebServerPaletteTest {
         // 4. Verify toggle checks response status
         assertTrue(
             "toggle should check res.ok",
-            html.contains(
-                "if (res.ok) {",
-            ) && html.contains("notify('Setting Updated');") && html.contains("throw new Error('Server returned ' + res.status);"),
+            html.contains("if (!res.ok) {") &&
+                html.contains("const message = await res.text();") &&
+                html.contains("throw new Error('Server returned ' + res.status + ': ' + message);") &&
+                html.contains("notify('Setting Updated');"),
         )
 
         // 5. Verify addAppRule has regex validation
