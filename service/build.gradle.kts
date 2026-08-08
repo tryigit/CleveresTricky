@@ -73,6 +73,7 @@ android {
         resources {
             excludes += "META-INF/versions/**"
             excludes += "META-INF/DEPENDENCIES"
+            pickFirsts += "META-INF/LICENSE.md"
         }
     }
 
