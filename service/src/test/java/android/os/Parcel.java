@@ -8,6 +8,7 @@ public class Parcel {
     public static final AtomicInteger obtainCount = new AtomicInteger(0);
 
     private Queue<Object> queue = new LinkedList<>();
+    private int lastDeclaredSize;
 
     public static void resetStats() {
         obtainCount.set(0);
@@ -45,7 +46,9 @@ public class Parcel {
     }
     public long readLong() {
         Object o = queue.poll();
-        return (o instanceof Long) ? (Long) o : 0L;
+        long value = (o instanceof Long) ? (Long) o : 0L;
+        lastDeclaredSize = value >= 0 && value <= Integer.MAX_VALUE ? (int) value : 0;
+        return value;
     }
     public String readString() {
         Object o = queue.poll();
@@ -63,5 +66,6 @@ public class Parcel {
     public void readByteArray(byte[] val) {}
     public void setDataPosition(int pos) {}
     public int dataPosition() { return 0; }
+    public int dataAvail() { return queue.isEmpty() ? lastDeclaredSize : Integer.MAX_VALUE; }
     public void appendFrom(Parcel parcel, int offset, int length) {}
 }

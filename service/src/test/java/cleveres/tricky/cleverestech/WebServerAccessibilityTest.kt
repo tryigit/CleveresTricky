@@ -68,7 +68,7 @@ class WebServerAccessibilityTest {
         // Verify that the Identity Manager description is now a label associated with the select element
         val expectedLabelStart = "<label for=\"templateSelect\""
         val expectedLabelStyle = "display:block;" // We added this style
-        val expectedText = "Select a verified device identity to spoof globally.</label>"
+        val expectedText = "Select the attestation identity used for configured target applications.</label>"
 
         assertTrue(
             "Identity Manager should use a label for templateSelect",

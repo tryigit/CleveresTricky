@@ -34,11 +34,7 @@ class ReproTemplateCaseTest {
 
         // Force Config to reload templates from Manager
         // This makes Config.templates have "MyTemplate"
-        val method =
-            Config::class.java.declaredMethods.find { it.name.startsWith("updateCustomTemplates") }
-                ?: throw NoSuchMethodException("updateCustomTemplates")
-        method.isAccessible = true
-        method.invoke(Config, null)
+        Config.updateCustomTemplates(null)
     }
 
     @Suppress("UNCHECKED_CAST")
@@ -54,8 +50,9 @@ class ReproTemplateCaseTest {
 
     private fun updateAppConfigs(file: File) {
         val method =
-            Config::class.java.declaredMethods.find { it.name == "updateAppConfigs" }
-                ?: Config::class.java.declaredMethods.find { it.name.startsWith("updateAppConfigs") } // try mangled
+            Config::class.java.declaredMethods.find {
+                it.name.startsWith("updateAppConfigs") && it.parameterCount == 1
+            }
                 ?: throw NoSuchMethodException("updateAppConfigs")
         method.isAccessible = true
         method.invoke(Config, file)

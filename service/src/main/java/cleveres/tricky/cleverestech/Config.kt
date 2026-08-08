@@ -559,13 +559,13 @@ object Config {
         runCatching {
             val newVars = mutableMapOf<String, String>()
             val newIds = mutableMapOf<String, ByteArray>()
-            if (f != null) {
+            if (f?.exists() == true) {
                 require(Files.isRegularFile(f.toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
                     "spoof_build_vars must be a regular file"
                 }
                 require(f.length() in 0..MAX_BUILD_VARS_BYTES) { "spoof_build_vars has an invalid size" }
             }
-            f?.useLines { lines ->
+            f?.takeIf(File::exists)?.useLines { lines ->
                 lines.forEach { line ->
                     if (line.isNotBlank() && !line.startsWith("#")) {
                         val eqIdx = line.indexOf('=')
@@ -864,6 +864,7 @@ object Config {
         }
     }
 
+    @Synchronized
     fun applyProfile(profileName: String) {
         val profile =
             when (profileName.trim().lowercase()) {
@@ -919,6 +920,12 @@ object Config {
                 SecureFile.touch(File(root, AUTO_KEYBOX_CHECK_FILE), 384)
             }
         }
+
+        updateGlobalMode(File(root, GLOBAL_MODE_FILE))
+        updateTeeBrokenMode(File(root, TEE_BROKEN_MODE_FILE))
+        updateTelephony(File(root, TELEPHONY_FILE))
+        updateBuildVars(File(root, SPOOF_BUILD_VARS_FILE))
+        updateTargetPackages(File(root, TARGET_FILE))
     }
 
     private fun enforceRandomization() {
@@ -932,7 +939,7 @@ object Config {
                     "ATTESTATION_ID_IMSI" to RandomUtils.generateDigits(15, "310260"),
                     "ATTESTATION_ID_ICCID" to RandomUtils.generateLuhn(20, "8901"),
                 )
-            DeviceTemplateManager.listTemplates().randomOrNull()?.let { replacements["TEMPLATE"] = it.id }
+            templates.keys.randomOrNull()?.let { replacements["TEMPLATE"] = it }
 
             val retainedLines = mutableListOf<String>()
             if (spoofFile.isFile) {

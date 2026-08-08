@@ -1126,10 +1126,10 @@ class WebServer(
             if (profileName != null && isValidProfile(profileName)) {
                 synchronized(fileLock) {
                     try {
-                        SecureFile.writeText(File(configDir, "apply_profile"), profileName)
+                        Config.applyProfile(profileName)
                         return secureResponse(Response.Status.OK, "text/plain", "Profile Applied")
                     } catch (e: Exception) {
-                        Logger.e("Failed to apply profile via file", e)
+                        Logger.e("Failed to apply profile", e)
                         return secureResponse(Response.Status.INTERNAL_ERROR, "text/plain", "Failed")
                     }
                 }
@@ -2478,7 +2478,10 @@ class WebServer(
             const el = document.getElementById(setting);
             try {
                 const res = await fetchAuth('/api/toggle', {method:'POST', body: new URLSearchParams({setting, value: el.checked})});
-                if (!res.ok) throw new Error(await res.text());
+                if (!res.ok) {
+                    const message = await res.text();
+                    throw new Error('Server returned ' + res.status + ': ' + message);
+                }
                 notify('Setting Updated');
                 if (setting === 'global_mode') {
                     const status = document.getElementById('status_global');

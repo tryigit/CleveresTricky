@@ -4,7 +4,9 @@ import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 import org.xmlpull.v1.XmlPullParserFactory;
 
+import java.io.IOException;
 import java.io.Reader;
+import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -18,6 +20,7 @@ public class XMLParser {
     private static final int MAX_NAME_LENGTH = 128;
     private static final int MAX_ATTRIBUTE_VALUE_LENGTH = 4096;
     private static final int MAX_TEXT_CHARS = 12 * 1024 * 1024;
+    private static final int MAX_DOCUMENT_CHARS = 16 * 1024 * 1024;
 
     public static class Element {
         public String name;
@@ -58,14 +61,17 @@ public class XMLParser {
     }
 
     private Element parse(Reader reader) throws Exception {
+        String document = readBounded(reader);
+        if (document.contains("<!DOCTYPE") || document.contains("<!ENTITY")) {
+            throw dtdRejected();
+        }
+
         XmlPullParserFactory xmlFactoryObject = XmlPullParserFactory.newInstance();
         XmlPullParser parser = xmlFactoryObject.newPullParser();
         parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false);
         try {
             parser.setFeature(XmlPullParser.FEATURE_PROCESS_DOCDECL, false);
-        } catch (Exception e) {
-            throw new SecurityException("XML parser cannot disable document declarations", e);
-        }
+        } catch (Exception ignored) {}
         try {
             parser.setFeature("http://xml.org/sax/features/external-general-entities", false);
             parser.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
@@ -73,7 +79,7 @@ public class XMLParser {
         try {
             parser.setFeature(XmlPullParser.FEATURE_VALIDATION, false);
         } catch (Exception ignored) {}
-        parser.setInput(reader);
+        parser.setInput(new StringReader(document));
 
         Element currentElement = null;
         // Stack to keep track of parents
@@ -88,7 +94,7 @@ public class XMLParser {
                     // Security: Explicitly reject DTDs to prevent XXE (XML External Entity) attacks.
                     // Even if FEATURE_PROCESS_DOCDECL was disabled, checking the event type adds
                     // a second layer of defense.
-                    throw new SecurityException("DTD is not allowed in this parser to prevent XXE attacks");
+                    throw dtdRejected();
 
                 case XmlPullParser.START_TAG:
                     if (++elementCount > MAX_ELEMENTS || stack.size() >= MAX_DEPTH) {
@@ -152,6 +158,26 @@ public class XMLParser {
             eventType = parser.next();
         }
         return stack.isEmpty() ? null : stack.get(0);
+    }
+
+    private static String readBounded(Reader reader) throws IOException {
+        char[] buffer = new char[8192];
+        StringBuilder document = new StringBuilder();
+        int count;
+        while ((count = reader.read(buffer)) != -1) {
+            if (count == 0) continue;
+            if (document.length() > MAX_DOCUMENT_CHARS - count) {
+                throw new SecurityException("XML document exceeds safety limit");
+            }
+            document.append(buffer, 0, count);
+        }
+        return document.toString();
+    }
+
+    private static SecurityException dtdRejected() {
+        return new SecurityException(
+                "DTD is not allowed in this parser to prevent XXE attacks",
+                new XmlPullParserException("docdecl not permitted"));
     }
 
     public Map<String, String> obtainPath(String path) {
