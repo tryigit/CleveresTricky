@@ -5,6 +5,7 @@ import android.os.FileObserver
 import android.os.ServiceManager
 import cleveres.tricky.cleverestech.keystore.CertHack
 import cleveres.tricky.cleverestech.util.DeviceKeyManager
+import cleveres.tricky.cleverestech.util.KeyboxAutoCleaner
 import cleveres.tricky.cleverestech.util.KeyboxVerifier
 import cleveres.tricky.cleverestech.util.PackageTrie
 import cleveres.tricky.cleverestech.util.RandomUtils
@@ -18,15 +19,26 @@ import java.io.File
 import java.io.IOException
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
+import java.nio.file.LinkOption
 import java.nio.file.StandardCopyOption
 import java.time.Instant
 import java.time.ZoneId
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Semaphore
+import java.util.concurrent.TimeUnit
 
 object Config {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val runtimeControllerSignal = Semaphore(0)
     private const val MAX_UID_CACHE_ENTRIES = 4096
     private const val UID_DECISION_CACHE_TTL_MS = 60 * 1000L
+    private const val FIRST_APPLICATION_UID = 10_000
+    private val rkpInfrastructurePackages =
+        setOf(
+            "com.android.rkpd",
+            "com.google.android.rkpd",
+            "com.google.android.go.rkpd",
+        )
 
     private fun <T> putBoundedUidCache(
         cache: ConcurrentHashMap<Int, T>,
@@ -38,6 +50,42 @@ object Config {
     }
 
     data class AppSpoofConfig(val template: String?, val keyboxFilename: String?)
+
+    internal data class IdentityOverrides(
+        val template: String? = null,
+        val imei: String? = null,
+        val imei2: String? = null,
+        val imsi: String? = null,
+        val imsi2: String? = null,
+        val iccid: String? = null,
+        val iccid2: String? = null,
+        val meid: String? = null,
+        val meid2: String? = null,
+        val phoneNumber: String? = null,
+        val phoneNumber2: String? = null,
+        val serial: String? = null,
+    ) {
+        private fun valueForSlot(
+            primary: String?,
+            secondary: String?,
+            slotIndex: Int,
+        ): String? =
+            when (slotIndex) {
+                0 -> primary
+                1 -> secondary ?: primary
+                else -> null
+            }
+
+        fun imeiForSlot(slotIndex: Int): String? = valueForSlot(imei, imei2, slotIndex)
+
+        fun imsiForSlot(slotIndex: Int): String? = valueForSlot(imsi, imsi2, slotIndex)
+
+        fun iccidForSlot(slotIndex: Int): String? = valueForSlot(iccid, iccid2, slotIndex)
+
+        fun meidForSlot(slotIndex: Int): String? = valueForSlot(meid, meid2, slotIndex)
+
+        fun phoneNumberForSlot(slotIndex: Int): String? = valueForSlot(phoneNumber, phoneNumber2, slotIndex)
+    }
 
     private data class CachedDecision(val value: Boolean, val timestamp: Long)
 
@@ -52,8 +100,25 @@ object Config {
     @Volatile
     private var targetState = TargetState(PackageTrie())
 
+    private val rkpInfrastructureCache = ConcurrentHashMap<Int, CachedDecision>()
+
     @Volatile
     var isGlobalMode = false
+        private set
+
+    /**
+     * Master runtime gate for every spoofing interceptor and boot-time property
+     * override. Installations create the flag by default; keeping the in-memory
+     * default enabled preserves safe behavior until the initial configuration
+     * snapshot has been loaded.
+     */
+    @Volatile
+    var isSpoofEnabled = true
+        private set
+
+    /** Applies the selected template to Android's app-visible build identity at boot. */
+    @Volatile
+    var isBuildIdentityEnabled = false
         private set
 
     @Volatile
@@ -218,7 +283,10 @@ object Config {
             }
             Logger.d("updateTargetPackages: reading ${f?.absolutePath} (exists=${f?.exists()})")
             val packages =
-                if (f != null && f.exists()) {
+                if (f != null && Files.exists(f.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+                    require(Files.isRegularFile(f.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+                        "target.txt must be a regular file"
+                    }
                     f.useLines { lines -> parsePackages(lines) }
                 } else {
                     Logger.d("updateTargetPackages: target file missing or null, using empty package list")
@@ -394,31 +462,90 @@ object Config {
         }
     }
 
+    private fun isRegularFlagFile(f: File?): Boolean = f != null && Files.isRegularFile(f.toPath(), LinkOption.NOFOLLOW_LINKS)
+
     private fun updateGlobalMode(f: File?) {
-        isGlobalMode = f?.exists() == true
+        isGlobalMode = isRegularFlagFile(f)
         Logger.i("Global mode is ${if (isGlobalMode) "enabled" else "disabled"}")
     }
 
+    private fun updateSpoofEnabled(f: File?) {
+        val enabled = isRegularFlagFile(f)
+        val changed = isSpoofEnabled != enabled
+        if (changed) {
+            targetState.hackCache.clear()
+            drmState.cache.clear()
+            rkpInfrastructureCache.clear()
+        }
+        isSpoofEnabled = enabled
+        KeyboxAutoCleaner.setEnabled(enabled && isRegularFlagFile(File(root, AUTO_KEYBOX_CHECK_FILE)))
+        Logger.i("Spoof engine is ${if (enabled) "enabled" else "disabled"}")
+        if (changed) signalRuntimeController()
+    }
+
+    private fun updateBuildIdentity(f: File?) {
+        isBuildIdentityEnabled = isRegularFlagFile(f)
+        Logger.i("Build identity spoofing is ${if (isBuildIdentityEnabled) "enabled" else "disabled"}")
+    }
+
     private fun updateTeeBrokenMode(f: File?) {
-        isTeeBrokenMode = f?.exists() == true
+        isTeeBrokenMode = isRegularFlagFile(f)
         Logger.i("TEE broken mode is ${if (isTeeBrokenMode) "enabled" else "disabled"}")
     }
 
     private fun updateTelephony(f: File?) {
-        isTelephonyEnabled = f?.exists() == true
-        Logger.i("Telephony is ${if (isTelephonyEnabled) "enabled" else "disabled"} (file=${f?.absolutePath}, exists=${f?.exists()})")
+        val enabled = isRegularFlagFile(f)
+        val changed = isTelephonyEnabled != enabled
+        isTelephonyEnabled = enabled
+        Logger.i("Telephony is ${if (isTelephonyEnabled) "enabled" else "disabled"}")
+        if (changed) signalRuntimeController()
     }
 
     private fun updateRkpPassthrough(f: File?) {
-        isRkpPassthroughEnabled = f?.isFile == true
+        isRkpPassthroughEnabled = isRegularFlagFile(f)
         Logger.i("RKP passthrough is ${if (isRkpPassthroughEnabled) "enabled" else "disabled"}")
     }
 
     private fun updateDrmPassthrough(f: File?) {
-        isDrmPassthroughEnabled = f?.isFile == true
+        isDrmPassthroughEnabled = isRegularFlagFile(f)
         drmState.cache.clear()
         targetState.hackCache.clear()
         Logger.i("DRM passthrough is ${if (isDrmPassthroughEnabled) "enabled" else "disabled"}")
+    }
+
+    /** Keeps WebUI writes and the runtime controller in the same state without waiting for FileObserver delivery. */
+    internal fun refreshRuntimeSetting(name: String) {
+        val candidate = File(root, name)
+        val file = candidate.takeIf { isRegularFlagFile(it) }
+        when (name) {
+            SPOOF_ENABLED_FILE -> updateSpoofEnabled(file)
+            BUILD_IDENTITY_FILE -> updateBuildIdentity(file)
+            GLOBAL_MODE_FILE -> {
+                updateGlobalMode(file)
+                updateTargetPackages(File(root, TARGET_FILE))
+            }
+            TEE_BROKEN_MODE_FILE -> {
+                updateTeeBrokenMode(file)
+                updateTargetPackages(File(root, TARGET_FILE))
+            }
+            TELEPHONY_FILE -> updateTelephony(file)
+            RKP_PASSTHROUGH_FILE -> updateRkpPassthrough(file)
+            DRM_PASSTHROUGH_FILE -> updateDrmPassthrough(file)
+            AUTO_KEYBOX_CHECK_FILE -> KeyboxAutoCleaner.setEnabled(isSpoofEnabled && file != null)
+        }
+    }
+
+    /** Wakes the event-driven interceptor controller without accumulating unbounded permits. */
+    internal fun signalRuntimeController() {
+        if (runtimeControllerSignal.availablePermits() == 0) runtimeControllerSignal.release()
+    }
+
+    /** Sleeps without polling until a lifecycle setting changes or a health-check timeout expires. */
+    @Throws(InterruptedException::class)
+    internal fun awaitRuntimeController(timeoutMs: Long) {
+        require(timeoutMs > 0) { "Runtime controller timeout must be positive" }
+        runtimeControllerSignal.tryAcquire(timeoutMs, TimeUnit.MILLISECONDS)
+        runtimeControllerSignal.drainPermits()
     }
 
     private fun parseDrmPackages(lines: Sequence<String>): PackageTrie<Boolean> {
@@ -465,6 +592,9 @@ object Config {
 
     @Volatile
     private var attestationIds: Map<String, ByteArray> = emptyMap()
+
+    @Volatile
+    private var identityOverrides = IdentityOverrides()
     private const val MAX_BUILD_VARS_BYTES = 1024 * 1024L
     private const val MAX_BUILD_VAR_ENTRIES = 512
     private const val MAX_BUILD_VAR_VALUE_LENGTH = 512
@@ -495,7 +625,20 @@ object Config {
     private const val MAX_TEMPLATE_VALUE_LENGTH = 512
     private val validTemplateName = Regex("[a-z0-9_-]{1,64}")
     private val supportedTemplateProperties =
-        setOf("BRAND", "DEVICE", "PRODUCT", "MANUFACTURER", "MODEL")
+        setOf(
+            "BRAND",
+            "DEVICE",
+            "PRODUCT",
+            "MANUFACTURER",
+            "MODEL",
+            "FINGERPRINT",
+            "RELEASE",
+            "BUILD_ID",
+            "INCREMENTAL",
+            "TYPE",
+            "TAGS",
+            "SECURITY_PATCH",
+        )
 
     internal fun updateCustomTemplates(f: File?) =
         runCatching {
@@ -571,6 +714,16 @@ object Config {
 
     fun getBuildVar(key: String): String? = buildVars[key]
 
+    /** Returns one immutable snapshot for the boot-property transaction. */
+    internal fun getBuildIdentity(): Map<String, String> {
+        val snapshot = buildVars
+        return supportedTemplateProperties.mapNotNull { key ->
+            snapshot[key]?.let { value -> key to value }
+        }.toMap()
+    }
+
+    internal fun getIdentityOverrides(): IdentityOverrides = identityOverrides
+
     fun getBuildVar(
         key: String,
         uid: Int,
@@ -596,11 +749,15 @@ object Config {
                 "ATTESTATION_ID_IMEI",
                 "ATTESTATION_ID_IMEI2",
                 "ATTESTATION_ID_IMSI",
+                "ATTESTATION_ID_IMSI2",
                 "ATTESTATION_ID_ICCID",
+                "ATTESTATION_ID_ICCID2",
                 "ATTESTATION_ID_MEID",
+                "ATTESTATION_ID_MEID2",
                 "ATTESTATION_ID_MANUFACTURER",
                 "ATTESTATION_ID_MODEL",
                 "ATTESTATION_ID_PHONE_NUMBER",
+                "ATTESTATION_ID_PHONE_NUMBER2",
             )
 
     internal fun isValidBuildVarEntry(
@@ -613,14 +770,26 @@ object Config {
         if (value.any(Char::isISOControl)) return false
         if (key == "TEMPLATE") return value.length <= 64 && templates.containsKey(value.lowercase())
         if (key == "MODULE_HASH") return value.length == 64 && value.all { it.digitToIntOrNull(16) != null }
+        when (key) {
+            "FINGERPRINT" ->
+                return value.all { it.isLetterOrDigit() || it in "._:/+-" }
+            "RELEASE" ->
+                return value.length <= 64 && value.all { it.isLetterOrDigit() || it in "._-" }
+            "BUILD_ID", "INCREMENTAL" ->
+                return value.length <= 128 && value.all { it.isLetterOrDigit() || it in "._+-" }
+            "TYPE" -> return value in setOf("user", "userdebug", "eng")
+            "TAGS" ->
+                return value.length <= 128 && value.all { it.isLetterOrDigit() || it in "._,-" }
+            "SECURITY_PATCH" -> return runCatching { value.convertPatchLevel(false) }.isSuccess
+        }
 
         val identifier = key.removePrefix("ATTESTATION_ID_")
         return when (identifier) {
             "IMEI", "IMEI2" -> value.length == 15 && value.all(Char::isDigit) && isValidLuhn(value)
-            "IMSI" -> value.length in 5..16 && value.all(Char::isDigit)
-            "ICCID" -> value.length in 18..22 && value.all(Char::isDigit) && isValidLuhn(value)
-            "MEID" -> value.length == 14 && value.all { it.digitToIntOrNull(16) != null }
-            "PHONE_NUMBER" -> {
+            "IMSI", "IMSI2" -> value.length in 5..16 && value.all(Char::isDigit)
+            "ICCID", "ICCID2" -> value.length in 18..22 && value.all(Char::isDigit) && isValidLuhn(value)
+            "MEID", "MEID2" -> value.length == 14 && value.all { it.digitToIntOrNull(16) != null }
+            "PHONE_NUMBER", "PHONE_NUMBER2" -> {
                 val digits = value.removePrefix("+")
                 digits.isNotEmpty() && value.length <= 32 && digits.all(Char::isDigit)
             }
@@ -670,6 +839,7 @@ object Config {
                                 val template =
                                     templates[value.lowercase()]
                                         ?: throw IllegalArgumentException("Unknown template")
+                                newVars[key] = value.lowercase()
                                 newVars.putAll(template.filterKeys { it in supportedTemplateProperties })
                             } else {
                                 newVars[key] = value
@@ -687,8 +857,24 @@ object Config {
                     require(value.length == 64) { "MODULE_HASH must be a SHA-256 digest" }
                     value.hexToByteArray().also { require(it.size == 32) }
                 }
-            buildVars = newVars
-            attestationIds = newIds
+            val newIdentityOverrides =
+                IdentityOverrides(
+                    template = newVars["TEMPLATE"],
+                    imei = newVars["ATTESTATION_ID_IMEI"],
+                    imei2 = newVars["ATTESTATION_ID_IMEI2"],
+                    imsi = newVars["ATTESTATION_ID_IMSI"],
+                    imsi2 = newVars["ATTESTATION_ID_IMSI2"],
+                    iccid = newVars["ATTESTATION_ID_ICCID"],
+                    iccid2 = newVars["ATTESTATION_ID_ICCID2"],
+                    meid = newVars["ATTESTATION_ID_MEID"],
+                    meid2 = newVars["ATTESTATION_ID_MEID2"],
+                    phoneNumber = newVars["ATTESTATION_ID_PHONE_NUMBER"],
+                    phoneNumber2 = newVars["ATTESTATION_ID_PHONE_NUMBER2"],
+                    serial = newVars["ATTESTATION_ID_SERIAL"],
+                )
+            buildVars = newVars.toMap()
+            attestationIds = newIds.toMap()
+            identityOverrides = newIdentityOverrides
             moduleHashFromVars = parsedModuleHash
             stringToBytesCache.clear()
 
@@ -792,10 +978,11 @@ object Config {
                 val sample = value.replace("YYYY", "2024").replace("MM", "06").replace("DD", "15")
                 runCatching { sample.convertPatchLevel(false) }.map { value }.getOrNull()
             }
-            else -> runCatching {
-                value.convertPatchLevel(false)
-                value
-            }.getOrNull()
+            else ->
+                runCatching {
+                    value.convertPatchLevel(false)
+                    value
+                }.getOrNull()
         }
 
     private fun resolvePatchValue(
@@ -1056,6 +1243,8 @@ object Config {
     private const val KEYBOX_DIR = "keyboxes"
     private const val TARGET_FILE = "target.txt"
     private const val KEYBOX_FILE = "keybox.xml"
+    private const val SPOOF_ENABLED_FILE = "spoof_enabled"
+    private const val BUILD_IDENTITY_FILE = "spoof_build_identity"
     private const val GLOBAL_MODE_FILE = "global_mode"
     private const val TEE_BROKEN_MODE_FILE = "tee_broken_mode"
     private const val TELEPHONY_FILE = "telephony"
@@ -1185,6 +1374,8 @@ object Config {
         Logger.i("Applying profile: $profile")
         when (profile) {
             "maximum" -> {
+                SecureFile.touch(File(root, SPOOF_ENABLED_FILE), 384)
+                SecureFile.touch(File(root, BUILD_IDENTITY_FILE), 384)
                 SecureFile.touch(File(root, GLOBAL_MODE_FILE), 384)
                 removeConfigFiles(
                     TEE_BROKEN_MODE_FILE,
@@ -1199,12 +1390,14 @@ object Config {
                 SecureFile.touch(File(root, TELEPHONY_FILE), 384)
             }
             "daily" -> {
+                SecureFile.touch(File(root, SPOOF_ENABLED_FILE), 384)
                 removeConfigFiles(
                     GLOBAL_MODE_FILE,
                     TEE_BROKEN_MODE_FILE,
                     RANDOM_ON_BOOT_FILE,
                     BootLogic.FILE_SPOOF_CN,
                     TELEPHONY_FILE,
+                    BUILD_IDENTITY_FILE,
                 )
                 SecureFile.touch(File(root, BootLogic.FILE_HIDE_PROPS), 384)
                 SecureFile.touch(File(root, SPOOF_BUILD_VARS_FILE), 384)
@@ -1215,6 +1408,8 @@ object Config {
             "minimal" -> {
                 SecureFile.touch(File(root, TEE_BROKEN_MODE_FILE), 384)
                 removeConfigFiles(
+                    SPOOF_ENABLED_FILE,
+                    BUILD_IDENTITY_FILE,
                     GLOBAL_MODE_FILE,
                     RANDOM_ON_BOOT_FILE,
                     BootLogic.FILE_HIDE_PROPS,
@@ -1226,7 +1421,9 @@ object Config {
                 SecureFile.touch(File(root, DRM_PASSTHROUGH_FILE), 384)
             }
             "default" -> {
+                SecureFile.touch(File(root, SPOOF_ENABLED_FILE), 384)
                 removeConfigFiles(
+                    BUILD_IDENTITY_FILE,
                     GLOBAL_MODE_FILE,
                     TEE_BROKEN_MODE_FILE,
                     RANDOM_ON_BOOT_FILE,
@@ -1240,6 +1437,8 @@ object Config {
             }
         }
 
+        updateSpoofEnabled(File(root, SPOOF_ENABLED_FILE))
+        updateBuildIdentity(File(root, BUILD_IDENTITY_FILE))
         updateGlobalMode(File(root, GLOBAL_MODE_FILE))
         updateTeeBrokenMode(File(root, TEE_BROKEN_MODE_FILE))
         updateTelephony(File(root, TELEPHONY_FILE))
@@ -1247,6 +1446,7 @@ object Config {
         updateDrmPassthrough(File(root, DRM_PASSTHROUGH_FILE))
         updateBuildVars(File(root, SPOOF_BUILD_VARS_FILE))
         updateTargetPackages(File(root, TARGET_FILE))
+        KeyboxAutoCleaner.setEnabled(isSpoofEnabled && isRegularFlagFile(File(root, AUTO_KEYBOX_CHECK_FILE)))
     }
 
     private fun enforceRandomization() {
@@ -1258,12 +1458,19 @@ object Config {
                     "ATTESTATION_ID_IMEI2" to RandomUtils.generateLuhn(15, "35"),
                     "ATTESTATION_ID_SERIAL" to RandomUtils.generateRandomSerial(12),
                     "ATTESTATION_ID_IMSI" to RandomUtils.generateDigits(15, "310260"),
+                    "ATTESTATION_ID_IMSI2" to RandomUtils.generateDigits(15, "310260"),
                     "ATTESTATION_ID_ICCID" to RandomUtils.generateLuhn(20, "8901"),
+                    "ATTESTATION_ID_ICCID2" to RandomUtils.generateLuhn(20, "8901"),
                 )
-            templates.keys.randomOrNull()?.let { replacements["TEMPLATE"] = it }
+            templates.keys.randomOrNull()?.let { templateName ->
+                replacements["TEMPLATE"] = templateName
+                templates[templateName]?.forEach { (key, value) ->
+                    if (key in supportedTemplateProperties) replacements[key] = value
+                }
+            }
 
             val retainedLines = mutableListOf<String>()
-            if (spoofFile.isFile) {
+            if (Files.isRegularFile(spoofFile.toPath(), LinkOption.NOFOLLOW_LINKS)) {
                 spoofFile.useLines { lines ->
                     lines.forEach { line ->
                         val key = line.substringBefore('=', "").trim()
@@ -1305,6 +1512,8 @@ object Config {
                     DeviceTemplateManager.initialize(root)
                     updateCustomTemplates(File(root, CUSTOM_TEMPLATES_FILE))
                 }
+                SPOOF_ENABLED_FILE -> updateSpoofEnabled(f)
+                BUILD_IDENTITY_FILE -> updateBuildIdentity(f)
                 GLOBAL_MODE_FILE -> {
                     updateGlobalMode(f)
                     updateTargetPackages(File(root, TARGET_FILE))
@@ -1320,6 +1529,7 @@ object Config {
                 DRM_PASSTHROUGH_FILE -> updateDrmPassthrough(f)
                 DRM_PACKAGES_FILE -> updateDrmPackages(f)
                 MODULE_HASH_FILE -> updateModuleHash(f)
+                AUTO_KEYBOX_CHECK_FILE -> KeyboxAutoCleaner.setEnabled(isSpoofEnabled && isRegularFlagFile(f))
 
                 APPLY_PROFILE_FILE -> applyProfileFromFile(f)
             }
@@ -1345,19 +1555,21 @@ object Config {
         ServerManager.initialize()
         DeviceTemplateManager.initialize(root)
 
+        updateSpoofEnabled(File(root, SPOOF_ENABLED_FILE))
+        updateBuildIdentity(File(root, BUILD_IDENTITY_FILE))
         updateGlobalMode(File(root, GLOBAL_MODE_FILE))
         updateTeeBrokenMode(File(root, TEE_BROKEN_MODE_FILE))
         updateTelephony(File(root, TELEPHONY_FILE))
         updateRkpPassthrough(File(root, RKP_PASSTHROUGH_FILE))
         updateDrmPassthrough(File(root, DRM_PASSTHROUGH_FILE))
         updateDrmPackages(File(root, DRM_PACKAGES_FILE))
+        updateCustomTemplates(File(root, CUSTOM_TEMPLATES_FILE))
         updateBuildVars(File(root, SPOOF_BUILD_VARS_FILE))
         updateModuleHash(File(root, MODULE_HASH_FILE))
         updateSecurityPatch(File(root, SECURITY_PATCH_FILE))
         updateAppConfigs(File(root, APP_CONFIG_FILE))
-        updateCustomTemplates(File(root, CUSTOM_TEMPLATES_FILE))
 
-        if (File(root, RANDOM_ON_BOOT_FILE).isFile) {
+        if (isSpoofEnabled && isRegularFlagFile(File(root, RANDOM_ON_BOOT_FILE))) {
             enforceRandomization()
         }
         updateBuildVars(File(root, SPOOF_BUILD_VARS_FILE))
@@ -1381,7 +1593,7 @@ object Config {
         KeyboxDirObserver.startWatching()
         keyboxPoller?.stop()
         keyboxPoller =
-            FilePoller(File(root, KEYBOX_FILE), 5000) {
+            FilePoller(File(root, KEYBOX_FILE), 30_000) {
                 Logger.i("Detected keybox change via polling")
                 updateKeyBoxes()
             }
@@ -1500,8 +1712,22 @@ object Config {
         putBoundedUidCache(cache, uid, CachedDecision(value, clockSource()))
     }
 
+    private fun isProtectedInfrastructureUid(callingUid: Int): Boolean {
+        val cached = getCachedDecision(rkpInfrastructureCache, callingUid)
+        if (cached != null) return cached
+
+        val packages = getPackages(callingUid)
+        // Unknown UIDs fail closed. Targeted mode already required a resolved
+        // package, and global mode must not turn a transient PM failure into a
+        // system-service hook.
+        val protected = packages.isEmpty() || packages.any(rkpInfrastructurePackages::contains)
+        cacheDecision(rkpInfrastructureCache, callingUid, protected)
+        return protected
+    }
+
     fun needHack(callingUid: Int): Boolean {
-        if (isTeeBrokenMode) return false
+        if (!isSpoofEnabled || callingUid < FIRST_APPLICATION_UID || isTeeBrokenMode) return false
+        if (isProtectedInfrastructureUid(callingUid)) return false
         if (isDrmPassthroughEnabled) {
             val state = drmState
             val cachedDrm = getCachedDecision(state.cache, callingUid)
@@ -1527,6 +1753,7 @@ object Config {
         ConfigObserver.stopWatching()
         KeyboxDirObserver.stopWatching()
         keyboxPoller?.stop()
+        KeyboxAutoCleaner.setEnabled(false)
         scope.coroutineContext.cancelChildren()
 
         root = File(CONFIG_PATH)
@@ -1536,8 +1763,10 @@ object Config {
         iPm = null
         appConfigState = AppConfigState(PackageTrie())
         targetState = TargetState(PackageTrie())
+        rkpInfrastructureCache.clear()
         buildVars = emptyMap()
         attestationIds = emptyMap()
+        identityOverrides = IdentityOverrides()
         stringToBytesCache.clear()
         templates = emptyMap()
         moduleHash = null
@@ -1545,6 +1774,8 @@ object Config {
         cachedPackageList = null
         lastPackageFetchTime = 0
         isGlobalMode = false
+        isSpoofEnabled = true
+        isBuildIdentityEnabled = false
         isTeeBrokenMode = false
         isTelephonyEnabled = false
         isRkpPassthroughEnabled = false

@@ -4,6 +4,7 @@ import android.os.Binder
 import android.os.IBinder
 import android.os.Parcel
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
@@ -126,5 +127,28 @@ class BinderInterceptorTest {
 
         data.recycle()
         reply.recycle()
+    }
+
+    @Test
+    fun testRuntimeControlTransactions() {
+        val seenCodes = mutableListOf<Int>()
+        val control =
+            object : Binder() {
+                override fun onTransact(
+                    code: Int,
+                    data: Parcel,
+                    reply: Parcel?,
+                    flags: Int,
+                ): Boolean {
+                    seenCodes += code
+                    reply?.writeInt(0)
+                    return true
+                }
+            }
+        val interceptor = BinderInterceptor()
+
+        assertTrue(BinderInterceptor.unregisterBinderInterceptor(control, Binder(), interceptor))
+        assertTrue(BinderInterceptor.parkBinderHook(control))
+        assertEquals(listOf(2, 3), seenCodes)
     }
 }

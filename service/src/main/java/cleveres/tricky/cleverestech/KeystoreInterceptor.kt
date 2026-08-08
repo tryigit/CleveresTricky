@@ -24,7 +24,15 @@ object KeystoreInterceptor : BinderInterceptor() {
 
     private var teeInterceptor: SecurityLevelInterceptor? = null
     private var strongBoxInterceptor: SecurityLevelInterceptor? = null
+    private var teeTarget: IBinder? = null
+    private var strongBoxTarget: IBinder? = null
     private var binderBackdoor: IBinder? = null
+
+    @Volatile private var keystoreRegistered = false
+
+    @Volatile private var registered = false
+
+    @Volatile private var deathRecipientLinked = false
 
     override fun onPreTransact(
         target: IBinder,
@@ -35,7 +43,6 @@ object KeystoreInterceptor : BinderInterceptor() {
         data: Parcel,
     ): Result {
         if (target != keystore || code != getKeyEntryTransaction || !CertHack.canHack()) return Skip
-        Logger.d { "intercept pre $target uid=$callingUid pid=$callingPid dataSz=${data.dataSize()}" }
         return if (Config.needHack(callingUid)) Continue else Skip
     }
 
@@ -59,14 +66,12 @@ object KeystoreInterceptor : BinderInterceptor() {
         ) {
             return Skip
         }
-        // Optimization: Replace runCatching with try-catch to avoid Result object allocation in hot path
         try {
             reply.readException()
         } catch (e: Exception) {
             return Skip
         }
         val p = Parcel.obtain()
-        Logger.d { "intercept post $target uid=$callingUid pid=$callingPid dataSz=${data.dataSize()} replySz=${reply.dataSize()}" }
         try {
             val response = reply.readTypedObject(KeyEntryResponse.CREATOR)
             val originalChain = Utils.getCertificateChain(response)
@@ -79,7 +84,6 @@ object KeystoreInterceptor : BinderInterceptor() {
 
             if (newChain != null) {
                 Utils.putCertificateChain(response, newChain)
-                Logger.d { "Rewrote stored attestation chain for uid=$callingUid" }
                 p.writeNoException()
                 p.writeTypedObject(response, 0)
                 return OverrideReply(0, p)
@@ -87,7 +91,7 @@ object KeystoreInterceptor : BinderInterceptor() {
                 p.recycle()
             }
         } catch (t: Throwable) {
-            Logger.e("failed to hack certificate chain of uid=$callingUid pid=$callingPid!", t)
+            Logger.e("Failed to rewrite a stored attestation certificate chain", t)
             p.recycle()
         }
         return Skip
@@ -173,7 +177,14 @@ object KeystoreInterceptor : BinderInterceptor() {
         return null
     }
 
+    @Synchronized
     fun tryRunKeystoreInterceptor(): Boolean {
+        if (!Config.isSpoofEnabled) {
+            stopKeystoreInterceptor()
+            return true
+        }
+        if (registered && ::keystore.isInitialized && keystore.isBinderAlive) return true
+        registered = false
         Logger.d("trying to register keystore interceptor (attempt=${triedCount.get()}) ...")
         val b =
             ServiceManager.getService("android.system.keystore2.IKeystoreService/default") ?: run {
@@ -189,10 +200,6 @@ object KeystoreInterceptor : BinderInterceptor() {
                 triedCount.incrementAndGet()
                 return false
             }
-            if (injected && injectedPid == pid) {
-                Logger.d("Waiting for the injected keystore control endpoint")
-                return false
-            }
             val now = SystemClock.elapsedRealtime()
             if (
                 lastInjectionAttemptMs != 0L &&
@@ -201,9 +208,9 @@ object KeystoreInterceptor : BinderInterceptor() {
                 return false
             }
             lastInjectionAttemptMs = now
-            Logger.i("trying to inject keystore (native Binder control endpoint unavailable) ...")
+            val symbol = if (injected && injectedPid == pid) "resume" else "entry"
+            Logger.i("trying to activate the keystore Binder hook ...")
             try {
-                Logger.i("found keystore2 at pid=$pid, injecting libcleverestricky.so ...")
                 val modulePath = getModuleDir()
                 val injectPath = "$modulePath/inject"
                 val p =
@@ -211,7 +218,7 @@ object KeystoreInterceptor : BinderInterceptor() {
                         injectPath,
                         pid.toString(),
                         "$modulePath/libcleverestricky.so",
-                        "entry",
+                        symbol,
                     ).redirectOutput(java.io.File("/dev/null"))
                         .redirectError(java.io.File("/dev/null"))
                         .start()
@@ -224,11 +231,11 @@ object KeystoreInterceptor : BinderInterceptor() {
                 }
                 val exitCode = p.exitValue()
                 if (exitCode != 0) {
-                    Logger.e("failed to inject keystore (exit=$exitCode)!")
+                    Logger.e("failed to activate the keystore Binder hook (exit=$exitCode)!")
                     triedCount.incrementAndGet()
                     return false
                 } else {
-                    Logger.i("injected keystore successfully")
+                    Logger.i("keystore Binder hook activated successfully")
                     injected = true
                     injectedPid = pid
                 }
@@ -239,6 +246,10 @@ object KeystoreInterceptor : BinderInterceptor() {
                 Logger.e("failed to run the keystore injector", error)
                 return false
             }
+        }
+        if (!Config.isSpoofEnabled) {
+            parkBinderHook(bd)
+            return true
         }
         val ks = IKeystoreService.Stub.asInterface(b)
         val tee =
@@ -255,10 +266,13 @@ object KeystoreInterceptor : BinderInterceptor() {
             }
         val interceptedCodes = validTransactCodes(getKeyEntryTransaction)
         keystore = b
+        binderBackdoor = bd
         if (!registerBinderInterceptor(bd, b, this, interceptedCodes)) {
             Logger.e("Failed to register the Keystore Binder interceptor")
+            parkBinderHook(bd)
             return false
         }
+        keystoreRegistered = true
 
         Logger.i("Keystore Binder interceptor registered")
         if (tee != null) {
@@ -271,9 +285,11 @@ object KeystoreInterceptor : BinderInterceptor() {
                 )
             ) {
                 Logger.e("Failed to register the TEE SecurityLevel interceptor")
+                stopKeystoreInterceptor()
                 return false
             }
             teeInterceptor = interceptor
+            teeTarget = tee.asBinder()
             Logger.i("TEE SecurityLevel interceptor registered")
         } else {
             Logger.i("TEE SecurityLevel is unavailable")
@@ -288,17 +304,92 @@ object KeystoreInterceptor : BinderInterceptor() {
                 )
             ) {
                 Logger.e("Failed to register the StrongBox SecurityLevel interceptor")
+                stopKeystoreInterceptor()
                 return false
             }
             strongBoxInterceptor = interceptor
+            strongBoxTarget = strongBox.asBinder()
             Logger.i("StrongBox SecurityLevel interceptor registered")
         } else {
             Logger.i("StrongBox SecurityLevel is unavailable")
         }
 
-        keystore.linkToDeath(Killer, 0)
+        try {
+            keystore.linkToDeath(Killer, 0)
+            deathRecipientLinked = true
+        } catch (error: android.os.RemoteException) {
+            Logger.w("Keystore exited before its interceptor lifecycle could be monitored")
+            stopKeystoreInterceptor()
+            return false
+        }
+        registered = true
+        if (!Config.isSpoofEnabled) {
+            stopKeystoreInterceptor()
+            return true
+        }
         triedCount.set(0)
         return true
+    }
+
+    fun isRunning(): Boolean = registered && ::keystore.isInitialized && keystore.isBinderAlive
+
+    @Synchronized
+    fun stopKeystoreInterceptor(): Boolean {
+        val control = binderBackdoor
+        var success = true
+        if (control != null) {
+            strongBoxInterceptor?.let { interceptor ->
+                strongBoxTarget?.let { target ->
+                    success = unregisterBinderInterceptor(control, target, interceptor) && success
+                }
+            }
+            teeInterceptor?.let { interceptor ->
+                teeTarget?.let { target ->
+                    success = unregisterBinderInterceptor(control, target, interceptor) && success
+                }
+            }
+            if (keystoreRegistered && ::keystore.isInitialized) {
+                success = unregisterBinderInterceptor(control, keystore, this) && success
+            }
+        } else if (registered || keystoreRegistered) {
+            success = false
+        }
+        if (deathRecipientLinked && ::keystore.isInitialized) {
+            try {
+                keystore.unlinkToDeath(Killer, 0)
+            } catch (_: java.util.NoSuchElementException) {
+                // The Binder driver already removed the recipient after death.
+            }
+            deathRecipientLinked = false
+        }
+
+        strongBoxInterceptor = null
+        strongBoxTarget = null
+        teeInterceptor = null
+        teeTarget = null
+        keystoreRegistered = false
+        registered = false
+        binderBackdoor = null
+        return success
+    }
+
+    override fun onInterceptorReplaced() {
+        if (deathRecipientLinked && ::keystore.isInitialized) {
+            try {
+                keystore.unlinkToDeath(Killer, 0)
+            } catch (_: java.util.NoSuchElementException) {
+                // The Binder driver already removed the recipient after death.
+            }
+        }
+        deathRecipientLinked = false
+        registered = false
+        keystoreRegistered = false
+        binderBackdoor = null
+        teeInterceptor = null
+        teeTarget = null
+        strongBoxInterceptor = null
+        strongBoxTarget = null
+        Config.signalRuntimeController()
     }
 
     object Killer : IBinder.DeathRecipient {

@@ -304,6 +304,149 @@ class WebServer(
         }
     }
 
+    private fun identityJson(): JSONObject {
+        val identity = Config.getIdentityOverrides()
+        return JSONObject()
+            .put("template", identity.template ?: "")
+            .put("imei", identity.imei ?: "")
+            .put("imei2", identity.imei2 ?: "")
+            .put("imsi", identity.imsi ?: "")
+            .put("imsi2", identity.imsi2 ?: "")
+            .put("iccid", identity.iccid ?: "")
+            .put("iccid2", identity.iccid2 ?: "")
+            .put("meid", identity.meid ?: "")
+            .put("meid2", identity.meid2 ?: "")
+            .put("phone_number", identity.phoneNumber ?: "")
+            .put("phone_number2", identity.phoneNumber2 ?: "")
+            .put("serial", identity.serial ?: "")
+    }
+
+    private fun parseIdentityUpdates(json: String): Map<String, String?> {
+        require(json.toByteArray(Charsets.UTF_8).size <= MAX_IDENTITY_REQUEST_BYTES) {
+            "Identity request is too large"
+        }
+        val obj = JSONObject(json)
+        require(obj.length() in 1..IDENTITY_FIELDS.size) { "Identity request is empty or too large" }
+
+        val updates = LinkedHashMap<String, String?>()
+        val keys = obj.keys()
+        while (keys.hasNext()) {
+            val field = keys.next()
+            val buildVar = IDENTITY_FIELDS[field] ?: throw IllegalArgumentException("Unsupported identity field")
+            val raw = obj.opt(field)
+            require(raw is String) { "Identity fields must be strings" }
+            val value =
+                raw.trim().let { trimmed ->
+                    when (buildVar) {
+                        "TEMPLATE" -> trimmed.lowercase()
+                        "ATTESTATION_ID_MEID", "ATTESTATION_ID_MEID2" -> trimmed.uppercase()
+                        else -> trimmed
+                    }
+                }
+            if (value.isEmpty()) {
+                updates[buildVar] = null
+            } else {
+                require(Config.isValidBuildVarEntry(buildVar, value)) { "Invalid identity field" }
+                updates[buildVar] = value
+            }
+        }
+        return updates
+    }
+
+    private fun saveIdentityUpdates(updates: Map<String, String?>): Boolean {
+        synchronized(fileLock) {
+            val file = File(configDir, "spoof_build_vars")
+            val path = file.toPath()
+            if (
+                Files.exists(path, LinkOption.NOFOLLOW_LINKS) &&
+                !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)
+            ) {
+                return false
+            }
+            if (Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) && file.length() > MAX_CONFIG_FILE_SIZE) {
+                return false
+            }
+
+            return try {
+                val templateRequested = updates.containsKey("TEMPLATE")
+                val directUpdates = LinkedHashMap(updates).apply { remove("TEMPLATE") }
+                val templateLines = ArrayList<String>()
+                if (templateRequested) {
+                    updates["TEMPLATE"]?.let { templateName ->
+                        val template = Config.getTemplate(templateName) ?: return false
+                        templateLines += BUILD_IDENTITY_BLOCK_START
+                        templateLines += "TEMPLATE=$templateName"
+                        BUILD_IDENTITY_VAR_KEYS.forEach { key ->
+                            template[key]?.let { value -> templateLines += "$key=$value" }
+                        }
+                        templateLines += BUILD_IDENTITY_BLOCK_END
+                    }
+                }
+                val lines =
+                    if (Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
+                        file.readLines().toMutableList()
+                    } else {
+                        mutableListOf()
+                    }
+                val rewritten = ArrayList<String>(lines.size + directUpdates.size + templateLines.size)
+                val processed = HashSet<String>(directUpdates.size)
+                var insideBuildIdentityBlock = false
+
+                lines.forEach { line ->
+                    val trimmed = line.trim()
+                    if (trimmed == BUILD_IDENTITY_BLOCK_START) {
+                        insideBuildIdentityBlock = true
+                        if (!templateRequested) rewritten += line
+                        return@forEach
+                    }
+                    if (insideBuildIdentityBlock) {
+                        if (trimmed == BUILD_IDENTITY_BLOCK_END) {
+                            insideBuildIdentityBlock = false
+                            if (!templateRequested) rewritten += line
+                        } else if (!templateRequested) {
+                            rewritten += line
+                        }
+                        return@forEach
+                    }
+                    val separator = if (trimmed.startsWith("#")) -1 else trimmed.indexOf('=')
+                    val key = if (separator > 0) trimmed.substring(0, separator).trim() else ""
+                    if (templateRequested && key == "TEMPLATE") {
+                        return@forEach
+                    }
+                    if (key in directUpdates) {
+                        if (processed.add(key)) {
+                            directUpdates[key]?.let { value -> rewritten += "$key=$value" }
+                        }
+                    } else {
+                        rewritten += line
+                    }
+                }
+                require(!insideBuildIdentityBlock) { "Unterminated managed build identity block" }
+                directUpdates.forEach { (key, value) ->
+                    if (processed.add(key) && value != null) rewritten += "$key=$value"
+                }
+                if (templateRequested && templateLines.isNotEmpty()) {
+                    if (rewritten.isNotEmpty() && rewritten.last().isNotBlank()) rewritten += ""
+                    rewritten += templateLines
+                }
+
+                val content =
+                    if (rewritten.isEmpty()) {
+                        ""
+                    } else {
+                        rewritten.joinToString("\n", postfix = "\n")
+                    }
+                if (!validateContent("spoof_build_vars", content)) return false
+                SecureFile.writeText(file, content)
+                Config.updateBuildVars(file)
+                true
+            } catch (error: Exception) {
+                Logger.e("Failed to save identity configuration", error)
+                false
+            }
+        }
+    }
+
     private fun listKeyboxes(): List<String> {
         synchronized(fileLock) {
             val keyboxDir = File(configDir, "keyboxes")
@@ -421,6 +564,7 @@ class WebServer(
                     }
                     Files.deleteIfExists(path)
                 }
+                Config.refreshRuntimeSetting(filename)
                 true
             } catch (e: Exception) {
                 Logger.e("Failed to toggle setting: $filename", e)
@@ -441,69 +585,37 @@ class WebServer(
     private var lastSysTime: Long = 0
     private var lastCpuUsage: Double = 0.0
 
-    private fun getCpuUsagePercent(): Double {
+    @Synchronized
+    private fun getCpuUsagePercent(): Double =
         try {
-            val statBuffer = ByteArray(8192)
-            var uTime = 0L
-            var sTime = 0L
-            java.io.FileInputStream("/proc/self/stat").use { fis ->
-                val read = fis.read(statBuffer)
-                if (read > 0) {
-                    var pos = 0
-                    var spaceCount = 0
-                    while (pos < read && spaceCount < 15) {
-                        if (statBuffer[pos] == ' '.code.toByte()) {
-                            spaceCount++
-                        } else if (spaceCount == 13) {
-                            uTime = uTime * 10 + (statBuffer[pos] - '0'.code.toByte())
-                        } else if (spaceCount == 14) {
-                            sTime = sTime * 10 + (statBuffer[pos] - '0'.code.toByte())
-                        }
-                        pos++
-                    }
-                }
-            }
-            val procTime = uTime + sTime
+            val processStat = File("/proc/self/stat").readText()
+            val commandEnd = processStat.lastIndexOf(')')
+            require(commandEnd >= 0) { "Malformed process stat" }
+            val processFields =
+                processStat.substring(commandEnd + 1).trim().split(Regex("\\s+"))
+            require(processFields.size > 12) { "Incomplete process stat" }
+            val processTime = processFields[11].toLong() + processFields[12].toLong()
 
-            var totalTime = 0L
-            java.io.FileInputStream("/proc/stat").use { fis ->
-                val read = fis.read(statBuffer)
-                if (read > 0) {
-                    var pos = 0
-                    // skip "cpu" prefix
-                    while (pos < read && statBuffer[pos] != ' '.code.toByte() && statBuffer[pos] != '\n'.code.toByte()) {
-                        pos++
-                    }
-                    while (pos < read && statBuffer[pos] != '\n'.code.toByte()) {
-                        while (pos < read && statBuffer[pos] == ' '.code.toByte()) {
-                            pos++
-                        }
-                        if (pos >= read || statBuffer[pos] == '\n'.code.toByte()) break
-                        var currentVal = 0L
-                        while (pos < read && statBuffer[pos] >= '0'.code.toByte() && statBuffer[pos] <= '9'.code.toByte()) {
-                            currentVal = currentVal * 10 + (statBuffer[pos] - '0'.code.toByte())
-                            pos++
-                        }
-                        totalTime += currentVal
-                    }
+            val cpuFields =
+                File("/proc/stat").bufferedReader().use { reader ->
+                    reader.readLine().orEmpty().trim().split(Regex("\\s+")).drop(1)
                 }
-            }
+            val totalTime = cpuFields.mapNotNull { it.toLongOrNull() }.sum()
 
-            if (lastSysTime > 0 && totalTime > lastSysTime) {
-                val deltaProc = procTime - lastCpuTime
-                val deltaSys = totalTime - lastSysTime
-                if (deltaSys > 0) {
-                    lastCpuUsage = (deltaProc.toDouble() / deltaSys.toDouble()) * 100.0 * Runtime.getRuntime().availableProcessors()
-                }
+            if (lastSysTime > 0 && totalTime > lastSysTime && processTime >= lastCpuTime) {
+                val deltaProcess = processTime - lastCpuTime
+                val deltaSystem = totalTime - lastSysTime
+                val processorCount = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
+                lastCpuUsage =
+                    ((deltaProcess.toDouble() / deltaSystem.toDouble()) * 100.0 * processorCount)
+                        .coerceIn(0.0, processorCount * 100.0)
             }
-            lastCpuTime = procTime
+            lastCpuTime = processTime
             lastSysTime = totalTime
-
-            return lastCpuUsage
-        } catch (e: Exception) {
-            return 0.0
+            lastCpuUsage
+        } catch (_: Exception) {
+            lastCpuUsage
         }
-    }
 
     private fun getRamUsageKb(): Long {
         try {
@@ -835,6 +947,28 @@ class WebServer(
             return secureResponse(Response.Status.OK, "application/json", array.toString())
         }
 
+        if (uri == "/api/identity" && method == Method.GET) {
+            return secureResponse(Response.Status.OK, "application/json", identityJson().toString())
+        }
+
+        if (uri == "/api/identity" && method == Method.POST) {
+            val body = HashMap<String, String>()
+            try {
+                session.parseBody(body)
+                val data = getParam(session, "data") ?: throw IllegalArgumentException("Missing identity data")
+                val updates = parseIdentityUpdates(data)
+                if (saveIdentityUpdates(updates)) {
+                    return secureResponse(Response.Status.OK, "application/json", identityJson().toString())
+                }
+            } catch (error: IllegalArgumentException) {
+                return secureResponse(Response.Status.BAD_REQUEST, "text/plain", error.message ?: "Invalid identity data")
+            } catch (error: Exception) {
+                Logger.e("Failed to process identity request", error)
+                return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid identity data")
+            }
+            return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Identity configuration was not saved")
+        }
+
         if (uri == "/api/random_identity" && method == Method.GET) {
             val templates = DeviceTemplateManager.listTemplates()
             if (templates.isNotEmpty()) {
@@ -849,7 +983,9 @@ class WebServer(
                 json.put("imei2", RandomUtils.generateLuhn(15, "35"))
                 json.put("serial", RandomUtils.generateRandomSerial(12))
                 json.put("imsi", RandomUtils.generateDigits(15, "310260"))
+                json.put("imsi2", RandomUtils.generateDigits(15, "310260"))
                 json.put("iccid", RandomUtils.generateLuhn(20, "8901"))
+                json.put("iccid2", RandomUtils.generateLuhn(20, "8901"))
                 return secureResponse(Response.Status.OK, "application/json", json.toString())
             }
             return secureResponse(Response.Status.NOT_FOUND, "text/plain", "No templates found")
@@ -1226,7 +1362,9 @@ class WebServer(
                             "ATTESTATION_ID_IMEI2" to RandomUtils.generateLuhn(15, "35"),
                             "ATTESTATION_ID_SERIAL" to RandomUtils.generateRandomSerial(12),
                             "ATTESTATION_ID_IMSI" to RandomUtils.generateDigits(15, "310260"),
+                            "ATTESTATION_ID_IMSI2" to RandomUtils.generateDigits(15, "310260"),
                             "ATTESTATION_ID_ICCID" to RandomUtils.generateLuhn(20, "8901"),
+                            "ATTESTATION_ID_ICCID2" to RandomUtils.generateLuhn(20, "8901"),
                         )
                     val lines =
                         if (Files.isRegularFile(spoofFile.toPath(), LinkOption.NOFOLLOW_LINKS)) {
@@ -1400,6 +1538,11 @@ class WebServer(
                             if (Files.isRegularFile(target.toPath(), LinkOption.NOFOLLOW_LINKS)) {
                                 target.setLastModified(System.currentTimeMillis())
                             }
+                            WEB_UI_SETTINGS.forEach(Config::refreshRuntimeSetting)
+                            DeviceTemplateManager.initialize(configDir)
+                            Config.updateCustomTemplates(File(configDir, "custom_templates"))
+                            Config.updateBuildVars(File(configDir, "spoof_build_vars"))
+                            Config.updateKeyBoxesSync(crlFetcher())
                             secureResponse(Response.Status.OK, "text/plain", "Restore Successful")
                         }
                     } finally {
@@ -1521,8 +1664,8 @@ class WebServer(
         .row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; min-height: 48px; }
         .row.wrap { flex-wrap: wrap; }
         label { font-size: 0.95em; color: #BBB; cursor: pointer; }
-        input[type="text"], input[type="password"], input[type="search"], input[type="number"], textarea, select { background: var(--input-bg); border: 1px solid var(--border); color: #fff; padding: 12px 14px; border-radius: 6px; width: 100%; box-sizing: border-box; font-family: inherit; transition: border-color 0.2s; font-size: 0.95em; min-height: 44px; min-width: 44px; }
-        input[type="text"]:focus, input[type="password"]:focus, input[type="search"]:focus, input[type="number"]:focus, textarea:focus, select:focus { border-color: var(--accent); outline: none; }
+        input[type="text"], input[type="tel"], input[type="password"], input[type="search"], input[type="number"], textarea, select { background: var(--input-bg); border: 1px solid var(--border); color: #fff; padding: 12px 14px; border-radius: 6px; width: 100%; box-sizing: border-box; font-family: inherit; transition: border-color 0.2s; font-size: 0.95em; min-height: 44px; min-width: 44px; }
+        input[type="text"]:focus, input[type="tel"]:focus, input[type="password"]:focus, input[type="search"]:focus, input[type="number"]:focus, textarea:focus, select:focus { border-color: var(--accent); outline: none; }
         button { background: var(--border); border: none; color: var(--fg); padding: 12px 24px; border-radius: 6px; cursor: pointer; font-family: inherit; font-weight: 500; font-size: 0.95em; transition: all 0.2s; text-transform: uppercase; letter-spacing: 0.5px; min-height: 44px; min-width: 44px; touch-action: manipulation; }
         button:hover { background: #444; }
         button:active { transform: scale(0.98); }
@@ -1541,6 +1684,11 @@ class WebServer(
         td { padding: 10px; border-bottom: 1px solid var(--border); color: #ccc; }
         .tag { display: inline-block; padding: 2px 8px; border-radius: 10px; background: #333; font-size: 0.75em; margin-right: 5px; }
         .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .identity-actions { margin-top: 18px; display: flex; justify-content: flex-end; gap: 10px; }
+        .scope-note { font-size: 0.85em; color: #999; line-height: 1.5; margin-bottom: 15px; }
+        .master-panel { border-color: var(--accent); background: linear-gradient(135deg, var(--panel), #18202d); }
+        .master-copy { flex: 1; min-width: 0; padding-right: 16px; }
+        .master-copy strong { display: block; color: #fff; font-size: 1.1em; margin-bottom: 5px; }
         .section-header { font-size: 0.8em; color: #666; text-transform: uppercase; letter-spacing: 1px; margin: 15px 0 5px 0; }
         .drag-over { border-color: var(--accent) !important; background: rgba(255,255,255,0.05); }
         #dropZone:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -1604,7 +1752,9 @@ class WebServer(
             .responsive-table td > div, .responsive-table td > span { text-align: right; flex: 1; word-break: break-word; }
             .server-item { flex-direction: column; align-items: flex-start; gap: 12px; padding: 14px; }
             .server-item > div:last-child { width: 100%; display: flex; justify-content: space-between; align-items: center; }
-            input[type="text"], input[type="password"], input[type="search"], input[type="number"], textarea, select, button { font-size: 16px; min-height: 48px; } /* Prevents mobile browser zoom */
+            input[type="text"], input[type="tel"], input[type="password"], input[type="search"], input[type="number"], textarea, select, button { font-size: 16px; min-height: 48px; } /* Prevents mobile browser zoom */
+            .identity-actions { display: grid; grid-template-columns: 1fr; }
+            .identity-actions button { width: 100%; }
             .island { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
             .island.active { min-width: 0; width: 100%; padding-left: 16px; }
             .resource-summary { flex-direction: column; gap: 10px; background: transparent; border: none; padding: 0; box-shadow: none; }
@@ -1635,7 +1785,18 @@ class WebServer(
     </div>
 
     <div id="dashboard" class="content active" role="tabpanel" aria-labelledby="tab_dashboard">
+        <div class="panel master-panel">
+            <div class="row" style="margin-bottom:8px;">
+                <label class="master-copy" for="spoof_enabled"><strong>Spoof Engine</strong><span>Master control for attestation, telephony, build identity, and boot-property spoofing.</span></label>
+                <input type="checkbox" class="toggle" id="spoof_enabled" data-setting="spoof_enabled" onchange="toggle('spoof_enabled', this)" aria-describedby="engineRuntimeNote">
+            </div>
+            <div id="engineRuntimeNote" class="scope-note" style="margin:0;">When paused, Binder interceptors are unregistered, native hooks enter an atomic fast path, and the scheduled keybox worker stops. Reboot once to undo boot-time property views and release injected libraries.</div>
+        </div>
         <div style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 120px; padding: 15px; border-radius: 8px; background: #1a1a1a; border: 1px solid var(--border); text-align: center;">
+                <div style="font-size: 0.8em; color: #888; text-transform: uppercase;">Spoof Engine</div>
+                <div id="status_engine" style="font-weight: bold; color: var(--danger); margin-top: 5px; background: rgba(239, 68, 68, 0.1); padding: 5px; border-radius: 4px;">PAUSED</div>
+            </div>
             <div style="flex: 1; min-width: 120px; padding: 15px; border-radius: 8px; background: #1a1a1a; border: 1px solid var(--border); text-align: center;">
                 <div style="font-size: 0.8em; color: #888; text-transform: uppercase;">Global Mode</div>
                 <div id="status_global" style="font-weight: bold; color: var(--danger); margin-top: 5px; background: rgba(239, 68, 68, 0.1); padding: 5px; border-radius: 4px;">INACTIVE</div>
@@ -1666,12 +1827,13 @@ class WebServer(
             <div class="section-header">Compatibility passthrough</div>
             <div class="row"><label for="rkp_passthrough">RKP Passthrough</label><input type="checkbox" class="toggle" id="rkp_passthrough" data-setting="rkp_passthrough" onchange="toggle('rkp_passthrough', this)"></div>
             <div class="row"><label for="drm_passthrough">DRM App Passthrough</label><input type="checkbox" class="toggle" id="drm_passthrough" data-setting="drm_passthrough" onchange="toggle('drm_passthrough', this)"></div>
-            <div style="font-size:0.8em; color:#888; margin-top:5px;">RKP passthrough preserves generated-key responses. DRM passthrough excludes packages in drm_packages.txt from certificate substitution.</div>
+            <div style="font-size:0.8em; color:#888; margin-top:5px;">RKP service packages are always protected from substitution. RKP passthrough also preserves generated-key responses. DRM passthrough excludes packages in drm_packages.txt.</div>
             <div class="section-header">Boot Properties</div>
+            <div class="row"><label for="spoof_build_identity">Template Build Identity (Fingerprint)</label><input type="checkbox" class="toggle" id="spoof_build_identity" data-setting="spoof_build_identity" onchange="toggle('spoof_build_identity', this)"></div>
             <div class="row"><label for="hide_sensitive_props">Hide Sensitive Props</label><input type="checkbox" class="toggle" id="hide_sensitive_props" data-setting="hide_sensitive_props" onchange="toggle('hide_sensitive_props', this)"></div>
             <div class="row"><label for="spoof_region_cn">Spoof Region (CN)</label><input type="checkbox" class="toggle" id="spoof_region_cn" data-setting="spoof_region_cn" onchange="toggle('spoof_region_cn', this)"></div>
             <div class="row"><label for="bootPropsMode">Boot Property Policy</label><select id="bootPropsMode" style="width:auto; min-width:150px;" onchange="saveBootPropsMode(this)"><option value="auto">Automatic</option><option value="force">Always apply</option><option value="disable">Disabled</option></select></div>
-            <div style="font-size:0.8em; color:#888; margin-top:5px;">Boot-property changes require a reboot. Automatic mode avoids known vendor and overlay conflicts.</div>
+            <div style="font-size:0.8em; color:#888; margin-top:5px;">Build identity applies the selected template fingerprint and app-visible android.os.Build fields before Zygote. Boot-property changes require a reboot. Automatic mode avoids known vendor and overlapping identity-provider conflicts. These controls do not relock the hardware bootloader or alter the TEE root of trust.</div>
             <div style="margin-top:20px; border-top: 1px solid var(--border); padding-top: 15px;">
                 <div class="row"><span id="keyboxStatus" style="font-size:0.9em; color:var(--success);">Active</span><button onclick="runWithState(this, 'Reloading...', reloadConfig)">Reload Config</button></div>
             </div>
@@ -1683,24 +1845,35 @@ class WebServer(
         <div class="panel">
             <h3>Identity Manager</h3>
             <label for="templateSelect" style="display:block; font-size:0.85em; color:#888; margin-bottom:8px;">Select the attestation identity used for configured target applications.</label>
-            <select id="templateSelect" onchange="previewTemplate()" style="margin-bottom:15px;"></select>
+            <select id="templateSelect" onchange="previewTemplate()" style="margin-bottom:15px;"><option value="">No attestation template</option></select>
             <div id="templatePreview" style="background:var(--input-bg); border-radius:8px; padding:15px; margin-bottom:15px;">
                 <div class="grid-2"><div><div class="section-header">Device</div><div id="pModel"></div></div><div><div class="section-header">Manufacturer</div><div id="pManuf"></div></div></div>
-                <div class="section-header">Reference fingerprint (display only) <button onclick="copyToClipboard(document.getElementById('pFing').innerText, 'Fingerprint Copied', this)" style="font-size:0.9em; padding:8px 12px; margin-left:5px; min-height:44px;" title="Copy reference fingerprint" aria-label="Copy Reference Fingerprint">Copy</button></div><div style="font-family:monospace; font-size:0.8em; color:#999; word-break:break-all;" id="pFing"></div>
+                <div class="section-header">Template fingerprint <button onclick="copyToClipboard(document.getElementById('pFing').innerText, 'Fingerprint Copied', this)" style="font-size:0.9em; padding:8px 12px; margin-left:5px; min-height:44px;" title="Copy template fingerprint" aria-label="Copy Template Fingerprint">Copy</button></div><div style="font-family:monospace; font-size:0.8em; color:#999; word-break:break-all;" id="pFing"></div>
             </div>
+            <div class="scope-note">Applying a template persists its fingerprint and build fields. Enable Template Build Identity and reboot to expose them through android.os.Build. Android ID remains Android's per-app SSAID, and the actual kernel uname remains unchanged. System, vendor, and boot/kernel attestation patch levels are controlled in security_patch.txt.</div>
             <div class="grid-2"><button onclick="runWithState(this, 'Generating...', generateRandomIdentity)" class="primary">Generate Random</button><button onclick="runWithState(this, 'Saving...', applySpoofing)">Apply Identity</button></div>
         </div>
         <div class="panel"><h3>Attestation and Telephony Identifiers</h3>
-            <div style="font-size:0.85em; color:#888; margin-bottom:15px;">IMEI and serial can be included in rewritten attestation records. IMSI and ICCID are used only when Telephony Identifier Interception is enabled.</div>
-            <div class="section-header">Identifiers</div><div class="grid-2">
-                <div><label for="inputImei">IMEI</label><input type="text" id="inputImei" placeholder="35..." style="font-family:monospace;" inputmode="numeric" oninput="validateRealtime(this, 'luhn')" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></div>
-                <div><label for="inputImsi">IMSI</label><input type="text" id="inputImsi" placeholder="310..." style="font-family:monospace;" inputmode="numeric" oninput="validateRealtime(this, 'imsi')" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></div>
+            <div id="identityScope" class="scope-note">These overrides are visible only to selected apps after Android grants the original API request. They do not change modem, SIM, EFS, baseband, or mobile-network identity.</div>
+            <div class="section-header">SIM 1</div>
+            <div class="grid-2">
+                <div><label for="inputImei">IMEI</label><input type="text" id="inputImei" placeholder="35..." maxlength="15" style="font-family:monospace;" inputmode="numeric" enterkeyhint="next" oninput="validateRealtime(this, 'luhn')" aria-describedby="identityScope" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></div>
+                <div><label for="inputMeid">MEID</label><input type="text" id="inputMeid" placeholder="14 hexadecimal characters" maxlength="14" style="font-family:monospace;" inputmode="text" enterkeyhint="next" oninput="validateRealtime(this, 'meid')" aria-describedby="identityScope" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="characters"></div>
+                <div><label for="inputImsi">IMSI</label><input type="text" id="inputImsi" placeholder="Subscriber identity" maxlength="16" style="font-family:monospace;" inputmode="numeric" enterkeyhint="next" oninput="validateRealtime(this, 'imsi')" aria-describedby="identityScope" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></div>
+                <div><label for="inputIccid">ICCID</label><input type="text" id="inputIccid" placeholder="SIM card identity" maxlength="22" style="font-family:monospace;" inputmode="numeric" enterkeyhint="next" oninput="validateRealtime(this, 'luhn')" aria-describedby="identityScope" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></div>
+                <div><label for="inputPhoneNumber">Phone number</label><input type="tel" id="inputPhoneNumber" placeholder="+12025550123" maxlength="32" style="font-family:monospace;" inputmode="tel" enterkeyhint="next" oninput="validateRealtime(this, 'phone')" aria-describedby="identityScope" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></div>
             </div>
-            <div class="grid-2" style="margin-top:10px;">
-                <div><label for="inputIccid">ICCID</label><input type="text" id="inputIccid" placeholder="89..." style="font-family:monospace;" inputmode="numeric" oninput="validateRealtime(this, 'luhn')" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></div>
-                <div><label for="inputSerial">Serial</label><input type="text" id="inputSerial" placeholder="Alphanumeric..." style="font-family:monospace;" autocapitalize="characters" oninput="validateRealtime(this, 'alphanum')" spellcheck="false" autocomplete="off" autocorrect="off"></div>
+            <div class="section-header">SIM 2 (optional)</div>
+            <div class="grid-2">
+                <div><label for="inputImei2">IMEI 2</label><input type="text" id="inputImei2" placeholder="35..." maxlength="15" style="font-family:monospace;" inputmode="numeric" enterkeyhint="next" oninput="validateRealtime(this, 'luhn')" aria-describedby="identityScope" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></div>
+                <div><label for="inputMeid2">MEID 2</label><input type="text" id="inputMeid2" placeholder="14 hexadecimal characters" maxlength="14" style="font-family:monospace;" inputmode="text" enterkeyhint="next" oninput="validateRealtime(this, 'meid')" aria-describedby="identityScope" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="characters"></div>
+                <div><label for="inputImsi2">IMSI 2</label><input type="text" id="inputImsi2" placeholder="Subscriber identity" maxlength="16" style="font-family:monospace;" inputmode="numeric" enterkeyhint="next" oninput="validateRealtime(this, 'imsi')" aria-describedby="identityScope" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></div>
+                <div><label for="inputIccid2">ICCID 2</label><input type="text" id="inputIccid2" placeholder="SIM card identity" maxlength="22" style="font-family:monospace;" inputmode="numeric" enterkeyhint="next" oninput="validateRealtime(this, 'luhn')" aria-describedby="identityScope" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></div>
+                <div><label for="inputPhoneNumber2">Phone number 2</label><input type="tel" id="inputPhoneNumber2" placeholder="+12025550124" maxlength="32" style="font-family:monospace;" inputmode="tel" enterkeyhint="next" oninput="validateRealtime(this, 'phone')" aria-describedby="identityScope" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></div>
             </div>
-            <div style="margin-top:15px; display:flex; justify-content:flex-end; gap:10px;"><button type="button" onclick="const btn = this; requireConfirm(btn, () => clearSpoofingInputs(), 'Confirm Clear')" style="background:transparent; border:1px solid var(--danger); color:var(--danger); min-height:44px; padding:0 20px;">Clear All</button><button onclick="runWithState(this, 'Saving...', applySpoofing)" class="danger">Apply Identity</button></div>
+            <div class="section-header">Device</div>
+            <div><label for="inputSerial">Serial</label><input type="text" id="inputSerial" placeholder="Device serial" maxlength="64" style="font-family:monospace;" enterkeyhint="done" autocapitalize="characters" oninput="validateRealtime(this, 'serial')" aria-describedby="identityScope" spellcheck="false" autocomplete="off" autocorrect="off"></div>
+            <div class="identity-actions"><button type="button" onclick="const btn = this; requireConfirm(btn, () => clearSpoofingInputs(), 'Confirm Clear')" style="background:transparent; border:1px solid var(--danger); color:var(--danger); min-height:44px; padding:0 20px;">Clear All</button><button onclick="runWithState(this, 'Saving...', applySpoofing)" class="danger">Apply Identity</button></div>
         </div>
     </div>
 
@@ -1766,7 +1939,7 @@ class WebServer(
             <h3>Upload Keybox / CBOX</h3>
             <div class="grid-2">
                 <div id="dropZone" role="button" tabindex="0" style="border: 2px dashed var(--border); border-radius: 6px; padding: 20px; text-align: center; margin-bottom: 10px; cursor: pointer;" onclick="document.getElementById('kbFilePicker').click()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault(); document.getElementById('kbFilePicker').click();}">
-                    <label for="kbFilename" style="display:none">Keybox File</label>
+                    <label for="kbFilePicker" style="display:none">Keybox File</label>
                     <input type="file" id="kbFilePicker" style="display:none" onchange="loadFileContent(this)" onclick="event.stopPropagation(); this.value = null" aria-label="Upload Keybox File" accept=".xml,.cbox">
                     <div id="dropZoneContent"><div style="font-size: 1.5em; margin-bottom: 10px; color: #888;">[ Drag &amp; Drop ]</div><div style="font-size: 0.9em; color: #888;">Or click to select .xml or .cbox</div></div>
                 </div>
@@ -1797,23 +1970,19 @@ class WebServer(
             
             <div class="panel">
                 <h3 data-i18n="resource_monitor_title">Resource Monitor</h3>
-                <p style="font-size:0.9em; color:#888;">Monitor resource usage and manage feature impact. <span style="color:var(--danger)">Disabling security features may expose your device.</span></p>
+                <p style="font-size:0.9em; color:#888;">The summary reports measured daemon CPU and resident memory. The table describes when each feature runs, without presenting synthetic per-feature estimates.</p>
                 <table id="resourceTable" class="responsive-table">
                     <thead>
                         <tr>
                             <th data-i18n="col_feature">Feature</th>
                             <th data-i18n="col_status">Status</th>
-                            <th data-i18n="col_ram">Est. RAM</th>
-                            <th data-i18n="col_cpu">Est. CPU</th>
-                            <th data-i18n="col_security">Security Impact</th>
+                            <th data-i18n="col_runtime">Runtime path</th>
+                            <th data-i18n="col_scope">Scope</th>
                         </tr>
                     </thead>
                     <tbody id="resourceBody">
                     </tbody>
                 </table>
-                <div style="margin-top:15px; font-size:0.85em; color:#666; text-align:center;">
-                    * RAM estimates are approximate based on loaded objects.
-                </div>
             </div>
         </div>
     </div>
@@ -2173,7 +2342,7 @@ class WebServer(
                 } else {
                      const len = val.length;
                      if (input.id.includes('Imei') && len !== 15) msg = "Must be 15 digits";
-                     else if (input.id.includes('Iccid') && (len < 19 || len > 20)) msg = "Must be 19-20 digits";
+                     else if (input.id.includes('Iccid') && (len < 18 || len > 22)) msg = "Must be 18-22 digits";
 
                      if (!msg) {
                          let sum = 0;
@@ -2194,11 +2363,21 @@ class WebServer(
             } else if (type === 'imsi') {
                 if (!/^\d+${'$'}/.test(val)) {
                     msg = "Must be numeric";
-                } else if (val.length !== 15) {
-                    msg = "Must be 15 digits";
+                } else if (val.length < 5 || val.length > 16) {
+                    msg = "Must be 5-16 digits";
                 } else {
                     isValid = true;
                 }
+            } else if (type === 'meid') {
+                if (/^[0-9A-Fa-f]{14}${'$'}/.test(val)) isValid = true;
+                else msg = "Must be 14 hexadecimal characters";
+            } else if (type === 'phone') {
+                const digits = val.startsWith('+') ? val.slice(1) : val;
+                if (val.length <= 32 && /^\d+${'$'}/.test(digits)) isValid = true;
+                else msg = "Use an optional + followed by digits";
+            } else if (type === 'serial') {
+                if (/^[a-zA-Z0-9._-]{1,64}${'$'}/.test(val)) isValid = true;
+                else msg = "Use letters, digits, dot, underscore, or hyphen";
             } else if (type === 'mac') {
                 if (/^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})${'$'}/.test(val)) isValid = true;
                 else msg = "Invalid MAC (XX:XX:XX:XX:XX:XX)";
@@ -2621,7 +2800,15 @@ class WebServer(
             }
         }
 
-        const WEB_UI_SETTINGS = ['global_mode', 'tee_broken_mode', 'auto_keybox_check', 'random_on_boot', 'hide_sensitive_props', 'spoof_region_cn', 'telephony', 'rkp_passthrough', 'drm_passthrough'];
+        const WEB_UI_SETTINGS = ['spoof_enabled', 'spoof_build_identity', 'global_mode', 'tee_broken_mode', 'auto_keybox_check', 'random_on_boot', 'hide_sensitive_props', 'spoof_region_cn', 'telephony', 'rkp_passthrough', 'drm_passthrough'];
+
+        function updateEngineStatus(enabled) {
+            const status = document.getElementById('status_engine');
+            if (!status) return;
+            status.innerText = enabled ? 'RUNNING' : 'PAUSED';
+            status.style.color = enabled ? 'var(--success)' : 'var(--danger)';
+            status.style.background = enabled ? 'rgba(74, 222, 128, 0.1)' : 'rgba(239, 68, 68, 0.1)';
+        }
 
         function updateGlobalStatus(enabled) {
             const status = document.getElementById('status_global');
@@ -2636,6 +2823,7 @@ class WebServer(
                 control.checked = Boolean(enabled);
                 control.disabled = disabled;
             });
+            if (setting === 'spoof_enabled') updateEngineStatus(Boolean(enabled));
             if (setting === 'global_mode') updateGlobalStatus(Boolean(enabled));
         }
 
@@ -2646,7 +2834,7 @@ class WebServer(
                 const res = await fetchAuth(getAuthUrl('/api/config'));
                     if (!res.ok) throw new Error(await res.text());
                 const data = await res.json();
-                console.log('[CleveresTricky] config loaded:', JSON.stringify({global_mode: data.global_mode, keybox_count: data.keybox_count, tee_broken_mode: data.tee_broken_mode, telephony: data.telephony}));
+                console.log('[CleveresTricky] configuration loaded');
                 WEB_UI_SETTINGS.forEach(k => syncSettingControls(k, Boolean(data[k])));
                 determineActiveProfile(data);
                 document.getElementById('keyboxStatus').innerText = `${'$'}{data.keybox_count} Keys Loaded`;
@@ -2663,7 +2851,7 @@ class WebServer(
                     opt.value = t.id; opt.text = `${'$'}{t.model} (${'$'}{t.manufacturer})`; opt.dataset.json = JSON.stringify(t);
                     sel.appendChild(opt.cloneNode(true)); appSel.appendChild(opt);
                 });
-                previewTemplate();
+                await loadIdentity();
             } catch(e) { console.error(e); notify('Error loading templates: ' + e.message, 'error'); }
             fetchAuth(getAuthUrl('/api/packages')).then(async r => { if(!r.ok) throw new Error(await r.text()); return r.json(); }).then(pkgs => {
                 installedPackages = pkgs;
@@ -2745,7 +2933,13 @@ class WebServer(
                     throw new Error('Server returned ' + res.status + ': ' + message);
                 }
                 syncSettingControls(setting, requestedValue);
-                notify('Setting Updated');
+                if (setting === 'spoof_enabled') {
+                    notify(requestedValue ? 'Spoof Engine resumed' : 'Spoof Engine paused; reboot to clear boot-time property views');
+                } else if (setting === 'spoof_build_identity') {
+                    notify('Build identity setting saved; reboot required');
+                } else {
+                    notify('Setting Updated');
+                }
             } catch(e) {
                 syncSettingControls(setting, !requestedValue);
                 notify('Error: ' + e.message, 'error');
@@ -2757,12 +2951,42 @@ class WebServer(
         }
         function previewTemplate() {
             const sel = document.getElementById('templateSelect'); if (!sel.selectedOptions.length) return;
-            const t = JSON.parse(sel.selectedOptions[0].dataset.json);
-            document.getElementById('pModel').innerText = t.model; document.getElementById('pManuf').innerText = t.manufacturer; document.getElementById('pFing').innerText = t.fingerprint;
+            const selected = sel.selectedOptions[0];
+            if (selected.dataset.json) {
+                const t = JSON.parse(selected.dataset.json);
+                document.getElementById('pModel').innerText = t.model;
+                document.getElementById('pManuf').innerText = t.manufacturer;
+                document.getElementById('pFing').innerText = t.fingerprint;
+            } else {
+                document.getElementById('pModel').innerText = 'Current device';
+                document.getElementById('pManuf').innerText = 'Current device';
+                document.getElementById('pFing').innerText = 'No template selected';
+            }
             if (!sel.dataset.lockExtras) {
                 clearSpoofingInputs();
             }
             delete sel.dataset.lockExtras;
+        }
+
+        async function loadIdentity() {
+            const res = await fetchAuth('/api/identity');
+            if (!res.ok) throw new Error(await res.text());
+            const identity = await res.json();
+            const fields = {
+                inputImei: 'imei', inputImei2: 'imei2', inputMeid: 'meid', inputMeid2: 'meid2',
+                inputImsi: 'imsi', inputImsi2: 'imsi2', inputIccid: 'iccid', inputIccid2: 'iccid2',
+                inputPhoneNumber: 'phone_number', inputPhoneNumber2: 'phone_number2', inputSerial: 'serial'
+            };
+            Object.entries(fields).forEach(([id, key]) => {
+                const input = document.getElementById(id);
+                if (input) input.value = identity[key] || '';
+            });
+            const select = document.getElementById('templateSelect');
+            const template = identity.template || '';
+            if ([...select.options].some(option => option.value === template)) select.value = template;
+            else select.value = '';
+            select.dataset.lockExtras = 'true';
+            previewTemplate();
         }
 
         async function generateRandomIdentity() {
@@ -2771,14 +2995,22 @@ class WebServer(
                 if (!res.ok) { const msg = await res.text(); notify('Error: ' + msg, 'error'); return; }
                 const t = await res.json();
                 document.getElementById('inputImei').value = t.imei || '';
+                document.getElementById('inputImei2').value = t.imei2 || '';
                 document.getElementById('inputImsi').value = t.imsi || '';
+                document.getElementById('inputImsi2').value = t.imsi2 || '';
                 document.getElementById('inputIccid').value = t.iccid || '';
+                document.getElementById('inputIccid2').value = t.iccid2 || '';
                 document.getElementById('inputSerial').value = t.serial || '';
+                ['inputMeid', 'inputMeid2', 'inputPhoneNumber', 'inputPhoneNumber2'].forEach(id => {
+                    document.getElementById(id).value = '';
+                });
+                const sel = document.getElementById('templateSelect');
+                if ([...sel.options].some(option => option.value === t.id)) sel.value = t.id;
+                sel.dataset.lockExtras = 'true';
+                previewTemplate();
                 document.getElementById('pModel').innerText = t.model + ' (Randomized)';
                 document.getElementById('pManuf').innerText = t.manufacturer;
                 document.getElementById('pFing').innerText = t.fingerprint;
-                const sel = document.getElementById('templateSelect');
-                sel.dataset.generated = JSON.stringify(t);
                 notify('Identity Generated');
             } catch (e) {
                 console.error(e);
@@ -2927,7 +3159,10 @@ class WebServer(
         }
 
         function clearSpoofingInputs() {
-            ['inputImei', 'inputImsi', 'inputIccid', 'inputSerial'].forEach(id => {
+            [
+                'inputImei', 'inputImei2', 'inputMeid', 'inputMeid2', 'inputImsi', 'inputImsi2',
+                'inputIccid', 'inputIccid2', 'inputPhoneNumber', 'inputPhoneNumber2', 'inputSerial'
+            ].forEach(id => {
                 const el = document.getElementById(id);
                 if (el) {
                     el.value = '';
@@ -2941,101 +3176,39 @@ class WebServer(
         async function saveAdvancedSpoof() { await applySpoofing(); }
 
         async function applySpoofing() {
-             const inputTypes = {
-                 'inputImei': 'luhn', 'inputImsi': 'imsi', 'inputIccid': 'luhn',
-                 'inputSerial': 'alphanum'
-             };
-             for (const [id, type] of Object.entries(inputTypes)) {
-                 const el = document.getElementById(id);
-                 if (el.value) {
-                     validateRealtime(el, type);
-                     if (el.classList.contains('invalid')) {
-                         notify('Invalid ' + id.replace('input', '').toUpperCase(), 'error');
-                         el.focus();
-                         return;
-                     }
-                 }
-             }
+            const inputTypes = {
+                inputImei: 'luhn', inputImei2: 'luhn', inputMeid: 'meid', inputMeid2: 'meid',
+                inputImsi: 'imsi', inputImsi2: 'imsi', inputIccid: 'luhn', inputIccid2: 'luhn',
+                inputPhoneNumber: 'phone', inputPhoneNumber2: 'phone', inputSerial: 'serial'
+            };
+            for (const [id, type] of Object.entries(inputTypes)) {
+                const input = document.getElementById(id);
+                if (!input || !input.value.trim()) continue;
+                validateRealtime(input, type);
+                if (input.classList.contains('invalid')) {
+                    notify('Invalid ' + id.replace('input', ''), 'error');
+                    input.focus();
+                    return;
+                }
+            }
 
-             try {
-                 // 1. Fetch current spoof_build_vars content
-                 let content = "";
-                 try {
-                     const res = await fetchAuth('/api/file?filename=spoof_build_vars');
-                     if (res.ok) { content = await res.text(); } else { const msg = await res.text(); throw new Error(msg); }
-                 } catch(e) { console.error(e); notify('Error loading build vars: ' + e.message, 'error'); return; }
+            const fields = {
+                imei: 'inputImei', imei2: 'inputImei2', meid: 'inputMeid', meid2: 'inputMeid2',
+                imsi: 'inputImsi', imsi2: 'inputImsi2', iccid: 'inputIccid', iccid2: 'inputIccid2',
+                phone_number: 'inputPhoneNumber', phone_number2: 'inputPhoneNumber2', serial: 'inputSerial'
+            };
+            const identity = { template: document.getElementById('templateSelect').value || '' };
+            Object.entries(fields).forEach(([key, id]) => {
+                identity[key] = document.getElementById(id).value.trim();
+            });
 
-                 // 2. Parse lines
-                 let lines = content.split('\n');
-                 const newKeyValues = {};
-
-                 // 3. Get values from UI
-                 const sel = document.getElementById('templateSelect');
-                 if (sel.value) newKeyValues['TEMPLATE'] = sel.value;
-
-                 const map = {
-                     'inputImei': 'ATTESTATION_ID_IMEI',
-                     'inputImsi': 'ATTESTATION_ID_IMSI',
-                     'inputIccid': 'ATTESTATION_ID_ICCID',
-                     'inputSerial': 'ATTESTATION_ID_SERIAL'
-                 };
-
-                 for (const [id, key] of Object.entries(map)) {
-                     const el = document.getElementById(id);
-                     if (el.value.trim()) {
-                         newKeyValues[key] = el.value.trim();
-                     } else {
-                         // If empty, user wants to remove the override (use template default)
-                         newKeyValues[key] = null;
-                     }
-                 }
-
-                 // 4. Update content
-                 const updatedLines = [];
-                 const processedKeys = new Set();
-
-                 for (let line of lines) {
-                     if (line.trim().startsWith('#') || !line.includes('=')) {
-                         updatedLines.push(line);
-                         continue;
-                     }
-                     const parts = line.split('=');
-                     const key = parts[0].trim();
-                     if (newKeyValues.hasOwnProperty(key)) {
-                         if (newKeyValues[key] !== null) {
-                             updatedLines.push(key + '=' + newKeyValues[key]);
-                         }
-                         processedKeys.add(key);
-                     } else {
-                         updatedLines.push(line);
-                     }
-                 }
-
-                 // Append new keys
-                 for (const [key, val] of Object.entries(newKeyValues)) {
-                     if (val !== null && !processedKeys.has(key)) {
-                         updatedLines.push(key + '=' + val);
-                     }
-                 }
-
-                 // 5. Save
-                 const newContent = updatedLines.join('\n');
-                 notify('Saving Configuration...', 'working');
-                 const saveRes = await fetchAuth('/api/save', {
-                     method: 'POST',
-                     body: new URLSearchParams({ filename: 'spoof_build_vars', content: newContent })
-                 });
-
-                 if (saveRes.ok) {
-                     notify('Configuration Saved');
-                 } else {
-                     const txt = await saveRes.text();
-                     notify('Save Failed: ' + txt, 'error');
-                 }
-
-             } catch (e) {
-                 notify('Error: ' + e.message, 'error');
-             }
+            notify('Saving Configuration...', 'working');
+            const response = await fetchAuth('/api/identity', {
+                method: 'POST',
+                body: new URLSearchParams({ data: JSON.stringify(identity) })
+            });
+            if (!response.ok) throw new Error(await response.text());
+            notify('Configuration Saved');
         }
 
         let appRules = [];
@@ -3169,10 +3342,10 @@ class WebServer(
         }
 
         function determineActiveProfile(data) {
-            const isMaximum = data.global_mode && !data.tee_broken_mode && data.random_on_boot && data.hide_sensitive_props && data.auto_keybox_check && data.telephony && !data.spoof_region_cn && !data.rkp_passthrough && !data.drm_passthrough;
-            const isDaily = !data.global_mode && !data.tee_broken_mode && !data.random_on_boot && data.hide_sensitive_props && data.auto_keybox_check && !data.telephony && !data.spoof_region_cn && data.rkp_passthrough && data.drm_passthrough;
-            const isMinimal = !data.global_mode && data.tee_broken_mode && !data.random_on_boot && !data.hide_sensitive_props && !data.auto_keybox_check && !data.telephony && !data.spoof_region_cn && data.rkp_passthrough && data.drm_passthrough;
-            const isDefault = !data.global_mode && !data.tee_broken_mode && !data.random_on_boot && !data.hide_sensitive_props && data.auto_keybox_check && !data.telephony && !data.spoof_region_cn && data.rkp_passthrough && data.drm_passthrough;
+            const isMaximum = data.spoof_enabled && data.spoof_build_identity && data.global_mode && !data.tee_broken_mode && data.random_on_boot && data.hide_sensitive_props && data.auto_keybox_check && data.telephony && !data.spoof_region_cn && !data.rkp_passthrough && !data.drm_passthrough;
+            const isDaily = data.spoof_enabled && !data.spoof_build_identity && !data.global_mode && !data.tee_broken_mode && !data.random_on_boot && data.hide_sensitive_props && data.auto_keybox_check && !data.telephony && !data.spoof_region_cn && data.rkp_passthrough && data.drm_passthrough;
+            const isMinimal = !data.spoof_enabled && !data.spoof_build_identity && !data.global_mode && data.tee_broken_mode && !data.random_on_boot && !data.hide_sensitive_props && !data.auto_keybox_check && !data.telephony && !data.spoof_region_cn && data.rkp_passthrough && data.drm_passthrough;
+            const isDefault = data.spoof_enabled && !data.spoof_build_identity && !data.global_mode && !data.tee_broken_mode && !data.random_on_boot && !data.hide_sensitive_props && data.auto_keybox_check && !data.telephony && !data.spoof_region_cn && data.rkp_passthrough && data.drm_passthrough;
 
             const select = document.getElementById('profileSelect');
             if (!select) return;
@@ -3365,7 +3538,7 @@ class WebServer(
         async function loadResourceUsage() {
              try {
                  const tbody = document.getElementById('resourceBody');
-                 if(tbody) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px; color:#888;"><div class="inline-spinner"></div> Loading...</td></tr>';
+                 if(tbody) tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:20px; color:#888;"><div class="inline-spinner"></div> Loading...</td></tr>';
                  const res = await fetchAuth('/api/resource_usage');
                  if (!res.ok) throw new Error(await res.text());
                  const data = await res.json();
@@ -3386,22 +3559,23 @@ class WebServer(
             if (summaryDiv) {
                 summaryDiv.innerHTML = 
                     '<div class="resource-stat"><div style="font-size:0.8em; color:#888; text-transform:uppercase;">Environment</div><div style="font-size:1.2em; font-weight:bold; color:var(--accent);">' + escapeHtml(env) + '</div></div>' +
-                    '<div class="resource-stat resource-stat-mid"><div style="font-size:0.8em; color:#888; text-transform:uppercase;">Est. CPU</div><div style="font-size:1.2em; font-weight:bold; color:var(--success);">' + escapeHtml(cpu) + '%</div></div>' +
-                    '<div class="resource-stat"><div style="font-size:0.8em; color:#888; text-transform:uppercase;">Est. RAM</div><div style="font-size:1.2em; font-weight:bold; color:#60A5FA;">' + escapeHtml(ramMb) + ' MB</div></div>';
+                    '<div class="resource-stat resource-stat-mid"><div style="font-size:0.8em; color:#888; text-transform:uppercase;">Process CPU</div><div style="font-size:1.2em; font-weight:bold; color:var(--success);">' + escapeHtml(cpu) + '%</div></div>' +
+                    '<div class="resource-stat"><div style="font-size:0.8em; color:#888; text-transform:uppercase;">Process RSS</div><div style="font-size:1.2em; font-weight:bold; color:#60A5FA;">' + escapeHtml(ramMb) + ' MB</div></div>';
             }
 
             const features = [
-                { id: 'global_mode', name: 'Global Mode', ram: 'Negligible', cpu: 'Conditional', sec: 'Medium', desc: 'Applies the attestation policy to every calling UID instead of target.txt rules.' },
-                { id: 'tee_broken_mode', name: 'Certificate Safe Mode', ram: 'Negligible', cpu: 'Lower', sec: 'High', desc: 'Disables certificate substitution while leaving genuine KeyMint and RKP behavior intact.' },
-                { id: 'auto_keybox_check', name: 'Automatic Keybox Check', ram: 'Small worker', cpu: 'Periodic', sec: 'High', desc: 'Checks active key material and revocation state in the background.' },
-                { id: 'random_on_boot', name: 'Identity Refresh on Boot', ram: 'None retained', cpu: 'Boot only', sec: 'Medium', desc: 'Refreshes configured attestation and telephony identifiers during boot.' },
-                { id: 'telephony', name: 'Telephony Interception', ram: 'Process dependent', cpu: 'Low', sec: 'Medium', desc: 'Optionally intercepts supported telephony identifier calls; requires a reboot.' },
-                { id: 'rkp_passthrough', name: 'RKP Passthrough', ram: 'Negligible', cpu: 'Lower', sec: 'High', desc: 'Leaves generated-key responses on the original platform path.' },
-                { id: 'drm_passthrough', name: 'DRM App Passthrough', ram: 'Bounded UID cache', cpu: 'Low', sec: 'High', desc: 'Excludes packages in drm_packages.txt from certificate substitution.' },
-                { id: 'hide_sensitive_props', name: 'Hide Sensitive Properties', ram: 'None retained', cpu: 'Boot only', sec: 'Medium', desc: 'Applies the selected boot-property policy after reboot.' },
-                { id: 'spoof_region_cn', name: 'CN Region Compatibility', ram: 'None retained', cpu: 'Boot only', sec: 'Medium', desc: 'Applies the optional region property set after reboot.' },
-                { id: 'keybox_storage', name: 'Keybox Storage', ram: 'Bounded cache', cpu: 'Low', sec: 'Sensitive', desc: data.keybox_count + ' authorized keyboxes loaded from root-only storage.' },
-                { id: 'app_rules', name: 'App Rules', ram: data.app_config_size + ' B config', cpu: 'Low', sec: 'Low', desc: 'Target-specific identity and keybox selection rules.' }
+                { id: 'spoof_enabled', name: 'Spoof Engine', activity: data.spoof_enabled ? 'Runtime controller active' : 'Interceptors parked', scope: 'All spoof and hook paths', desc: 'Master switch; boot-disabled mode avoids native injection entirely.' },
+                { id: 'global_mode', name: 'Global Mode', activity: 'UID decision only', scope: 'Resolved application UIDs', desc: 'Targets every eligible app while protecting system and RKP infrastructure UIDs.' },
+                { id: 'tee_broken_mode', name: 'Certificate Safe Mode', activity: 'No certificate rewrite', scope: 'Keystore interception', desc: 'Keeps genuine KeyMint responses when certificate substitution is paused.' },
+                { id: 'auto_keybox_check', name: 'Automatic Keybox Check', activity: data.spoof_enabled && data.auto_keybox_check ? 'Scheduled background check' : 'Worker stopped', scope: 'Authorized key material', desc: 'Revalidates key material and revocation state at a bounded interval.' },
+                { id: 'random_on_boot', name: 'Identity Refresh on Boot', activity: 'Boot only', scope: 'Persisted identity fields', desc: 'Refreshes configured attestation and app-visible telephony identifiers.' },
+                { id: 'telephony', name: 'Telephony Interception', activity: 'Matching Binder calls only', scope: 'Permission-approved app APIs', desc: 'Overrides configured dual-SIM values without changing modem or carrier identity.' },
+                { id: 'rkp_passthrough', name: 'RKP Passthrough', activity: 'Generated-key fast path', scope: 'KeyMint generated-key replies', desc: 'RKP infrastructure UIDs are always protected; this also preserves generated-key responses.' },
+                { id: 'drm_passthrough', name: 'DRM App Passthrough', activity: 'Bounded UID lookup', scope: 'drm_packages.txt rules', desc: 'Leaves configured playback and DRM packages on the original keystore path.' },
+                { id: 'spoof_build_identity', name: 'Template Build Identity', activity: 'Boot only', scope: 'Fingerprint and Build fields', desc: 'Persists the selected template before Zygote; requires reboot.' },
+                { id: 'hide_sensitive_props', name: 'Boot-State Property View', activity: 'Boot only', scope: 'App-visible system properties', desc: 'Does not relock the bootloader or alter hardware attestation.' },
+                { id: 'keybox_storage', name: 'Keybox Storage', activity: 'Validated bounded cache', scope: data.keybox_count + ' active keyboxes', desc: 'Uses root-only storage and fails closed when revocation data is unavailable.' },
+                { id: 'app_rules', name: 'App Rules', activity: 'Cached package lookup', scope: data.app_config_size + ' B configuration', desc: 'Selects target-specific identity and keybox policy.' }
             ];
 
             features.forEach(f => {
@@ -3416,15 +3590,11 @@ class WebServer(
                     statusHtml = '<span style="color:#888;">Info Only</span>';
                 }
 
-                let secColor = f.sec === 'Critical' ? 'var(--danger)' : ((f.sec === 'High' || f.sec === 'Sensitive') ? 'orange' : (f.sec === 'Medium' ? '#FACC15' : 'var(--success)'));
-
-                // Single row layout for responsive design
                 tr.innerHTML =
                     '<td data-label="' + escapeHtml(t('col_feature', 'Feature')) + '"><div><div>' + escapeHtml(f.name) + '</div><div class="res-desc">' + escapeHtml(f.desc) + '</div></div></td>' +
                     '<td data-label="' + escapeHtml(t('col_status', 'Status')) + '">' + statusHtml + '</td>' +
-                    '<td data-label="' + escapeHtml(t('col_ram', 'Est. RAM')) + '" style="font-family:monospace;">' + escapeHtml(f.ram) + '</td>' +
-                    '<td data-label="' + escapeHtml(t('col_cpu', 'Est. CPU')) + '">' + escapeHtml(f.cpu) + '</td>' +
-                    '<td data-label="' + escapeHtml(t('col_security', 'Security Impact')) + '" style="color:' + secColor + '; font-weight:bold;">' + escapeHtml(f.sec) + '</td>';
+                    '<td data-label="' + escapeHtml(t('col_runtime', 'Runtime path')) + '">' + escapeHtml(f.activity) + '</td>' +
+                    '<td data-label="' + escapeHtml(t('col_scope', 'Scope')) + '">' + escapeHtml(f.scope) + '</td>';
 
                 tbody.appendChild(tr);
             });
@@ -3435,9 +3605,8 @@ class WebServer(
                 "resource_monitor_title": "Resource Monitor",
                 "col_feature": "Feature",
                 "col_status": "Status",
-                "col_ram": "Est. RAM",
-                "col_cpu": "Est. CPU",
-                "col_security": "Security Impact",
+                "col_runtime": "Runtime path",
+                "col_scope": "Scope",
                 "tab_dashboard": "Dashboard",
                 "tab_spoof": "Identity",
                 "tab_apps": "Apps",
@@ -3518,13 +3687,14 @@ class WebServer(
     </script>
 </body>
 </html>
-        """.trimIndent()
+            """.trimIndent()
     }
 
     companion object {
         private const val MAX_UPLOAD_SIZE = 10 * 1024 * 1024L
         private const val MAX_BODY_SIZE = 5 * 1024 * 1024L
         private const val MAX_CONFIG_FILE_SIZE = 1024 * 1024L
+        private const val MAX_IDENTITY_REQUEST_BYTES = 8 * 1024
         private const val MAX_LOG_BYTES = 2 * 1024 * 1024
         private const val RATE_LIMIT = 100
         private const val RATE_WINDOW = 60 * 1000L
@@ -3543,9 +3713,56 @@ class WebServer(
         private val SECURITY_PATCH_COMPONENTS = setOf("all", "system", "vendor", "boot")
         private val VALID_TEMPLATE_ID = Regex("[a-z0-9_-]{1,64}")
         private val CUSTOM_TEMPLATE_PROPERTIES =
-            setOf("BRAND", "DEVICE", "PRODUCT", "MANUFACTURER", "MODEL")
+            setOf(
+                "BRAND",
+                "DEVICE",
+                "PRODUCT",
+                "MANUFACTURER",
+                "MODEL",
+                "FINGERPRINT",
+                "RELEASE",
+                "BUILD_ID",
+                "INCREMENTAL",
+                "TYPE",
+                "TAGS",
+                "SECURITY_PATCH",
+            )
+        private val IDENTITY_FIELDS =
+            linkedMapOf(
+                "template" to "TEMPLATE",
+                "imei" to "ATTESTATION_ID_IMEI",
+                "imei2" to "ATTESTATION_ID_IMEI2",
+                "imsi" to "ATTESTATION_ID_IMSI",
+                "imsi2" to "ATTESTATION_ID_IMSI2",
+                "iccid" to "ATTESTATION_ID_ICCID",
+                "iccid2" to "ATTESTATION_ID_ICCID2",
+                "meid" to "ATTESTATION_ID_MEID",
+                "meid2" to "ATTESTATION_ID_MEID2",
+                "phone_number" to "ATTESTATION_ID_PHONE_NUMBER",
+                "phone_number2" to "ATTESTATION_ID_PHONE_NUMBER2",
+                "serial" to "ATTESTATION_ID_SERIAL",
+            )
+        private val BUILD_IDENTITY_VAR_KEYS =
+            linkedSetOf(
+                "BRAND",
+                "DEVICE",
+                "PRODUCT",
+                "MANUFACTURER",
+                "MODEL",
+                "FINGERPRINT",
+                "RELEASE",
+                "BUILD_ID",
+                "INCREMENTAL",
+                "TYPE",
+                "TAGS",
+                "SECURITY_PATCH",
+            )
+        private const val BUILD_IDENTITY_BLOCK_START = "# BEGIN CLEVERESTRICKY BUILD IDENTITY"
+        private const val BUILD_IDENTITY_BLOCK_END = "# END CLEVERESTRICKY BUILD IDENTITY"
         private val WEB_UI_SETTINGS =
             linkedSetOf(
+                "spoof_enabled",
+                "spoof_build_identity",
                 "global_mode",
                 "tee_broken_mode",
                 "auto_keybox_check",
@@ -3574,6 +3791,8 @@ class WebServer(
                 "app_config",
                 "templates.json",
                 "custom_templates",
+                "spoof_enabled",
+                "spoof_build_identity",
                 "global_mode",
                 "tee_broken_mode",
                 "auto_keybox_check",
@@ -3691,6 +3910,7 @@ class WebServer(
             filename: String,
             content: String,
         ): Boolean {
+            if (filename in WEB_UI_SETTINGS) return content.isEmpty()
             // Basic validation based on known file types
             if (filename == "target.txt") {
                 var ruleCount = 0
@@ -3899,8 +4119,10 @@ class WebServer(
                 if (Files.isDirectory(keyboxDir.toPath(), LinkOption.NOFOLLOW_LINKS)) {
                     val keyboxes =
                         keyboxDir.listFiles { file ->
-                            (file.name.endsWith(".xml", ignoreCase = true) ||
-                                file.name.endsWith(".cbox", ignoreCase = true)) &&
+                            (
+                                file.name.endsWith(".xml", ignoreCase = true) ||
+                                    file.name.endsWith(".cbox", ignoreCase = true)
+                            ) &&
                                 isValidKeyboxBackupPath("keyboxes/${file.name}") &&
                                 Files.isRegularFile(file.toPath(), LinkOption.NOFOLLOW_LINKS)
                         }?.sortedBy { it.name }.orEmpty()

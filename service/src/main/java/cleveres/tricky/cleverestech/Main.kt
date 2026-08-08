@@ -2,7 +2,6 @@ package cleveres.tricky.cleverestech
 
 import cleveres.tricky.cleverestech.util.KeyboxAutoCleaner
 import cleveres.tricky.cleverestech.util.SecureFile
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -85,75 +84,87 @@ fun main(args: Array<String>) {
 
         KeyboxAutoCleaner.start()
 
-        // === Interceptor Registration Loop ===
-        // Wrapping each launch in try-catch prevents an unexpected exception
-        // inside tryRunKeystoreInterceptor / tryRunTelephonyInterceptor from
-        // propagating to the parent runBlocking scope and crashing the daemon.
+        // Runtime controller. The master switch owns the complete interceptor
+        // lifecycle, including native registration teardown when it is paused.
+        var previousEngineState: Boolean? = null
+        var previousTelephonyState: Boolean? = null
         while (true) {
-            var ksSuccess = false
-            var telSuccess = false
-
-            // Launch concurrent polling for both interceptors to improve startup time
-            val ksJob =
-                launch(Dispatchers.IO) {
-                    try {
-                        ksSuccess = KeystoreInterceptor.tryRunKeystoreInterceptor()
-                    } catch (e: Exception) {
-                        Logger.e("Keystore interceptor threw unexpected exception", e)
+            val engineEnabled = Config.isSpoofEnabled
+            if (!engineEnabled) {
+                if (previousEngineState != false) {
+                    val telephonyStopped = TelephonyInterceptor.stopTelephonyInterceptor()
+                    val keystoreStopped = KeystoreInterceptor.stopKeystoreInterceptor()
+                    if (!telephonyStopped || !keystoreStopped) {
+                        Logger.w("One or more Binder registrations had already disappeared while pausing")
                     }
+                    Logger.i("Spoof Engine paused; Binder hooks are parked")
                 }
-            val telJob =
-                launch(Dispatchers.IO) {
-                    try {
-                        if (Config.isTelephonyEnabled) {
-                            telSuccess = TelephonyInterceptor.tryRunTelephonyInterceptor()
-                        } else {
-                            telSuccess = true // Bypass if disabled
-                        }
-                    } catch (e: Exception) {
-                        Logger.e("Telephony interceptor threw unexpected exception", e)
-                    }
-                }
-
-            ksJob.join()
-            telJob.join()
-
-            if (!ksSuccess) {
-                // Keystore is critical, so we loop until it's ready
+                previousEngineState = false
+                previousTelephonyState = Config.isTelephonyEnabled
                 try {
-                    delay(1000)
-                } catch (_: CancellationException) {
+                    Config.awaitRuntimeController(30_000)
+                } catch (_: InterruptedException) {
                     Thread.currentThread().interrupt()
-                    Logger.i("Main: Keystore wait interrupted, shutting down")
                     return@runBlocking
                 }
                 continue
             }
 
-            // Telephony is optional/advanced, but we should try to keep it alive
-            // Since injecting into com.android.phone might take time to start up
+            if (previousEngineState == false) {
+                Logger.i("Spoof Engine resumed; restoring configured Binder interceptors")
+            }
+            previousEngineState = true
+
+            var ksSuccess = KeystoreInterceptor.isRunning()
+            var telSuccess = !Config.isTelephonyEnabled || TelephonyInterceptor.isRunning()
+
+            val ksJob =
+                if (!ksSuccess) {
+                    launch(Dispatchers.IO) {
+                        try {
+                            ksSuccess = KeystoreInterceptor.tryRunKeystoreInterceptor()
+                        } catch (e: Exception) {
+                            Logger.e("Keystore interceptor threw unexpected exception", e)
+                        }
+                    }
+                } else {
+                    null
+                }
+            val telJob =
+                if (!telSuccess) {
+                    launch(Dispatchers.IO) {
+                        try {
+                            if (Config.isTelephonyEnabled) {
+                                telSuccess = TelephonyInterceptor.tryRunTelephonyInterceptor()
+                            }
+                        } catch (e: Exception) {
+                            Logger.e("Telephony interceptor threw unexpected exception", e)
+                        }
+                    }
+                } else {
+                    null
+                }
+
+            ksJob?.join()
+            telJob?.join()
+
+            val telephonyEnabled = Config.isTelephonyEnabled
+            if (!telephonyEnabled && previousTelephonyState != false) {
+                TelephonyInterceptor.stopTelephonyInterceptor()
+            }
+            previousTelephonyState = telephonyEnabled
+
+            if (!ksSuccess) Logger.d("Keystore interceptor is not ready; retry scheduled")
             if (!telSuccess) {
                 Logger.d("Telephony interceptor not ready yet")
             }
 
-            // Config.initialize() and BootLogic.run() were already called above.
-
-            while (true) {
-                try {
-                    if (Config.isTelephonyEnabled && !TelephonyInterceptor.tryRunTelephonyInterceptor()) {
-                        Logger.d("Retrying Telephony interceptor injection")
-                    }
-                } catch (e: Exception) {
-                    Logger.e("Telephony interceptor retry threw unexpected exception", e)
-                }
-
-                try {
-                    delay(10000)
-                } catch (_: CancellationException) {
-                    Thread.currentThread().interrupt()
-                    Logger.i("Main: Poll loop interrupted, shutting down")
-                    return@runBlocking
-                }
+            try {
+                Config.awaitRuntimeController(if (ksSuccess && telSuccess) 30_000 else 1_000)
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+                Logger.i("Main: Runtime controller interrupted, shutting down")
+                return@runBlocking
             }
         }
     }

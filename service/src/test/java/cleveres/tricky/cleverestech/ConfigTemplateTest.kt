@@ -6,14 +6,42 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
-import org.mockito.Mockito
 import java.io.File
+import java.util.concurrent.AbstractExecutorService
 import java.util.concurrent.ExecutorService
-import java.util.concurrent.Future
+import java.util.concurrent.TimeUnit
 
 class ConfigTemplateTest {
     private lateinit var originalImpl: SecureFileOperations
     private lateinit var originalExecutor: ExecutorService
+
+    private class DirectExecutorService : AbstractExecutorService() {
+        @Volatile
+        private var shutdown = false
+
+        override fun shutdown() {
+            shutdown = true
+        }
+
+        override fun shutdownNow(): MutableList<Runnable> {
+            shutdown = true
+            return mutableListOf()
+        }
+
+        override fun isShutdown() = shutdown
+
+        override fun isTerminated() = shutdown
+
+        override fun awaitTermination(
+            timeout: Long,
+            unit: TimeUnit,
+        ) = shutdown
+
+        override fun execute(command: Runnable) {
+            check(!shutdown) { "Executor is shut down" }
+            command.run()
+        }
+    }
 
     @Before
     fun setUp() {
@@ -21,23 +49,10 @@ class ConfigTemplateTest {
         originalImpl = SecureFile.impl
         SecureFile.impl = MockSecureFileOperations()
 
-        // Mock ExecutorService
-        val mockExecutor = Mockito.mock(ExecutorService::class.java)
-        Mockito.`when`(mockExecutor.submit(Mockito.any(Runnable::class.java))).thenAnswer { invocation ->
-            (invocation.arguments[0] as Runnable).run()
-            Mockito.mock(Future::class.java)
-        }
-        Mockito.`when`(mockExecutor.submit(Mockito.any(java.util.concurrent.Callable::class.java))).thenAnswer { invocation ->
-            (invocation.arguments[0] as java.util.concurrent.Callable<*>).call()
-            val f = Mockito.mock(Future::class.java)
-            Mockito.`when`(f.get()).thenReturn(null)
-            f
-        }
-
         val executorField = DeviceTemplateManager::class.java.getDeclaredField("executor")
         executorField.isAccessible = true
         originalExecutor = executorField.get(DeviceTemplateManager) as ExecutorService
-        DeviceTemplateManager.setExecutorForTesting(mockExecutor)
+        DeviceTemplateManager.setExecutorForTesting(DirectExecutorService())
 
         val tempDir = java.nio.file.Files.createTempDirectory("test_config_template").toFile()
         tempDir.deleteOnExit()
@@ -71,6 +86,12 @@ class ConfigTemplateTest {
         // Verify
         assertEquals("Pixel 7 Pro", Config.getBuildVar("MODEL"))
         assertEquals("google", Config.getBuildVar("BRAND"))
+        assertEquals(
+            "google/cheetah/cheetah:14/AP1A.240305.019.A1/11445699:user/release-keys",
+            Config.getBuildVar("FINGERPRINT"),
+        )
+        assertEquals("AP1A.240305.019.A1", Config.getBuildIdentity()["BUILD_ID"])
+        assertEquals("pixel7pro", Config.getIdentityOverrides().template)
     }
 
     @Test

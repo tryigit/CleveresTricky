@@ -31,9 +31,9 @@ class SecurityLevelInterceptor : BinderInterceptor() {
     ): Result =
         if (
             code == generateKeyTransaction &&
-                !Config.isRkpPassthroughEnabled &&
-                CertHack.canHack() &&
-                Config.needHack(callingUid)
+            !Config.isRkpPassthroughEnabled &&
+            CertHack.canHack() &&
+            Config.needHack(callingUid)
         ) {
             Continue
         } else {
@@ -52,11 +52,11 @@ class SecurityLevelInterceptor : BinderInterceptor() {
     ): Result {
         if (
             code != generateKeyTransaction ||
-                Config.isRkpPassthroughEnabled ||
-                reply == null ||
-                resultCode != 0 ||
-                !CertHack.canHack() ||
-                !Config.needHack(callingUid)
+            Config.isRkpPassthroughEnabled ||
+            reply == null ||
+            resultCode != 0 ||
+            !CertHack.canHack() ||
+            !Config.needHack(callingUid)
         ) {
             return Skip
         }
@@ -83,14 +83,10 @@ class SecurityLevelInterceptor : BinderInterceptor() {
             Utils.putCertificateChain(metadata, rewritten)
             replacement.writeNoException()
             replacement.writeTypedObject(metadata, 0)
-            Logger.d { "Rewrote generated attestation chain for uid=$callingUid" }
             OverrideReply(0, replacement)
         } catch (error: Throwable) {
             replacement.recycle()
-            Logger.e(
-                "Could not rewrite generated attestation chain for uid=$callingUid: " +
-                    error.javaClass.simpleName,
-            )
+            Logger.e("Could not rewrite a generated attestation chain: ${error.javaClass.simpleName}")
             Skip
         }
     }

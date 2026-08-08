@@ -987,6 +987,9 @@ static constexpr uint32_t kControlEndpointTransactionCode = 0xdeadbeefU;
 // =============================================================================
 
 sp<BinderInterceptor> gBinderInterceptor = nullptr;
+static std::atomic_bool gHookPaused{false};
+static std::atomic_bool gHooksInitialized{false};
+static std::mutex gHookInitializationMutex;
 
 struct thread_transaction_info {
   uint32_t code;
@@ -1102,6 +1105,12 @@ int new_ioctl(int fd, unsigned long request, ...) {
           : static_cast<int>(syscall(SYS_ioctl, fd, request, arg));
 
   if (result >= 0 && request == BINDER_WRITE_READ) {
+    // Runtime-off fast path. The original ioctl has already completed, so a
+    // parked hook adds only one atomic read and never touches Binder buffers.
+    if (gHookPaused.load(std::memory_order_acquire)) {
+      return result;
+    }
+
     // Safety: ensure arg is not null before any access
     if (arg == nullptr) {
       return result;
@@ -1282,7 +1291,11 @@ status_t BinderInterceptor::onTransact(uint32_t code,
       replaced_interceptor->transact(INTERCEPTOR_REPLACED, notification,
                                      nullptr, IBinder::FLAG_ONEWAY);
     }
-    return reply->writeInt32(0);
+    const status_t status = reply->writeInt32(0);
+    if (status == OK) {
+      gHookPaused.store(false, std::memory_order_release);
+    }
+    return status;
   } else if (code == UNREGISTER_INTERCEPTOR) {
     if (reply == nullptr) return BAD_VALUE;
     sp<IBinder> target, interceptor;
@@ -1299,6 +1312,7 @@ status_t BinderInterceptor::onTransact(uint32_t code,
       return BAD_VALUE;
     }
     if (data.dataAvail() != 0) return BAD_VALUE;
+    size_t remaining = 0;
     {
       WriteGuard wg{lock};
       wp<IBinder> t = target;
@@ -1308,10 +1322,27 @@ status_t BinderInterceptor::onTransact(uint32_t code,
           return BAD_VALUE;
         }
         items.erase(it);
-        return reply->writeInt32(0);
+        remaining = items.size();
+      } else {
+        return BAD_VALUE;
       }
-      return BAD_VALUE;
     }
+    const status_t status = reply->writeInt32(0);
+    if (status == OK && remaining == 0) {
+      gHookPaused.store(true, std::memory_order_release);
+    }
+    return status;
+  } else if (code == PARK_HOOK) {
+    if (reply == nullptr || data.dataAvail() != 0) return BAD_VALUE;
+    {
+      ReadGuard rg{lock};
+      if (!items.empty()) return INVALID_OPERATION;
+    }
+    const status_t status = reply->writeInt32(0);
+    if (status == OK) {
+      gHookPaused.store(true, std::memory_order_release);
+    }
+    return status;
   }
   return UNKNOWN_TRANSACTION;
 }
@@ -1469,6 +1500,12 @@ bool BinderInterceptor::handleIntercept(sp<BBinder> target, uint32_t code,
 // =============================================================================
 
 bool initialize_hooks() {
+  const std::lock_guard<std::mutex> initialization_guard{
+      gHookInitializationMutex};
+  if (gHooksInitialized.load(std::memory_order_acquire)) {
+    gHookPaused.store(false, std::memory_order_release);
+    return true;
+  }
   if (!g_adaptive.initialize()) {
     LOGE("Binder ABI validation failed; refusing to install hooks");
     return false;
@@ -1511,6 +1548,8 @@ bool initialize_hooks() {
     LOGE("libbinder ioctl hook has no original function");
     return false;
   }
+  gHooksInitialized.store(true, std::memory_order_release);
+  gHookPaused.store(false, std::memory_order_release);
   LOGI("libbinder ioctl hook installed successfully");
   return true;
 }
@@ -1518,5 +1557,11 @@ bool initialize_hooks() {
 extern "C" [[gnu::visibility("default")]] [[gnu::used]] bool
 entry(void *handle) {
   LOGI("injected, my handle %p", handle);
+  return initialize_hooks();
+}
+
+extern "C" [[gnu::visibility("default")]] [[gnu::used]] bool
+resume(void *handle) {
+  LOGI("resuming parked Binder hook, my handle %p", handle);
   return initialize_hooks();
 }

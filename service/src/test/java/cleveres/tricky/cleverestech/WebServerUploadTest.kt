@@ -127,6 +127,7 @@ class WebServerUploadTest {
     ): Int {
         val boundary = "CleveresTrickyUploadBoundary"
         val output = ByteArrayOutputStream()
+
         fun write(value: String) = output.write(value.toByteArray(StandardCharsets.UTF_8))
 
         write("--$boundary\r\n")

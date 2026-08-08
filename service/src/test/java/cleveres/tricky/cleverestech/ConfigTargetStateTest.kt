@@ -22,6 +22,7 @@ class ConfigTargetStateTest {
     private fun resetConfig() {
         setPrivateField(Config, "isTeeBrokenMode", false)
         setPrivateField(Config, "isGlobalMode", false)
+        setPrivateField(Config, "isSpoofEnabled", true)
         Config.clockSource = { System.currentTimeMillis() }
 
         val packageCache =
@@ -47,26 +48,27 @@ class ConfigTargetStateTest {
         val targetState = createTargetState(hackTrie)
         setPrivateField(Config, "targetState", targetState)
 
-        mockPackage(1001, arrayOf("com.hack.me"))
+        val uid = 10_001
+        mockPackage(uid, arrayOf("com.hack.me"))
 
-        assertTrue("needHack should return true for com.hack.me", Config.needHack(1001))
+        assertTrue("needHack should return true for com.hack.me", Config.needHack(uid))
 
         val hackCache =
             getFieldFromTargetState(targetState, "hackCache") as
                 @Suppress("UNCHECKED_CAST")
                 ConcurrentHashMap<Int, Any>
-        assertTrue("Cache should contain entry for 1001", hackCache.containsKey(1001))
+        assertTrue("Cache should contain entry for the app UID", hackCache.containsKey(uid))
 
         val packageCache =
             getPrivateField(Config, "packageCache") as
                 @Suppress("UNCHECKED_CAST")
                 ConcurrentHashMap<Int, Any>
-        packageCache.remove(1001)
+        packageCache.remove(uid)
 
-        assertTrue("needHack should return cached true even if package info is gone", Config.needHack(1001))
+        assertTrue("needHack should return cached true even if package info is gone", Config.needHack(uid))
 
         now += 61_000
-        assertFalse("Expired UID decisions must be recalculated", Config.needHack(1001))
+        assertFalse("Expired UID decisions must be recalculated", Config.needHack(uid))
     }
 
     private fun createTargetState(hack: PackageTrie<Boolean>): Any {

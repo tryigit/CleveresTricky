@@ -1,14 +1,16 @@
 package cleveres.tricky.cleverestech.util
 
+import cleveres.tricky.cleverestech.Config
 import cleveres.tricky.cleverestech.Logger
 import cleveres.tricky.cleverestech.WEB_UI_LOOPBACK_HOST
 import java.io.File
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
+import java.nio.file.LinkOption
 import java.nio.file.StandardCopyOption
 import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
 
 object KeyboxAutoCleaner {
     private fun isTokenValid(token: String): Boolean {
@@ -22,27 +24,55 @@ object KeyboxAutoCleaner {
         return true
     }
 
-    private val executor = Executors.newSingleThreadScheduledExecutor()
+    private val executorLock = Any()
+
+    @Volatile
+    private var executor: ScheduledExecutorService? = null
     private val configDir = File("/data/adb/cleverestricky")
     private val keyboxDir = File(configDir, "keyboxes")
     private val revokedDir = File(keyboxDir, "revoked")
     private val toggleFile = File(configDir, "auto_keybox_check")
     private val webPortFile = File(configDir, "web_port")
-    private val started = AtomicBoolean(false)
 
     fun start() {
-        if (!started.compareAndSet(false, true)) return
-        executor.scheduleWithFixedDelay({
-            try {
-                runCheck()
-            } catch (error: Throwable) {
-                Logger.e("AutoCleaner: Scheduled check failed", error)
+        setEnabled(Config.isSpoofEnabled && isRegularFile(toggleFile))
+    }
+
+    fun setEnabled(enabled: Boolean) {
+        synchronized(executorLock) {
+            val current = executor
+            if (!enabled) {
+                current?.shutdownNow()
+                executor = null
+                return
             }
-        }, 1, 1440, TimeUnit.MINUTES) // Run 1 min after start, then every 24 hours
+            if (current != null && !current.isShutdown) return
+
+            val created =
+                Executors.newSingleThreadScheduledExecutor { runnable ->
+                    Thread(runnable, "CleveresTricky-KeyboxCheck").apply {
+                        isDaemon = true
+                        priority = Thread.MIN_PRIORITY
+                    }
+                }
+            created.scheduleWithFixedDelay(
+                {
+                    try {
+                        runCheck()
+                    } catch (error: Throwable) {
+                        Logger.e("AutoCleaner: Scheduled check failed", error)
+                    }
+                },
+                1,
+                1440,
+                TimeUnit.MINUTES,
+            )
+            executor = created
+        }
     }
 
     private fun runCheck() {
-        if (!toggleFile.exists()) return
+        if (!isRegularFile(toggleFile)) return
 
         Logger.i("AutoCleaner: Starting daily revocation check...")
         val results = KeyboxVerifier.verify(configDir)
@@ -133,6 +163,7 @@ object KeyboxAutoCleaner {
      */
     private fun readWebUiUrl(): String? {
         return try {
+            if (!isRegularFile(webPortFile) || webPortFile.length() !in 1..256) return null
             val raw = webPortFile.readText().trim()
             val pipeIdx = raw.indexOf('|')
             val portStr = if (pipeIdx != -1) raw.substring(0, pipeIdx) else raw
@@ -149,4 +180,6 @@ object KeyboxAutoCleaner {
             null
         }
     }
+
+    private fun isRegularFile(file: File): Boolean = Files.isRegularFile(file.toPath(), LinkOption.NOFOLLOW_LINKS)
 }

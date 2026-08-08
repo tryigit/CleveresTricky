@@ -2,20 +2,23 @@
 
 [![Build](https://github.com/tryigit/CleveresTricky/actions/workflows/build.yml/badge.svg)](https://github.com/tryigit/CleveresTricky/actions/workflows/build.yml)
 
-CleveresTricky is a KernelSU/APatch module for Android keystore and attestation compatibility. It provides app-scoped certificate handling, keybox management, patch-level controls, boot-property compatibility, and an on-device WebUI.
+CleveresTricky is a KernelSU/APatch module for Android keystore and attestation compatibility. Its mobile WebUI puts the main switch, app scope, identity, patch-level, RKP, DRM, and keybox controls in one place.
 
 ## Features
 
 | Feature | What it gives you |
 |---|---|
+| One master Spoof Engine switch | Start or park every Binder spoof path from the dashboard. A boot-disabled engine performs no native injection. |
 | Targeted attestation handling | Apply certificate-chain substitution only to the apps you choose, or enable global mode when needed. |
 | TEE and StrongBox support | Works with genuine Android KeyMint key creation and later cryptographic operations. |
 | Multi-keybox manager | Load, verify, select, rotate, and monitor EC/RSA keyboxes from the WebUI. |
 | Encrypted CBOX storage | Protect keybox files with AES-256-GCM containers and encrypted local caches. |
 | Complete patch-level control | Configure OS, vendor, and boot patch levels globally or per app with live reload. |
-| Boot-property compatibility | Optional, bounded property adjustments for common unlocked/debug build indicators. |
-| PIF-friendly coexistence | Keeps process-scoped fingerprint configuration separate instead of overwriting another module's working setup. |
-| RKP passthrough | Keep generated-key responses on Android's genuine Remote Key Provisioning path when enabled. |
+| App-scoped identity manager | Manage dual-SIM IMEI, MEID, IMSI, ICCID, phone-number, and device-serial overrides from the WebUI. |
+| Template fingerprint and Build identity | Persist a selected template and optionally expose its fingerprint and app-visible `android.os.Build` fields from early boot. |
+| Boot-state property compatibility | Apply a bounded early-boot property view for common unlocked/debug indicators, with automatic conflict checks. |
+| PIF-friendly coexistence | Automatic mode detects overlapping build-identity providers and leaves their fingerprint setup untouched. |
+| RKP protection | Keep RKP service infrastructure outside substitution scope and optionally preserve generated-key responses end to end. |
 | DRM app passthrough | Keep selected streaming/DRM apps on the genuine keystore certificate path. |
 | Secure WebUI | Manage targets, keyboxes, profiles, logs, encrypted backups, and compatibility switches from the module Action button. |
 | Hardened installer | Verifies every packaged payload, blocks unsupported installation paths, and keeps configuration root-only. |
@@ -27,7 +30,7 @@ CleveresTricky is a KernelSU/APatch module for Android keystore and attestation 
 3. Select the ZIP and reboot.
 4. Press CleveresTricky's **Action** button to open the WebUI.
 5. Add an authorized keybox, select target apps, and choose a profile.
-6. Check the dashboard and logs before enabling extra compatibility options.
+6. Leave **Spoof Engine** on, then enable only the optional identity and boot controls you need.
 
 No usable keybox or private attestation key is bundled. Only use key material you own or are authorized to test.
 
@@ -60,20 +63,28 @@ The Action button opens a token-authenticated WebUI on the device loopback inter
 
 The main controls are:
 
+- **Spoof Engine:** master control for attestation, telephony, build identity, and boot-property spoofing. Turning it off unregisters Binder interceptors, parks injected native hooks, and stops the scheduled keybox worker. Rebooting with it off avoids injection and clears boot-time property views.
 - **Global Mode:** targets every calling UID instead of only `target.txt` entries.
 - **Disable Certificate Substitution:** immediate safe mode without uninstalling the module.
 - **Auto Keybox Check:** periodically checks loaded keyboxes and revocation state.
 - **Refresh Identity on Boot:** refreshes supported attestation/telephony identifiers.
-- **Telephony Identifier Interception:** optional targeted telephony handling; reboot recommended after changing it.
+- **Telephony Identifier Interception:** changes supported values returned to selected apps only after Android permits the original API call. The hook can start and stop at runtime; an app may need to be restarted if it cached an earlier value.
+- **Template Build Identity:** applies the selected template fingerprint and app-visible Build fields before Zygote on the next boot.
 - **Hide Sensitive Props:** applies the boot-property compatibility set on the next boot.
-- **RKP Passthrough:** leaves generated-key replies untouched while the normal existing-key path remains available.
+- **RKP Passthrough:** leaves generated-key replies untouched while the normal existing-key path remains available. Android and Google RKP service packages stay protected from substitution in every mode.
 - **DRM App Passthrough:** excludes packages in `drm_packages.txt` from certificate substitution.
 
 RKP and DRM passthrough are enabled on a fresh install. They are compatibility safeguards, not simulated RKP or DRM implementations.
 
+Telephony overrides are app-facing. They do not write EFS/NV storage, change the modem or baseband, alter the physical SIM, or change the identity seen by a mobile network operator. If Android returns `null` or denies an identifier request, CleveresTricky preserves that result.
+
+Android 8 and newer derive Android ID as a per-app, per-user SSAID inside SettingsProvider, so CleveresTricky does not offer a misleading global Android ID switch. The real kernel version reported by `uname` is also unchanged. `security_patch.txt` controls the genuine certificate fields for system, vendor, and boot/kernel patch levels.
+
+Hide Sensitive Props changes the userspace property view used by apps. It does not relock the physical bootloader, repair verified boot, rewrite vbmeta, or change the TEE root of trust.
+
 `boot_props_mode` controls the property layer: `auto` skips known overlapping/vendor-sensitive setups, `force` applies it whenever Hide Sensitive Props is enabled, and `disable` turns it off without deleting the toggle.
 
-If you also use a process-scoped PIF/Zygisk module, let that module own its fingerprint file. CleveresTricky does not download public fingerprints or overwrite external PIF configuration; its attestation identity, patch-level, keybox, and boot-property layers continue to work independently.
+If another PIF-style module already owns the build fingerprint, keep `boot_props_mode=auto`. CleveresTricky detects common overlapping identity providers and skips its template Build properties while its attestation, patch-level, keybox, RKP, DRM, and targeted identity layers continue to work.
 
 ## Configuration
 
@@ -140,10 +151,24 @@ MODEL=Pixel 8 Pro
 BRAND=google
 PRODUCT=husky
 DEVICE=husky
+FINGERPRINT=google/husky/husky:14/AP1A.240405.002/11480754:user/release-keys
+RELEASE=14
+BUILD_ID=AP1A.240405.002
+INCREMENTAL=11480754
+TYPE=user
+TAGS=release-keys
 ATTESTATION_ID_SERIAL=ABC123XYZ789
+ATTESTATION_ID_IMEI=356938035643809
+ATTESTATION_ID_IMEI2=356938035643817
+ATTESTATION_ID_IMSI=310260123456789
+ATTESTATION_ID_ICCID=89014103211118510720
+ATTESTATION_ID_MEID=A100000927F4E1
+ATTESTATION_ID_PHONE_NUMBER=+12025550123
 ```
 
-Bootloader-related userspace properties are controlled by **Hide Sensitive Props**, not by placing arbitrary `ro.*` lines in this file. The file accepts only fields supported by the module.
+The WebUI writes the complete selected template to this file so the fingerprint is available during early boot. Enable **Template Build Identity** and reboot to apply it. Bootloader-related userspace properties are controlled by **Hide Sensitive Props**, not by placing arbitrary `ro.*` lines in this file. The file accepts only fields supported by the module.
+
+The Identity tab is the recommended way to edit these values. It validates checksums and lengths, supports separate SIM 2 values, preserves unrelated settings, and applies each update atomically.
 
 ### DRM passthrough packages
 
@@ -190,6 +215,7 @@ Common checks:
 
 - **No keybox active:** open Keyboxes, run verification, and check network access to the revocation list.
 - **An app behaves differently after property changes:** disable Hide Sensitive Props and reboot.
+- **Fingerprint did not change:** apply a template, enable Template Build Identity, verify `boot_props_mode` is not `disable`, and reboot. Automatic mode intentionally defers to another detected identity provider.
 - **Key generation or provisioning regressed:** enable RKP Passthrough.
 - **Native endpoint unavailable:** disable other ptrace/injection modules and inspect SELinux logs.
 - **Tamper warning:** reinstall the complete ZIP; a payload or checksum is missing or changed.

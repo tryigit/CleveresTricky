@@ -6,8 +6,12 @@ import org.json.JSONObject
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.LinkOption
-import java.util.concurrent.Executors
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.Future
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.ThreadFactory
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
 data class DeviceTemplate(
@@ -32,6 +36,13 @@ data class DeviceTemplate(
             "BRAND" to brand,
             "PRODUCT" to product,
             "DEVICE" to device,
+            "FINGERPRINT" to fingerprint,
+            "RELEASE" to release,
+            "BUILD_ID" to buildId,
+            "INCREMENTAL" to incremental,
+            "TYPE" to type,
+            "TAGS" to tags,
+            "SECURITY_PATCH" to securityPatch,
         )
     }
 }
@@ -45,12 +56,25 @@ object DeviceTemplateManager {
     private var templates: MutableMap<String, DeviceTemplate> = mutableMapOf()
     private var cachedList: List<DeviceTemplate>? = null
 
-    private var executor = Executors.newSingleThreadExecutor()
+    private var executor: ExecutorService =
+        ThreadPoolExecutor(
+            1,
+            1,
+            30,
+            TimeUnit.SECONDS,
+            LinkedBlockingQueue<Runnable>(),
+            ThreadFactory { runnable ->
+                Thread(runnable, "CleveresTricky-Templates").apply {
+                    isDaemon = true
+                    priority = Thread.MIN_PRIORITY
+                }
+            },
+        ).apply { allowCoreThreadTimeOut(true) }
     private var initFuture: Future<*>? = null
     private val initializationGeneration = AtomicLong()
 
     @androidx.annotation.VisibleForTesting
-    fun setExecutorForTesting(newExecutor: java.util.concurrent.ExecutorService) {
+    fun setExecutorForTesting(newExecutor: ExecutorService) {
         executor = newExecutor
     }
 

@@ -251,7 +251,8 @@ public:
 private:
     enum {
         REGISTER_INTERCEPTOR = 1,
-        UNREGISTER_INTERCEPTOR = 2
+        UNREGISTER_INTERCEPTOR = 2,
+        PARK_HOOK = 3
     };
     enum {
         PRE_TRANSACT = 1,

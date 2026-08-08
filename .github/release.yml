@@ -1,0 +1,7 @@
+changelog:
+  exclude:
+    authors:
+      - "dependabot[bot]"
+    labels:
+      - dependencies
+      - skip-release-notes

@@ -21,6 +21,8 @@ open class BinderInterceptor : Binder() {
         private const val POST_TRANSACT = 2
         private const val INTERCEPTOR_REPLACED = 3
         private const val REGISTER_INTERCEPTOR = 1
+        private const val UNREGISTER_INTERCEPTOR = 2
+        private const val PARK_HOOK = 3
         private const val CONTROL_ENDPOINT_TRANSACTION = 0xdeadbeef.toInt()
         private const val MAX_FILTERED_CODES = 1024
         private const val MAX_INTERCEPT_PARCEL_BYTES = 8L * 1024 * 1024
@@ -68,6 +70,44 @@ open class BinderInterceptor : Binder() {
                 handled && status == 0
             } catch (error: Throwable) {
                 Logger.e("Failed to register Binder interceptor", error)
+                false
+            } finally {
+                data.recycle()
+                reply.recycle()
+            }
+        }
+
+        fun unregisterBinderInterceptor(
+            controlEndpoint: IBinder,
+            target: IBinder,
+            interceptor: BinderInterceptor,
+        ): Boolean {
+            val data = Parcel.obtain()
+            val reply = Parcel.obtain()
+            return try {
+                data.writeStrongBinder(target)
+                data.writeStrongBinder(interceptor)
+                val handled = controlEndpoint.transact(UNREGISTER_INTERCEPTOR, data, reply, 0)
+                val status = if (reply.dataAvail() >= Int.SIZE_BYTES) reply.readInt() else -1
+                handled && status == 0
+            } catch (error: Throwable) {
+                Logger.e("Failed to unregister Binder interceptor", error)
+                false
+            } finally {
+                data.recycle()
+                reply.recycle()
+            }
+        }
+
+        fun parkBinderHook(controlEndpoint: IBinder): Boolean {
+            val data = Parcel.obtain()
+            val reply = Parcel.obtain()
+            return try {
+                val handled = controlEndpoint.transact(PARK_HOOK, data, reply, 0)
+                val status = if (reply.dataAvail() >= Int.SIZE_BYTES) reply.readInt() else -1
+                handled && status == 0
+            } catch (error: Throwable) {
+                Logger.e("Failed to park an idle Binder hook", error)
                 false
             } finally {
                 data.recycle()

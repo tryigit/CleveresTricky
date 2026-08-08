@@ -85,11 +85,21 @@ class WebServerHtmlTest {
         assertTrue("Missing Identifier Header", html.contains("<h3>Attestation and Telephony Identifiers</h3>"))
         assertTrue("Missing IMEI Input", html.contains("id=\"inputImei\""))
         assertTrue("Missing IMEI Label", html.contains("<label for=\"inputImei\""))
+        assertTrue("Missing IMEI 2 Label", html.contains("<label for=\"inputImei2\""))
+        assertTrue("Missing MEID Label", html.contains("<label for=\"inputMeid\""))
+        assertTrue("Missing MEID 2 Label", html.contains("<label for=\"inputMeid2\""))
         assertTrue("Missing IMSI Label", html.contains("<label for=\"inputImsi\""))
+        assertTrue("Missing IMSI 2 Label", html.contains("<label for=\"inputImsi2\""))
         assertTrue("Missing ICCID Label", html.contains("<label for=\"inputIccid\""))
+        assertTrue("Missing ICCID 2 Label", html.contains("<label for=\"inputIccid2\""))
+        assertTrue("Missing phone number Label", html.contains("<label for=\"inputPhoneNumber\""))
+        assertTrue("Missing phone number 2 Label", html.contains("<label for=\"inputPhoneNumber2\""))
         assertTrue("Missing Serial Label", html.contains("<label for=\"inputSerial\""))
+        assertTrue("Missing app-facing scope notice", html.contains("id=\"identityScope\""))
         assertTrue("Missing Generate Random Button", html.contains("generateRandomIdentity"))
         assertTrue("Missing Telephony Toggle", html.contains("id=\"telephony\""))
+        assertTrue("Missing master Spoof Engine Toggle", html.contains("id=\"spoof_enabled\""))
+        assertTrue("Missing build identity Toggle", html.contains("id=\"spoof_build_identity\""))
 
         // Verify Apps Logic
         assertTrue("Missing App Package Input", html.contains("id=\"appPkg\""))
@@ -140,22 +150,23 @@ class WebServerHtmlTest {
         // Verify Numeric Inputs
         assertTrue(
             "IMEI missing inputmode=numeric",
-            html.contains("id=\"inputImei\" placeholder=\"35...\" style=\"font-family:monospace;\" inputmode=\"numeric\""),
+            html.contains("id=\"inputImei\" placeholder=\"35...\" maxlength=\"15\"") &&
+                html.contains("inputmode=\"numeric\" enterkeyhint=\"next\""),
         )
         assertTrue(
             "IMSI missing inputmode=numeric",
-            html.contains("id=\"inputImsi\" placeholder=\"310...\" style=\"font-family:monospace;\" inputmode=\"numeric\""),
+            html.contains("id=\"inputImsi\" placeholder=\"Subscriber identity\" maxlength=\"16\""),
         )
         assertTrue(
             "ICCID missing inputmode=numeric",
-            html.contains("id=\"inputIccid\" placeholder=\"89...\" style=\"font-family:monospace;\" inputmode=\"numeric\""),
+            html.contains("id=\"inputIccid\" placeholder=\"SIM card identity\" maxlength=\"22\""),
         )
 
         // Verify Autocapitalize Inputs
         assertTrue(
             "Serial missing autocapitalize=characters",
             html.contains(
-                "id=\"inputSerial\" placeholder=\"Alphanumeric...\" style=\"font-family:monospace;\" autocapitalize=\"characters\"",
+                "id=\"inputSerial\" placeholder=\"Device serial\" maxlength=\"64\" style=\"font-family:monospace;\" enterkeyhint=\"done\" autocapitalize=\"characters\"",
             ),
         )
 
@@ -174,7 +185,7 @@ class WebServerHtmlTest {
         )
 
         // Verify Keybox Filename Label and File Picker Accessibility
-        assertTrue("Keybox Filename missing label", html.contains("<label for=\"kbFilename\""))
+        assertTrue("Keybox Filename missing label", html.contains("<label for=\"kbFilePicker\""))
         assertTrue(
             "Keybox File Picker missing aria-label",
             html.contains(

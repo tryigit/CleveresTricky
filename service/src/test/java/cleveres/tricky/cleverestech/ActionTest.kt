@@ -128,6 +128,7 @@ class ActionTest {
     fun tearDown() {
         server.stop()
         CertHack.readFromXml(null)
+        Config.reset()
         Config.setRootForTesting(originalConfigRoot)
         SecureFile.impl = originalSecureFileImpl
     }
@@ -283,6 +284,8 @@ class ActionTest {
     fun testUserCanToggleFeaturesOffAndOnAndConfigReflectsState() {
         val settings =
             listOf(
+                "spoof_enabled",
+                "spoof_build_identity",
                 "global_mode",
                 "tee_broken_mode",
                 "auto_keybox_check",

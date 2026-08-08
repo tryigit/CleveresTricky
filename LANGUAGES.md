@@ -35,9 +35,8 @@ The module will automatically load this file if it exists.
   "resource_monitor_title": "Resource Monitor",
   "col_feature": "Feature",
   "col_status": "Status",
-  "col_ram": "Est. RAM",
-  "col_cpu": "Est. CPU",
-  "col_security": "Security Impact",
+  "col_runtime": "Runtime path",
+  "col_scope": "Scope",
   "col_desc": "Description"
 }
 ```

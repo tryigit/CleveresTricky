@@ -128,6 +128,8 @@ class WebServerUXTest {
         val html = fetchHtml()
         val settings =
             listOf(
+                "spoof_enabled",
+                "spoof_build_identity",
                 "global_mode",
                 "tee_broken_mode",
                 "auto_keybox_check",
@@ -182,6 +184,7 @@ class WebServerUXTest {
                 "/api/server/delete",
                 "/api/server/refresh",
                 "/api/templates",
+                "/api/identity",
                 "/api/random_identity",
                 "/api/packages",
                 "/api/app_config_structured",

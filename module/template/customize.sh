@@ -111,11 +111,25 @@ chmod 700 "$CONFIG_DIR"
 chown 0:0 "$CONFIG_DIR"
 
 for config_file in spoof_build_vars security_patch.txt target.txt drm_packages.txt boot_props_mode \
-  auto_keybox_check rkp_passthrough drm_passthrough hide_sensitive_props; do
+  spoof_enabled spoof_switch_initialized spoof_build_identity global_mode tee_broken_mode \
+  auto_keybox_check random_on_boot rkp_passthrough drm_passthrough hide_sensitive_props \
+  spoof_region_cn telephony; do
   if [ -L "$CONFIG_DIR/$config_file" ]; then
     abort "! Refusing symlinked configuration file: $config_file"
   fi
 done
+
+# Migrate existing installations once without re-enabling a switch the user
+# intentionally disabled on a later update.
+if [ ! -e "$CONFIG_DIR/spoof_switch_initialized" ]; then
+  ui_print "- Enabling the master Spoof Engine switch"
+  [ -e "$CONFIG_DIR/spoof_enabled" ] || : > "$CONFIG_DIR/spoof_enabled" \
+    || abort "! Could not enable the Spoof Engine"
+  : > "$CONFIG_DIR/spoof_switch_initialized" \
+    || abort "! Could not write the Spoof Engine migration marker"
+fi
+chmod 600 "$CONFIG_DIR/spoof_switch_initialized"
+[ -e "$CONFIG_DIR/spoof_enabled" ] && chmod 600 "$CONFIG_DIR/spoof_enabled"
 
 if [ ! -f "$CONFIG_DIR/spoof_build_vars" ]; then
   ui_print "- Adding default spoof_build_vars"
@@ -159,12 +173,12 @@ if [ ! -f "$CONFIG_DIR/boot_props_mode" ]; then
 fi
 [ -f "$CONFIG_DIR/boot_props_mode" ] && chmod 600 "$CONFIG_DIR/boot_props_mode"
 
-if [ ! -e "$CONFIG_DIR/auto_keybox_check" ]; then
+if [ "$INSTALL_COMPAT_DEFAULTS" = true ] && [ ! -e "$CONFIG_DIR/auto_keybox_check" ]; then
   ui_print "- Enabling daily keybox revocation checks"
   : > "$CONFIG_DIR/auto_keybox_check" \
     || abort "! Could not enable keybox revocation checks"
 fi
-chmod 600 "$CONFIG_DIR/auto_keybox_check"
+[ -e "$CONFIG_DIR/auto_keybox_check" ] && chmod 600 "$CONFIG_DIR/auto_keybox_check"
 for default_flag in rkp_passthrough drm_passthrough hide_sensitive_props; do
   if [ "$INSTALL_COMPAT_DEFAULTS" = true ] && [ ! -e "$CONFIG_DIR/$default_flag" ]; then
     ui_print "- Enabling $default_flag"
@@ -175,7 +189,10 @@ for default_flag in rkp_passthrough drm_passthrough hide_sensitive_props; do
 done
 chown 0:0 "$CONFIG_DIR/spoof_build_vars" "$CONFIG_DIR/security_patch.txt" \
   "$CONFIG_DIR/target.txt" "$CONFIG_DIR/drm_packages.txt" \
-  "$CONFIG_DIR/boot_props_mode" "$CONFIG_DIR/auto_keybox_check"
+  "$CONFIG_DIR/boot_props_mode" "$CONFIG_DIR/spoof_switch_initialized"
+[ -e "$CONFIG_DIR/auto_keybox_check" ] && chown 0:0 "$CONFIG_DIR/auto_keybox_check"
+[ -e "$CONFIG_DIR/spoof_enabled" ] && chown 0:0 "$CONFIG_DIR/spoof_enabled"
+[ -e "$CONFIG_DIR/spoof_build_identity" ] && chown 0:0 "$CONFIG_DIR/spoof_build_identity"
 [ -e "$CONFIG_DIR/rkp_passthrough" ] && chown 0:0 "$CONFIG_DIR/rkp_passthrough"
 [ -e "$CONFIG_DIR/drm_passthrough" ] && chown 0:0 "$CONFIG_DIR/drm_passthrough"
 [ -e "$CONFIG_DIR/hide_sensitive_props" ] && chown 0:0 "$CONFIG_DIR/hide_sensitive_props"

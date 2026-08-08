@@ -4,6 +4,8 @@ updates:
     directory: "/"
     schedule:
       interval: "daily"
+    labels:
+      - "dependencies"
     open-pull-requests-limit: 10
     allow:
       - dependency-type: "direct"
@@ -12,7 +14,11 @@ updates:
     directory: "/"
     schedule:
       interval: "daily"
+    labels:
+      - "dependencies"
   - package-ecosystem: "cargo"
     directory: "/rust"
     schedule:
       interval: "daily"
+    labels:
+      - "dependencies"

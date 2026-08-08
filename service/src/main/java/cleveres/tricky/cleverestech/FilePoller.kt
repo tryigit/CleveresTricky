@@ -2,6 +2,8 @@ package cleveres.tricky.cleverestech
 
 import android.os.FileObserver
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.LinkOption
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
@@ -25,9 +27,10 @@ class FilePoller(
 
     companion object {
         private val scheduler =
-            Executors.newScheduledThreadPool(2) { runnable ->
+            Executors.newSingleThreadScheduledExecutor { runnable ->
                 Thread(runnable, "FilePoller-Scheduler").apply {
                     isDaemon = true
+                    priority = Thread.MIN_PRIORITY
                 }
             }
     }
@@ -111,7 +114,7 @@ class FilePoller(
     }
 
     private fun snapshot(): Snapshot {
-        val exists = file.exists()
+        val exists = Files.isRegularFile(file.toPath(), LinkOption.NOFOLLOW_LINKS)
         return Snapshot(
             exists = exists,
             lastModified = if (exists) file.lastModified() else 0L,
