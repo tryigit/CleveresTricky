@@ -3542,6 +3542,8 @@ class WebServer(
         private const val MAX_DRM_PACKAGES_BYTES = 64 * 1024
         private val SECURITY_PATCH_COMPONENTS = setOf("all", "system", "vendor", "boot")
         private val VALID_TEMPLATE_ID = Regex("[a-z0-9_-]{1,64}")
+        private val CUSTOM_TEMPLATE_PROPERTIES =
+            setOf("BRAND", "DEVICE", "PRODUCT", "MANUFACTURER", "MODEL")
         private val WEB_UI_SETTINGS =
             linkedSetOf(
                 "global_mode",
@@ -3842,6 +3844,33 @@ class WebServer(
                     }
                     true
                 }.getOrDefault(false)
+            }
+            if (filename == "custom_templates") {
+                var sectionCount = 0
+                var hasCurrentTemplate = false
+                return content.lineSequence().all { rawLine ->
+                    val value = rawLine.trim()
+                    if (value.isEmpty() || value.startsWith("#")) return@all true
+
+                    if (value.startsWith("[") && value.endsWith("]")) {
+                        val name = value.substring(1, value.lastIndex).trim().lowercase()
+                        if (!VALID_TEMPLATE_ID.matches(name) || ++sectionCount > MAX_TEMPLATES) {
+                            return@all false
+                        }
+                        hasCurrentTemplate = true
+                        return@all true
+                    }
+
+                    if (!hasCurrentTemplate) return@all false
+                    val separator = value.indexOf('=')
+                    if (separator !in 1 until value.lastIndex) return@all false
+                    val key = value.substring(0, separator).trim()
+                    val propertyValue = value.substring(separator + 1).trim()
+                    key in CUSTOM_TEMPLATE_PROPERTIES &&
+                        propertyValue.isNotEmpty() &&
+                        propertyValue.length <= MAX_TEMPLATE_FIELD_LENGTH &&
+                        propertyValue.none(Char::isISOControl)
+                }
             }
             return false
         }

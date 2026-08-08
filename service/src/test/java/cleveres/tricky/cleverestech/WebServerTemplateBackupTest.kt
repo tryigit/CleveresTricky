@@ -4,11 +4,13 @@ import cleveres.tricky.cleverestech.util.SecureFile
 import cleveres.tricky.cleverestech.util.SecureFileOperations
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import java.io.ByteArrayInputStream
 import java.io.File
+import java.io.IOException
 import java.nio.file.Files
 
 class WebServerTemplateBackupTest {
@@ -83,11 +85,31 @@ class WebServerTemplateBackupTest {
     @Test
     fun testTemplatesJsonBackup() {
         // Setup: Create templates.json
-        val templatesJson = """[{"id":"custom","model":"Custom Model"}]"""
+        val templatesJson =
+            """
+            [{
+              "id":"custom",
+              "manufacturer":"Example",
+              "model":"Custom Model",
+              "fingerprint":"example/custom/custom:14/BUILD/1:user/release-keys",
+              "brand":"example",
+              "product":"custom",
+              "device":"custom",
+              "release":"14",
+              "buildId":"BUILD",
+              "incremental":"1",
+              "securityPatch":"2024-01-01"
+            }]
+            """.trimIndent()
         File(configDir, "templates.json").writeText(templatesJson)
 
-        // Also create a custom_templates file to check if it's backed up (legacy/unused?)
-        File(configDir, "custom_templates").writeText("some legacy content")
+        val customTemplates =
+            """
+            [custom]
+            MANUFACTURER=Example
+            MODEL=Example Model
+            """.trimIndent()
+        File(configDir, "custom_templates").writeText(customTemplates)
 
         // Create Backup
         val zipBytes = WebServer.createBackupZip(configDir)
@@ -105,8 +127,21 @@ class WebServerTemplateBackupTest {
         assertTrue("templates.json should be restored", restoredTemplates.exists())
         assertEquals(templatesJson, restoredTemplates.readText())
 
-        // Verify: custom_templates should exist (it's in the list)
         val restoredCustomTemplates = File(configDir, "custom_templates")
         assertTrue("custom_templates should be restored", restoredCustomTemplates.exists())
+        assertEquals(customTemplates, restoredCustomTemplates.readText())
+    }
+
+    @Test
+    fun testInvalidCustomTemplatesBackupIsRejected() {
+        File(configDir, "custom_templates").writeText("property before a section")
+        val zipBytes = WebServer.createBackupZip(configDir)
+
+        configDir.deleteRecursively()
+        configDir.mkdirs()
+
+        assertThrows(IOException::class.java) {
+            WebServer.restoreBackupZip(configDir, ByteArrayInputStream(zipBytes))
+        }
     }
 }
