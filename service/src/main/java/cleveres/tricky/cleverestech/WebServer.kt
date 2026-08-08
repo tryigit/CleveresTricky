@@ -1146,7 +1146,7 @@ class WebServer(
             }
             val setting = getParam(session, "setting")
             val value = getParam(session, "value")
-            if (setting != null && value in setOf("true", "false")) {
+            if (setting != null && value != null && value in setOf("true", "false")) {
                 if (toggleFile(setting, value.toBooleanStrict())) {
                     return secureResponse(Response.Status.OK, "text/plain", "Toggled")
                 }

@@ -9,6 +9,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 object BootLogic {
     private const val CONFIG_PATH = "/data/adb/cleverestricky"
     private const val COMMAND_TIMEOUT_SECONDS = 10L
+    private val nullDevice = File("/dev/null")
     private val ran = AtomicBoolean(false)
     private val configDir = File(CONFIG_PATH)
 
@@ -125,8 +126,8 @@ object BootLogic {
     private fun execChecked(command: Array<String>) {
         val process =
             ProcessBuilder(*command)
-                .redirectOutput(ProcessBuilder.Redirect.DISCARD)
-                .redirectError(ProcessBuilder.Redirect.DISCARD)
+                .redirectOutput(nullDevice)
+                .redirectError(nullDevice)
                 .start()
         if (!process.waitFor(COMMAND_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
             process.destroyForcibly()

@@ -12,6 +12,7 @@ import cleveres.tricky.cleverestech.util.SecureFile
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.IOException
@@ -192,7 +193,7 @@ object Config {
             Logger.d("updateTargetPackages: reading ${f?.absolutePath} (exists=${f?.exists()})")
             val packages =
                 if (f != null && f.exists()) {
-                    f.useLines(::parsePackages)
+                    f.useLines { lines -> parsePackages(lines) }
                 } else {
                     Logger.d("updateTargetPackages: target file missing or null, using empty package list")
                     parsePackages(emptySequence())
@@ -321,7 +322,7 @@ object Config {
             // 4. Remote Server Keyboxes
             allKeyboxes.addAll(ServerManager.getLoadedKeyboxes())
 
-            val verifiedKeyboxes =
+            val verifiedKeyboxes: List<CertHack.KeyBox> =
                 if (allKeyboxes.isEmpty()) {
                     emptyList()
                 } else {
@@ -335,7 +336,7 @@ object Config {
                                 KeyboxVerifier.verifyKeybox(keybox, revokedSerials)
                             }
                         if (statuses.all { it == KeyboxVerifier.Status.VALID }) {
-                            List.copyOf(allKeyboxes)
+                            allKeyboxes.toList()
                         } else {
                             Logger.e("Keybox pool rejected because it contains an invalid or revoked entry")
                             emptyList()

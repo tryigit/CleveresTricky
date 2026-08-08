@@ -14,6 +14,16 @@ import java.security.DigestInputStream
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 
+private fun ByteArray.indexOfFrom(
+    value: Byte,
+    startIndex: Int = 0,
+): Int {
+    for (index in startIndex.coerceAtLeast(0) until size) {
+        if (this[index] == value) return index
+    }
+    return -1
+}
+
 object CboxManager {
     private data class UnlockedEntry(
         val sourceLastModified: Long,
@@ -123,7 +133,7 @@ object CboxManager {
 
             writeCache(file, payload.xmlContent, sourceDigest)
             unlockedCache[filename] =
-                UnlockedEntry(file.lastModified(), file.length(), List.copyOf(verified))
+                UnlockedEntry(file.lastModified(), file.length(), verified.toList())
             lockedFiles.remove(filename)
             true
         } catch (e: Exception) {
@@ -160,9 +170,9 @@ object CboxManager {
         var expectedDigestBytes: ByteArray? = null
         try {
             decrypted = DeviceKeyManager.decrypt(encrypted) ?: return null
-            val firstNewline = decrypted.indexOf('\n'.code.toByte())
+            val firstNewline = decrypted.indexOfFrom('\n'.code.toByte())
             val secondNewline =
-                if (firstNewline >= 0) decrypted.indexOf('\n'.code.toByte(), firstNewline + 1) else -1
+                if (firstNewline >= 0) decrypted.indexOfFrom('\n'.code.toByte(), firstNewline + 1) else -1
             if (firstNewline <= 0 || secondNewline <= firstNewline ||
                 String(decrypted, 0, firstNewline, StandardCharsets.US_ASCII) != CACHE_VERSION
             ) {
@@ -195,7 +205,7 @@ object CboxManager {
                     KeyboxVerifier.verifyKeybox(it, revoked) == KeyboxVerifier.Status.VALID
                 }
             if (verified.isEmpty() || verified.size != parsed.size) return null
-            return UnlockedEntry(file.lastModified(), file.length(), List.copyOf(verified))
+            return UnlockedEntry(file.lastModified(), file.length(), verified.toList())
         } catch (e: Exception) {
             Logger.e("Ignoring invalid CBOX cache for ${file.name}: ${e.javaClass.simpleName}")
             deleteCacheSafely(cacheFile)
