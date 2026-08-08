@@ -13,9 +13,7 @@ pub(crate) unsafe fn validate_slice_args<'a, T>(
     }
 
     let byte_length = length.checked_mul(std::mem::size_of::<T>())?;
-    if byte_length > isize::MAX as usize
-        || (pointer as usize).checked_add(byte_length).is_none()
-    {
+    if byte_length > isize::MAX as usize || (pointer as usize).checked_add(byte_length).is_none() {
         return None;
     }
 
@@ -36,9 +34,7 @@ pub(crate) unsafe fn validate_mut_slice_args<'a, T>(
     }
 
     let byte_length = length.checked_mul(std::mem::size_of::<T>())?;
-    if byte_length > isize::MAX as usize
-        || (pointer as usize).checked_add(byte_length).is_none()
-    {
+    if byte_length > isize::MAX as usize || (pointer as usize).checked_add(byte_length).is_none() {
         return None;
     }
 

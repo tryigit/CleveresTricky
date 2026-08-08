@@ -221,10 +221,7 @@ mod tests {
 
     fn write_at<T: Copy>(buffer: &mut [u8], offset: usize, value: T) {
         let bytes = unsafe {
-            std::slice::from_raw_parts(
-                (&value as *const T).cast::<u8>(),
-                mem::size_of::<T>(),
-            )
+            std::slice::from_raw_parts((&value as *const T).cast::<u8>(), mem::size_of::<T>())
         };
         buffer[offset..offset + bytes.len()].copy_from_slice(bytes);
     }
