@@ -10,10 +10,9 @@ assignees: ''
 
 - **Device:** (e.g., Pixel 8 Pro, Samsung Galaxy S24)
 - **Android Version:** (e.g., Android 14, API 34)
-- **Root Method:** (Magisk / KernelSU / APatch)
-- **Root Version:** (e.g., Magisk 27.0, KernelSU 1.0.0)
-- **Module Version:** (e.g., v3.2.1 — check WebUI or `module.prop`)
-- **Zygisk:** (Enabled / Disabled / Zygisk Next)
+- **Root Method:** (KernelSU / APatch)
+- **Root Version:**
+- **Module Version:** (check WebUI or `module.prop`)
 
 ## Description
 

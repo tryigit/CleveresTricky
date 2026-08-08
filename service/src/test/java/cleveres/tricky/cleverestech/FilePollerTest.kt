@@ -11,9 +11,7 @@ import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
-@org.junit.Ignore("Flaky test")
 class FilePollerTest {
-
     @get:Rule
     val tempFolder = TemporaryFolder()
 
@@ -39,10 +37,11 @@ class FilePollerTest {
         val latch = CountDownLatch(1)
         var callbackFile: File? = null
 
-        poller = FilePoller(testFile, intervalMs) {
-            callbackFile = it
-            latch.countDown()
-        }
+        poller =
+            FilePoller(testFile, intervalMs) {
+                callbackFile = it
+                latch.countDown()
+            }
         poller.start()
 
         // Wait a bit to ensure poller started and read initial state
@@ -66,9 +65,10 @@ class FilePollerTest {
     @Test
     fun testNoFalsePositives() {
         val latch = CountDownLatch(1)
-        poller = FilePoller(testFile, intervalMs) {
-            latch.countDown()
-        }
+        poller =
+            FilePoller(testFile, intervalMs) {
+                latch.countDown()
+            }
         poller.start()
 
         Thread.sleep(intervalMs * 3)
@@ -79,9 +79,10 @@ class FilePollerTest {
     @Test
     fun testUpdateLastModifiedPreventsTrigger() {
         val latch = CountDownLatch(1)
-        poller = FilePoller(testFile, intervalMs) {
-            latch.countDown()
-        }
+        poller =
+            FilePoller(testFile, intervalMs) {
+                latch.countDown()
+            }
         // Don't start yet, to avoid race conditions with the update below
 
         // Modify file

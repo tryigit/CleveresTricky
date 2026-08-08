@@ -8,18 +8,8 @@
 # Keep JNI Callbacks (Critical for native binder interception)
 -keep class cleveres.tricky.cleverestech.KeystoreInterceptor { *; }
 -keep class cleveres.tricky.cleverestech.TelephonyInterceptor { *; }
--keep class cleveres.tricky.cleverestech.PropertyHiderService { *; }
 # BinderInterceptor abstract class might be used
 -keep class cleveres.tricky.cleverestech.binder.BinderInterceptor { *; }
-
-# Remove all logging (d, i, e, w, v)
--assumenosideeffects class cleveres.tricky.cleverestech.Logger {
-    public static void d(...);
-    public static void i(...);
-    public static void e(...);
-    public static void w(...);
-    public static void v(...);
-}
 
 # Keep BouncyCastle providers
 -keep class org.bouncycastle.jcajce.provider.** { *; }

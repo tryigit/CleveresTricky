@@ -20,7 +20,7 @@ The module will automatically load this file if it exists.
 ```json
 {
   "tab_dashboard": "Dashboard",
-  "tab_spoof": "Spoofing",
+  "tab_spoof": "Identity",
   "tab_apps": "Apps",
   "tab_keys": "Keyboxes",
   "tab_info": "Info & Resources",
@@ -30,8 +30,7 @@ The module will automatically load this file if it exists.
   "h1_title": "CleveresTricky",
   "section_system_control": "System Control",
   "lbl_global_mode": "Global Mode",
-  "lbl_tee_broken": "TEE Broken Mode",
-  "lbl_rkp_bypass": "RKP Bypass (Strong)",
+  "lbl_tee_broken": "Certificate Safe Mode",
 
   "resource_monitor_title": "Resource Monitor",
   "col_feature": "Feature",
@@ -49,4 +48,4 @@ The module will automatically load this file if it exists.
 -   **Security Warnings:** Pay special attention to security warnings. Do not soften the language; users must understand the risks of disabling features.
 -   **Updates:** When new features are added, please update your `lang.json` file. The module will fall back to English for any missing keys.
 
-To submit your translation for official inclusion (e.g., as a preset), please open a Pull Request or share it in the Telegram group.
+To submit your translation for official inclusion (for example, as a preset), please open a Pull Request.

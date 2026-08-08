@@ -4,11 +4,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
 import java.io.File
-import java.lang.reflect.Field
-import java.lang.reflect.Method
 
 class ReproTemplateCaseTest {
-
     @Before
     fun setUp() {
         // Reset Config state
@@ -19,31 +16,36 @@ class ReproTemplateCaseTest {
         DeviceTemplateManager.initialize(tempDir)
 
         // Add a custom template with Mixed Case ID
-        val customTemplate = DeviceTemplate(
-            id = "MyTemplate",
-            manufacturer = "CustomManu",
-            model = "CustomModel",
-            fingerprint = "Custom/Fingerprint",
-            brand = "CustomBrand",
-            product = "CustomProduct",
-            device = "CustomDevice",
-            release = "14",
-            buildId = "ID123",
-            incremental = "123",
-            securityPatch = "2024-01-01"
-        )
+        val customTemplate =
+            DeviceTemplate(
+                id = "MyTemplate",
+                manufacturer = "CustomManu",
+                model = "CustomModel",
+                fingerprint = "Custom/Fingerprint",
+                brand = "CustomBrand",
+                product = "CustomProduct",
+                device = "CustomDevice",
+                release = "14",
+                buildId = "ID123",
+                incremental = "123",
+                securityPatch = "2024-01-01",
+            )
         DeviceTemplateManager.addTemplate(customTemplate)
 
         // Force Config to reload templates from Manager
         // This makes Config.templates have "MyTemplate"
-        val method = Config::class.java.declaredMethods.find { it.name.startsWith("updateCustomTemplates") }
-            ?: throw NoSuchMethodException("updateCustomTemplates")
+        val method =
+            Config::class.java.declaredMethods.find { it.name.startsWith("updateCustomTemplates") }
+                ?: throw NoSuchMethodException("updateCustomTemplates")
         method.isAccessible = true
         method.invoke(Config, null)
     }
 
     @Suppress("UNCHECKED_CAST")
-    private fun setPackageCache(uid: Int, packages: Array<String>) {
+    private fun setPackageCache(
+        uid: Int,
+        packages: Array<String>,
+    ) {
         val field = Config::class.java.getDeclaredField("packageCache")
         field.isAccessible = true
         val cache = field.get(Config) as MutableMap<Int, Any>
@@ -51,9 +53,10 @@ class ReproTemplateCaseTest {
     }
 
     private fun updateAppConfigs(file: File) {
-        val method = Config::class.java.declaredMethods.find { it.name == "updateAppConfigs" }
-             ?: Config::class.java.declaredMethods.find { it.name.startsWith("updateAppConfigs") } // try mangled
-             ?: throw NoSuchMethodException("updateAppConfigs")
+        val method =
+            Config::class.java.declaredMethods.find { it.name == "updateAppConfigs" }
+                ?: Config::class.java.declaredMethods.find { it.name.startsWith("updateAppConfigs") } // try mangled
+                ?: throw NoSuchMethodException("updateAppConfigs")
         method.isAccessible = true
         method.invoke(Config, file)
     }
@@ -81,9 +84,8 @@ class ReproTemplateCaseTest {
         // Config.templates has "MyTemplate".
         // Config.getBuildVar tries templates["mytemplate"], which should fail if map is case-sensitive.
 
-        val model = Config.getBuildVar("ro.product.model", testUid)
+        val model = Config.getBuildVar("MODEL", testUid)
 
-        // We expect "CustomModel", but bug will likely cause it to return null
         assertEquals("CustomModel", model)
     }
 }

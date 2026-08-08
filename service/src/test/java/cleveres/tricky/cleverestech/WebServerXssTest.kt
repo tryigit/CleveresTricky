@@ -1,19 +1,19 @@
+@file:Suppress("ktlint:standard:max-line-length")
+
 package cleveres.tricky.cleverestech
 
+import cleveres.tricky.cleverestech.util.SecureFile
+import cleveres.tricky.cleverestech.util.SecureFileOperations
 import fi.iki.elonen.NanoHTTPD
 import org.junit.Assert.assertEquals
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
-import org.junit.Rule
-import cleveres.tricky.cleverestech.util.SecureFile
-import cleveres.tricky.cleverestech.util.SecureFileOperations
 import java.io.File
 import java.io.InputStream
 
-@org.junit.Ignore
 class WebServerXssTest {
-
     @Rule
     @JvmField
     val tempFolder = TemporaryFolder()
@@ -26,19 +26,31 @@ class WebServerXssTest {
     fun setUp() {
         configDir = tempFolder.newFolder("config")
         originalSecureFileImpl = SecureFile.impl
-        SecureFile.impl = object : SecureFileOperations {
-            override fun writeText(file: File, content: String) {
-                file.parentFile?.mkdirs()
-                file.writeText(content)
+        SecureFile.impl =
+            object : SecureFileOperations {
+                override fun writeText(
+                    file: File,
+                    content: String,
+                ) {
+                    file.parentFile?.mkdirs()
+                    file.writeText(content)
+                }
+
+                override fun mkdirs(
+                    file: File,
+                    mode: Int,
+                ) {
+                    file.mkdirs()
+                }
+
+                override fun touch(
+                    file: File,
+                    mode: Int,
+                ) {
+                    file.parentFile?.mkdirs()
+                    if (!file.exists()) file.createNewFile()
+                }
             }
-            override fun mkdirs(file: File, mode: Int) {
-                file.mkdirs()
-            }
-            override fun touch(file: File, mode: Int) {
-                file.parentFile?.mkdirs()
-                if (!file.exists()) file.createNewFile()
-            }
-        }
         webServer = WebServer(8080, configDir)
     }
 
@@ -53,24 +65,36 @@ class WebServerXssTest {
         val xssPayload = "<svg/onload=alert(1)>"
         val jsonPayload = "[{\"package\": \"$xssPayload\", \"template\": \"null\", \"keybox\": \"null\"}]"
 
-        val session = object : NanoHTTPD.IHTTPSession {
-            override fun execute() {}
-            override fun getCookies() = null
-            @Deprecated("NanoHTTPD deprecated this, ignore warning")
-    override fun getHeaders() = mapOf("content-length" to jsonPayload.length.toString(), "host" to "localhost")
-            override fun getInputStream(): InputStream? = null
-            override fun getMethod() = NanoHTTPD.Method.POST
-            override fun getParms() = mapOf("token" to webServer.token, "data" to jsonPayload)
-            override fun getParameters(): Map<String, List<String>> = emptyMap<String, List<String>>()
-            @Deprecated("NanoHTTPD deprecated this, ignore warning")
-    override fun getQueryParameterString() = ""
-            override fun getUri() = "/api/app_config_structured"
-            override fun parseBody(files: MutableMap<String, String>?) {}
-            @Deprecated("NanoHTTPD deprecated this, ignore warning")
-    override fun getRemoteIpAddress() = "127.0.0.1"
-            @Deprecated("NanoHTTPD deprecated this, ignore warning")
-    override fun getRemoteHostName() = "localhost"
-        }
+        val session =
+            object : NanoHTTPD.IHTTPSession {
+                override fun execute() {}
+
+                override fun getCookies() = null
+
+                @Deprecated("NanoHTTPD deprecated this, ignore warning")
+                override fun getHeaders() = mapOf("content-length" to jsonPayload.length.toString(), "host" to "localhost")
+
+                override fun getInputStream(): InputStream? = null
+
+                override fun getMethod() = NanoHTTPD.Method.POST
+
+                override fun getParms() = mapOf("token" to webServer.token, "data" to jsonPayload)
+
+                override fun getParameters(): Map<String, List<String>> = emptyMap<String, List<String>>()
+
+                @Deprecated("NanoHTTPD deprecated this, ignore warning")
+                override fun getQueryParameterString() = ""
+
+                override fun getUri() = "/api/app_config_structured"
+
+                override fun parseBody(files: MutableMap<String, String>?) {}
+
+                @Deprecated("NanoHTTPD deprecated this, ignore warning")
+                override fun getRemoteIpAddress() = "127.0.0.1"
+
+                @Deprecated("NanoHTTPD deprecated this, ignore warning")
+                override fun getRemoteHostName() = "localhost"
+            }
 
         val response = webServer.serve(session)
 
@@ -91,24 +115,36 @@ class WebServerXssTest {
 
         val jsonPayload = "[{\"package\": \"$validPkg\", \"template\": \"pixel8pro\", \"keybox\": \"null\"}, {\"package\": \"$wildcardPkg\", \"template\": \"null\", \"keybox\": \"null\"}]"
 
-        val session = object : NanoHTTPD.IHTTPSession {
-            override fun execute() {}
-            override fun getCookies() = null
-            @Deprecated("NanoHTTPD deprecated this, ignore warning")
-    override fun getHeaders() = mapOf("content-length" to jsonPayload.length.toString(), "host" to "localhost")
-            override fun getInputStream(): InputStream? = null
-            override fun getMethod() = NanoHTTPD.Method.POST
-            override fun getParms() = mapOf("token" to webServer.token, "data" to jsonPayload)
-            override fun getParameters(): Map<String, List<String>> = emptyMap<String, List<String>>()
-            @Deprecated("NanoHTTPD deprecated this, ignore warning")
-    override fun getQueryParameterString() = ""
-            override fun getUri() = "/api/app_config_structured"
-            override fun parseBody(files: MutableMap<String, String>?) {}
-            @Deprecated("NanoHTTPD deprecated this, ignore warning")
-    override fun getRemoteIpAddress() = "127.0.0.1"
-            @Deprecated("NanoHTTPD deprecated this, ignore warning")
-    override fun getRemoteHostName() = "localhost"
-        }
+        val session =
+            object : NanoHTTPD.IHTTPSession {
+                override fun execute() {}
+
+                override fun getCookies() = null
+
+                @Deprecated("NanoHTTPD deprecated this, ignore warning")
+                override fun getHeaders() = mapOf("content-length" to jsonPayload.length.toString(), "host" to "localhost")
+
+                override fun getInputStream(): InputStream? = null
+
+                override fun getMethod() = NanoHTTPD.Method.POST
+
+                override fun getParms() = mapOf("token" to webServer.token, "data" to jsonPayload)
+
+                override fun getParameters(): Map<String, List<String>> = emptyMap<String, List<String>>()
+
+                @Deprecated("NanoHTTPD deprecated this, ignore warning")
+                override fun getQueryParameterString() = ""
+
+                override fun getUri() = "/api/app_config_structured"
+
+                override fun parseBody(files: MutableMap<String, String>?) {}
+
+                @Deprecated("NanoHTTPD deprecated this, ignore warning")
+                override fun getRemoteIpAddress() = "127.0.0.1"
+
+                @Deprecated("NanoHTTPD deprecated this, ignore warning")
+                override fun getRemoteHostName() = "localhost"
+            }
 
         val response = webServer.serve(session)
 

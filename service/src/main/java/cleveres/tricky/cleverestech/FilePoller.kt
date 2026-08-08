@@ -9,75 +9,91 @@ import java.util.concurrent.TimeUnit
 class FilePoller(
     private val file: File,
     private val intervalMs: Long = 5000,
-    private val onModified: (File) -> Unit
+    private val onModified: (File) -> Unit,
 ) {
+    private data class Snapshot(
+        val exists: Boolean,
+        val lastModified: Long,
+        val length: Long,
+    )
+
     @Volatile
     private var isRunning = false
-    @Volatile
-    private var lastModified: Long = 0
+    private var lastSnapshot = snapshot()
     private var scheduledFuture: ScheduledFuture<*>? = null
     private var observer: FileObserver? = null
 
     companion object {
-        private val scheduler = Executors.newSingleThreadScheduledExecutor { r ->
-            val t = Thread(r, "FilePoller-Scheduler")
-            t.isDaemon = true
-            t
-        }
+        private val scheduler =
+            Executors.newScheduledThreadPool(2) { runnable ->
+                Thread(runnable, "FilePoller-Scheduler").apply {
+                    isDaemon = true
+                }
+            }
     }
 
     init {
-        if (file.exists()) {
-            lastModified = file.lastModified()
-        }
+        require(intervalMs > 0) { "intervalMs must be positive" }
     }
 
     @Synchronized
     fun start() {
         if (isRunning) return
         isRunning = true
+        lastSnapshot = snapshot()
 
-        var observerActive = false
         try {
             val parent = file.parentFile
-            if (parent != null && parent.exists()) {
+            if (parent != null && parent.isDirectory) {
+                val eventMask =
+                    FileObserver.CLOSE_WRITE or
+                        FileObserver.MOVED_TO or
+                        FileObserver.MOVED_FROM or
+                        FileObserver.CREATE or
+                        FileObserver.DELETE or
+                        FileObserver.ATTRIB
+
                 @Suppress("DEPRECATION")
-                val observer = object : FileObserver(parent.absolutePath, CLOSE_WRITE or MOVED_TO) {
-                    override fun onEvent(event: Int, path: String?) {
-                        if (path == file.name && file.exists()) {
-                            val currentModified = file.lastModified()
-                            if (currentModified > lastModified) {
-                                lastModified = currentModified
-                                onModified(file)
-                            }
+                val fileObserver =
+                    object : FileObserver(parent.absolutePath, eventMask) {
+                        override fun onEvent(
+                            event: Int,
+                            path: String?,
+                        ) {
+                            if (path == file.name) checkForChange()
                         }
                     }
-                }
-                observer.startWatching()
-                this.observer = observer
-                observerActive = true
+                fileObserver.startWatching()
+                observer = fileObserver
             }
-        } catch (t: Throwable) {
-            observerActive = false
+        } catch (error: Throwable) {
+            Logger.e("FilePoller: Could not start FileObserver for ${file.name}", error)
         }
 
-        if (observerActive) return
-
-        scheduledFuture = scheduler.scheduleWithFixedDelay({
-            if (!isRunning) return@scheduleWithFixedDelay // Double check
-            try {
-                if (file.exists()) {
-                    val currentModified = file.lastModified()
-                    if (currentModified > lastModified) {
-                        lastModified = currentModified
-                        onModified(file)
+        // Poll even when FileObserver is available. Some vendor kernels drop
+        // inotify events during atomic replacement or early boot.
+        scheduledFuture =
+            scheduler.scheduleWithFixedDelay(
+                {
+                    try {
+                        checkForChange()
+                    } catch (error: Throwable) {
+                        Logger.e("FilePoller: Check failed for ${file.name}", error)
                     }
-                }
-            } catch (e: Throwable) {
-                // Prevent thread death
-                e.printStackTrace()
-            }
-        }, intervalMs, intervalMs, TimeUnit.MILLISECONDS)
+                },
+                intervalMs,
+                intervalMs,
+                TimeUnit.MILLISECONDS,
+            )
+    }
+
+    @Synchronized
+    private fun checkForChange() {
+        if (!isRunning) return
+        val current = snapshot()
+        if (current == lastSnapshot) return
+        lastSnapshot = current
+        onModified(file)
     }
 
     @Synchronized
@@ -89,11 +105,17 @@ class FilePoller(
         scheduledFuture = null
     }
 
+    @Synchronized
     fun updateLastModified() {
-         if (file.exists()) {
-            lastModified = file.lastModified()
-        } else {
-            lastModified = 0
-        }
+        lastSnapshot = snapshot()
+    }
+
+    private fun snapshot(): Snapshot {
+        val exists = file.exists()
+        return Snapshot(
+            exists = exists,
+            lastModified = if (exists) file.lastModified() else 0L,
+            length = if (exists) file.length() else 0L,
+        )
     }
 }

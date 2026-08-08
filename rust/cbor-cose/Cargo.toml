@@ -2,31 +2,11 @@
 name = "cleverestricky-cbor-cose"
 version = "0.1.1"
 edition = "2021"
-description = "Memory-safe CBOR/COSE encoder for CleveresTricky RKP attestation spoofing"
+description = "Memory-safe Binder stream parsing for CleveresTricky"
 license = "GPL-3.0"
 
 [lib]
 name = "cleverestricky_cbor_cose"
 crate-type = ["lib", "staticlib"]
 
-[features]
-default = ["fingerprint"]
-fingerprint = ["dep:minreq"]
-
 [dependencies]
-hmac = "0.12"
-digest = "0.10"
-sha2 = "0.10"
-minreq = { version = "3.0", features = ["https-rustls"], optional = true }
-coset = "0.4"
-p256 = { version = "0.13", features = ["arithmetic", "ecdsa", "std"] }
-rand_core = { version = "0.6", features = ["std", "getrandom"] }
-libc = "0.2"
-rustc-hash = "2.1.2"
-goblin = { version = "0.10.7", default-features = false, features = ["elf32", "elf64", "endian_fd"] }
-
-[dev-dependencies]
-hex = "0.4"
-rand = "0.8"
-serial_test = "4.0"
-

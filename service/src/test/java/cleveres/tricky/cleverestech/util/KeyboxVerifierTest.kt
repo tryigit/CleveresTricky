@@ -2,13 +2,11 @@ package cleveres.tricky.cleverestech.util
 
 import cleveres.tricky.cleverestech.keystore.CertHack
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.mockito.Mockito
 import java.security.cert.X509Certificate
 
 class KeyboxVerifierTest {
-
     @Test
     fun `verifyKeybox returns VALID for unrevoked certificate`() {
         // Arrange

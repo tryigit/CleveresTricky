@@ -1,6 +1,9 @@
-use crate::ffi::validate_slice_args;
+use crate::ffi::{validate_mut_slice_args, validate_slice_args};
 use std::mem;
 
+const MAX_TRANSACTIONS_PER_CALL: usize = 1_024;
+
+#[derive(Clone, Copy, Debug, Default)]
 #[repr(C)]
 pub struct RustOffsetCacheView {
     pub target_ptr_offset: usize,
@@ -13,9 +16,10 @@ pub struct RustOffsetCacheView {
     pub data_ptr_offset: usize,
     pub transaction_data_size: usize,
     pub transaction_data_secctx_size: usize,
-    pub valid: bool,
+    pub valid: u8,
 }
 
+#[derive(Clone, Copy, Debug, Default)]
 #[repr(C)]
 pub struct RustParsedTransaction {
     pub target_ptr: usize,
@@ -29,220 +33,268 @@ pub struct RustParsedTransaction {
     pub cmd: u32,
     pub raw_ptr: usize,
     pub raw_size: usize,
-    pub valid: bool,
+    pub valid: u8,
 }
 
-fn safe_read<T: Copy>(buf: &[u8], offset: usize) -> Option<T> {
+fn safe_read<T: Copy>(buffer: &[u8], offset: usize) -> Option<T> {
     let end = offset.checked_add(mem::size_of::<T>())?;
-    if end > buf.len() {
+    if end > buffer.len() {
         return None;
     }
-    let mut tmp = mem::MaybeUninit::<T>::uninit();
+
+    let mut value = mem::MaybeUninit::<T>::uninit();
+    // SAFETY: Both ranges are valid for `size_of::<T>()` bytes and do not overlap.
     unsafe {
         std::ptr::copy_nonoverlapping(
-            buf.as_ptr().add(offset),
-            tmp.as_mut_ptr() as *mut u8,
+            buffer.as_ptr().add(offset),
+            value.as_mut_ptr().cast::<u8>(),
             mem::size_of::<T>(),
         );
-        Some(tmp.assume_init())
+        Some(value.assume_init())
     }
 }
 
 #[inline]
-fn _ioc_size(cmd: u32) -> usize {
-    // Matches _IOC_SIZE from linux/ioctl.h: bits 16..30
-    ((cmd >> 16) & 0x3FFF) as usize
+fn ioctl_size(command: u32) -> usize {
+    ((command >> IOC_SIZE_SHIFT) & 0x3fff) as usize
 }
 
-// Replicate Linux ioctl encoding to compute binder BR_* constants locally.
-const IOC_NRBITS: u32 = 8;
-const IOC_TYPEBITS: u32 = 8;
-const IOC_SIZEBITS: u32 = 14;
-const IOC_DIRBITS: u32 = 2;
-
-const IOC_NRSHIFT: u32 = 0;
-const IOC_TYPESHIFT: u32 = IOC_NRSHIFT + IOC_NRBITS;
-const IOC_SIZESHIFT: u32 = IOC_TYPESHIFT + IOC_TYPEBITS;
-const IOC_DIRSHIFT: u32 = IOC_SIZESHIFT + IOC_SIZEBITS;
-
+const IOC_NUMBER_BITS: u32 = 8;
+const IOC_TYPE_BITS: u32 = 8;
+const IOC_SIZE_BITS: u32 = 14;
+const IOC_DIRECTION_BITS: u32 = 2;
+const IOC_NUMBER_SHIFT: u32 = 0;
+const IOC_TYPE_SHIFT: u32 = IOC_NUMBER_SHIFT + IOC_NUMBER_BITS;
+const IOC_SIZE_SHIFT: u32 = IOC_TYPE_SHIFT + IOC_TYPE_BITS;
+const IOC_DIRECTION_SHIFT: u32 = IOC_SIZE_SHIFT + IOC_SIZE_BITS;
 const IOC_READ: u32 = 2;
-
-const fn _ioc_dir(cmd: u32) -> u32 {
-    (cmd >> IOC_DIRSHIFT) & ((1 << IOC_DIRBITS) - 1)
-}
-
-const fn _ioc_type(cmd: u32) -> u32 {
-    (cmd >> IOC_TYPESHIFT) & ((1 << IOC_TYPEBITS) - 1)
-}
-
-const fn _ioc_nr(cmd: u32) -> u32 {
-    (cmd >> IOC_NRSHIFT) & ((1 << IOC_NRBITS) - 1)
-}
-
-// Char literal 'r' == 0x72
 const BINDER_TYPE: u32 = b'r' as u32;
-const TRANSACTION_NR: u32 = 2;
+const TRANSACTION_NUMBER: u32 = 2;
 
-#[no_mangle]
-/// Parse a binder ioctl stream and extract transactions into the provided output slice.
+const fn ioctl_direction(command: u32) -> u32 {
+    (command >> IOC_DIRECTION_SHIFT) & ((1 << IOC_DIRECTION_BITS) - 1)
+}
+
+const fn ioctl_type(command: u32) -> u32 {
+    (command >> IOC_TYPE_SHIFT) & ((1 << IOC_TYPE_BITS) - 1)
+}
+
+const fn ioctl_number(command: u32) -> u32 {
+    (command >> IOC_NUMBER_SHIFT) & ((1 << IOC_NUMBER_BITS) - 1)
+}
+
+fn is_transaction_command(command: u32) -> bool {
+    ioctl_direction(command) == IOC_READ
+        && ioctl_type(command) == BINDER_TYPE
+        && ioctl_number(command) == TRANSACTION_NUMBER
+}
+
+/// Parse a Binder driver response stream into a caller-owned output array.
 ///
 /// # Safety
-/// - `buffer_ptr` must point to `buffer_size` readable bytes and remain valid for the call.
-/// - `consumed` must not exceed `buffer_size`.
-/// - `cache_ptr` must be non-null, point to a valid [`RustOffsetCacheView`] populated from
-///   trusted C++ offsets, and remain valid for the duration of the call.
-/// - `out_txns` must either be null (to skip writes) or point to a slice of length
-///   `max_txns` with properly aligned [`RustParsedTransaction`] storage.
-/// - `out_txn_count` must be non-null and writable.
-/// - All pointers must satisfy Rust's aliasing rules for the duration of this call.
+/// All pointers must be valid, correctly aligned, non-overlapping for mutable
+/// access, and live for the duration of this call. The C++ caller supplies the
+/// ABI offsets only after validating them against live Binder traffic.
+#[no_mangle]
 pub unsafe extern "C" fn rust_parse_binder_stream(
-    buffer_ptr: *const u8,
+    buffer_pointer: *const u8,
     consumed: usize,
     buffer_size: usize,
-    cache_ptr: *const RustOffsetCacheView,
-    out_txns: *mut RustParsedTransaction,
-    max_txns: usize,
-    out_txn_count: *mut usize,
+    cache_pointer: *const RustOffsetCacheView,
+    output_pointer: *mut RustParsedTransaction,
+    output_capacity: usize,
+    output_count_pointer: *mut usize,
 ) -> bool {
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        if out_txn_count.is_null() {
+        // SAFETY: Forwarded from the function contract and bounded above.
+        let count_slice = match unsafe { validate_mut_slice_args(output_count_pointer, 1) } {
+            Some(value) => value,
+            None => return false,
+        };
+        count_slice[0] = 0;
+
+        if output_capacity > MAX_TRANSACTIONS_PER_CALL || consumed == 0 || consumed > buffer_size {
             return false;
         }
-        *out_txn_count = 0;
 
-        let cache = match cache_ptr.as_ref() {
-            Some(c) if c.valid => c,
+        // SAFETY: Forwarded from the function contract and bounded above.
+        let cache_slice = match unsafe { validate_slice_args(cache_pointer, 1) } {
+            Some(value) => value,
             _ => return false,
         };
-
-        if buffer_ptr.is_null() || consumed == 0 || buffer_size == 0 {
+        let cache = &cache_slice[0];
+        if cache.valid == 0 {
+            return false;
+        }
+        if cache.transaction_data_size == 0 && cache.transaction_data_secctx_size == 0 {
             return false;
         }
 
-        let buffer = match validate_slice_args(buffer_ptr, buffer_size) {
-            Some(s) => s,
+        // SAFETY: Forwarded from the function contract and bounded by `buffer_size`.
+        let buffer = match unsafe { validate_slice_args(buffer_pointer, buffer_size) } {
+            Some(value) => value,
+            None => return false,
+        };
+        // SAFETY: Forwarded from the function contract and bounded above.
+        let output = match unsafe { validate_mut_slice_args(output_pointer, output_capacity) } {
+            Some(value) => value,
             None => return false,
         };
 
-        if consumed > buffer.len() {
-            return false;
-        }
-
-        let mut pos: usize = 0;
-        let mut remaining: usize = consumed;
-
+        let mut position = 0usize;
+        let mut remaining = consumed;
         while remaining >= mem::size_of::<u32>() {
-            let cmd = match safe_read::<u32>(buffer, pos) {
-                Some(c) => c,
+            let command = match safe_read::<u32>(buffer, position) {
+                Some(value) => value,
                 None => return false,
             };
-            pos += mem::size_of::<u32>();
+            position += mem::size_of::<u32>();
             remaining -= mem::size_of::<u32>();
 
-            let payload_sz = _ioc_size(cmd);
-            if payload_sz > remaining {
-                return *out_txn_count > 0;
+            let payload_size = ioctl_size(command);
+            if payload_size > remaining {
+                return false;
             }
 
-            if _ioc_dir(cmd) == IOC_READ
-                && _ioc_type(cmd) == BINDER_TYPE
-                && _ioc_nr(cmd) == TRANSACTION_NR
-            {
-                if *out_txn_count >= max_txns || out_txns.is_null() {
-                    pos += payload_sz;
-                    remaining -= payload_sz;
-                    continue;
+            let known_transaction_size = payload_size == cache.transaction_data_size
+                || payload_size == cache.transaction_data_secctx_size;
+            if is_transaction_command(command) && !known_transaction_size {
+                return false;
+            }
+            if is_transaction_command(command) && known_transaction_size {
+                if count_slice[0] >= output.len() {
+                    return false;
                 }
+                let transaction = &buffer[position..position + payload_size];
+                let parsed = (
+                    safe_read::<usize>(transaction, cache.target_ptr_offset),
+                    safe_read::<usize>(transaction, cache.cookie_offset),
+                    safe_read::<u32>(transaction, cache.code_offset),
+                    safe_read::<u32>(transaction, cache.flags_offset),
+                    safe_read::<i32>(transaction, cache.sender_pid_offset),
+                    safe_read::<u32>(transaction, cache.sender_euid_offset),
+                    safe_read::<u64>(transaction, cache.data_size_offset),
+                    safe_read::<usize>(transaction, cache.data_ptr_offset),
+                );
 
-                let txn_slice = &buffer[pos..pos + payload_sz];
-                let mut txn = RustParsedTransaction {
-                    target_ptr: 0,
-                    cookie: 0,
-                    code: 0,
-                    flags: 0,
-                    sender_pid: 0,
-                    sender_euid: 0,
-                    data_size: 0,
-                    data_buffer: 0,
-                    cmd,
-                    raw_ptr: buffer_ptr as usize + pos,
-                    raw_size: payload_sz,
-                    valid: true,
-                };
-
-                if let Some(v) = safe_read::<usize>(txn_slice, cache.target_ptr_offset) {
-                    txn.target_ptr = v;
+                if let (
+                    Some(target_ptr),
+                    Some(cookie),
+                    Some(code),
+                    Some(flags),
+                    Some(sender_pid),
+                    Some(sender_euid),
+                    Some(data_size),
+                    Some(data_buffer),
+                ) = parsed
+                {
+                    output[count_slice[0]] = RustParsedTransaction {
+                        target_ptr,
+                        cookie,
+                        code,
+                        flags,
+                        sender_pid,
+                        sender_euid,
+                        data_size,
+                        data_buffer,
+                        cmd: command,
+                        raw_ptr: buffer_pointer as usize + position,
+                        raw_size: payload_size,
+                        valid: 1,
+                    };
+                    count_slice[0] += 1;
                 }
-                if let Some(v) = safe_read::<usize>(txn_slice, cache.cookie_offset) {
-                    txn.cookie = v;
-                }
-                if let Some(v) = safe_read::<u32>(txn_slice, cache.code_offset) {
-                    txn.code = v;
-                }
-                if let Some(v) = safe_read::<u32>(txn_slice, cache.flags_offset) {
-                    txn.flags = v;
-                }
-                if let Some(v) = safe_read::<i32>(txn_slice, cache.sender_pid_offset) {
-                    txn.sender_pid = v;
-                }
-                if let Some(v) = safe_read::<u32>(txn_slice, cache.sender_euid_offset) {
-                    txn.sender_euid = v;
-                }
-                if let Some(v) = safe_read::<u64>(txn_slice, cache.data_size_offset) {
-                    txn.data_size = v;
-                }
-                if let Some(v) = safe_read::<usize>(txn_slice, cache.data_ptr_offset) {
-                    txn.data_buffer = v;
-                }
-
-                std::ptr::write(out_txns.add(*out_txn_count), txn);
-                *out_txn_count += 1;
             }
 
-            pos += payload_sz;
-            remaining -= payload_sz;
+            position += payload_size;
+            remaining -= payload_size;
         }
 
-        *out_txn_count > 0
+        remaining == 0 && count_slice[0] > 0
     }))
     .unwrap_or(false)
 }
 
-/// # Safety
-/// The `data` and `target` pointers must be valid for reads of `size` and `target_len` bytes, respectively.
-#[no_mangle]
-pub unsafe extern "C" fn rust_parse_binder_parcel(
-    data: *const u8,
-    size: usize,
-    target: *const u8,
-    target_len: usize,
-) -> bool {
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        if data.is_null() || target.is_null() || size == 0 || target_len == 0 {
-            return false;
-        }
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-        let parcel_bytes = std::slice::from_raw_parts(data, size);
-        let target_bytes = std::slice::from_raw_parts(target, target_len);
+    fn write_at<T: Copy>(buffer: &mut [u8], offset: usize, value: T) {
+        let bytes = unsafe {
+            std::slice::from_raw_parts(
+                (&value as *const T).cast::<u8>(),
+                mem::size_of::<T>(),
+            )
+        };
+        buffer[offset..offset + bytes.len()].copy_from_slice(bytes);
+    }
 
-        let target_str = match std::str::from_utf8(target_bytes) {
-            Ok(s) => s,
-            Err(_) => return false,
+    #[test]
+    fn parses_a_bounded_transaction() {
+        let payload_size = 64usize;
+        let command = (IOC_READ << IOC_DIRECTION_SHIFT)
+            | (payload_size as u32) << IOC_SIZE_SHIFT
+            | (BINDER_TYPE << IOC_TYPE_SHIFT)
+            | TRANSACTION_NUMBER;
+        let mut input = vec![0u8; mem::size_of::<u32>() + payload_size];
+        write_at(&mut input, 0, command);
+        write_at(&mut input, 4, 0x1234usize);
+        write_at(&mut input, 12, 0x5678usize);
+        write_at(&mut input, 20, 42u32);
+        write_at(&mut input, 24, 1u32);
+        write_at(&mut input, 28, 123i32);
+        write_at(&mut input, 32, 10_000u32);
+        write_at(&mut input, 40, 16u64);
+        write_at(&mut input, 48, 0x9abcusize);
+
+        let cache = RustOffsetCacheView {
+            target_ptr_offset: 0,
+            cookie_offset: 8,
+            code_offset: 16,
+            flags_offset: 20,
+            sender_pid_offset: 24,
+            sender_euid_offset: 28,
+            data_size_offset: 36,
+            data_ptr_offset: 44,
+            transaction_data_size: payload_size,
+            transaction_data_secctx_size: 0,
+            valid: 1,
+        };
+        let mut output = [RustParsedTransaction::default(); 1];
+        let mut count = 0usize;
+
+        let parsed = unsafe {
+            rust_parse_binder_stream(
+                input.as_ptr(),
+                input.len(),
+                input.len(),
+                &cache,
+                output.as_mut_ptr(),
+                output.len(),
+                &mut count,
+            )
         };
 
-        let mut u16_bytes = Vec::new();
-        for c in target_str.encode_utf16() {
-            u16_bytes.extend_from_slice(&c.to_ne_bytes());
-        }
+        assert!(parsed);
+        assert_eq!(count, 1);
+        assert_eq!(output[0].code, 42);
+        assert_eq!(output[0].data_buffer, 0x9abc);
+    }
 
-        if u16_bytes.is_empty() || u16_bytes.len() > parcel_bytes.len() {
-            return false;
-        }
-
-        parcel_bytes
-            .windows(u16_bytes.len())
-            .any(|window| window == u16_bytes.as_slice())
-    }));
-
-    result.unwrap_or(false)
+    #[test]
+    fn rejects_an_unbounded_output_capacity() {
+        let mut count = 99usize;
+        let parsed = unsafe {
+            rust_parse_binder_stream(
+                std::ptr::null(),
+                1,
+                1,
+                std::ptr::null(),
+                std::ptr::null_mut(),
+                MAX_TRANSACTIONS_PER_CALL + 1,
+                &mut count,
+            )
+        };
+        assert!(!parsed);
+    }
 }

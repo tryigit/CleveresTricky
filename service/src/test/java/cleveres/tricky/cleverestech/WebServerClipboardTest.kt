@@ -4,15 +4,14 @@ import cleveres.tricky.cleverestech.keystore.CertHack
 import org.junit.After
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
-import org.junit.Rule
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 
 class WebServerClipboardTest {
-
     @get:Rule
     val tempFolder = TemporaryFolder()
 
@@ -21,12 +20,30 @@ class WebServerClipboardTest {
 
     @Before
     fun setUp() {
-        Logger.setImpl(object : Logger.LogImpl {
-            override fun d(tag: String, msg: String) {}
-            override fun e(tag: String, msg: String) {}
-            override fun e(tag: String, msg: String, t: Throwable?) {}
-            override fun i(tag: String, msg: String) {}
-        })
+        Logger.setImpl(
+            object : Logger.LogImpl {
+                override fun d(
+                    tag: String,
+                    msg: String,
+                ) {}
+
+                override fun e(
+                    tag: String,
+                    msg: String,
+                ) {}
+
+                override fun e(
+                    tag: String,
+                    msg: String,
+                    t: Throwable?,
+                ) {}
+
+                override fun i(
+                    tag: String,
+                    msg: String,
+                ) {}
+            },
+        )
         configDir = tempFolder.newFolder("config")
         server = WebServer(0, configDir)
         server.start()

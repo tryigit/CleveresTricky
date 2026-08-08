@@ -9,7 +9,6 @@ import java.lang.reflect.Field
 import java.lang.reflect.Proxy
 
 class ConfigPackageCacheStalenessTest {
-
     private lateinit var mockPmProxy: Any
     private var originalPm: Any? = null
     private var originalClock: (() -> Long)? = null
@@ -40,17 +39,18 @@ class ConfigPackageCacheStalenessTest {
         // Create Mock IPackageManager using Proxy
         val stubInterface = IPackageManager::class.java
 
-        mockPmProxy = Proxy.newProxyInstance(
-            stubInterface.classLoader,
-            arrayOf(stubInterface)
-        ) { _, method, args ->
-            if (method.name == "getPackagesForUid") {
-                val uid = args[0] as Int
-                callCounts[uid] = (callCounts[uid] ?: 0) + 1
-                return@newProxyInstance packages[uid]
+        mockPmProxy =
+            Proxy.newProxyInstance(
+                stubInterface.classLoader,
+                arrayOf(stubInterface),
+            ) { _, method, args ->
+                if (method.name == "getPackagesForUid") {
+                    val uid = args[0] as Int
+                    callCounts[uid] = (callCounts[uid] ?: 0) + 1
+                    return@newProxyInstance packages[uid]
+                }
+                null
             }
-            null
-        }
 
         // Inject mock
         iPmField.set(Config, mockPmProxy)

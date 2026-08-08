@@ -15,9 +15,9 @@ import java.io.File
 import javax.crypto.AEADBadTagException
 
 class WebServerBackupEncryptionTest {
-
     private lateinit var testDir: File
     private lateinit var configDir: File
+    private lateinit var originalSecureFileImpl: SecureFileOperations
 
     @Before
     fun setUp() {
@@ -25,32 +25,56 @@ class WebServerBackupEncryptionTest {
         testDir.mkdirs()
         configDir = File(testDir, "config")
         configDir.mkdirs()
+        originalSecureFileImpl = SecureFile.impl
 
-        SecureFile.impl = object : SecureFileOperations {
-            override fun writeText(file: File, content: String) {
-                file.parentFile?.mkdirs()
-                file.writeText(content)
-            }
-            override fun writeStream(file: File, inputStream: java.io.InputStream, limit: Long) {
-                file.parentFile?.mkdirs()
-                file.outputStream().use { out ->
-                    var total = 0L
-                    val buf = ByteArray(8192)
-                    var n: Int
-                    while (inputStream.read(buf).also { n = it } != -1) {
-                        if (limit > 0 && total + n > limit) throw java.io.IOException("Exceeds limit")
-                        out.write(buf, 0, n)
-                        total += n
+        SecureFile.impl =
+            object : SecureFileOperations {
+                override fun writeText(
+                    file: File,
+                    content: String,
+                ) {
+                    file.parentFile?.mkdirs()
+                    file.writeText(content)
+                }
+
+                override fun writeStream(
+                    file: File,
+                    inputStream: java.io.InputStream,
+                    limit: Long,
+                ) {
+                    file.parentFile?.mkdirs()
+                    file.outputStream().use { out ->
+                        var total = 0L
+                        val buf = ByteArray(8192)
+                        var n: Int
+                        while (inputStream.read(buf).also { n = it } != -1) {
+                            if (limit > 0 && total + n > limit) throw java.io.IOException("Exceeds limit")
+                            out.write(buf, 0, n)
+                            total += n
+                        }
                     }
                 }
+
+                override fun mkdirs(
+                    file: File,
+                    mode: Int,
+                ) {
+                    file.mkdirs()
+                }
+
+                override fun touch(
+                    file: File,
+                    mode: Int,
+                ) {
+                    file.parentFile?.mkdirs()
+                    file.createNewFile()
+                }
             }
-            override fun mkdirs(file: File, mode: Int) { file.mkdirs() }
-            override fun touch(file: File, mode: Int) { file.parentFile?.mkdirs(); file.createNewFile() }
-        }
     }
 
     @After
     fun tearDown() {
+        SecureFile.impl = originalSecureFileImpl
         testDir.deleteRecursively()
     }
 
@@ -105,6 +129,20 @@ class WebServerBackupEncryptionTest {
     }
 
     @Test
+    fun testAuthenticatedHeaderRejectsTampering() {
+        val encrypted = BackupEncryptor.encrypt("sensitive data".toByteArray(), "correctPassword")
+        encrypted[12] = (encrypted[12].toInt() xor 1).toByte()
+
+        var threw = false
+        try {
+            BackupEncryptor.decrypt(encrypted, "correctPassword")
+        } catch (e: Exception) {
+            threw = true
+        }
+        assertTrue("Changing a v2 CTSB header byte must invalidate authentication", threw)
+    }
+
+    @Test
     fun testDecryptInvalidMagicThrows() {
         val notCtsb = byteArrayOf(0x50, 0x4B, 0x03, 0x04, 0x00, 0x00, 0x00, 0x00)
         var threw = false
@@ -140,7 +178,7 @@ class WebServerBackupEncryptionTest {
         File(configDir, "spoof_build_vars").writeText("MODEL=Pixel 9")
         val kbDir = File(configDir, "keyboxes")
         kbDir.mkdirs()
-        File(kbDir, "kb1.xml").writeText("<xml>keybox1</xml>")
+        File(kbDir, "kb1.xml").writeText(TestKeyboxFixtures.validEcKeyboxXml)
 
         // Create plain ZIP backup
         val zipBytes = WebServer.createBackupZip(configDir)
@@ -162,6 +200,6 @@ class WebServerBackupEncryptionTest {
         // Verify restoration
         assertEquals("com.example.app", File(configDir, "target.txt").readText())
         assertEquals("MODEL=Pixel 9", File(configDir, "spoof_build_vars").readText())
-        assertEquals("<xml>keybox1</xml>", File(configDir, "keyboxes/kb1.xml").readText())
+        assertEquals(TestKeyboxFixtures.validEcKeyboxXml, File(configDir, "keyboxes/kb1.xml").readText())
     }
 }

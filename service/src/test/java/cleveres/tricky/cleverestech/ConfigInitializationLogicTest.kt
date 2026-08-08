@@ -9,11 +9,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import java.io.File
-import java.lang.reflect.Field
-import java.lang.reflect.Modifier
 
 class ConfigInitializationLogicTest {
-
     private lateinit var tempDir: File
     private var originalRoot: Any? = null
     private lateinit var originalSecureFileImpl: SecureFileOperations
@@ -28,28 +25,62 @@ class ConfigInitializationLogicTest {
 
         // Mock Logger
         originalLoggerImpl = getLoggerImpl()
-        Logger.setImpl(object : Logger.LogImpl {
-            override fun d(tag: String, msg: String) {}
-            override fun e(tag: String, msg: String) { println("E/$tag: $msg") }
-            override fun e(tag: String, msg: String, t: Throwable?) { println("E/$tag: $msg") }
-            override fun i(tag: String, msg: String) {}
-        })
+        Logger.setImpl(
+            object : Logger.LogImpl {
+                override fun d(
+                    tag: String,
+                    msg: String,
+                ) {}
+
+                override fun e(
+                    tag: String,
+                    msg: String,
+                ) {
+                    println("E/$tag: $msg")
+                }
+
+                override fun e(
+                    tag: String,
+                    msg: String,
+                    t: Throwable?,
+                ) {
+                    println("E/$tag: $msg")
+                }
+
+                override fun i(
+                    tag: String,
+                    msg: String,
+                ) {}
+            },
+        )
 
         // Mock SecureFile
         originalSecureFileImpl = SecureFile.impl
-        SecureFile.impl = object : SecureFileOperations {
-            override fun writeText(file: File, content: String) {
-                file.parentFile?.mkdirs()
-                file.writeText(content)
+        SecureFile.impl =
+            object : SecureFileOperations {
+                override fun writeText(
+                    file: File,
+                    content: String,
+                ) {
+                    file.parentFile?.mkdirs()
+                    file.writeText(content)
+                }
+
+                override fun mkdirs(
+                    file: File,
+                    mode: Int,
+                ) {
+                    file.mkdirs()
+                }
+
+                override fun touch(
+                    file: File,
+                    mode: Int,
+                ) {
+                    file.parentFile?.mkdirs()
+                    file.createNewFile()
+                }
             }
-            override fun mkdirs(file: File, mode: Int) {
-                file.mkdirs()
-            }
-            override fun touch(file: File, mode: Int) {
-                file.parentFile?.mkdirs()
-                file.createNewFile()
-            }
-        }
 
         // Set Config.root via reflection
         try {
@@ -107,33 +138,33 @@ class ConfigInitializationLogicTest {
         randomOnBootFile.createNewFile()
 
         val spoofFile = File(tempDir, "spoof_build_vars")
-        spoofFile.writeText("ATTESTATION_ID_IMEI=123456789012345\n")
+        spoofFile.writeText("ATTESTATION_ID_IMEI=490154203237518\n")
 
         try {
-             callUpdateBuildVars(spoofFile)
+            callUpdateBuildVars(spoofFile)
         } catch (e: NoSuchMethodException) {
-             println("Methods available in Config:")
-             Config::class.java.declaredMethods.forEach { println(it.name) }
-             throw e
+            println("Methods available in Config:")
+            Config::class.java.declaredMethods.forEach { println(it.name) }
+            throw e
         }
 
-        assertEquals("123456789012345", Config.getBuildVar("ATTESTATION_ID_IMEI"))
+        assertEquals("490154203237518", Config.getBuildVar("ATTESTATION_ID_IMEI"))
 
         callEnforceRandomization()
 
         // Mirror the fix: Call updateBuildVars again to load the new values
         try {
-             callUpdateBuildVars(spoofFile)
+            callUpdateBuildVars(spoofFile)
         } catch (e: NoSuchMethodException) {
-             throw e
+            throw e
         }
 
         val fileContent = spoofFile.readText()
-        assertNotEquals("File should have been randomized", "ATTESTATION_ID_IMEI=123456789012345\n", fileContent)
+        assertNotEquals("File should have been randomized", "ATTESTATION_ID_IMEI=490154203237518\n", fileContent)
         assertTrue("File should contain ATTESTATION_ID_IMEI", fileContent.contains("ATTESTATION_ID_IMEI="))
 
         // Assert Fix: Config should have NEW value (randomized)
-        assertNotEquals("Config should have NEW value", "123456789012345", Config.getBuildVar("ATTESTATION_ID_IMEI"))
+        assertNotEquals("Config should have NEW value", "490154203237518", Config.getBuildVar("ATTESTATION_ID_IMEI"))
 
         // Extract IMEI from file content to verify exact match
         val newImei = fileContent.lines().find { it.startsWith("ATTESTATION_ID_IMEI=") }?.split("=")?.get(1)?.trim()
@@ -143,8 +174,9 @@ class ConfigInitializationLogicTest {
     private fun callUpdateBuildVars(file: File) {
         // Try finding method starting with updateBuildVars
         val methods = Config::class.java.declaredMethods
-        val method = methods.find { it.name.startsWith("updateBuildVars") }
-            ?: throw NoSuchMethodException("updateBuildVars not found")
+        val method =
+            methods.find { it.name.startsWith("updateBuildVars") }
+                ?: throw NoSuchMethodException("updateBuildVars not found")
 
         method.isAccessible = true
         method.invoke(Config, file)

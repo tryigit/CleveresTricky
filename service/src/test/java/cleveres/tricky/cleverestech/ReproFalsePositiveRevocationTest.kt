@@ -5,7 +5,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ReproFalsePositiveRevocationTest {
-
     @Test
     fun testAmbiguousKeyIsIncludedToAvoidSecurityBypass() {
         // A 32-character string that consists only of digits.
@@ -17,19 +16,23 @@ class ReproFalsePositiveRevocationTest {
 
         val decimalSerial = "10000000000000000000000000000001" // 32 chars
 
-        val json = """
-        {
-          "entries": {
-            "$decimalSerial": "REVOKED"
-          }
-        }
-        """.trimIndent()
+        val json =
+            """
+            {
+              "entries": {
+                "$decimalSerial": "REVOKED"
+              }
+            }
+            """.trimIndent()
 
         val revoked = KeyboxVerifier.parseCrl(json)
         println("Revoked: $revoked")
 
         // We expect it to be included as literal hex.
         // We now prioritize Security (catching potentially revoked hashes) over avoiding rare False Positives.
-        org.junit.Assert.assertTrue("Should contain literal string '$decimalSerial' (Security Fix)", revoked.contains(decimalSerial.lowercase()))
+        org.junit.Assert.assertTrue(
+            "Should contain literal string '$decimalSerial' (Security Fix)",
+            revoked.contains(decimalSerial.lowercase()),
+        )
     }
 }

@@ -1,10 +1,9 @@
 package cleveres.tricky.cleverestech
 
-import org.junit.Test
 import org.junit.Assert.assertEquals
+import org.junit.Test
 
 class TrimLineTest {
-
     // Reference implementation (old slow version)
     private fun String.referenceTrimLine() = trim().split("\n").joinToString("\n") { it.trim() }
 
@@ -20,19 +19,20 @@ class TrimLineTest {
         val input = sb.toString()
 
         // Edge cases
-        val edgeCases = listOf(
-            "",
-            "   ",
-            "\n",
-            "  \n  ",
-            "A",
-            " A ",
-            "\nA\n",
-            "  A  \n  B  ",
-            "A\n\nB",
-            " A \n \n B ",
-            "\n\n\n"
-        )
+        val edgeCases =
+            listOf(
+                "",
+                "   ",
+                "\n",
+                "  \n  ",
+                "A",
+                " A ",
+                "\nA\n",
+                "  A  \n  B  ",
+                "A\n\nB",
+                " A \n \n B ",
+                "\n\n\n",
+            )
 
         // Verify correctness for edge cases
         for (case in edgeCases) {

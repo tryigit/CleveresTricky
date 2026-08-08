@@ -1,6 +1,5 @@
-import android.databinding.tool.ext.capitalizeUS
-import org.jetbrains.kotlin.daemon.common.toHexString
 import java.security.MessageDigest
+import java.util.HexFormat
 
 plugins {
     alias(libs.plugins.agp.app)
@@ -23,7 +22,7 @@ fun calculateChecksum(variantLowered: String): String {
         update(verCode.toString().toByteArray(Charsets.UTF_8))
         update(author.toByteArray(Charsets.UTF_8))
         update(description.toByteArray(Charsets.UTF_8))
-        digest().toHexString()
+        HexFormat.of().formatHex(digest())
     }
 }
 
@@ -60,13 +59,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-            val signingKey =
-                if (project.hasProperty("RELEASE_KEYSTORE") || project.hasProperty("BETA_KEYSTORE")) {
-                    "release"
-                } else {
-                    "debug"
-                }
-            signingConfig = signingConfigs.getByName(signingKey)
+            if (project.hasProperty("RELEASE_KEYSTORE") || project.hasProperty("BETA_KEYSTORE")) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
         forEach {
             val checksum = calculateChecksum(it.name)
@@ -129,9 +124,6 @@ dependencies {
     testImplementation("net.sf.kxml:kxml2:2.3.0")
     testImplementation("org.json:json:20260719")
     testImplementation("org.mockito:mockito-core:5.23.0")
-    testImplementation("org.mockito:mockito-inline:5.2.0")
-    testImplementation("net.bytebuddy:byte-buddy:1.18.11")
-    testImplementation("net.bytebuddy:byte-buddy-agent:1.18.11")
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.espresso.core)
     androidTestImplementation(libs.androidx.test.runner)
@@ -141,7 +133,7 @@ dependencies {
 afterEvaluate {
     android.buildTypes.forEach { buildType ->
         val variantLowered = buildType.name.lowercase()
-        val variantCapped = buildType.name.capitalizeUS()
+        val variantCapped = buildType.name.replaceFirstChar { it.uppercaseChar() }
 
         val pushTask =
             tasks.register<Task>("pushService$variantCapped") {

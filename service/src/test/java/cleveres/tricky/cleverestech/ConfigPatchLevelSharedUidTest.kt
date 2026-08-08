@@ -5,7 +5,6 @@ import org.junit.Test
 import java.util.concurrent.ConcurrentHashMap
 
 class ConfigPatchLevelSharedUidTest {
-
     @Test
     fun testPatchLevelSharedUid() {
         Config.reset()
@@ -16,8 +15,9 @@ class ConfigPatchLevelSharedUidTest {
         val testPatchMap = mapOf("com.example.pkgB" to "2023-01-01")
         val defaultPatch = "2024-01-01"
 
-        val stateClass = Config::class.java.declaredClasses.find { it.simpleName == "SecurityPatchState" }
-            ?: throw ClassNotFoundException("SecurityPatchState not found")
+        val stateClass =
+            Config::class.java.declaredClasses.find { it.simpleName == "SecurityPatchState" }
+                ?: throw ClassNotFoundException("SecurityPatchState not found")
         val stateConstructor = stateClass.getDeclaredConstructor(Map::class.java, Any::class.java)
         stateConstructor.isAccessible = true
         val state = stateConstructor.newInstance(testPatchMap, defaultPatch)
@@ -36,7 +36,10 @@ class ConfigPatchLevelSharedUidTest {
         val packageCacheField = Config::class.java.getDeclaredField("packageCache")
         packageCacheField.isAccessible = true
         @Suppress("UNCHECKED_CAST")
-        val packageCache = packageCacheField.get(Config) as @Suppress("UNCHECKED_CAST") ConcurrentHashMap<Int, Any>
+        val packageCache =
+            packageCacheField.get(Config) as
+                @Suppress("UNCHECKED_CAST")
+                ConcurrentHashMap<Int, Any>
         packageCache[1001] = cachedPkg
 
         try {

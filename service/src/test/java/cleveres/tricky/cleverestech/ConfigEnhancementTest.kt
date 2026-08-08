@@ -1,24 +1,43 @@
 package cleveres.tricky.cleverestech
 
-import org.junit.Assert.*
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
 class ConfigEnhancementTest {
+    @Test
+    fun testInvalidCustomTemplateIsRejectedTransactionally() {
+        Config.updateCustomTemplates(null)
+        val before = Config.getTemplateNames()
+        val file = File.createTempFile("custom_templates_invalid", null)
+        file.deleteOnExit()
+        file.writeText("[bad\"name]\nMODEL=Injected")
+
+        Config.updateCustomTemplates(file)
+
+        assertEquals(before, Config.getTemplateNames())
+        assertFalse(Config.getTemplateNames().contains("bad\"name"))
+    }
 
     @Test
     fun testCustomTemplates() {
         // Create temp file
         val f = File.createTempFile("custom_templates", null)
         f.deleteOnExit()
-        f.writeText("""
+        f.writeText(
+            """
             [MyTemplate]
             MANUFACTURER=MyMan
             MODEL=MyModel
 
             [Another]
             BRAND=SomeBrand
-        """.trimIndent())
+            """.trimIndent(),
+        )
 
         Config.updateCustomTemplates(f)
 
@@ -43,11 +62,13 @@ class ConfigEnhancementTest {
         // Create temp file for build vars
         val f = File.createTempFile("spoof_build_vars", null)
         f.deleteOnExit()
-        f.writeText("""
+        f.writeText(
+            """
             MANUFACTURER=FallbackMan
             MODEL=FallbackModel
             ATTESTATION_ID_BRAND=ExplicitBrand
-        """.trimIndent())
+            """.trimIndent(),
+        )
 
         Config.updateBuildVars(f)
 

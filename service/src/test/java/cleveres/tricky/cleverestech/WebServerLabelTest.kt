@@ -4,15 +4,14 @@ import cleveres.tricky.cleverestech.keystore.CertHack
 import org.junit.After
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
-import org.junit.Rule
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 
 class WebServerLabelTest {
-
     @get:Rule
     val tempFolder = TemporaryFolder()
 
@@ -21,12 +20,30 @@ class WebServerLabelTest {
 
     @Before
     fun setUp() {
-        Logger.setImpl(object : Logger.LogImpl {
-            override fun d(tag: String, msg: String) {}
-            override fun e(tag: String, msg: String) {}
-            override fun e(tag: String, msg: String, t: Throwable?) {}
-            override fun i(tag: String, msg: String) {}
-        })
+        Logger.setImpl(
+            object : Logger.LogImpl {
+                override fun d(
+                    tag: String,
+                    msg: String,
+                ) {}
+
+                override fun e(
+                    tag: String,
+                    msg: String,
+                ) {}
+
+                override fun e(
+                    tag: String,
+                    msg: String,
+                    t: Throwable?,
+                ) {}
+
+                override fun i(
+                    tag: String,
+                    msg: String,
+                ) {}
+            },
+        )
         configDir = tempFolder.newFolder("config")
         server = WebServer(0, configDir)
         server.start()
@@ -47,8 +64,9 @@ class WebServerLabelTest {
         val conn = url.openConnection() as HttpURLConnection
         val html = conn.inputStream.bufferedReader().readText()
 
-        assertTrue("Keybox Content textarea should have a visible label",
-            html.contains("<label for=\"kbContent\"") && html.contains(">Manual Paste (XML)</label>")
+        assertTrue(
+            "Keybox Content textarea should have a visible label",
+            html.contains("<label for=\"kbContent\"") && html.contains(">Manual Paste (XML)</label>"),
         )
     }
 
@@ -60,8 +78,9 @@ class WebServerLabelTest {
         val conn = url.openConnection() as HttpURLConnection
         val html = conn.inputStream.bufferedReader().readText()
 
-        assertTrue("Delete rule button should have a title attribute",
-            html.contains("title=\"Remove rule\"") && html.contains("aria-label=\"Remove rule for \${rule.package}\"")
+        assertTrue(
+            "Delete rule button should have a title attribute",
+            html.contains("title=\"Remove rule\"") && html.contains("aria-label=\"Remove rule for \${rule.package}\""),
         )
     }
 }

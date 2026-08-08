@@ -75,7 +75,10 @@ class PackageTrie<T> {
     var size = 0
         private set
 
-    fun add(rule: String, value: T) {
+    fun add(
+        rule: String,
+        value: T,
+    ) {
         size++
         var current = root
         var effectiveRule = rule

@@ -1,23 +1,27 @@
-# Log Documentation
+# Logging and diagnostics
 
-## How to Read Logs
-The module does not use a proprietary log file. Instead, it integrates directly with Android's standard logging system. You must read the logs through `logcat`.
+CleveresTricky writes diagnostics to Android logcat; it does not store a separate plaintext log file.
 
-## Best Logcat Filter
-To view logs specifically for this module, use the following filter in your terminal:
 ```bash
-adb logcat -s cleverestricky
+adb logcat -s cleverestricky CleveresTricky
 ```
 
-## What to Pay Attention To First
-When analyzing logs, pay attention to the following:
-1. **Initialization:** Look for the startup message `Welcome to Service!` to ensure the module is loading.
-2. **Errors:** Look for any `E/cleverestricky` tags which indicate errors (e.g., failure to load config, server start failures).
-3. **WebUI:** Check if `Web server started on port` appears.
-4. **Interceptors:** Verify that `PropertyHiderService registered successfully` and similar Binder interceptor logs appear.
+Useful startup markers are:
 
-## Additional Debug Logging
-If you are using a `debug` build of the module, additional, more verbose logging is automatically enabled to help trace application flow and troubleshoot issues.
+- `Welcome to Service!`
+- `Web server on port ...`
+- `libbinder ioctl hook installed successfully`
+- `Keystore Binder interceptor registered`
+- `TEE SecurityLevel interceptor registered`
 
-## Testing Functionality
-We test functionality across a variety of devices (e.g., Pixel series, Xiaomi) running Android 12+. Key components such as the WebUI, Binder interception, and property spoofing are verified through Android instrumented tests and manual device flashing.
+Errors such as `TAMPER DETECTED`, `Binder ABI validation failed`, a rejected keybox, or an injector timeout are actionable. Release builds retain informational, warning, and error logs; debug builds additionally emit verbose native diagnostics.
+
+For a clean capture:
+
+```bash
+adb logcat -c
+adb shell su -c 'setprop ctl.restart keystore2'
+adb logcat -d -s cleverestricky CleveresTricky
+```
+
+Do not publish logs without reviewing them. Although credentials and WebUI tokens are not intentionally logged, filenames, package names, device properties, and process identifiers may still be sensitive.

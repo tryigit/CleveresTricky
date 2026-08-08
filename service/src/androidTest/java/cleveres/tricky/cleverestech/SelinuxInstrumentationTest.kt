@@ -2,17 +2,16 @@ package cleveres.tricky.cleverestech
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.io.File
 import java.io.BufferedReader
+import java.io.File
 import java.io.InputStreamReader
 
 @RunWith(AndroidJUnit4::class)
 class SelinuxInstrumentationTest {
-
     private fun executeCommand(vararg command: String): Pair<Int, String> {
         return try {
             val process = Runtime.getRuntime().exec(command)
@@ -58,10 +57,12 @@ class SelinuxInstrumentationTest {
         // Either chcon is not found, or it fails due to permission denied
         // In both cases, exit code shouldn't be 0 for a non-root app trying to set system_file
         assertTrue("chcon should fail for non-root apps setting system context", exitCode != 0)
-        assertTrue("Output should indicate permission denied or not found",
+        assertTrue(
+            "Output should indicate permission denied or not found",
             output.contains("Permission denied", ignoreCase = true) ||
-            output.contains("not found", ignoreCase = true) ||
-            output.contains("Operation not permitted", ignoreCase = true))
+                output.contains("not found", ignoreCase = true) ||
+                output.contains("Operation not permitted", ignoreCase = true),
+        )
 
         testFile.delete()
     }

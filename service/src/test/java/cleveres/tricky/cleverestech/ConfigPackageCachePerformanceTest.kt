@@ -11,7 +11,6 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 class ConfigPackageCachePerformanceTest {
-
     private lateinit var mockPm: IPackageManager
     private val callLatencyMs = 50L
 
@@ -20,17 +19,18 @@ class ConfigPackageCachePerformanceTest {
         Config.reset()
 
         // Create dynamic proxy for IPackageManager
-        mockPm = Proxy.newProxyInstance(
-            IPackageManager::class.java.classLoader,
-            arrayOf(IPackageManager::class.java)
-        ) { _, method, args ->
-            if (method.name == "getPackagesForUid") {
-                Thread.sleep(callLatencyMs)
-                val uid = args[0] as Int
-                return@newProxyInstance arrayOf("com.example.app$uid")
-            }
-            null
-        } as IPackageManager
+        mockPm =
+            Proxy.newProxyInstance(
+                IPackageManager::class.java.classLoader,
+                arrayOf(IPackageManager::class.java),
+            ) { _, method, args ->
+                if (method.name == "getPackagesForUid") {
+                    Thread.sleep(callLatencyMs)
+                    val uid = args[0] as Int
+                    return@newProxyInstance arrayOf("com.example.app$uid")
+                }
+                null
+            } as IPackageManager
 
         // Reflection to set Config.iPm
         val field = Config::class.java.getDeclaredField("iPm")

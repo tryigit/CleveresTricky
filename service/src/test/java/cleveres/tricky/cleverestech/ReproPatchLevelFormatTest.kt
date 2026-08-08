@@ -5,7 +5,6 @@ import org.junit.Test
 import java.io.File
 
 class ReproPatchLevelFormatTest {
-
     @Test
     fun testPatchLevelWithoutDashes() {
         // Many users might input "20231201" instead of "2023-12-01"

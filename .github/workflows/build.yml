@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   # ============================================================
@@ -33,13 +33,13 @@ jobs:
       - name: "🐚 Shell Script Linting (Shellcheck)"
         run: |
           sudo apt-get update && sudo apt-get install -y shellcheck
-          shellcheck module/template/*.sh || echo "::warning::Shellcheck found issues (suppressed for now to avoid breaking existing code)"
+          shellcheck module/template/*.sh
 
       - name: "🎨 Kotlin Format & Quality (Ktlint)"
         run: ./gradlew ktlintCheck
 
       - name: "📱 Android Static Analysis (Lint)"
-        run: ./gradlew lintDebug
+        run: ./gradlew :service:lintDebug :stub:lintDebug :encryptor-app:lintDebug
 
   # ============================================================
   # Phase 2: Rust Tests & Linters
@@ -82,14 +82,14 @@ jobs:
 
       - name: Security Audit
         run: |
-          cargo install cargo-audit
+          cargo install cargo-audit --locked
           cargo audit
 
   # ============================================================
-  # Phase 2: Build & Release
+  # Phase 3: Build artifacts
   # ============================================================
   build:
-    name: "🛠️ Build & Release Module"
+    name: "🛠️ Build Module"
     runs-on: ubuntu-latest
     needs: rust-test
     steps:
@@ -121,7 +121,7 @@ jobs:
           done < module/template/sepolicy.rule
           if [ "$ERRORS" -gt 0 ]; then exit 1; fi
 
-      - name: "📱 Magisk Module Structure Validation"
+      - name: "📱 KernelSU/APatch Module Structure Validation"
         run: |
           ERRORS=0
           for f in module.prop customize.sh service.sh post-fs-data.sh sepolicy.rule; do
@@ -152,6 +152,11 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v4
 
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,x86_64-linux-android
+
       - name: Run Module Tests
         run: ./gradlew :module:testDebugUnitTest
 
@@ -172,96 +177,85 @@ jobs:
           ./gradlew zipDebug
           ./gradlew :encryptor-app:assembleRelease
 
-      - name: Prepare artifact
-        if: success()
-        id: prepareArtifact
-        run: |
-          releasePath=$(ls module/release/*-release.zip)
-          releaseName=$(basename "$releasePath" .zip)
-          echo "releaseName=$releaseName" >> $GITHUB_OUTPUT
-
-          debugPath=$(ls module/release/*-debug.zip)
-          debugName=$(basename "$debugPath" .zip)
-          echo "debugName=$debugName" >> $GITHUB_OUTPUT
-
-          unzip "$releasePath" -d module-release
-          unzip "$debugPath" -d module-debug
-
       - name: Upload release zip
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ steps.prepareArtifact.outputs.releaseName }}
-          path: "./module-release/*"
+          name: CleveresTricky-release
+          path: "module/release/*-release.zip"
+          if-no-files-found: error
+          compression-level: 0
 
       - name: Upload debug zip
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ steps.prepareArtifact.outputs.debugName }}
-          path: "./module-debug/*"
+          name: CleveresTricky-debug
+          path: "module/release/*-debug.zip"
+          if-no-files-found: error
+          compression-level: 0
 
       - name: Upload Encryptor App
         uses: actions/upload-artifact@v7
         with:
           name: EncryptorApp
-          path: "./encryptor-app/build/outputs/apk/release/*.apk"
+          path: "encryptor-app/build/outputs/apk/release/*.apk"
+          if-no-files-found: error
+          compression-level: 0
 
-      - name: Check for Release Tag
-        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/master'
-        id: check_release
+  # ============================================================
+  # Phase 4: Publish only after a protected master push
+  # ============================================================
+  release:
+    name: "📦 Publish Release"
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: write
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Download release zip
+        uses: actions/download-artifact@v8
+        with:
+          name: CleveresTricky-release
+          path: release-assets
+
+      - name: Download debug zip
+        uses: actions/download-artifact@v8
+        with:
+          name: CleveresTricky-debug
+          path: release-assets
+
+      - name: Download Encryptor App
+        uses: actions/download-artifact@v8
+        with:
+          name: EncryptorApp
+          path: release-assets
+
+      - name: Check release version
+        id: release_version
+        shell: bash
         run: |
-          VERSION=$(grep 'val verName by extra' build.gradle.kts | cut -d'"' -f2 | sed 's/^[vV]//')
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          if git ls-remote --exit-code --tags origin "refs/tags/V$VERSION" >/dev/null 2>&1; then
-            echo "create_release=false" >> $GITHUB_OUTPUT
+          version=$(sed -n 's/^val verName by extra("[vV]\{0,1\}\([^"]*\)").*/\1/p' build.gradle.kts)
+          if [ -z "$version" ]; then
+            echo "::error::Could not read verName from build.gradle.kts"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if git ls-remote --exit-code --tags origin "refs/tags/V$version" >/dev/null 2>&1; then
+            echo "create=false" >> "$GITHUB_OUTPUT"
           else
-            echo "create_release=true" >> $GITHUB_OUTPUT
+            echo "create=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: "📝 Build Changelog"
-        if: steps.check_release.outputs.create_release == 'true'
-        id: build_changelog
-        run: |
-          PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          if [ -z "$PREV_TAG" ]; then
-              git log --pretty=format:"%s" > raw_commits.txt
-          else
-              git log ${PREV_TAG}..HEAD --pretty=format:"%s" > raw_commits.txt
-          fi
-          
-          python3 -c '
-          import re
-          from collections import defaultdict
-          
-          groups = defaultdict(list)
-          for line in open("raw_commits.txt"):
-              line = line.strip()
-              if not line: continue
-              match = re.search(r"^(.*)\s+\(#(\d+)\)$", line)
-              if match:
-                  msg = match.group(1).strip()
-                  num = match.group(2)
-                  groups[msg].append(num)
-              else:
-                  groups[line].append(None)
-          
-          with open("CHANGELOG.md", "w", encoding="utf-8") as f:
-              f.write("## 🚀 Changes\n")
-              for msg, nums in groups.items():
-                  nums = [n for n in nums if n]
-                  if nums:
-                      f.write("- " + msg + " (#" + ", #".join(nums) + ")\n")
-                  else:
-                      f.write("- " + msg + "\n")
-          '
-
-      - name: Create Tag & Release
-        if: steps.check_release.outputs.create_release == 'true'
+      - name: Create tag and release
+        if: steps.release_version.outputs.create == 'true'
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: "V${{ env.VERSION }}"
-          name: "Release V${{ env.VERSION }}"
-          body_path: CHANGELOG.md
-          files: |
-            module/release/*-release.zip
-            module/release/*-debug.zip
-            encryptor-app/build/outputs/apk/release/*.apk
+          tag_name: "V${{ steps.release_version.outputs.version }}"
+          name: "Release V${{ steps.release_version.outputs.version }}"
+          generate_release_notes: true
+          files: "release-assets/*"

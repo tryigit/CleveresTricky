@@ -1,8 +1,8 @@
 package cleveres.tricky.cleverestech.util
 
-import org.junit.Test
-import org.junit.Assert.*
+import org.junit.Assert.assertTrue
 import org.junit.Rule
+import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
 

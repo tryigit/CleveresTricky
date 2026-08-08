@@ -1,39 +1,82 @@
 package cleveres.tricky.cleverestech
 
 import android.util.Log
-import cleveres.tricky.cleverestech.BuildConfig
 
 object Logger {
     const val TAG = "cleverestricky"
 
     interface LogImpl {
-        fun d(tag: String, msg: String)
-        fun e(tag: String, msg: String)
-        fun e(tag: String, msg: String, t: Throwable?)
-        fun i(tag: String, msg: String)
+        fun d(
+            tag: String,
+            msg: String,
+        )
+
+        fun e(
+            tag: String,
+            msg: String,
+        )
+
+        fun e(
+            tag: String,
+            msg: String,
+            t: Throwable?,
+        )
+
+        fun i(
+            tag: String,
+            msg: String,
+        )
+
+        fun w(
+            tag: String,
+            msg: String,
+        ) {
+            i(tag, msg)
+        }
     }
 
-    private var impl: LogImpl = object : LogImpl {
-        override fun d(tag: String, msg: String) {
-            Log.d(tag, msg)
-        }
+    private var impl: LogImpl =
+        object : LogImpl {
+            override fun d(
+                tag: String,
+                msg: String,
+            ) {
+                Log.d(tag, msg)
+            }
 
-        override fun e(tag: String, msg: String) {
-            Log.e(tag, msg)
-        }
-
-        override fun e(tag: String, msg: String, t: Throwable?) {
-            if (t != null) {
-                Log.e(tag, msg, t)
-            } else {
+            override fun e(
+                tag: String,
+                msg: String,
+            ) {
                 Log.e(tag, msg)
             }
-        }
 
-        override fun i(tag: String, msg: String) {
-            Log.i(tag, msg)
+            override fun e(
+                tag: String,
+                msg: String,
+                t: Throwable?,
+            ) {
+                if (t != null) {
+                    Log.e(tag, msg, t)
+                } else {
+                    Log.e(tag, msg)
+                }
+            }
+
+            override fun i(
+                tag: String,
+                msg: String,
+            ) {
+                Log.i(tag, msg)
+            }
+
+            override fun w(
+                tag: String,
+                msg: String,
+            ) {
+                Log.w(tag, msg)
+            }
         }
-    }
 
     @JvmStatic
     fun setImpl(newImpl: LogImpl) {
@@ -46,7 +89,10 @@ object Logger {
     }
 
     @JvmStatic
-    fun d(tag: String, msg: String) {
+    fun d(
+        tag: String,
+        msg: String,
+    ) {
         impl.d(tag, msg)
     }
 
@@ -63,17 +109,27 @@ object Logger {
     }
 
     @JvmStatic
-    fun e(tag: String, msg: String) {
+    fun e(
+        tag: String,
+        msg: String,
+    ) {
         impl.e(tag, msg)
     }
 
     @JvmStatic
-    fun e(msg: String, t: Throwable?) {
+    fun e(
+        msg: String,
+        t: Throwable?,
+    ) {
         impl.e(TAG, msg, t)
     }
 
     @JvmStatic
-    fun e(tag: String, msg: String, t: Throwable?) {
+    fun e(
+        tag: String,
+        msg: String,
+        t: Throwable?,
+    ) {
         impl.e(tag, msg, t)
     }
 
@@ -83,8 +139,24 @@ object Logger {
     }
 
     @JvmStatic
-    fun i(tag: String, msg: String) {
+    fun i(
+        tag: String,
+        msg: String,
+    ) {
         impl.i(tag, msg)
+    }
+
+    @JvmStatic
+    fun w(msg: String) {
+        impl.w(TAG, msg)
+    }
+
+    @JvmStatic
+    fun w(
+        tag: String,
+        msg: String,
+    ) {
+        impl.w(tag, msg)
     }
 
     @JvmStatic

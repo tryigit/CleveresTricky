@@ -6,7 +6,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
 import java.lang.reflect.InvocationHandler
-import java.lang.reflect.Method
 import java.lang.reflect.Proxy
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
@@ -14,7 +13,6 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 class ConfigThunderingHerdTest {
-
     private lateinit var mockPm: IPackageManager
     private var originalPm: IPackageManager? = null
     private val callLatencyMs = 100L
@@ -23,20 +21,22 @@ class ConfigThunderingHerdTest {
     @Before
     fun setup() {
         // Create dynamic proxy for IPackageManager
-        val handler = InvocationHandler { _, method, args ->
-            if (method.name == "getPackagesForUid") {
-                callCount.incrementAndGet()
-                Thread.sleep(callLatencyMs)
-                return@InvocationHandler arrayOf("com.example.app")
+        val handler =
+            InvocationHandler { _, method, args ->
+                if (method.name == "getPackagesForUid") {
+                    callCount.incrementAndGet()
+                    Thread.sleep(callLatencyMs)
+                    return@InvocationHandler arrayOf("com.example.app")
+                }
+                null
             }
-            null
-        }
 
-        mockPm = Proxy.newProxyInstance(
-            IPackageManager::class.java.classLoader,
-            arrayOf(IPackageManager::class.java),
-            handler
-        ) as IPackageManager
+        mockPm =
+            Proxy.newProxyInstance(
+                IPackageManager::class.java.classLoader,
+                arrayOf(IPackageManager::class.java),
+                handler,
+            ) as IPackageManager
 
         // Reflection to set Config.iPm
         val field = Config::class.java.getDeclaredField("iPm")

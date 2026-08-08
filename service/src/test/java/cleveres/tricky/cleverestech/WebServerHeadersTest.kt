@@ -12,7 +12,6 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 class WebServerHeadersTest {
-
     @get:Rule
     val tempFolder = TemporaryFolder()
 
@@ -22,12 +21,32 @@ class WebServerHeadersTest {
     @Before
     fun setUp() {
         // Mock Logger
-        Logger.setImpl(object : Logger.LogImpl {
-            override fun d(tag: String, msg: String) {}
-            override fun e(tag: String, msg: String) {}
-            override fun e(tag: String, msg: String, t: Throwable?) { t?.printStackTrace() }
-            override fun i(tag: String, msg: String) {}
-        })
+        Logger.setImpl(
+            object : Logger.LogImpl {
+                override fun d(
+                    tag: String,
+                    msg: String,
+                ) {}
+
+                override fun e(
+                    tag: String,
+                    msg: String,
+                ) {}
+
+                override fun e(
+                    tag: String,
+                    msg: String,
+                    t: Throwable?,
+                ) {
+                    t?.printStackTrace()
+                }
+
+                override fun i(
+                    tag: String,
+                    msg: String,
+                ) {}
+            },
+        )
         configDir = tempFolder.newFolder("config")
         server = WebServer(0, configDir)
         server.start()
@@ -64,7 +83,10 @@ class WebServerHeadersTest {
         assertEquals("no-referrer", referrerPolicy)
     }
 
-    private fun assertTrue(message: String, condition: Boolean) {
+    private fun assertTrue(
+        message: String,
+        condition: Boolean,
+    ) {
         if (!condition) throw AssertionError(message)
     }
 }

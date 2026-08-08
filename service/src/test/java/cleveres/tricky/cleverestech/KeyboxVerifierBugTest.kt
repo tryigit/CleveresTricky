@@ -5,7 +5,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class KeyboxVerifierBugTest {
-
     @Test
     fun testParseCrlWithLongAllDigitHex() {
         // A 32-character string that happens to be all digits.
@@ -14,13 +13,14 @@ class KeyboxVerifierBugTest {
 
         val targetStr = "10000000000000000000000000000001"
         val expectedHex = java.math.BigInteger(targetStr).toString(16)
-        val json = """
-        {
-          "entries": {
-            "$targetStr": "REVOKED"
-          }
-        }
-        """.trimIndent()
+        val json =
+            """
+            {
+              "entries": {
+                "$targetStr": "REVOKED"
+              }
+            }
+            """.trimIndent()
 
         val revoked = KeyboxVerifier.parseCrl(json)
 

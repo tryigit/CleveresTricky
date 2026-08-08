@@ -4,10 +4,8 @@ import cleveres.tricky.cleverestech.util.KeyboxVerifier
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.math.BigInteger
-import java.security.MessageDigest
 
 class KeyboxVerifierPaddingBugTest {
-
     @Test
     fun testParseCrlWithDecimalRepresentingHashWithLeadingZero() {
         // Create a fake certificate or just simulate the check logic
@@ -26,13 +24,14 @@ class KeyboxVerifierPaddingBugTest {
         println("Testing with Decimal String: " + decimalString)
         println("Which corresponds to Hex: " + hexHash)
 
-        val json = """
-        {
-          "entries": {
-            "$decimalString": "REVOKED"
-          }
-        }
-        """.trimIndent()
+        val json =
+            """
+            {
+              "entries": {
+                "$decimalString": "REVOKED"
+              }
+            }
+            """.trimIndent()
 
         val revokedSet = KeyboxVerifier.parseCrl(json)
         println("Revoked Set contains: " + revokedSet)
@@ -49,7 +48,9 @@ class KeyboxVerifierPaddingBugTest {
         // However, the verifier doesn't know if it's a hash or serial number at parse time.
         // But hashes have fixed lengths (32 chars for MD5, 40 for SHA1, 64 for SHA256).
 
-        assertTrue("Revoked set should contain the padded hex string used by checkHash. Set: " + revokedSet,
-            revokedSet.contains(hexHash))
+        assertTrue(
+            "Revoked set should contain the padded hex string used by checkHash. Set: " + revokedSet,
+            revokedSet.contains(hexHash),
+        )
     }
 }

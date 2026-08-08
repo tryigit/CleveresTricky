@@ -1,7 +1,6 @@
 package cleveres.tricky.cleverestech
 
 import org.junit.After
-import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -11,7 +10,6 @@ import java.net.Socket
 import java.net.SocketTimeoutException
 
 class WebServerDosTest {
-
     @get:Rule
     val tempFolder = TemporaryFolder()
 
@@ -21,12 +19,32 @@ class WebServerDosTest {
     @Before
     fun setUp() {
         // Mock Logger
-        Logger.setImpl(object : Logger.LogImpl {
-            override fun d(tag: String, msg: String) {}
-            override fun e(tag: String, msg: String) {}
-            override fun e(tag: String, msg: String, t: Throwable?) { t?.printStackTrace() }
-            override fun i(tag: String, msg: String) {}
-        })
+        Logger.setImpl(
+            object : Logger.LogImpl {
+                override fun d(
+                    tag: String,
+                    msg: String,
+                ) {}
+
+                override fun e(
+                    tag: String,
+                    msg: String,
+                ) {}
+
+                override fun e(
+                    tag: String,
+                    msg: String,
+                    t: Throwable?,
+                ) {
+                    t?.printStackTrace()
+                }
+
+                override fun i(
+                    tag: String,
+                    msg: String,
+                ) {}
+            },
+        )
         configDir = tempFolder.newFolder("config")
         server = WebServer(0, configDir)
         server.start()
@@ -64,13 +82,13 @@ class WebServerDosTest {
         try {
             val line = reader.readLine()
             if (line == null) {
-                 // Success - Server dropped connection without responding, protecting itself
+                // Success - Server dropped connection without responding, protecting itself
             } else {
-                 if (line.contains("400") || line.contains("500")) {
-                     // Success - Server rejected the payload
-                 } else {
-                     org.junit.Assert.fail("Expected 400 or 500 response but got: $line")
-                 }
+                if (line.contains("400") || line.contains("500")) {
+                    // Success - Server rejected the payload
+                } else {
+                    org.junit.Assert.fail("Expected 400 or 500 response but got: $line")
+                }
             }
         } catch (e: SocketTimeoutException) {
             org.junit.Assert.fail("Server timed out waiting for data (Vulnerable to DoS)")
@@ -103,13 +121,13 @@ class WebServerDosTest {
         try {
             val line = reader.readLine()
             if (line == null) {
-                 // Success - Server dropped connection
+                // Success - Server dropped connection
             } else {
-                 if (line.contains("400") || line.contains("500")) {
-                     // Success
-                 } else {
-                     org.junit.Assert.fail("Expected 400 or 500 response but got: $line")
-                 }
+                if (line.contains("400") || line.contains("500")) {
+                    // Success
+                } else {
+                    org.junit.Assert.fail("Expected 400 or 500 response but got: $line")
+                }
             }
         } catch (e: SocketTimeoutException) {
             org.junit.Assert.fail("Server timed out waiting for data (Vulnerable to DoS)")

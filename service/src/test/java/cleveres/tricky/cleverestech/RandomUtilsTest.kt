@@ -2,11 +2,11 @@ package cleveres.tricky.cleverestech
 
 import cleveres.tricky.cleverestech.util.RandomUtils
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RandomUtilsTest {
-
     @Test
     fun testGenerateLuhn() {
         val length = 15
@@ -65,15 +65,19 @@ class RandomUtilsTest {
     }
 
     @Test
-    fun testGenerateRandomMac() {
-        val mac = RandomUtils.generateRandomMac()
-        assertTrue(mac.matches(Regex("^([0-9a-f]{2}:){5}[0-9a-f]{2}$")))
+    fun testGenerateDigitsWithPrefix() {
+        val digits = RandomUtils.generateDigits(15, "310260")
+        assertEquals(15, digits.length)
+        assertTrue(digits.startsWith("310260"))
+        assertTrue(digits.all(Char::isDigit))
     }
 
     @Test
-    fun testGenerateRandomAndroidId() {
-        val aid = RandomUtils.generateRandomAndroidId()
-        assertEquals(16, aid.length)
-        assertTrue(aid.matches(Regex("^[0-9a-f]+$")))
+    fun testRejectsInvalidIdentifierArguments() {
+        assertThrows(IllegalArgumentException::class.java) { RandomUtils.generateLuhn(1) }
+        assertThrows(IllegalArgumentException::class.java) { RandomUtils.generateLuhn(15, "abc") }
+        assertThrows(IllegalArgumentException::class.java) { RandomUtils.generateLuhn(2, "12") }
+        assertThrows(IllegalArgumentException::class.java) { RandomUtils.generateDigits(3, "1234") }
+        assertThrows(IllegalArgumentException::class.java) { RandomUtils.generateRandomSerial(0) }
     }
 }

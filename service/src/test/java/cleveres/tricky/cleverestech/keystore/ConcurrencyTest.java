@@ -4,6 +4,7 @@ import org.junit.Test;
 import java.io.StringReader;
 import java.util.concurrent.atomic.AtomicBoolean;
 import static org.junit.Assert.*;
+import cleveres.tricky.cleverestech.TestKeyboxFixtures;
 
 public class ConcurrencyTest {
 
@@ -13,26 +14,12 @@ public class ConcurrencyTest {
             "<Keybox>\n" +
             "<Key algorithm=\"ecdsa\">\n" +
             "<PrivateKey>\n" +
-            "-----BEGIN EC PRIVATE KEY-----\n" +
-            "MHcCAQEEIAcPs+YkQGT6EDkaEH6Z9StSR7mQuKnh49K0DVqB/ZxYoAoGCCqGSM49\n" +
-            "AwEHoUQDQgAEzi23gXvUATkDmPcNPgsqe24eWmSIfuteSk8S5wJxs4ABt+O6QGAO\n" +
-            "XHqvCjNpJSbUxgz3SZefi8TWWQ1t32G/1w==\n" +
-            "-----END EC PRIVATE KEY-----\n" +
+            TestKeyboxFixtures.INSTANCE.getEcPrivateKey() + "\n" +
             "</PrivateKey>\n" +
             "<CertificateChain>\n" +
             "<NumberOfCertificates>1</NumberOfCertificates>\n" +
             "<Certificate>\n" +
-            "-----BEGIN CERTIFICATE-----\n" +
-            "MIIBfTCCASOgAwIBAgIUBZ47iWGUbx00hmWBPTYkakbXnigwCgYIKoZIzj0EAwIw\n" +
-            "FDESMBAGA1UEAwwJVGVzdCBDZXJ0MB4XDTI2MDEyOTIxNTI0M1oXDTI3MDEyNDIx\n" +
-            "NTI0M1owFDESMBAGA1UEAwwJVGVzdCBDZXJ0MFkwEwYHKoZIzj0CAQYIKoZIzj0D\n" +
-            "AQcDQgAEzi23gXvUATkDmPcNPgsqe24eWmSIfuteSk8S5wJxs4ABt+O6QGAOXHqv\n" +
-            "CjNpJSbUxgz3SZefi8TWWQ1t32G/16NTMFEwHQYDVR0OBBYEFCwifKyDaNaHtKvx\n" +
-            "m+0eLn/LZoTaMB8GA1UdIwQYMBaAFCwifKyDaNaHtKvxm+0eLn/LZoTaMA8GA1Ud\n" +
-            "EwEB/wQFMAMBAf8wCgYIKoZIzj0EAwIDSAAwRQIgT+CWCLXuIN5XY0c3mFN1p1FM\n" +
-            "1KAiK9pMwjbHYxNxDmYCIQDXriCpaafMnkJIqGb8UsI5XlkQD0soXYP7hd9ymW/t\n" +
-            "qg==\n" +
-            "-----END CERTIFICATE-----\n" +
+            TestKeyboxFixtures.INSTANCE.getCertificate() + "\n" +
             "</Certificate>\n" +
             "</CertificateChain>\n" +
             "</Key>\n" +

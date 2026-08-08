@@ -3,10 +3,8 @@ package cleveres.tricky.cleverestech
 import cleveres.tricky.cleverestech.util.KeyboxVerifier
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.math.BigInteger
 
 class ReproFailOpenAmbiguityTest {
-
     @Test
     fun testParseCrlFailOpenOnAllDigitHash() {
         // A 32-digit string that is ambiguous.
@@ -21,13 +19,14 @@ class ReproFailOpenAmbiguityTest {
 
         val ambiguousStr = "12345678901234567890123456789012"
 
-        val json = """
-        {
-          "entries": {
-            "$ambiguousStr": "REVOKED"
-          }
-        }
-        """.trimIndent()
+        val json =
+            """
+            {
+              "entries": {
+                "$ambiguousStr": "REVOKED"
+              }
+            }
+            """.trimIndent()
 
         val revoked = KeyboxVerifier.parseCrl(json)
         println("Revoked Set: " + revoked)

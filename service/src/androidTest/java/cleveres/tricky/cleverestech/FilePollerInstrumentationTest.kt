@@ -4,15 +4,13 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
-import org.junit.runner.RunWith
 import org.junit.rules.TemporaryFolder
-import java.io.File
+import org.junit.runner.RunWith
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 @RunWith(AndroidJUnit4::class)
 class FilePollerInstrumentationTest {
-
     @get:Rule
     val tempFolder = TemporaryFolder()
 
@@ -26,9 +24,10 @@ class FilePollerInstrumentationTest {
 
         // Use default interval (5000ms) to show that efficient polling (FileObserver) works
         // If it falls back to polling, this test will likely fail (timeout > 200ms)
-        val poller = FilePoller(testFile) {
-            latch.countDown()
-        }
+        val poller =
+            FilePoller(testFile) {
+                latch.countDown()
+            }
         poller.start()
 
         // Wait a bit to ensure poller is ready
@@ -51,6 +50,9 @@ class FilePollerInstrumentationTest {
             println("Benchmark: Detection took ${duration}ms")
         }
 
-        assertTrue("Detection took too long: ${duration}ms. Expected near-instant detection with FileObserver. Test fallback polling took >4000ms", detected)
+        assertTrue(
+            "Detection took too long: ${duration}ms. Expected near-instant detection with FileObserver. Test fallback polling took >4000ms",
+            detected,
+        )
     }
 }

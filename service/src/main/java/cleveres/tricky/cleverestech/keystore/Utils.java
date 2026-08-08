@@ -5,85 +5,134 @@ import android.system.keystore2.KeyMetadata;
 import android.util.Log;
 
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import cleveres.tricky.cleverestech.util.FastByteArrayOutputStream;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Iterator;
+import java.util.List;
 
-public class Utils {
-    private final static String TAG = "Utils";
-    private static final CertificateFactory certFactoryInstance;
-    static {
-        CertificateFactory cf = null;
-        try {
-            cf = CertificateFactory.getInstance("X.509");
-        } catch (CertificateException e) {
-            Log.e(TAG, "Failed to get X.509 CertificateFactory", e);
-        }
-        certFactoryInstance = cf;
+import cleveres.tricky.cleverestech.util.FastByteArrayOutputStream;
+
+public final class Utils {
+    private static final String TAG = "Utils";
+    private static final int MAX_CERTIFICATE_BYTES = 1024 * 1024;
+    private static final int MAX_CHAIN_BYTES = 8 * 1024 * 1024;
+    private static final int MAX_CERTIFICATES = 16;
+
+    private static final ThreadLocal<CertificateFactory> CERTIFICATE_FACTORY =
+            new ThreadLocal<CertificateFactory>() {
+                @Override
+                protected CertificateFactory initialValue() {
+                    try {
+                        return CertificateFactory.getInstance("X.509");
+                    } catch (CertificateException error) {
+                        Log.e(TAG, "X.509 certificate factory is unavailable");
+                        return null;
+                    }
+                }
+            };
+
+    private Utils() {
     }
-    static X509Certificate toCertificate(byte[] bytes) {
+
+    static X509Certificate toCertificate(byte[] encoded) {
+        if (encoded == null || encoded.length == 0 ||
+                encoded.length > MAX_CERTIFICATE_BYTES) {
+            return null;
+        }
         try {
-            if (certFactoryInstance == null) return null;
-            return (X509Certificate) certFactoryInstance.generateCertificate(
-                    new ByteArrayInputStream(bytes));
-        } catch (CertificateException e) {
-            Log.w(TAG, "Couldn't parse certificate in keystore", e);
+            CertificateFactory factory = CERTIFICATE_FACTORY.get();
+            if (factory == null) return null;
+            return (X509Certificate) factory.generateCertificate(
+                    new ByteArrayInputStream(encoded));
+        } catch (CertificateException | ClassCastException error) {
+            Log.w(TAG, "Could not parse an X.509 certificate");
             return null;
         }
     }
 
-    @SuppressWarnings("unchecked")
-    private static Collection<X509Certificate> toCertificates(byte[] bytes) {
+    private static List<X509Certificate> toCertificates(byte[] encoded) {
+        if (encoded == null || encoded.length == 0 ||
+                encoded.length > MAX_CHAIN_BYTES) {
+            return List.of();
+        }
         try {
-            if (certFactoryInstance == null) return new ArrayList<>();
-            return (Collection<X509Certificate>) certFactoryInstance.generateCertificates(
-                    new ByteArrayInputStream(bytes));
-        } catch (CertificateException e) {
-            Log.w(TAG, "Couldn't parse certificates in keystore", e);
-            return new ArrayList<>();
+            CertificateFactory factory = CERTIFICATE_FACTORY.get();
+            if (factory == null) return List.of();
+            Collection<? extends Certificate> parsed = factory.generateCertificates(
+                    new ByteArrayInputStream(encoded));
+            if (parsed.size() >= MAX_CERTIFICATES) return List.of();
+
+            List<X509Certificate> certificates = new ArrayList<>(parsed.size());
+            for (Certificate certificate : parsed) {
+                if (!(certificate instanceof X509Certificate x509Certificate)) {
+                    return List.of();
+                }
+                certificates.add(x509Certificate);
+            }
+            return certificates;
+        } catch (CertificateException error) {
+            Log.w(TAG, "Could not parse an X.509 certificate chain");
+            return List.of();
         }
     }
 
     public static Certificate[] getCertificateChain(KeyEntryResponse response) {
-        if (response == null || response.metadata == null || response.metadata.certificate == null) return null;
-        var leaf = toCertificate(response.metadata.certificate);
-        if (leaf == null) {
-            Log.w(TAG, "Failed to parse leaf certificate from keystore response");
-            return null;
-        }
-        Certificate[] chain;
-        if (response.metadata.certificateChain != null) {
-            var certs = toCertificates(response.metadata.certificateChain);
-            chain = new Certificate[certs.size() + 1];
-            final Iterator<X509Certificate> it = certs.iterator();
-            int i = 1;
-            while (it.hasNext()) {
-                chain[i++] = it.next();
-            }
-        } else {
-            chain = new Certificate[1];
-        }
+        return response == null ? null : getCertificateChain(response.metadata);
+    }
+
+    public static Certificate[] getCertificateChain(KeyMetadata metadata) {
+        if (metadata == null) return null;
+        X509Certificate leaf = toCertificate(metadata.certificate);
+        if (leaf == null) return null;
+
+        List<X509Certificate> issuers =
+                metadata.certificateChain == null
+                        ? List.of()
+                        : toCertificates(metadata.certificateChain);
+        if (metadata.certificateChain != null && issuers.isEmpty()) return null;
+
+        Certificate[] chain = new Certificate[issuers.size() + 1];
         chain[0] = leaf;
+        for (int index = 0; index < issuers.size(); index++) {
+            chain[index + 1] = issuers.get(index);
+        }
         return chain;
     }
 
-    public static void putCertificateChain(KeyEntryResponse response, Certificate[] chain) throws Throwable {
+    public static void putCertificateChain(KeyEntryResponse response, Certificate[] chain)
+            throws CertificateException {
+        if (response == null) throw new CertificateException("Missing key response");
         putCertificateChain(response.metadata, chain);
     }
 
-    public static void putCertificateChain(KeyMetadata metadata, Certificate[] chain) throws Throwable {
-        if (chain == null || chain.length == 0) return;
-        metadata.certificate = chain[0].getEncoded();
-        var output = new FastByteArrayOutputStream(2048);
-        for (int i = 1; i < chain.length; i++) {
-            output.write(chain[i].getEncoded());
+    public static void putCertificateChain(KeyMetadata metadata, Certificate[] chain)
+            throws CertificateException {
+        if (metadata == null || chain == null || chain.length == 0 ||
+                chain.length > MAX_CERTIFICATES) {
+            throw new CertificateException("Invalid certificate chain");
         }
+
+        byte[] leaf = chain[0].getEncoded();
+        if (leaf.length == 0 || leaf.length > MAX_CERTIFICATE_BYTES) {
+            throw new CertificateException("Invalid leaf certificate size");
+        }
+
+        FastByteArrayOutputStream output = new FastByteArrayOutputStream(2048);
+        int total = 0;
+        for (int index = 1; index < chain.length; index++) {
+            byte[] encoded = chain[index].getEncoded();
+            if (encoded.length == 0 || encoded.length > MAX_CERTIFICATE_BYTES ||
+                    encoded.length > MAX_CHAIN_BYTES - total) {
+                throw new CertificateException("Invalid certificate-chain size");
+            }
+            output.write(encoded, 0, encoded.length);
+            total += encoded.length;
+        }
+
+        metadata.certificate = leaf;
         metadata.certificateChain = output.toByteArray();
     }
 }

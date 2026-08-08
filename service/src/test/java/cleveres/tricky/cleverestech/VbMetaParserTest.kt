@@ -10,18 +10,41 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 class VbMetaParserTest {
-
     @Before
     fun setup() {
-        Logger.setImpl(object : Logger.LogImpl {
-            override fun d(tag: String, msg: String) { println("DEBUG: $tag: $msg") }
-            override fun e(tag: String, msg: String) { println("ERROR: $tag: $msg") }
-            override fun e(tag: String, msg: String, t: Throwable?) {
-                println("ERROR: $tag: $msg")
-                t?.printStackTrace()
-            }
-            override fun i(tag: String, msg: String) { println("INFO: $tag: $msg") }
-        })
+        Logger.setImpl(
+            object : Logger.LogImpl {
+                override fun d(
+                    tag: String,
+                    msg: String,
+                ) {
+                    println("DEBUG: $tag: $msg")
+                }
+
+                override fun e(
+                    tag: String,
+                    msg: String,
+                ) {
+                    println("ERROR: $tag: $msg")
+                }
+
+                override fun e(
+                    tag: String,
+                    msg: String,
+                    t: Throwable?,
+                ) {
+                    println("ERROR: $tag: $msg")
+                    t?.printStackTrace()
+                }
+
+                override fun i(
+                    tag: String,
+                    msg: String,
+                ) {
+                    println("INFO: $tag: $msg")
+                }
+            },
+        )
     }
 
     @Test
@@ -31,12 +54,17 @@ class VbMetaParserTest {
             val key = "dummy_public_key".toByteArray()
             val authDataSize: Long = 64
             val keyOffset: Long = 10 // Relative to Aux Block start
+            val auxiliaryDataSize = keyOffset + key.size
             val header = ByteBuffer.allocate(256).order(ByteOrder.BIG_ENDIAN)
             header.put("AVB0".toByteArray())
 
             // Set Auth Data Block Size at 12
             header.position(12)
             header.putLong(authDataSize)
+
+            // Set Auxiliary Data Block Size at 20
+            header.position(20)
+            header.putLong(auxiliaryDataSize)
 
             // Set Public Key Offset at 64
             header.position(64)
@@ -52,7 +80,7 @@ class VbMetaParserTest {
                 // Write dummy Auth Data (64 bytes)
                 val authData = ByteArray(authDataSize.toInt())
                 // Fill with something to ensure we skip it
-                for(i in authData.indices) authData[i] = 0xAA.toByte()
+                for (i in authData.indices) authData[i] = 0xAA.toByte()
                 raf.write(authData)
 
                 // Now at offset 256 + 64.
@@ -64,7 +92,6 @@ class VbMetaParserTest {
 
             val extracted = VbMetaParser.extractPublicKey(tempFile.absolutePath)
             assertArrayEquals(key, extracted)
-
         } finally {
             tempFile.delete()
         }

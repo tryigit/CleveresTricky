@@ -1,5 +1,38 @@
-## Changelog
+# Changelog
 
-For the full changelog and details of all releases, please refer to our GitHub releases page:
+## V2.5.0
 
-Github Releases: https://github.com/tryigit/CleveresTricky/releases
+### Fixed
+
+- Restored the real native `keystore2` injector and Binder hook, pinned LSPlt as a submodule, and added both arm64 and x86_64 builds.
+- Kept key generation and all private-key operations on genuine KeyMint/StrongBox paths; certificate responses are changed only after a successful platform operation.
+- Corrected certificate/private-key matching, PKCS#8 handling, patch-level parsing, Luhn generation, per-app keybox selection, Binder parcel bounds, and file-cache invalidation.
+- Fixed telephony interception so the native bridge continues into the response phase and now parses dual-SIM indices through the AIDL interface header instead of treating the raw Parcel as a string.
+- Fixed fail-open keybox activation: invalid/revoked mixed payloads and unavailable CRL data now leave keyboxes inactive.
+- Fixed WebUI Host/Origin validation, stored XSS paths, malformed-body handling, unsupported toggles, path traversal, ZIP/CBOX bounds, and encrypted restore validation.
+- Fixed module consistency verification so missing targets, malformed checksums, symbolic links, and non-regular files are rejected.
+
+### Security and performance
+
+- Added root-only atomic configuration writes, symlink defenses, input/count/size limits, constant-time token comparison, loopback-only WebUI binding, security headers, and bounded rate/UID caches.
+- Upgraded CBOX and CTSB output to v2 AES-256-GCM envelopes with PBKDF2-HMAC-SHA256 (250,000 iterations) and authenticated headers; v1 remains read-only for migration.
+- Encrypted server credentials and unlocked keybox caches, disabled redirects, required HTTPS for remote sources, and validated every remote/local key before activation.
+- Added a bounded Rust Binder stream parser and fail-closed native layout validation; native code builds with warnings as errors and hardened visibility/linker settings.
+- Reduced repeated certificate parsing, PackageManager IPC, template parsing, and keybox reload work with bounded, state-consistent caches.
+
+### Removed or changed
+
+- Removed synthetic RKP, software KeyMint generation, fake hardware/timing paths, bundled/fake keyboxes, the undocumented plaintext keybox harvester, AutoPIF, DRM/location/MAC/permission spoofing, and other UI/config switches that did not have a working implementation.
+- Remote Key Provisioning now always remains on Android's genuine implementation.
+- `spoof_build_vars` now accepts only fields actually consumed by attestation or optional telephony interception; arbitrary `ro.*` and other no-op keys are rejected.
+- `app_config` now has exactly three columns: package, identity template, and keybox filename.
+- The legacy trailing `!` target syntax is migrated to normal certificate substitution; it no longer requests software key generation.
+- Minimal profile now enables certificate safe mode; Default restores targeted mode with revocation checks.
+- Replaced inaccurate Strong Integrity and Device Recall claims with the constraints documented by Google and AOSP.
+
+### Build and maintenance
+
+- Updated Android 12–16/API 31–36 configuration, Java/Rust/native CI, artifact boundaries, least-privilege workflow permissions, documentation, contribution rules, and regression tests.
+- Removed repository-root experiments, generated binaries/screenshots, obsolete audits, duplicated implementations, and ignored tests for deleted features.
+
+Earlier release history is available on [GitHub Releases](https://github.com/tryigit/CleveresTricky/releases).

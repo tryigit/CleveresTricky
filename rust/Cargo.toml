@@ -1,9 +1,6 @@
 [workspace]
 members = [
-    "cbor-cose",
-    "daemon",
-    "interceptor",
-    "shared"
+    "cbor-cose"
 ]
 resolver = "2"
 

@@ -1,18 +1,19 @@
+@file:Suppress("ktlint:standard:max-line-length")
+
 package cleveres.tricky.cleverestech
 
 import cleveres.tricky.cleverestech.keystore.CertHack
 import org.junit.After
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
-import org.junit.Rule
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 
 class WebServerHtmlTest {
-
     @get:Rule
     val tempFolder = TemporaryFolder()
 
@@ -21,12 +22,30 @@ class WebServerHtmlTest {
 
     @Before
     fun setUp() {
-        Logger.setImpl(object : Logger.LogImpl {
-            override fun d(tag: String, msg: String) {}
-            override fun e(tag: String, msg: String) {}
-            override fun e(tag: String, msg: String, t: Throwable?) {}
-            override fun i(tag: String, msg: String) {}
-        })
+        Logger.setImpl(
+            object : Logger.LogImpl {
+                override fun d(
+                    tag: String,
+                    msg: String,
+                ) {}
+
+                override fun e(
+                    tag: String,
+                    msg: String,
+                ) {}
+
+                override fun e(
+                    tag: String,
+                    msg: String,
+                    t: Throwable?,
+                ) {}
+
+                override fun i(
+                    tag: String,
+                    msg: String,
+                ) {}
+            },
+        )
         configDir = tempFolder.newFolder("config")
         server = WebServer(0, configDir)
         server.start()
@@ -63,26 +82,20 @@ class WebServerHtmlTest {
         assertTrue("Missing Remove Button Accessibility", html.contains("aria-label=\"Remove rule for ${'$'}{rule.package}\""))
 
         // Verify Random Logic
-        assertTrue("Missing Randomized Extras Header", html.contains("<h3>System-Wide Spoofing (Global Hardware)</h3>"))
+        assertTrue("Missing Identifier Header", html.contains("<h3>Attestation and Telephony Identifiers</h3>"))
         assertTrue("Missing IMEI Input", html.contains("id=\"inputImei\""))
         assertTrue("Missing IMEI Label", html.contains("<label for=\"inputImei\""))
         assertTrue("Missing IMSI Label", html.contains("<label for=\"inputImsi\""))
         assertTrue("Missing ICCID Label", html.contains("<label for=\"inputIccid\""))
         assertTrue("Missing Serial Label", html.contains("<label for=\"inputSerial\""))
-        assertTrue("Missing WiFi MAC Label", html.contains("<label for=\"inputWifiMac\""))
-        assertTrue("Missing BT MAC Label", html.contains("<label for=\"inputBtMac\""))
-        assertTrue("Missing SIM ISO Input", html.contains("id=\"inputSimIso\""))
-        assertTrue("Missing SIM ISO Label", html.contains("<label for=\"inputSimIso\""))
-        assertTrue("Missing Operator Label", html.contains("<label for=\"inputSimOp\""))
         assertTrue("Missing Generate Random Button", html.contains("generateRandomIdentity"))
+        assertTrue("Missing Telephony Toggle", html.contains("id=\"telephony\""))
 
         // Verify Apps Logic
         assertTrue("Missing App Package Input", html.contains("id=\"appPkg\""))
         assertTrue("Missing App Package Label", html.contains("<label for=\"appPkg\""))
         assertTrue("Missing App Template Label", html.contains("<label for=\"appTemplate\""))
         assertTrue("Missing App Keybox Label", html.contains("<label for=\"appKeybox\""))
-        assertTrue("Missing Blank Permissions Logic", html.contains("Blank Permissions (Privacy)"))
-        assertTrue("Missing Contacts Permission Toggle", html.contains("id=\"permContacts\""))
         assertTrue("Missing Remove Button Accessibility", html.contains("aria-label=\"Remove rule for \${rule.package}\""))
         assertTrue("Missing Empty State", html.contains("No active rules"))
 
@@ -125,27 +138,62 @@ class WebServerHtmlTest {
         assertTrue("Missing tabindex update in switchTab", html.contains("setAttribute('tabindex'"))
 
         // Verify Numeric Inputs
-        assertTrue("IMEI missing inputmode=numeric", html.contains("id=\"inputImei\" placeholder=\"35...\" style=\"font-family:monospace;\" inputmode=\"numeric\""))
-        assertTrue("IMSI missing inputmode=numeric", html.contains("id=\"inputImsi\" placeholder=\"310...\" style=\"font-family:monospace;\" inputmode=\"numeric\""))
-        assertTrue("ICCID missing inputmode=numeric", html.contains("id=\"inputIccid\" placeholder=\"89...\" style=\"font-family:monospace;\" inputmode=\"numeric\""))
+        assertTrue(
+            "IMEI missing inputmode=numeric",
+            html.contains("id=\"inputImei\" placeholder=\"35...\" style=\"font-family:monospace;\" inputmode=\"numeric\""),
+        )
+        assertTrue(
+            "IMSI missing inputmode=numeric",
+            html.contains("id=\"inputImsi\" placeholder=\"310...\" style=\"font-family:monospace;\" inputmode=\"numeric\""),
+        )
+        assertTrue(
+            "ICCID missing inputmode=numeric",
+            html.contains("id=\"inputIccid\" placeholder=\"89...\" style=\"font-family:monospace;\" inputmode=\"numeric\""),
+        )
 
         // Verify Autocapitalize Inputs
-        assertTrue("Serial missing autocapitalize=characters", html.contains("id=\"inputSerial\" placeholder=\"Alphanumeric...\" style=\"font-family:monospace;\" autocapitalize=\"characters\""))
-        assertTrue("WiFi MAC missing autocapitalize=characters", html.contains("id=\"inputWifiMac\" placeholder=\"00:11:22:33:44:55\" style=\"font-family:monospace;\" autocapitalize=\"characters\""))
-        assertTrue("BT MAC missing autocapitalize=characters", html.contains("id=\"inputBtMac\" placeholder=\"00:11:22:33:44:55\" style=\"font-family:monospace;\" autocapitalize=\"characters\""))
+        assertTrue(
+            "Serial missing autocapitalize=characters",
+            html.contains(
+                "id=\"inputSerial\" placeholder=\"Alphanumeric...\" style=\"font-family:monospace;\" autocapitalize=\"characters\"",
+            ),
+        )
 
         // Verify Accessibility Labels for Textareas
-        assertTrue("File Editor missing aria-label", html.contains("id=\"fileEditor\" style=\"height:500px; font-family:monospace; margin-top:10px; line-height:1.4;\" aria-label=\"File Content\""))
-        assertTrue("Keybox Content missing aria-label", html.contains("id=\"kbContent\" placeholder=\"Paste Keybox XML Content Here\" style=\"height:100px; font-family:monospace; font-size:0.8em; margin-bottom:10px;\" aria-label=\"Keybox XML Content\""))
+        assertTrue(
+            "File Editor missing aria-label",
+            html.contains(
+                "id=\"fileEditor\" style=\"height:500px; font-family:monospace; margin-top:10px; line-height:1.4;\" aria-label=\"File Content\"",
+            ),
+        )
+        assertTrue(
+            "Keybox Content missing aria-label",
+            html.contains(
+                "id=\"kbContent\" placeholder=\"Paste Keybox XML Content Here\" style=\"height:100px; font-family:monospace; font-size:0.8em; margin-bottom:10px;\" aria-label=\"Keybox XML Content\"",
+            ),
+        )
 
         // Verify Keybox Filename Label and File Picker Accessibility
         assertTrue("Keybox Filename missing label", html.contains("<label for=\"kbFilename\""))
-        assertTrue("Keybox File Picker missing aria-label", html.contains("id=\"kbFilePicker\" style=\"display:none\" onchange=\"loadFileContent(this)\" onclick=\"event.stopPropagation(); this.value = null\" aria-label=\"Upload Keybox File\""))
-        assertTrue("File Selector missing aria-label", html.contains("id=\"fileSelector\" onchange=\"loadFile()\" style=\"width:70%;\" aria-label=\"Select file to edit\""))
+        assertTrue(
+            "Keybox File Picker missing aria-label",
+            html.contains(
+                "id=\"kbFilePicker\" style=\"display:none\" onchange=\"loadFileContent(this)\" onclick=\"event.stopPropagation(); this.value = null\" aria-label=\"Upload Keybox File\"",
+            ),
+        )
+        assertTrue(
+            "File Selector missing aria-label",
+            html.contains("id=\"fileSelector\" onchange=\"loadFile()\" style=\"width:70%;\" aria-label=\"Select file to edit\""),
+        )
 
         // Verify Drop Zone Accessibility
         assertTrue("Drop Zone missing accessibility attributes", html.contains("id=\"dropZone\" role=\"button\" tabindex=\"0\""))
-        assertTrue("Drop Zone missing keyboard handler", html.contains("onkeydown=\"if(event.key==='Enter'||event.key===' '){event.preventDefault(); document.getElementById('kbFilePicker').click();}\""))
+        assertTrue(
+            "Drop Zone missing keyboard handler",
+            html.contains(
+                "onkeydown=\"if(event.key==='Enter'||event.key===' '){event.preventDefault(); document.getElementById('kbFilePicker').click();}\"",
+            ),
+        )
     }
 
     @Test
@@ -157,17 +205,19 @@ class WebServerHtmlTest {
         val html = conn.inputStream.bufferedReader().readText()
 
         // Verify Focus Visible CSS
-        assertTrue("Missing focus-visible CSS", html.contains("input[type=\"checkbox\"].toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }"))
-        assertTrue("Missing disabled toggle CSS", html.contains("input[type=\"checkbox\"].toggle:disabled { opacity: 0.5; cursor: not-allowed; }"))
+        assertTrue(
+            "Missing focus-visible CSS",
+            html.contains("input[type=\"checkbox\"].toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }"),
+        )
+        assertTrue(
+            "Missing disabled toggle CSS",
+            html.contains("input[type=\"checkbox\"].toggle:disabled { opacity: 0.5; cursor: not-allowed; }"),
+        )
 
         // Verify Label Cursor CSS
         assertTrue("Missing label cursor CSS", html.contains("label { font-size: 0.95em; color: #BBB; cursor: pointer; }"))
 
-        // Verify Disabled Attributes Removed (Enabled now)
-        assertTrue("Contacts Checkbox is missing", html.contains("id=\"permContacts\""))
-        assertTrue("Contacts Checkbox is disabled", !html.contains("id=\"permContacts\" class=\"toggle\" style=\"transform:scale(0.8)\" disabled"))
-        assertTrue("Media Checkbox is missing", html.contains("id=\"permMedia\""))
-        assertTrue("Media Checkbox is disabled", !html.contains("id=\"permMedia\" class=\"toggle\" style=\"transform:scale(0.8)\" disabled"))
+        assertTrue("Safe mode label is missing", html.contains("Disable Certificate Substitution (Safe Mode)"))
     }
 
     @Test

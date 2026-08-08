@@ -3,19 +3,17 @@ package cleveres.tricky.cleverestech
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.After
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
-import org.junit.Rule
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.charset.StandardCharsets
 
 class AppConfigKeyboxValidationTest {
-
     @get:Rule
     val tempFolder = TemporaryFolder()
 

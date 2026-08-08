@@ -8,7 +8,6 @@ import org.junit.Test
 
 @OptIn(ExperimentalStdlibApi::class)
 class UtilTest {
-
     private val originalFetcher = systemPropertiesGet
     private val properties = mutableMapOf<String, String>()
 
@@ -25,7 +24,10 @@ class UtilTest {
         systemPropertiesGet = originalFetcher
     }
 
-    private fun setProp(key: String, value: String) {
+    private fun setProp(
+        key: String,
+        value: String,
+    ) {
         properties[key] = value
     }
 

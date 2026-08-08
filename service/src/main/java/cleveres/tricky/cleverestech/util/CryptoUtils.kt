@@ -3,10 +3,7 @@ package cleveres.tricky.cleverestech.util
 import java.security.KeyFactory
 import java.security.KeyPair
 import java.security.KeyPairGenerator
-import java.security.MessageDigest
 import java.security.PrivateKey
-import java.security.PublicKey
-import java.security.SecureRandom
 import java.security.spec.X509EncodedKeySpec
 import javax.crypto.Cipher
 import javax.crypto.KeyAgreement
@@ -16,7 +13,6 @@ import javax.crypto.spec.SecretKeySpec
 import kotlin.experimental.and
 
 object CryptoUtils {
-
     fun generateX25519KeyPair(): KeyPair {
         val kpg = KeyPairGenerator.getInstance("X25519")
         return kpg.generateKeyPair()
@@ -27,7 +23,10 @@ object CryptoUtils {
         return kpg.generateKeyPair()
     }
 
-    fun ecdhDeriveKey(privateKey: PrivateKey, publicKeyBytes: ByteArray): ByteArray {
+    fun ecdhDeriveKey(
+        privateKey: PrivateKey,
+        publicKeyBytes: ByteArray,
+    ): ByteArray {
         val keyFactory = KeyFactory.getInstance("X25519")
         val publicKey = keyFactory.generatePublic(X509EncodedKeySpec(publicKeyBytes))
 
@@ -38,7 +37,12 @@ object CryptoUtils {
         return keyAgreement.generateSecret()
     }
 
-    fun hkdfSha256(ikm: ByteArray, salt: ByteArray, info: ByteArray, outLen: Int): ByteArray {
+    fun hkdfSha256(
+        ikm: ByteArray,
+        salt: ByteArray,
+        info: ByteArray,
+        outLen: Int,
+    ): ByteArray {
         // Extract
         val extractMac = Mac.getInstance("HmacSHA256")
         val saltKey = SecretKeySpec(if (salt.isEmpty()) ByteArray(32) else salt, "HmacSHA256")
@@ -70,7 +74,12 @@ object CryptoUtils {
         return result
     }
 
-    fun aesGcmEncrypt(key: ByteArray, iv: ByteArray, aad: ByteArray, plaintext: ByteArray): ByteArray {
+    fun aesGcmEncrypt(
+        key: ByteArray,
+        iv: ByteArray,
+        aad: ByteArray,
+        plaintext: ByteArray,
+    ): ByteArray {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         val secretKey = SecretKeySpec(key, "AES")
         val gcmSpec = GCMParameterSpec(128, iv)
@@ -117,7 +126,10 @@ object CryptoUtils {
         return elements
     }
 
-    private fun skipCborObject(cborBytes: ByteArray, startOffset: Int): Int {
+    private fun skipCborObject(
+        cborBytes: ByteArray,
+        startOffset: Int,
+    ): Int {
         var offset = startOffset
         if (offset >= cborBytes.size) return offset
 
@@ -126,18 +138,33 @@ object CryptoUtils {
         val additionalInfo = initialByte and 0x1F
         offset++
 
-        val count = when (additionalInfo) {
-            in 0..23 -> additionalInfo.toLong()
-            24 -> { offset++; (cborBytes[offset - 1].toInt() and 0xFF).toLong() }
-            25 -> { offset += 2; (((cborBytes[offset - 2].toInt() and 0xFF) shl 8) or (cborBytes[offset - 1].toInt() and 0xFF)).toLong() }
-            26 -> { offset += 4; 0L } // Simplified
-            27 -> { offset += 8; 0L } // Simplified
-            else -> 0L
-        }
+        val count =
+            when (additionalInfo) {
+                in 0..23 -> additionalInfo.toLong()
+                24 -> {
+                    offset++
+                    (cborBytes[offset - 1].toInt() and 0xFF).toLong()
+                }
+                25 -> {
+                    offset += 2
+                    (((cborBytes[offset - 2].toInt() and 0xFF) shl 8) or (cborBytes[offset - 1].toInt() and 0xFF)).toLong()
+                }
+                26 -> {
+                    offset += 4
+                    0L
+                } // Simplified
+                27 -> {
+                    offset += 8
+                    0L
+                } // Simplified
+                else -> 0L
+            }
 
         when (majorType) {
             0, 1 -> {} // Integer (already skipped size)
-            2, 3 -> { offset += count.toInt() } // bstr, tstr
+            2, 3 -> {
+                offset += count.toInt()
+            } // bstr, tstr
             4 -> { // array
                 for (i in 0 until count) {
                     offset = skipCborObject(cborBytes, offset)

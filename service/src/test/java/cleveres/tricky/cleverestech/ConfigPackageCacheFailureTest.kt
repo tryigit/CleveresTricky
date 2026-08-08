@@ -2,13 +2,13 @@ package cleveres.tricky.cleverestech
 
 import android.content.pm.IPackageManager
 import org.junit.After
-import org.junit.Assert.*
+import org.junit.Assert.assertEquals
+import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
 import java.lang.reflect.Proxy
 
 class ConfigPackageCacheFailureTest {
-
     private var originalPm: IPackageManager? = null
 
     @Before
@@ -42,15 +42,16 @@ class ConfigPackageCacheFailureTest {
         assertEquals(0, res1.size)
 
         // 2. Setup a working PM mock
-        val workingPm = Proxy.newProxyInstance(
-            IPackageManager::class.java.classLoader,
-            arrayOf(IPackageManager::class.java)
-        ) { _, method, args ->
-            if (method.name == "getPackagesForUid") {
-                return@newProxyInstance arrayOf("com.example.app")
+        val workingPm =
+            Proxy.newProxyInstance(
+                IPackageManager::class.java.classLoader,
+                arrayOf(IPackageManager::class.java),
+            ) { _, method, args ->
+                if (method.name == "getPackagesForUid") {
+                    return@newProxyInstance arrayOf("com.example.app")
+                }
+                null
             }
-            null
-        }
 
         val field = Config::class.java.getDeclaredField("iPm")
         field.isAccessible = true

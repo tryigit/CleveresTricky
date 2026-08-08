@@ -36,7 +36,7 @@ The UI follows a minimalist, monochrome aesthetic inspired by **Nothing OS** and
 
 ## Mobile-First Design
 
-Since this WebUI is designed for a Magisk module, it is primarily accessed via mobile devices (e.g., Termux, local browser).
+Since this WebUI is designed for a KernelSU/APatch module, it is primarily accessed on the device through the root manager or a local browser.
 *   **Responsive Layout:** The interface must be fully responsive and optimized for touch targets.
 *   **Vertical Scrolling:** Prioritize vertical flow over horizontal complexity.
 *   **Touch Targets:** Buttons and inputs should be at least 44px height.

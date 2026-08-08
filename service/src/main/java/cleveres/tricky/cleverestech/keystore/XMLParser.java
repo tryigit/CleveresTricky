@@ -12,6 +12,12 @@ import java.util.List;
 import java.util.Map;
 
 public class XMLParser {
+    private static final int MAX_DEPTH = 32;
+    private static final int MAX_ELEMENTS = 4096;
+    private static final int MAX_ATTRIBUTES_PER_ELEMENT = 32;
+    private static final int MAX_NAME_LENGTH = 128;
+    private static final int MAX_ATTRIBUTE_VALUE_LENGTH = 4096;
+    private static final int MAX_TEXT_CHARS = 12 * 1024 * 1024;
 
     public static class Element {
         public String name;
@@ -57,8 +63,8 @@ public class XMLParser {
         parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false);
         try {
             parser.setFeature(XmlPullParser.FEATURE_PROCESS_DOCDECL, false);
-        } catch (Exception ignored) {
-            // Ignore if feature not supported (though it should be for security)
+        } catch (Exception e) {
+            throw new SecurityException("XML parser cannot disable document declarations", e);
         }
         try {
             parser.setFeature("http://xml.org/sax/features/external-general-entities", false);
@@ -74,6 +80,8 @@ public class XMLParser {
         List<Element> stack = new ArrayList<>();
 
         int eventType = parser.getEventType();
+        int elementCount = 0;
+        int textChars = 0;
         while (eventType != XmlPullParser.END_DOCUMENT) {
             switch (eventType) {
                 case XmlPullParser.DOCDECL:
@@ -83,9 +91,26 @@ public class XMLParser {
                     throw new SecurityException("DTD is not allowed in this parser to prevent XXE attacks");
 
                 case XmlPullParser.START_TAG:
-                    Element element = new Element(parser.getName());
-                    for (int i = 0; i < parser.getAttributeCount(); i++) {
-                        element.attributes.put(parser.getAttributeName(i), parser.getAttributeValue(i));
+                    if (++elementCount > MAX_ELEMENTS || stack.size() >= MAX_DEPTH) {
+                        throw new SecurityException("XML structure exceeds safety limits");
+                    }
+                    String elementName = parser.getName();
+                    if (elementName == null || elementName.length() > MAX_NAME_LENGTH) {
+                        throw new SecurityException("Invalid XML element name");
+                    }
+                    int attributeCount = parser.getAttributeCount();
+                    if (attributeCount > MAX_ATTRIBUTES_PER_ELEMENT) {
+                        throw new SecurityException("Too many XML attributes");
+                    }
+                    Element element = new Element(elementName);
+                    for (int i = 0; i < attributeCount; i++) {
+                        String attributeName = parser.getAttributeName(i);
+                        String attributeValue = parser.getAttributeValue(i);
+                        if (attributeName == null || attributeName.length() > MAX_NAME_LENGTH ||
+                                attributeValue == null || attributeValue.length() > MAX_ATTRIBUTE_VALUE_LENGTH) {
+                            throw new SecurityException("XML attribute exceeds safety limits");
+                        }
+                        element.attributes.put(attributeName, attributeValue);
                     }
                     if (!stack.isEmpty()) {
                         stack.get(stack.size() - 1).addChild(element);
@@ -98,6 +123,10 @@ public class XMLParser {
                     if (currentElement != null && parser.getText() != null) {
                         String text = parser.getText().trim();
                         if (!text.isEmpty()) {
+                            textChars = Math.addExact(textChars, text.length());
+                            if (textChars > MAX_TEXT_CHARS) {
+                                throw new SecurityException("XML text exceeds safety limit");
+                            }
                             if (currentElement.textBuilder == null) {
                                 currentElement.textBuilder = new StringBuilder(text);
                             } else {
@@ -106,6 +135,9 @@ public class XMLParser {
                         }
                     }
                     break;
+
+                case XmlPullParser.ENTITY_REF:
+                    throw new SecurityException("XML entities are not allowed");
 
                 case XmlPullParser.END_TAG:
                     if (!stack.isEmpty()) {

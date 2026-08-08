@@ -1,8 +1,0 @@
-What:
-Fix cargo multi-arch build errors by limiting to `arm64-v8a` temporarily and fix Kotlin compilation warnings/errors where redundant casts caused failures due to `-Werror`.
-
-Why:
-The `cargoBuild` process was failing when building for 32-bit `armv7-linux-androideabi` and `x86_64-linux-android` architectures. It turned out `frida-gum` bindings (particularly `gum_sys`) had issues fetching or mapping 64-bit binaries / definitions when trying to compile across architectures using the NDK and headers we had available. To unblock the CI, we temporarily limit the cargo build target just to `arm64-v8a` in `build.gradle.kts`. We also fix two Kotlin code compilation issues inside `BinderInterceptor.kt` lines 151 and 155 which were failing the `:service:compileDebugKotlin` step because `-Werror` flags redundant casts (`No cast needed`). We also removed an unused mutable variable from `rust/interceptor/src/binder_hook.rs`.
-
-Measured Improvement:
-CI build pipelines pass and allow execution to continue normally.

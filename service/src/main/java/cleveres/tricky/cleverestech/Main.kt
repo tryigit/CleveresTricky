@@ -1,14 +1,15 @@
 package cleveres.tricky.cleverestech
 
-import android.system.Os
-import cleveres.tricky.cleverestech.rkp.LocalRkpProxy
 import cleveres.tricky.cleverestech.util.KeyboxAutoCleaner
 import cleveres.tricky.cleverestech.util.SecureFile
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import java.io.File
-import kotlinx.coroutines.*
 
 private const val CONFIG_DIR_MODE = 448
-private const val RKP_KEY_MODE = 384
 
 fun main(args: Array<String>) {
     Logger.i("Welcome to Service!")
@@ -16,12 +17,6 @@ fun main(args: Array<String>) {
     if (isTampered) {
         Logger.e("TAMPER DETECTED: Disabling all interceptors and running in safe mode.")
     }
-    // Start Auto Cleaner
-    KeyboxAutoCleaner.start()
-
-    // Start Keybox Fetcher
-    cleveres.tricky.cleverestech.util.KeyboxFetcher.schedule()
-
     runBlocking {
         val configDir = File("/data/adb/cleverestricky")
 
@@ -55,14 +50,6 @@ fun main(args: Array<String>) {
                     Logger.e("failed to set permissions for config dir", t)
                 }
 
-                // Initialize RKP Proxy and ensure key is accessible by system/interceptor
-                try {
-                    LocalRkpProxy.getMacKey()
-                    Os.chmod(LocalRkpProxy.KEY_FILE_PATH, RKP_KEY_MODE) // 0600
-                } catch (t: Throwable) {
-                    Logger.e("failed to init RKP permissions", t)
-                }
-
                 SecureFile.writeText(portFile, "$port|$token")
                 Logger.d("Main: Wrote WebUI port metadata to ${portFile.absolutePath}")
             } else {
@@ -74,7 +61,7 @@ fun main(args: Array<String>) {
 
         // If tampered, we stop here. We only serve the WebUI warning page.
         if (isTampered) {
-            Logger.e("Main: Running in Tamper-Lockdown mode. Keystore/Telephony/DRM hooks will NOT be registered.")
+            Logger.e("Main: Running in tamper lockdown; native interceptors will not be registered")
             // Keep the daemon alive just to serve the WebUI
             while (true) {
                 delay(60000)
@@ -92,7 +79,11 @@ fun main(args: Array<String>) {
             BootLogic.run()
         } catch (e: Exception) {
             Logger.e("Failed to initialize Config/BootLogic", e)
+            Logger.e("Main: Interceptors remain disabled because initialization did not complete")
+            while (true) delay(60_000)
         }
+
+        KeyboxAutoCleaner.start()
 
         // === Interceptor Registration Loop ===
         // Wrapping each launch in try-catch prevents an unexpected exception
@@ -103,24 +94,26 @@ fun main(args: Array<String>) {
             var telSuccess = false
 
             // Launch concurrent polling for both interceptors to improve startup time
-            val ksJob = launch(Dispatchers.IO) {
-                try {
-                    ksSuccess = KeystoreInterceptor.tryRunKeystoreInterceptor()
-                } catch (e: Exception) {
-                    Logger.e("Keystore interceptor threw unexpected exception", e)
-                }
-            }
-            val telJob = launch(Dispatchers.IO) {
-                try {
-                    if (Config.isTelephonyEnabled) {
-                        telSuccess = TelephonyInterceptor.tryRunTelephonyInterceptor()
-                    } else {
-                        telSuccess = true // Bypass if disabled
+            val ksJob =
+                launch(Dispatchers.IO) {
+                    try {
+                        ksSuccess = KeystoreInterceptor.tryRunKeystoreInterceptor()
+                    } catch (e: Exception) {
+                        Logger.e("Keystore interceptor threw unexpected exception", e)
                     }
-                } catch (e: Exception) {
-                    Logger.e("Telephony interceptor threw unexpected exception", e)
                 }
-            }
+            val telJob =
+                launch(Dispatchers.IO) {
+                    try {
+                        if (Config.isTelephonyEnabled) {
+                            telSuccess = TelephonyInterceptor.tryRunTelephonyInterceptor()
+                        } else {
+                            telSuccess = true // Bypass if disabled
+                        }
+                    } catch (e: Exception) {
+                        Logger.e("Telephony interceptor threw unexpected exception", e)
+                    }
+                }
 
             ksJob.join()
             telJob.join()
@@ -140,44 +133,19 @@ fun main(args: Array<String>) {
             // Telephony is optional/advanced, but we should try to keep it alive
             // Since injecting into com.android.phone might take time to start up
             if (!telSuccess) {
-                 Logger.d("Telephony interceptor not ready yet")
+                Logger.d("Telephony interceptor not ready yet")
             }
 
             // Config.initialize() and BootLogic.run() were already called above.
 
-            var drmRegistered = false
             while (true) {
-                val telRetryJob = launch(Dispatchers.IO) {
-                    try {
-                        if (Config.isTelephonyEnabled && !TelephonyInterceptor.tryRunTelephonyInterceptor()) {
-                            Logger.d("Retrying Telephony Interceptor injection...")
-                        }
-                    } catch (e: Exception) {
-                        Logger.e("Telephony interceptor retry threw unexpected exception", e)
+                try {
+                    if (Config.isTelephonyEnabled && !TelephonyInterceptor.tryRunTelephonyInterceptor()) {
+                        Logger.d("Retrying Telephony interceptor injection")
                     }
+                } catch (e: Exception) {
+                    Logger.e("Telephony interceptor retry threw unexpected exception", e)
                 }
-
-                val drmRetryJob = launch(Dispatchers.IO) {
-                    try {
-                        if (!drmRegistered) {
-                            drmRegistered = DrmInterceptor.tryRunDrmInterceptor()
-                        }
-                    } catch (e: Exception) {
-                        Logger.e("DRM interceptor threw unexpected exception", e)
-                    }
-                }
-
-                val rkpJob = launch(Dispatchers.IO) {
-                    try {
-                        LocalRkpProxy.checkAndRotate()
-                    } catch (e: Exception) {
-                        Logger.e("RKP check threw unexpected exception", e)
-                    }
-                }
-
-                telRetryJob.join()
-                drmRetryJob.join()
-                rkpJob.join()
 
                 try {
                     delay(10000)

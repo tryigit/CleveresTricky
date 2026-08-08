@@ -1,5 +1,7 @@
 package cleveres.tricky.cleverestech
 
+import cleveres.tricky.cleverestech.util.SecureFile
+import cleveres.tricky.cleverestech.util.SecureFileOperations
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.After
@@ -7,18 +9,15 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
-import org.junit.Rule
-import cleveres.tricky.cleverestech.util.SecureFile
-import cleveres.tricky.cleverestech.util.SecureFileOperations
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.charset.StandardCharsets
 
 class AppConfigInjectionTest {
-
     @get:Rule
     val tempFolder = TemporaryFolder()
 
@@ -31,19 +30,31 @@ class AppConfigInjectionTest {
         configDir = tempFolder.newFolder("config")
 
         originalSecureFileImpl = SecureFile.impl
-        SecureFile.impl = object : SecureFileOperations {
-            override fun writeText(file: File, content: String) {
-                file.parentFile?.mkdirs()
-                file.writeText(content)
+        SecureFile.impl =
+            object : SecureFileOperations {
+                override fun writeText(
+                    file: File,
+                    content: String,
+                ) {
+                    file.parentFile?.mkdirs()
+                    file.writeText(content)
+                }
+
+                override fun mkdirs(
+                    file: File,
+                    mode: Int,
+                ) {
+                    file.mkdirs()
+                }
+
+                override fun touch(
+                    file: File,
+                    mode: Int,
+                ) {
+                    file.parentFile?.mkdirs()
+                    if (!file.exists()) file.createNewFile()
+                }
             }
-            override fun mkdirs(file: File, mode: Int) {
-                file.mkdirs()
-            }
-            override fun touch(file: File, mode: Int) {
-                file.parentFile?.mkdirs()
-                if (!file.exists()) file.createNewFile()
-            }
-        }
 
         server = WebServer(0, configDir)
         server.start()

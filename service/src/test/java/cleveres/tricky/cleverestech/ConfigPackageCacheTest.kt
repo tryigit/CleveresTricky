@@ -8,7 +8,6 @@ import org.junit.Test
 import java.lang.reflect.Proxy
 
 class ConfigPackageCacheTest {
-
     private lateinit var mockPm: IPackageManager
     private var originalPm: IPackageManager? = null
 
@@ -22,18 +21,19 @@ class ConfigPackageCacheTest {
         packages.clear()
 
         // Create dynamic proxy for IPackageManager
-        mockPm = Proxy.newProxyInstance(
-            IPackageManager::class.java.classLoader,
-            arrayOf(IPackageManager::class.java)
-        ) { _, method, args ->
-            if (method.name == "getPackagesForUid") {
-                val uid = args[0] as Int
-                callCounts[uid] = (callCounts[uid] ?: 0) + 1
-                return@newProxyInstance packages[uid] ?: emptyArray<String>()
-            }
-            // Return null for other methods (getPackageInfo, etc)
-            null
-        } as IPackageManager
+        mockPm =
+            Proxy.newProxyInstance(
+                IPackageManager::class.java.classLoader,
+                arrayOf(IPackageManager::class.java),
+            ) { _, method, args ->
+                if (method.name == "getPackagesForUid") {
+                    val uid = args[0] as Int
+                    callCounts[uid] = (callCounts[uid] ?: 0) + 1
+                    return@newProxyInstance packages[uid] ?: emptyArray<String>()
+                }
+                // Return null for other methods (getPackageInfo, etc)
+                null
+            } as IPackageManager
 
         // Reflection to set Config.iPm
         val field = Config::class.java.getDeclaredField("iPm")

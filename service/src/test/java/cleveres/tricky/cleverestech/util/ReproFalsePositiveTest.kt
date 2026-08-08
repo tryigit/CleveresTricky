@@ -1,7 +1,6 @@
 package cleveres.tricky.cleverestech.util
 
 import cleveres.tricky.cleverestech.Logger
-import cleveres.tricky.cleverestech.keystore.CertHack
 import org.junit.Assert.assertEquals
 import org.junit.BeforeClass
 import org.junit.Test
@@ -10,17 +9,38 @@ import java.math.BigInteger
 import java.security.cert.X509Certificate
 
 class ReproFalsePositiveTest {
-
     companion object {
         @JvmStatic
         @BeforeClass
         fun setup() {
-             Logger.setImpl(object : Logger.LogImpl {
-                override fun d(tag: String, msg: String) {}
-                override fun e(tag: String, msg: String) { println("E/$tag: $msg") }
-                override fun e(tag: String, msg: String, t: Throwable?) { println("E/$tag: $msg") }
-                override fun i(tag: String, msg: String) {}
-            })
+            Logger.setImpl(
+                object : Logger.LogImpl {
+                    override fun d(
+                        tag: String,
+                        msg: String,
+                    ) {}
+
+                    override fun e(
+                        tag: String,
+                        msg: String,
+                    ) {
+                        println("E/$tag: $msg")
+                    }
+
+                    override fun e(
+                        tag: String,
+                        msg: String,
+                        t: Throwable?,
+                    ) {
+                        println("E/$tag: $msg")
+                    }
+
+                    override fun i(
+                        tag: String,
+                        msg: String,
+                    ) {}
+                },
+            )
         }
     }
 
@@ -31,13 +51,14 @@ class ReproFalsePositiveTest {
         // It is ALSO a valid Hex string (all digits are valid hex chars).
         val ambiguousStr = "10000000000000000000000000000000" // 32 chars
 
-        val json = """
-        {
-          "entries": {
-            "$ambiguousStr": "REVOKED"
-          }
-        }
-        """.trimIndent()
+        val json =
+            """
+            {
+              "entries": {
+                "$ambiguousStr": "REVOKED"
+              }
+            }
+            """.trimIndent()
 
         // Parse CRL
         val revokedSerials = KeyboxVerifier.parseCrl(json)

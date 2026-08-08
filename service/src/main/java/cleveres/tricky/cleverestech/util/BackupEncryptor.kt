@@ -1,8 +1,5 @@
 package cleveres.tricky.cleverestech.util
 
-import java.io.ByteArrayInputStream
-import java.io.ByteArrayOutputStream
-import java.io.DataInputStream
 import java.io.IOException
 import java.nio.ByteBuffer
 import java.security.SecureRandom
@@ -12,81 +9,111 @@ import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.PBEKeySpec
 import javax.crypto.spec.SecretKeySpec
 
-/**
- * Encrypts and decrypts settings backup ZIPs using PBKDF2-derived AES-256-GCM.
- *
- * File format (CTSB — CleveresTricky Settings Backup):
- *   [4]  magic "CTSB" (ASCII)
- *   [4]  version = 1 (big-endian int)
- *   [16] PBKDF2 salt
- *   [12] AES-GCM IV
- *   [N]  AES-256-GCM ciphertext + 128-bit authentication tag
- */
+/** Password-encrypted settings backups using PBKDF2-HMAC-SHA256 and AES-256-GCM. */
 object BackupEncryptor {
     internal const val MAGIC = "CTSB"
-    private const val VERSION = 1
+
+    private const val LEGACY_VERSION = 1
+    private const val VERSION = 2
     private const val PBKDF2_ALGORITHM = "PBKDF2WithHmacSHA256"
     private const val AES_TRANSFORMATION = "AES/GCM/NoPadding"
-    private const val ITERATION_COUNT = 250000
+    private const val ITERATION_COUNT = 250_000
     private const val KEY_LENGTH = 256
     private const val SALT_LENGTH = 16
     private const val IV_LENGTH = 12
+    private const val TAG_LENGTH = 16
+    private const val HEADER_LENGTH = 4 + Int.SIZE_BYTES + SALT_LENGTH + IV_LENGTH
+    private const val MAX_BACKUP_BYTES = 32 * 1024 * 1024
 
-    fun encrypt(plaintext: ByteArray, password: String): ByteArray {
-        val salt = ByteArray(SALT_LENGTH).also { SecureRandom().nextBytes(it) }
-        val iv = ByteArray(IV_LENGTH).also { SecureRandom().nextBytes(it) }
+    private val magicBytes = MAGIC.toByteArray(Charsets.US_ASCII)
+    private val secureRandom = SecureRandom()
+
+    /**
+     * CTSB v2 format: magic, version, salt, IV, then ciphertext and its GCM tag.
+     * The complete header is authenticated as AAD so its version and KDF inputs
+     * cannot be modified without detection.
+     */
+    fun encrypt(
+        plaintext: ByteArray,
+        password: String,
+    ): ByteArray {
+        require(plaintext.size <= MAX_BACKUP_BYTES) { "Backup exceeds $MAX_BACKUP_BYTES bytes" }
+
+        val salt = ByteArray(SALT_LENGTH).also(secureRandom::nextBytes)
+        val iv = ByteArray(IV_LENGTH).also(secureRandom::nextBytes)
         val keyBytes = deriveKey(password, salt)
+        var ciphertext: ByteArray? = null
         try {
-            val secretKey = SecretKeySpec(keyBytes, "AES")
+            val header =
+                ByteBuffer.allocate(HEADER_LENGTH)
+                    .put(magicBytes)
+                    .putInt(VERSION)
+                    .put(salt)
+                    .put(iv)
+                    .array()
             val cipher = Cipher.getInstance(AES_TRANSFORMATION)
-            cipher.init(Cipher.ENCRYPT_MODE, secretKey, GCMParameterSpec(128, iv))
-            val ciphertext = cipher.doFinal(plaintext)
-
-            val bos = ByteArrayOutputStream()
-            bos.write(MAGIC.toByteArray(Charsets.US_ASCII))
-            bos.write(ByteBuffer.allocate(4).putInt(VERSION).array())
-            bos.write(salt)
-            bos.write(iv)
-            bos.write(ciphertext)
-            return bos.toByteArray()
+            cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(keyBytes, "AES"), GCMParameterSpec(128, iv))
+            cipher.updateAAD(header)
+            val encrypted = cipher.doFinal(plaintext)
+            ciphertext = encrypted
+            return header + encrypted
         } finally {
             keyBytes.fill(0)
+            ciphertext?.fill(0)
+            salt.fill(0)
+            iv.fill(0)
         }
     }
 
-    fun decrypt(data: ByteArray, password: String): ByteArray {
-        DataInputStream(ByteArrayInputStream(data)).use { dis ->
-            val magic = ByteArray(4).also { dis.readFully(it) }
-            if (String(magic, Charsets.US_ASCII) != MAGIC) throw IOException("Not a CTSB encrypted backup")
-            val versionBytes = ByteArray(4).also { dis.readFully(it) }
-            val version = ByteBuffer.wrap(versionBytes).int
-            if (version != VERSION) throw IOException("Unsupported CTSB version: $version")
-            val salt = ByteArray(SALT_LENGTH).also { dis.readFully(it) }
-            val iv = ByteArray(IV_LENGTH).also { dis.readFully(it) }
-            val encryptedData = dis.readBytes()
+    /** Decrypts v2 backups and retains read compatibility with CTSB v1. */
+    fun decrypt(
+        data: ByteArray,
+        password: String,
+    ): ByteArray {
+        if (data.size < HEADER_LENGTH + TAG_LENGTH || data.size > MAX_BACKUP_BYTES + HEADER_LENGTH + TAG_LENGTH) {
+            throw IOException("Invalid CTSB backup size")
+        }
 
-            val keyBytes = deriveKey(password, salt)
-            try {
-                val secretKey = SecretKeySpec(keyBytes, "AES")
-                val cipher = Cipher.getInstance(AES_TRANSFORMATION)
-                cipher.init(Cipher.DECRYPT_MODE, secretKey, GCMParameterSpec(128, iv))
-                return cipher.doFinal(encryptedData)
-            } finally {
-                keyBytes.fill(0)
-            }
+        val buffer = ByteBuffer.wrap(data)
+        val magic = ByteArray(magicBytes.size).also(buffer::get)
+        if (!magic.contentEquals(magicBytes)) throw IOException("Not a CTSB encrypted backup")
+
+        val version = buffer.int
+        if (version != LEGACY_VERSION && version != VERSION) {
+            throw IOException("Unsupported CTSB version: $version")
+        }
+
+        val salt = ByteArray(SALT_LENGTH).also(buffer::get)
+        val iv = ByteArray(IV_LENGTH).also(buffer::get)
+        val encryptedData = ByteArray(buffer.remaining()).also(buffer::get)
+        val keyBytes = deriveKey(password, salt)
+        try {
+            val cipher = Cipher.getInstance(AES_TRANSFORMATION)
+            cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(keyBytes, "AES"), GCMParameterSpec(128, iv))
+            if (version == VERSION) cipher.updateAAD(data, 0, HEADER_LENGTH)
+            return cipher.doFinal(encryptedData)
+        } finally {
+            keyBytes.fill(0)
+            encryptedData.fill(0)
+            salt.fill(0)
+            iv.fill(0)
+            magic.fill(0)
         }
     }
 
     fun isEncryptedBackup(bytes: ByteArray): Boolean =
-        bytes.size >= 4 && String(bytes.copyOf(4), Charsets.US_ASCII) == MAGIC
+        bytes.size >= magicBytes.size && bytes.copyOfRange(0, magicBytes.size).contentEquals(magicBytes)
 
-    private fun deriveKey(password: String, salt: ByteArray): ByteArray {
-        val factory = SecretKeyFactory.getInstance(PBKDF2_ALGORITHM)
+    private fun deriveKey(
+        password: String,
+        salt: ByteArray,
+    ): ByteArray {
         val passwordChars = password.toCharArray()
-        try {
-            val spec = PBEKeySpec(passwordChars, salt, ITERATION_COUNT, KEY_LENGTH)
-            return factory.generateSecret(spec).encoded
+        val spec = PBEKeySpec(passwordChars, salt, ITERATION_COUNT, KEY_LENGTH)
+        return try {
+            SecretKeyFactory.getInstance(PBKDF2_ALGORITHM).generateSecret(spec).encoded
         } finally {
+            spec.clearPassword()
             passwordChars.fill('\u0000')
         }
     }

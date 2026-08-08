@@ -1,7 +1,6 @@
 package cleveres.tricky.cleverestech
 
 import org.junit.After
-import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -10,7 +9,6 @@ import java.io.File
 import java.net.Socket
 
 class WebServerMissingContentLengthTest {
-
     @get:Rule
     val tempFolder = TemporaryFolder()
 
@@ -20,12 +18,39 @@ class WebServerMissingContentLengthTest {
     @Before
     fun setUp() {
         // Use println logger to avoid silencing logs for other tests and to aid debugging
-        Logger.setImpl(object : Logger.LogImpl {
-            override fun d(tag: String, msg: String) { println("D/$tag: $msg") }
-            override fun e(tag: String, msg: String) { println("E/$tag: $msg") }
-            override fun e(tag: String, msg: String, t: Throwable?) { println("E/$tag: $msg"); t?.printStackTrace() }
-            override fun i(tag: String, msg: String) { println("I/$tag: $msg") }
-        })
+        Logger.setImpl(
+            object : Logger.LogImpl {
+                override fun d(
+                    tag: String,
+                    msg: String,
+                ) {
+                    println("D/$tag: $msg")
+                }
+
+                override fun e(
+                    tag: String,
+                    msg: String,
+                ) {
+                    println("E/$tag: $msg")
+                }
+
+                override fun e(
+                    tag: String,
+                    msg: String,
+                    t: Throwable?,
+                ) {
+                    println("E/$tag: $msg")
+                    t?.printStackTrace()
+                }
+
+                override fun i(
+                    tag: String,
+                    msg: String,
+                ) {
+                    println("I/$tag: $msg")
+                }
+            },
+        )
         configDir = tempFolder.newFolder("config")
         server = WebServer(0, configDir)
         server.start()
@@ -73,9 +98,9 @@ class WebServerMissingContentLengthTest {
         try {
             val line = reader.readLine()
             if (line == null) {
-                 // Success - Connection closed
+                // Success - Connection closed
             } else if (!line.contains("400") && !line.contains("500")) {
-                 org.junit.Assert.fail("Expected 400/500 Bad Request but got: $line")
+                org.junit.Assert.fail("Expected 400/500 Bad Request but got: $line")
             }
         } catch (e: Exception) {
             // Some runtimes close the socket immediately after rejecting malformed requests.
@@ -107,13 +132,13 @@ class WebServerMissingContentLengthTest {
         try {
             val line = reader.readLine()
             if (line == null) {
-                 // Success - Connection closed
+                // Success - Connection closed
             } else {
-                 if (line.contains("400") || line.contains("500")) {
-                     // Success
-                 } else {
-                     org.junit.Assert.fail("Expected 400 or 500 response but got: $line")
-                 }
+                if (line.contains("400") || line.contains("500")) {
+                    // Success
+                } else {
+                    org.junit.Assert.fail("Expected 400 or 500 response but got: $line")
+                }
             }
         } catch (e: Exception) {
             // connection reset is fine for bad request

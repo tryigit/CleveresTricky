@@ -1,8 +1,8 @@
-import android.databinding.tool.ext.capitalizeUS
 import org.apache.tools.ant.filters.FixCrLfFilter
 import org.apache.tools.ant.filters.ReplaceTokens
 import java.io.File
 import java.security.MessageDigest
+import java.util.HexFormat
 
 plugins {
     alias(libs.plugins.agp.app)
@@ -27,14 +27,12 @@ android {
         externalNativeBuild {
             cmake {
                 arguments(
-                    "-DANDROID_CPP_FEATURES=exceptions",
                     "-Wno-dev",
                     "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON",
-                    "-DANDROID_ALLOW_UNDEFINED_SYMBOLS=ON",
                     "-DANDROID_USE_LEGACY_TOOLCHAIN_FILE=OFF",
                     "-DMODULE_NAME=$moduleId",
-                    "-DCMAKE_CXX_STANDARD=23",
-                    "-DCMAKE_C_STANDARD=23",
+                    "-DCMAKE_CXX_STANDARD=20",
+                    "-DCMAKE_C_STANDARD=17",
                     "-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON",
                     "-DCMAKE_VISIBILITY_INLINES_HIDDEN=ON",
                     "-DCMAKE_CXX_VISIBILITY_PRESET=hidden",
@@ -47,14 +45,20 @@ android {
     buildFeatures {
         prefab = true
     }
+
+    externalNativeBuild {
+        cmake {
+            version = "3.22.1"
+            path("src/main/cpp/CMakeLists.txt")
+        }
+    }
 }
 
 dependencies {}
 
 evaluationDependsOn(":service")
 
-// Rust Build Integration
-val isWindowsHost = org.gradle.internal.os.OperatingSystem.current().isWindows
+val isWindowsHost = System.getProperty("os.name").startsWith("Windows", ignoreCase = true)
 
 fun commandExists(command: String): Boolean {
     val pathEntries =
@@ -76,35 +80,28 @@ fun commandExists(command: String): Boolean {
     }
 }
 
-// Ensure cargo-ndk is installed
 tasks.register<Exec>("installCargoNdk") {
     group = "rust"
     description = "Installs cargo-ndk if not present"
     onlyIf { commandExists("cargo") }
     if (isWindowsHost) {
-        commandLine("cmd", "/c", "cargo ndk --version >NUL 2>&1 || cargo install cargo-ndk")
+        commandLine("cmd", "/c", "cargo ndk --version >NUL 2>&1 || cargo install cargo-ndk --locked")
     } else {
-        commandLine("sh", "-c", "cargo ndk --version >/dev/null 2>&1 || cargo install cargo-ndk")
+        commandLine("sh", "-c", "cargo ndk --version >/dev/null 2>&1 || cargo install cargo-ndk --locked")
     }
 }
 
-// Ensure Rust Android targets are installed
 tasks.register<Exec>("installRustTargets") {
     group = "rust"
     description = "Installs Android Rust targets via rustup"
     onlyIf { commandExists("rustup") }
-    // We run rustup target add for all required targets.
-    // Ideally we should check if they are installed, but `rustup target add` is idempotent and fast if already installed.
     commandLine(
         "rustup",
         "target",
         "add",
         "aarch64-linux-android",
-        "armv7-linux-androideabi",
         "x86_64-linux-android",
-        "i686-linux-android",
     )
-    // Ensure cargo-ndk is installed first (though not strictly dependent, good for ordering)
     dependsOn("installCargoNdk")
 }
 
@@ -112,70 +109,31 @@ tasks.register<Exec>("cargoBuild") {
     group = "rust"
     description = "Builds the Rust static library for all Android targets using cargo-ndk"
     workingDir = file("../rust")
-    onlyIf { commandExists("cargo") && commandExists("rustup") }
-
-    dependsOn("installRustTargets")
-
-    // Treat Rust warnings as errors
-    environment("RUSTFLAGS", "-D warnings")
 
     doFirst {
-        if (!isWindowsHost) {
-            Runtime.getRuntime().exec(
-                arrayOf(
-                    "sh",
-                    "-c",
-                    "find ~/.cargo/registry/src/ -name lib.rs | grep frida-build | xargs sed -i 's/armhf/arm/g' || true",
-                ),
-            ).waitFor()
+        if (!commandExists("cargo") || !commandExists("rustup")) {
+            throw GradleException("Rust and rustup are required to build the native attestation core")
         }
     }
 
-    // Using cargo-ndk to build the interceptor lib for all supported ABIs.
+    dependsOn("installRustTargets")
+
+    environment("RUSTFLAGS", "-D warnings")
+
     commandLine(
         "cargo",
         "ndk",
         "-t",
         "arm64-v8a",
+        "-t",
+        "x86_64",
         "build",
         "--release",
         "-p",
-        "interceptor",
-        "-p",
-        "daemon",
+        "cleverestricky-cbor-cose",
     )
-
-    doLast {
-        // Since we removed CMake, we copy the .so files directly to where the module zipper expects them
-        // The zip task expects libraries in build/intermediates/stripped_native_libs/.../out/lib/
-        // For simplicity, we can copy them to a known directory and adjust the zip task, or
-        // since CMake is completely gone, we can place them directly in the jniLibs equivalent or custom lib dir
-        // Let's copy the interceptor .so to where prepareModuleFiles task picks them up
-        val abiMap =
-            mapOf(
-                "aarch64-linux-android" to "arm64-v8a",
-            )
-
-        val baseTarget = "../rust/target"
-
-        abiMap.forEach { (rustAbi, androidAbi) ->
-            // Copy interceptor .so
-            copy {
-                from("$baseTarget/$rustAbi/release/libinterceptor.so")
-                into(layout.buildDirectory.dir("rust_outputs/lib/$androidAbi"))
-                rename { "libcleverestricky.so" }
-            }
-            // Copy daemon executable
-            copy {
-                from("$baseTarget/$rustAbi/release/daemon")
-                into(layout.buildDirectory.dir("rust_outputs/lib/$androidAbi"))
-                rename { "inject" }
-            }
-        }
-    }
 }
 
-// Hook into preBuild to ensure Rust libs are ready before CMake runs
 tasks.named("preBuild") {
     dependsOn("cargoBuild")
 }
@@ -183,11 +141,11 @@ tasks.named("preBuild") {
 afterEvaluate {
     android.buildTypes.forEach { buildType ->
         val variantLowered = buildType.name.lowercase()
-        val variantCapped = buildType.name.capitalizeUS()
+        val variantCapped = buildType.name.replaceFirstChar { it.uppercaseChar() }
         val buildTypeCapped = buildType.name.replaceFirstChar { it.uppercase() }
         val buildTypeLowered = buildType.name.lowercase()
         val supportedAbis =
-            listOf("arm64-v8a", "x86_64").map {
+            abiList.map {
                 when (it) {
                     "arm64-v8a" -> "arm64"
                     "armeabi-v7a" -> "arm"
@@ -211,7 +169,7 @@ afterEvaluate {
                 into(moduleDir)
                 from(rootProject.layout.projectDirectory.file("README.md"))
                 from(layout.projectDirectory.file("template")) {
-                    exclude("module.prop", "customize.sh", "post-fs-data.sh", "service.sh", "daemon", "provision_attestation.sh")
+                    exclude("module.prop", "customize.sh", "post-fs-data.sh", "service.sh", "daemon")
                     filter<FixCrLfFilter>("eol" to FixCrLfFilter.CrLf.newInstance("lf"))
                 }
                 from(layout.projectDirectory.file("template")) {
@@ -226,7 +184,7 @@ afterEvaluate {
                     )
                 }
                 from(layout.projectDirectory.file("template")) {
-                    include("customize.sh", "post-fs-data.sh", "service.sh", "daemon", "provision_attestation.sh")
+                    include("customize.sh", "post-fs-data.sh", "service.sh", "daemon")
                     val tokens =
                         mapOf(
                             "DEBUG" to if (buildTypeLowered == "debug") "true" else "false",
@@ -241,8 +199,34 @@ afterEvaluate {
                     include("*.apk")
                     rename(".*\\.apk", "service.apk")
                 }
-                from(layout.buildDirectory.dir("rust_outputs/lib")) {
+                from(
+                    layout.buildDirectory.file(
+                        "intermediates/stripped_native_libs/$variantLowered/strip${variantCapped}DebugSymbols/out/lib",
+                    ),
+                ) {
+                    exclude("**/libbinder.so", "**/libutils.so")
                     into("lib")
+                }
+
+                from(layout.buildDirectory.dir("intermediates/cxx")) {
+                    include("**/inject")
+                    eachFile {
+                        val segments = relativePath.segments
+                        if (buildTypeLowered == "release" && segments.contains("Debug")) {
+                            exclude()
+                            return@eachFile
+                        }
+                        if (buildTypeLowered == "debug" && !segments.contains("Debug")) {
+                            exclude()
+                            return@eachFile
+                        }
+
+                        val abi = segments.find { it in abiList }
+                        if (abi != null) {
+                            relativePath = RelativePath(true, "lib", abi, "inject")
+                        }
+                    }
+                    includeEmptyDirs = false
                 }
 
                 doLast {
@@ -258,16 +242,19 @@ afterEvaluate {
                         }
                     }
 
-                    fileTree(moduleDir).visit {
-                        if (isDirectory) return@visit
+                    val payloadFiles =
+                        fileTree(moduleDir) {
+                            exclude("**/*.sha256")
+                        }.files
+                            .filter(File::isFile)
+                            .sortedBy { it.relativeTo(moduleDir.get().asFile).invariantSeparatorsPath }
+                    payloadFiles.forEach { payload ->
                         val md = MessageDigest.getInstance("SHA-256")
-                        file.forEachBlock(4096) { bytes, size ->
+                        payload.forEachBlock(4096) { bytes, size ->
                             md.update(bytes, 0, size)
                         }
-                        file(file.path + ".sha256").writeText(
-                            org.apache.commons.codec.binary.Hex.encodeHexString(
-                                md.digest(),
-                            ),
+                        file(payload.path + ".sha256").writeText(
+                            HexFormat.of().formatHex(md.digest()),
                         )
                     }
                 }
@@ -304,29 +291,9 @@ afterEvaluate {
                 )
             }
 
-        val installMagiskTask =
-            tasks.register<Exec>("installMagisk$variantCapped") {
-                group = "module"
-                dependsOn(pushTask)
-                commandLine(
-                    "adb",
-                    "shell",
-                    "su",
-                    "-M",
-                    "-c",
-                    "magisk --install-module /data/local/tmp/$zipFileName",
-                )
-            }
-
         tasks.register<Exec>("installKsuAndReboot$variantCapped") {
             group = "module"
             dependsOn(installKsuTask)
-            commandLine("adb", "reboot")
-        }
-
-        tasks.register<Exec>("installMagiskAndReboot$variantCapped") {
-            group = "module"
-            dependsOn(installMagiskTask)
             commandLine("adb", "reboot")
         }
     }

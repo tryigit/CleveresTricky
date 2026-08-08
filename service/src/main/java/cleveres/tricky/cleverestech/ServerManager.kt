@@ -1,22 +1,29 @@
 package cleveres.tricky.cleverestech
 
 import android.util.Base64
+import cleveres.tricky.cleverestech.keystore.CertHack
+import cleveres.tricky.cleverestech.util.CboxDecryptor
+import cleveres.tricky.cleverestech.util.DeviceKeyManager
+import cleveres.tricky.cleverestech.util.KeyboxVerifier
+import cleveres.tricky.cleverestech.util.SecureFile
+import cleveres.tricky.cleverestech.util.ZipProcessor
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.StringReader
-import java.net.HttpURLConnection
+import java.net.URI
 import java.net.URL
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+import java.nio.file.LinkOption
 import java.security.cert.X509Certificate
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
-import cleveres.tricky.cleverestech.keystore.CertHack
-import cleveres.tricky.cleverestech.util.CboxDecryptor
-import cleveres.tricky.cleverestech.util.DeviceKeyManager
-import cleveres.tricky.cleverestech.util.SecureFile
-import cleveres.tricky.cleverestech.util.ZipProcessor
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import javax.net.ssl.HttpsURLConnection
 
 object ServerManager {
     data class ServerConfig(
@@ -32,53 +39,96 @@ object ServerManager {
         var lastStatus: String = "OK",
         var lastChecked: Long = 0,
         var lastAuthor: String = "",
-        // Encrypted fields (password, api key, etc) handled via authData
-        // We can store a server-specific password for CBOX decryption
         var contentPassword: String? = null,
-        var contentPublicKey: String? = null
+        var contentPublicKey: String? = null,
     )
 
     private val serversList = CopyOnWriteArrayList<ServerConfig>()
     private val serversMap = ConcurrentHashMap<String, ServerConfig>()
-    private val serverKeyboxes = ConcurrentHashMap<String, List<CertHack.KeyBox>>() // ServerID -> List<KeyBox>
-    private val serverFile by lazy { File(Config.keyboxDirectory.parentFile, "servers.json") }
+    private val serverKeyboxes = ConcurrentHashMap<String, List<CertHack.KeyBox>>()
+    private val serverFile get() = File(Config.keyboxDirectory.parentFile, "servers.json")
+    private val validServerId = Regex("[A-Za-z0-9_-]{1,64}")
+    private val validHeaderName = Regex("[!#$%&'*+.^_`|~0-9A-Za-z-]{1,128}")
+    private val supportedAuthTypes = setOf("NONE", "BEARER", "BASIC", "API_KEY", "CUSTOM")
+    private val restrictedHeaders = setOf("host", "content-length", "connection", "transfer-encoding")
+    private val schedulerStarted = AtomicBoolean(false)
+    private val scheduler =
+        Executors.newSingleThreadScheduledExecutor { runnable ->
+            Thread(runnable, "cleverestricky-server-refresh").apply { isDaemon = true }
+        }
 
     fun initialize() {
         loadServers()
-        // Try to load cached keyboxes if available?
-        // Server keyboxes are usually transient or cached encrypted.
-        // For simplicity, we re-fetch on boot if auto-refresh enabled, or load from a cache file.
-        // To support offline boot, we should cache the *result* (decrypted keyboxes) encrypted with device key.
         loadCachedKeyboxes()
+        startScheduler()
     }
 
     private fun loadServers() {
-        if (!serverFile.exists()) return
+        serversList.clear()
+        serversMap.clear()
+        serverKeyboxes.clear()
+        val file = serverFile
+        if (!Files.isRegularFile(file.toPath(), LinkOption.NOFOLLOW_LINKS)) return
         try {
-            val content = serverFile.readText()
-            val json = JSONArray(content)
+            if (file.length() !in 1..MAX_CONFIG_BYTES) {
+                throw SecurityException("Server configuration has an invalid size")
+            }
+            val stored = file.readBytes()
+            val wasPlaintext = stored.firstOrNull() == '['.code.toByte()
+            val plaintext =
+                if (wasPlaintext) {
+                    stored
+                } else {
+                    DeviceKeyManager.decrypt(stored)
+                        ?: throw SecurityException("Could not decrypt server configuration")
+                }
+            try {
+                val json = JSONArray(String(plaintext, StandardCharsets.UTF_8))
+                require(json.length() <= MAX_SERVERS) { "Too many server configurations" }
+                for (i in 0 until json.length()) {
+                    try {
+                        val server = parseServer(json.getJSONObject(i))
+                        validateServer(server)
+                        if (serversMap.putIfAbsent(server.id, server) == null) {
+                            serversList.add(server)
+                        }
+                    } catch (e: Exception) {
+                        Logger.e("Skipping invalid server configuration at index $i", e)
+                    }
+                }
+            } finally {
+                if (!wasPlaintext) stored.fill(0)
+                plaintext.fill(0)
+            }
+            // Migrate legacy plaintext credentials to encrypted storage.
+            if (wasPlaintext) saveServers()
+        } catch (e: Exception) {
             serversList.clear()
             serversMap.clear()
-            for (i in 0 until json.length()) {
-                val obj = json.getJSONObject(i)
-                val s = parseServer(obj)
-                serversList.add(s)
-                serversMap[s.id] = s
-            }
-        } catch (e: Exception) {
+            serverKeyboxes.clear()
             Logger.e("Failed to load servers", e)
         }
     }
 
+    @Synchronized
     fun saveServers() {
-        try {
-            val json = JSONArray()
-            serversList.forEach { server ->
-                json.put(serializeServer(server))
+        val json = JSONArray()
+        serversList.forEach { server ->
+            json.put(serializeServer(server))
+        }
+        val plaintext = json.toString().toByteArray(StandardCharsets.UTF_8)
+        val encrypted =
+            try {
+                require(plaintext.size <= MAX_CONFIG_BYTES) { "Server configuration is too large" }
+                DeviceKeyManager.encrypt(plaintext)
+                    ?: throw IllegalStateException("Device encryption key is unavailable")
+            } finally {
+                plaintext.fill(0)
             }
-            SecureFile.writeText(serverFile, json.toString())
-        } catch (e: Exception) {
-            Logger.e("Failed to save servers", e)
+        try {
+            SecureFile.writeBytes(serverFile, encrypted)
+        } finally {
+            encrypted.fill(0)
         }
     }
 
@@ -97,7 +147,7 @@ object ServerManager {
             lastChecked = json.optLong("lastChecked", 0),
             lastAuthor = json.optString("lastAuthor", ""),
             contentPassword = json.optString("contentPassword").ifEmpty { null },
-            contentPublicKey = json.optString("contentPublicKey").ifEmpty { null }
+            contentPublicKey = json.optString("contentPublicKey").ifEmpty { null },
         )
     }
 
@@ -120,54 +170,201 @@ object ServerManager {
         return json
     }
 
-    fun getServers(): List<ServerConfig> = serversList.sortedBy { it.priority }
+    internal fun getServers(): List<ServerConfig> =
+        serversList
+            .sortedBy { it.priority }
+            .map {
+                it.copy(
+                    authData = JSONObject(),
+                    contentPassword = null,
+                    contentPublicKey = null,
+                )
+            }
 
+    internal fun findServer(id: String): ServerConfig? = if (validServerId.matches(id)) serversMap[id] else null
+
+    @Synchronized
     fun addServer(server: ServerConfig) {
+        validateServer(server)
+        require(serversMap.containsKey(server.id) || serversMap.size < MAX_SERVERS) { "Too many servers" }
+        val previous = serversMap.put(server.id, server)
+        if (previous != null) {
+            serversList.removeIf { it.id == server.id }
+        }
         serversList.add(server)
-        serversMap[server.id] = server
-        saveServers()
-        fetchFromServer(server) // Initial fetch
+        try {
+            saveServers()
+        } catch (error: Exception) {
+            serversList.removeIf { it.id == server.id }
+            serversMap.remove(server.id)
+            if (previous != null) {
+                serversMap[previous.id] = previous
+                serversList.add(previous)
+            }
+            throw error
+        }
     }
 
-    fun removeServer(id: String) {
+    @Synchronized
+    fun removeServer(id: String): Boolean {
+        if (!validServerId.matches(id)) return false
+        val previous = serversMap.remove(id) ?: return false
+        val previousKeyboxes = serverKeyboxes.remove(id)
         serversList.removeIf { it.id == id }
-        serversMap.remove(id)
-        serverKeyboxes.remove(id)
-        File(Config.keyboxDirectory.parentFile, "server_cache_${id}.enc").delete()
-        saveServers()
-        // Trigger update
-        // We need a callback or Config listens to us?
-        // Config calls getLoadedKeyboxes()
-        // We should trigger Config.updateKeyBoxes via polling or callback?
-        // ServerManager is static/object.
-        // We can expose a listener.
+        try {
+            saveServers()
+        } catch (error: Exception) {
+            serversMap[id] = previous
+            serversList.add(previous)
+            if (previousKeyboxes != null) serverKeyboxes[id] = previousKeyboxes
+            throw error
+        }
+        val cacheFile = File(Config.keyboxDirectory.parentFile, "server_cache_$id.enc")
+        if (cacheFile.exists() && !cacheFile.delete()) Logger.w("Could not delete removed server cache")
+        return true
     }
 
-    fun updateServer(id: String, block: (ServerConfig) -> Unit) {
+    @Synchronized
+    fun updateServer(
+        id: String,
+        block: (ServerConfig) -> Unit,
+    ) {
         val s = serversMap[id]
         if (s != null) {
-            block(s)
-            saveServers()
+            val previous = s.copy(authData = JSONObject(s.authData.toString()))
+            try {
+                block(s)
+                validateServer(s)
+                saveServers()
+            } catch (error: Exception) {
+                serversMap[id] = previous
+                serversList.replaceAll { if (it.id == id) previous else it }
+                throw error
+            }
+        }
+    }
+
+    private fun validateServer(server: ServerConfig) {
+        require(validServerId.matches(server.id)) { "Invalid server ID" }
+        require(server.name.isNotBlank() && server.name.length <= 128) { "Invalid server name" }
+        require(server.name.none { it.isISOControl() }) { "Invalid server name" }
+        require(server.authType in supportedAuthTypes) { "Unsupported authentication type" }
+        require(server.priority in -1_000_000..1_000_000) { "Invalid priority" }
+        require(server.refreshIntervalHours in 1..24 * 30) { "Invalid refresh interval" }
+        require((server.contentPassword?.length ?: 0) <= 1024) { "Content password is too long" }
+        require((server.contentPublicKey?.length ?: 0) <= 16 * 1024) { "Public key is too long" }
+        require(server.authData.toString().length <= 64 * 1024) { "Authentication data is too large" }
+        require(server.lastStatus.length <= 128 && server.lastStatus.none { it.isISOControl() }) {
+            "Invalid server status"
+        }
+        require(server.lastAuthor.length <= 1024 && server.lastAuthor.none { it.isISOControl() }) {
+            "Invalid server author"
+        }
+        validateAuthentication(server)
+        validatedServerUrl(server.url)
+    }
+
+    private fun validateAuthentication(server: ServerConfig) {
+        when (server.authType) {
+            "NONE" -> Unit
+            "BEARER" -> {
+                val token = server.authData.optString("token")
+                if (token.isNotEmpty()) requireSafeHeader("Authorization", "Bearer $token")
+            }
+            "BASIC" -> {
+                val username = server.authData.optString("username")
+                val password = server.authData.optString("password")
+                require(username.length <= 1024 && password.length <= 1024) {
+                    "Basic authentication credentials are too long"
+                }
+                require('\r' !in username && '\n' !in username && '\r' !in password && '\n' !in password) {
+                    "Invalid basic authentication credentials"
+                }
+            }
+            "API_KEY" -> {
+                val header = server.authData.optString("headerName", "X-API-Key")
+                val key = server.authData.optString("key")
+                if (key.isNotEmpty()) requireSafeHeader(header, key)
+            }
+            "CUSTOM" -> {
+                val headers = server.authData.optJSONObject("headers") ?: return
+                require(headers.length() <= 32) { "Too many custom authentication headers" }
+                val names = headers.keys()
+                while (names.hasNext()) {
+                    val name = names.next()
+                    requireSafeHeader(name, headers.getString(name))
+                }
+            }
+        }
+    }
+
+    private fun validatedServerUrl(rawUrl: String): URL {
+        require(rawUrl.length in 1..2048) { "Invalid server URL length" }
+        val uri = URI(rawUrl)
+        require(
+            uri.scheme.equals("https", ignoreCase = true) &&
+                uri.host?.isNotBlank() == true &&
+                uri.userInfo == null &&
+                uri.fragment == null,
+        ) { "Server URL must be an absolute HTTPS URL without credentials or a fragment" }
+        require(uri.port == -1 || uri.port in 1..65535) { "Invalid server port" }
+        return uri.toURL()
+    }
+
+    private fun requireSafeHeader(
+        name: String,
+        value: String,
+    ) {
+        require(validHeaderName.matches(name)) { "Invalid authentication header name" }
+        require(
+            name.lowercase() !in restrictedHeaders,
+        ) { "Restricted authentication header" }
+        require(value.length <= 8192 && '\r' !in value && '\n' !in value) {
+            "Invalid authentication header value"
         }
     }
 
     private fun loadCachedKeyboxes() {
+        if (serversList.none { it.enabled }) return
+        val revoked = KeyboxVerifier.fetchCrl()
+        if (revoked == null) {
+            Logger.w("Server keybox cache remains inactive because the revocation list is unavailable")
+            return
+        }
         serversList.forEach { server ->
             if (server.enabled) {
                 val cacheFile = File(Config.keyboxDirectory.parentFile, "server_cache_${server.id}.enc")
-                if (cacheFile.exists()) {
+                if (Files.isRegularFile(cacheFile.toPath(), LinkOption.NOFOLLOW_LINKS)) {
                     try {
+                        if (cacheFile.length() !in 1..MAX_CACHE_BYTES) {
+                            throw SecurityException("Cached keybox file has an invalid size")
+                        }
                         val enc = cacheFile.readBytes()
-                        val dec = DeviceKeyManager.decrypt(enc)
-                        if (dec != null) {
-                            val xml = String(dec, StandardCharsets.UTF_8)
-                            val kbs = CertHack.parseKeyboxXml(StringReader(xml), "server_${server.name}")
-                            if (kbs.isNotEmpty()) {
-                                serverKeyboxes[server.id] = kbs
-                                Logger.i("Loaded cached keyboxes for server: ${server.name}")
+                        try {
+                            val dec = DeviceKeyManager.decrypt(enc)
+                            if (dec != null) {
+                                try {
+                                    val xml = String(dec, StandardCharsets.UTF_8)
+                                    val parsed = CertHack.parseKeyboxXml(StringReader(xml), "server_${server.name}")
+                                    val statuses = parsed.map { KeyboxVerifier.verifyKeybox(it, revoked) }
+                                    if (parsed.isNotEmpty() && statuses.all { it == KeyboxVerifier.Status.VALID }) {
+                                        serverKeyboxes[server.id] = parsed
+                                        Logger.i("Loaded cached keyboxes for server: ${server.name}")
+                                    } else {
+                                        deactivateServerContent(server.id, deleteCache = true)
+                                        Logger.w("Rejected incomplete or invalid server cache: ${server.name}")
+                                    }
+                                } finally {
+                                    dec.fill(0)
+                                }
+                            } else {
+                                deactivateServerContent(server.id, deleteCache = true)
                             }
+                        } finally {
+                            enc.fill(0)
                         }
                     } catch (e: Exception) {
+                        deactivateServerContent(server.id, deleteCache = true)
                         Logger.e("Failed to load server cache for ${server.name}", e)
                     }
                 }
@@ -175,94 +372,114 @@ object ServerManager {
         }
     }
 
+    @Synchronized
     fun fetchFromServer(server: ServerConfig): Boolean {
         if (!server.enabled) return false
 
+        var conn: HttpsURLConnection? = null
         try {
+            validateServer(server)
             server.lastChecked = System.currentTimeMillis()
-            val url = URL(server.url)
-            val conn = url.openConnection() as HttpURLConnection
+            conn = validatedServerUrl(server.url).openConnection() as HttpsURLConnection
             conn.connectTimeout = 15000
             conn.readTimeout = 30000
             conn.requestMethod = "GET"
-            conn.instanceFollowRedirects = true
+            conn.instanceFollowRedirects = false
+            conn.setRequestProperty("Accept-Encoding", "identity")
 
             // Apply Auth
             when (server.authType) {
                 "BEARER" -> {
                     val token = server.authData.optString("token")
-                    // Decrypt token if needed (assuming DeviceKeyManager handles sensitive storage logic elsewhere,
-                    // for now simple string)
-                    if (token.isNotEmpty()) conn.setRequestProperty("Authorization", "Bearer $token")
+                    if (token.isNotEmpty()) {
+                        requireSafeHeader("Authorization", "Bearer $token")
+                        conn.setRequestProperty("Authorization", "Bearer $token")
+                    }
                 }
                 "BASIC" -> {
                     val user = server.authData.optString("username")
                     val pass = server.authData.optString("password")
                     if (user.isNotEmpty() || pass.isNotEmpty()) {
                         val auth = Base64.encodeToString("$user:$pass".toByteArray(), Base64.NO_WRAP)
+                        requireSafeHeader("Authorization", "Basic $auth")
                         conn.setRequestProperty("Authorization", "Basic $auth")
                     }
                 }
                 "API_KEY" -> {
                     val key = server.authData.optString("key")
                     val header = server.authData.optString("headerName", "X-API-Key")
-                    if (key.isNotEmpty()) conn.setRequestProperty(header, key)
+                    if (key.isNotEmpty()) {
+                        requireSafeHeader(header, key)
+                        conn.setRequestProperty(header, key)
+                    }
                 }
                 "CUSTOM" -> {
                     val headers = server.authData.optJSONObject("headers")
                     headers?.keys()?.forEach { k ->
-                        conn.setRequestProperty(k, headers.getString(k))
+                        val value = headers.getString(k)
+                        requireSafeHeader(k, value)
+                        conn.setRequestProperty(k, value)
                     }
-                }
-                "TELEGRAM" -> {
-                    // Telegram logic: User provides bot url + id + chat
-                    // We assume authData has 'token' after verification in WebUI
-                    val token = server.authData.optString("token")
-                    if (token.isNotEmpty()) conn.setRequestProperty("Authorization", "Bearer $token")
-                    // If not verified, fail
                 }
             }
 
             if (conn.responseCode != 200) {
                 server.lastStatus = "HTTP_${conn.responseCode}"
-                saveServers()
+                persistStatusSafely()
                 return false
             }
 
             // Cap response size to prevent OOM from malicious servers
             val maxResponseSize = 10 * 1024 * 1024 // 10MB
-            val contentLength = conn.contentLength
+            val contentLength = conn.contentLengthLong
             if (contentLength > maxResponseSize) {
                 server.lastStatus = "RESPONSE_TOO_LARGE"
-                saveServers()
+                persistStatusSafely()
                 return false
             }
-            val bytes = conn.inputStream.use { input ->
-                val buffer = java.io.ByteArrayOutputStream(minOf(contentLength.coerceAtLeast(0), 65536))
-                val chunk = ByteArray(8192)
-                var totalRead = 0
-                var n: Int
-                while (input.read(chunk).also { n = it } != -1) {
-                    totalRead += n
-                    if (totalRead > maxResponseSize) {
-                        throw SecurityException("Server response exceeds ${maxResponseSize / 1024 / 1024}MB limit")
+            val bytes =
+                conn.inputStream.use { input ->
+                    val buffer =
+                        java.io.ByteArrayOutputStream(
+                            minOf(contentLength.coerceAtLeast(0), 65536L).toInt(),
+                        )
+                    val chunk = ByteArray(8192)
+                    var totalRead = 0
+                    var n: Int
+                    while (input.read(chunk).also { n = it } != -1) {
+                        totalRead += n
+                        if (totalRead > maxResponseSize) {
+                            throw SecurityException("Server response exceeds ${maxResponseSize / 1024 / 1024}MB limit")
+                        }
+                        buffer.write(chunk, 0, n)
                     }
-                    buffer.write(chunk, 0, n)
+                    buffer.toByteArray()
                 }
-                buffer.toByteArray()
-            }
 
             // Process Content
-            val result = processContent(bytes, server)
+            val result =
+                try {
+                    processContent(bytes, server)
+                } finally {
+                    bytes.fill(0)
+                }
+            val crl = KeyboxVerifier.fetchCrl()
+            if (crl == null) {
+                server.lastStatus = "CRL_UNAVAILABLE"
+                deactivateServerContent(server.id, deleteCache = false)
+                persistStatusSafely()
+                return false
+            }
             val keyboxes = result.first
+            val statuses = keyboxes.map { KeyboxVerifier.verifyKeybox(it, crl) }
             val xmlContent = result.second
 
-            if (keyboxes.isNotEmpty()) {
+            if (keyboxes.isNotEmpty() && statuses.all { it == KeyboxVerifier.Status.VALID }) {
                 serverKeyboxes[server.id] = keyboxes
                 server.lastStatus = "OK"
-                val cert = keyboxes[0].certificates[0]
+                val cert = keyboxes.firstOrNull()?.certificates?.firstOrNull()
                 if (cert is X509Certificate) {
-                    server.lastAuthor = cert.subjectDN.name
+                    server.lastAuthor = cert.subjectX500Principal.name.take(1024)
                 } else {
                     server.lastAuthor = "Unknown"
                 }
@@ -270,24 +487,34 @@ object ServerManager {
                 if (xmlContent != null) {
                     cacheXml(server.id, xmlContent)
                 }
-
             } else {
                 server.lastStatus = "INVALID_CONTENT"
-                saveServers()
+                deactivateServerContent(server.id, deleteCache = true)
+                persistStatusSafely()
                 return false
             }
 
-            saveServers()
+            persistStatusSafely()
             return true
+        } catch (e: IllegalArgumentException) {
+            server.lastStatus = "INVALID_CONFIG"
+            Logger.e("Invalid server configuration: ${server.name}", e)
+            persistStatusSafely()
+            return false
         } catch (e: Exception) {
             server.lastStatus = "NETWORK_ERROR"
             Logger.e("Server fetch failed: ${server.name}", e)
-            saveServers()
+            persistStatusSafely()
             return false
+        } finally {
+            conn?.disconnect()
         }
     }
 
-    internal fun processContent(bytes: ByteArray, server: ServerConfig): Pair<List<CertHack.KeyBox>, String?> {
+    internal fun processContent(
+        bytes: ByteArray,
+        server: ServerConfig,
+    ): Pair<List<CertHack.KeyBox>, String?> {
         val magic = if (bytes.size >= 4) String(bytes.copyOfRange(0, 4), StandardCharsets.US_ASCII) else ""
 
         if (magic == "CBOX") {
@@ -300,6 +527,7 @@ object ServerManager {
                 if (!server.contentPublicKey.isNullOrBlank()) {
                     if (!CboxDecryptor.verifySignature(payload, server.contentPublicKey!!)) {
                         Logger.e("Signature verification failed for server ${server.name}")
+                        return Pair(emptyList(), null)
                     }
                 }
                 val kbs = CertHack.parseKeyboxXml(StringReader(payload.xmlContent), "server_${server.name}")
@@ -312,63 +540,209 @@ object ServerManager {
             val stream = ByteArrayInputStream(bytes)
             val pack = ZipProcessor.process(stream)
             if (pack != null) {
-                val allKeys = ArrayList<CertHack.KeyBox>()
-                val sb = StringBuilder()
+                try {
+                    val allKeys = ArrayList<CertHack.KeyBox>()
+                    val pwd = pack.password ?: server.contentPassword ?: ""
+                    // Only a key configured out-of-band is a trust anchor.
+                    val pubKey = server.contentPublicKey
 
-                val pwd = pack.password ?: server.contentPassword ?: ""
-                val pubKey = pack.publicKey ?: server.contentPublicKey
-
-                pack.cboxFiles.forEach { (name, content) ->
-                    val cboxStream = ByteArrayInputStream(content)
-                    val payload = CboxDecryptor.decrypt(cboxStream, pwd)
-                    if (payload != null) {
-                         if (!pubKey.isNullOrBlank()) {
-                             if (!CboxDecryptor.verifySignature(payload, pubKey)) {
-                                 Logger.e("Signature verification failed for zip entry $name")
-                             }
-                         }
-                         val kbs = CertHack.parseKeyboxXml(StringReader(payload.xmlContent), "server_${server.name}_$name")
-                         allKeys.addAll(kbs)
-                         sb.append(payload.xmlContent).append("\n")
+                    for ((name, content) in pack.cboxFiles) {
+                        val cboxStream = ByteArrayInputStream(content)
+                        val payload = CboxDecryptor.decrypt(cboxStream, pwd)
+                        if (payload == null) {
+                            Logger.e("Could not decrypt zip entry $name")
+                            return Pair(emptyList(), null)
+                        }
+                        if (!pubKey.isNullOrBlank() &&
+                            !CboxDecryptor.verifySignature(payload, pubKey)
+                        ) {
+                            Logger.e("Signature verification failed for zip entry $name")
+                            return Pair(emptyList(), null)
+                        }
+                        val kbs =
+                            CertHack.parseKeyboxXml(
+                                StringReader(payload.xmlContent),
+                                "server_${server.name}_$name",
+                            )
+                        if (kbs.isEmpty()) {
+                            Logger.e("Zip entry contains no valid keybox records: $name")
+                            return Pair(emptyList(), null)
+                        }
+                        if (kbs.size > MAX_REMOTE_KEYBOXES - allKeys.size) {
+                            Logger.e("Server archive exceeds the keybox-count limit")
+                            return Pair(emptyList(), null)
+                        }
+                        allKeys.addAll(kbs)
                     }
-                }
 
-                if (allKeys.isNotEmpty()) {
-                    return Pair(allKeys, sb.toString())
+                    if (allKeys.isNotEmpty()) {
+                        return Pair(allKeys, serializeKeyboxesForCache(allKeys))
+                    }
+                } finally {
+                    pack.cboxFiles.forEach { it.second.fill(0) }
                 }
             }
         } else {
             // Assume Plain XML
+            if (!server.contentPublicKey.isNullOrBlank()) {
+                Logger.e("Signed server refused unsigned plain XML")
+                return Pair(emptyList(), null)
+            }
             val xml = String(bytes, StandardCharsets.UTF_8)
             if (xml.contains("AndroidAttestation")) {
-                 val kbs = CertHack.parseKeyboxXml(StringReader(xml), "server_${server.name}")
-                 if (kbs.isNotEmpty()) {
-                     return Pair(kbs, xml)
-                 }
+                val kbs = CertHack.parseKeyboxXml(StringReader(xml), "server_${server.name}")
+                if (kbs.isNotEmpty()) {
+                    return Pair(kbs, xml)
+                }
             }
         }
         return Pair(emptyList(), null)
     }
 
-    private fun cacheXml(serverId: String, xml: String) {
+    private fun cacheXml(
+        serverId: String,
+        xml: String,
+    ) {
+        val plaintext = xml.toByteArray(StandardCharsets.UTF_8)
         try {
-            val enc = DeviceKeyManager.encrypt(xml.toByteArray(StandardCharsets.UTF_8))
+            val enc = DeviceKeyManager.encrypt(plaintext)
             if (enc != null) {
-                val file = File(Config.keyboxDirectory.parentFile, "server_cache_$serverId.enc")
-                SecureFile.writeBytes(file, enc)
+                try {
+                    val file = File(Config.keyboxDirectory.parentFile, "server_cache_$serverId.enc")
+                    SecureFile.writeBytes(file, enc)
+                } finally {
+                    enc.fill(0)
+                }
             }
         } catch (e: Exception) {
             Logger.e("Failed to cache server content", e)
+        } finally {
+            plaintext.fill(0)
+        }
+    }
+
+    internal fun serializeKeyboxesForCache(keyboxes: List<CertHack.KeyBox>): String {
+        require(keyboxes.isNotEmpty() && keyboxes.size <= MAX_REMOTE_KEYBOXES) {
+            "Invalid keybox cache size"
+        }
+        return buildString {
+            append("<?xml version=\"1.0\"?>\n")
+            append("<AndroidAttestation>\n")
+            append("  <NumberOfKeyboxes>${keyboxes.size}</NumberOfKeyboxes>\n")
+            keyboxes.forEach { keybox ->
+                val keyPair = keybox.keyPair
+                val algorithm =
+                    when (keyPair.public.algorithm.uppercase()) {
+                        "EC", "ECDSA" -> "ecdsa"
+                        "RSA" -> "rsa"
+                        else -> throw IllegalArgumentException("Unsupported keybox algorithm")
+                    }
+                val privateKey =
+                    requireNotNull(keyPair.private.encoded) { "Private key is not exportable" }
+                val certificates = keybox.certificates
+                require(certificates.isNotEmpty()) { "Keybox certificate chain is empty" }
+
+                append("  <Keybox>\n")
+                append("    <Key algorithm=\"$algorithm\">\n")
+                append("      <PrivateKey>\n")
+                appendPem("PRIVATE KEY", privateKey)
+                append("      </PrivateKey>\n")
+                append("      <CertificateChain>\n")
+                append("        <NumberOfCertificates>${certificates.size}</NumberOfCertificates>\n")
+                certificates.forEach { certificate ->
+                    append("        <Certificate>\n")
+                    appendPem("CERTIFICATE", certificate.encoded)
+                    append("        </Certificate>\n")
+                }
+                append("      </CertificateChain>\n")
+                append("    </Key>\n")
+                append("  </Keybox>\n")
+            }
+            append("</AndroidAttestation>\n")
+        }
+    }
+
+    private fun StringBuilder.appendPem(
+        label: String,
+        bytes: ByteArray,
+    ) {
+        val encoded =
+            java.util.Base64.getMimeEncoder(64, byteArrayOf('\n'.code.toByte()))
+                .encodeToString(bytes)
+        append("-----BEGIN $label-----\n")
+        append(encoded)
+        append("\n-----END $label-----\n")
+    }
+
+    private fun deactivateServerContent(
+        serverId: String,
+        deleteCache: Boolean,
+    ) {
+        serverKeyboxes.remove(serverId)
+        if (!deleteCache) return
+        val cacheFile = File(Config.keyboxDirectory.parentFile, "server_cache_$serverId.enc")
+        if (cacheFile.exists() && !cacheFile.delete()) {
+            Logger.w("Could not delete rejected server cache")
         }
     }
 
     fun getLoadedKeyboxes(): List<CertHack.KeyBox> {
-        return serverKeyboxes.values.flatten()
+        return serversList
+            .asSequence()
+            .filter { it.enabled }
+            .sortedBy { it.priority }
+            .flatMap { serverKeyboxes[it.id].orEmpty().asSequence() }
+            .toList()
     }
 
     fun refreshAll() {
         serversList.filter { it.enabled }.sortedBy { it.priority }.forEach {
             fetchFromServer(it)
         }
+        Config.updateKeyBoxesSync()
     }
+
+    private fun startScheduler() {
+        if (!schedulerStarted.compareAndSet(false, true)) return
+        scheduler.scheduleWithFixedDelay(
+            {
+                try {
+                    val now = System.currentTimeMillis()
+                    val dueServers =
+                        serversList
+                            .filter { server ->
+                                server.enabled &&
+                                    server.autoRefresh &&
+                                    (
+                                        server.lastChecked == 0L ||
+                                            now - server.lastChecked >= TimeUnit.HOURS.toMillis(server.refreshIntervalHours.toLong())
+                                    )
+                            }
+                            .sortedBy { it.priority }
+                    dueServers.forEach(::fetchFromServer)
+                    if (dueServers.isNotEmpty()) Config.updateKeyBoxesSync()
+                } catch (e: Exception) {
+                    Logger.e("Scheduled server refresh failed", e)
+                }
+            },
+            1,
+            60,
+            TimeUnit.MINUTES,
+        )
+    }
+
+    private fun persistStatusSafely() {
+        try {
+            saveServers()
+        } catch (e: Exception) {
+            Logger.e("Failed to persist server status", e)
+        }
+    }
+
+    private const val MAX_SERVERS = 64
+
+    // Keep canonical cache documents within CertHack's per-document parser bound.
+    private const val MAX_REMOTE_KEYBOXES = 64
+    private const val MAX_CONFIG_BYTES = 2L * 1024 * 1024
+    private const val MAX_CACHE_BYTES = 16L * 1024 * 1024
 }

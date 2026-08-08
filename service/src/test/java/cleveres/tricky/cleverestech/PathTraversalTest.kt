@@ -2,7 +2,6 @@ package cleveres.tricky.cleverestech
 
 import org.junit.After
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -13,7 +12,6 @@ import java.net.URL
 import java.nio.charset.StandardCharsets
 
 class PathTraversalTest {
-
     @get:Rule
     val tempFolder = TemporaryFolder()
 
@@ -23,12 +21,32 @@ class PathTraversalTest {
 
     @Before
     fun setUp() {
-        Logger.setImpl(object : Logger.LogImpl {
-            override fun d(tag: String, msg: String) {}
-            override fun e(tag: String, msg: String) {}
-            override fun e(tag: String, msg: String, t: Throwable?) { t?.printStackTrace() }
-            override fun i(tag: String, msg: String) {}
-        })
+        Logger.setImpl(
+            object : Logger.LogImpl {
+                override fun d(
+                    tag: String,
+                    msg: String,
+                ) {}
+
+                override fun e(
+                    tag: String,
+                    msg: String,
+                ) {}
+
+                override fun e(
+                    tag: String,
+                    msg: String,
+                    t: Throwable?,
+                ) {
+                    t?.printStackTrace()
+                }
+
+                override fun i(
+                    tag: String,
+                    msg: String,
+                ) {}
+            },
+        )
         configDir = tempFolder.newFolder("config")
         outsideFile = File(tempFolder.root, "outside.txt")
 
@@ -63,9 +81,9 @@ class PathTraversalTest {
 
         // In vulnerable state, this creates the file
         if (outsideFile.exists()) {
-             println("VULNERABILITY CONFIRMED: Created file outside config dir")
+            println("VULNERABILITY CONFIRMED: Created file outside config dir")
         } else {
-             println("File not created.")
+            println("File not created.")
         }
 
         // Assert that the file was NOT created (passes if fixed)

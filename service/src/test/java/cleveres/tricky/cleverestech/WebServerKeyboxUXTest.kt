@@ -12,7 +12,6 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 class WebServerKeyboxUXTest {
-
     @get:Rule
     val tempFolder = TemporaryFolder()
 
@@ -22,12 +21,30 @@ class WebServerKeyboxUXTest {
     @Before
     fun setUp() {
         // Mock Logger to prevent spam
-        Logger.setImpl(object : Logger.LogImpl {
-            override fun d(tag: String, msg: String) {}
-            override fun e(tag: String, msg: String) {}
-            override fun e(tag: String, msg: String, t: Throwable?) {}
-            override fun i(tag: String, msg: String) {}
-        })
+        Logger.setImpl(
+            object : Logger.LogImpl {
+                override fun d(
+                    tag: String,
+                    msg: String,
+                ) {}
+
+                override fun e(
+                    tag: String,
+                    msg: String,
+                ) {}
+
+                override fun e(
+                    tag: String,
+                    msg: String,
+                    t: Throwable?,
+                ) {}
+
+                override fun i(
+                    tag: String,
+                    msg: String,
+                ) {}
+            },
+        )
         configDir = tempFolder.newFolder("config")
         server = WebServer(0, configDir)
         server.start()
@@ -49,32 +66,37 @@ class WebServerKeyboxUXTest {
         val html = conn.inputStream.bufferedReader().readText()
 
         // 1. Verify "Stored Keyboxes" panel exists
-        assertTrue("HTML should contain Stored Keyboxes panel",
+        assertTrue(
+            "HTML should contain Stored Keyboxes panel",
             html.contains("<h3>Stored Keyboxes</h3>") &&
-            html.contains("<div id=\"storedKeyboxesList\"")
+                html.contains("<div id=\"storedKeyboxesList\""),
         )
 
         // 2. Verify loadKeyboxes function exists
-        assertTrue("loadKeyboxes function should exist",
-            html.contains("async function loadKeyboxes()")
+        assertTrue(
+            "loadKeyboxes function should exist",
+            html.contains("async function loadKeyboxes()"),
         )
 
         // 3. Verify init calls loadKeyboxes
-        assertTrue("init function should call loadKeyboxes",
-            html.contains("loadKeyboxes();")
+        assertTrue(
+            "init function should call loadKeyboxes",
+            html.contains("loadKeyboxes();"),
         )
 
         // 4. Verify uploadKeybox handles errors and reloads list
-        assertTrue("uploadKeybox should check res.ok and call loadKeyboxes",
+        assertTrue(
+            "uploadKeybox should check res.ok and call loadKeyboxes",
             html.contains("if (!res.ok) {") &&
-            html.contains("loadKeyboxes();") &&
-            html.contains("notify('Error: ' + msg, 'error');")
+                html.contains("loadKeyboxes();") &&
+                html.contains("notify('Error: ' + msg, 'error');"),
         )
 
         // 5. Verify verifyKeyboxes handles errors
-        assertTrue("verifyKeyboxes should check res.ok",
+        assertTrue(
+            "verifyKeyboxes should check res.ok",
             html.contains("if (!res.ok) throw new Error(await res.text());") ||
-            html.contains("if (!res.ok) {")
+                html.contains("if (!res.ok) {"),
         )
     }
 }

@@ -1,13 +1,12 @@
 package cleveres.tricky.cleverestech
 
 import cleveres.tricky.cleverestech.util.KeyboxVerifier
-import org.junit.Assert.assertTrue
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.security.MessageDigest
 
 class KeyboxVerifierHashTest {
-
     @OptIn(ExperimentalStdlibApi::class)
     @Test
     fun testCheckHashOptimization() {

@@ -5,14 +5,16 @@ import org.junit.Assert.assertNotNull
 import org.junit.Before
 import org.junit.Test
 import org.mockito.MockedStatic
-import org.mockito.Mockito
-import org.mockito.Mockito.*
+import org.mockito.Mockito.any
+import org.mockito.Mockito.eq
+import org.mockito.Mockito.mock
+import org.mockito.Mockito.mockStatic
+import org.mockito.Mockito.times
+import org.mockito.Mockito.verify
 import java.security.KeyStore
-import javax.crypto.SecretKey
 import javax.crypto.spec.SecretKeySpec
 
 class DeviceKeyManagerTest {
-
     private lateinit var keyStoreMock: KeyStore
     private lateinit var keyStoreStaticMock: MockedStatic<KeyStore>
 

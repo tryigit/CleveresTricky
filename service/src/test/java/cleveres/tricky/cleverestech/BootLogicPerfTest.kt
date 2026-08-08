@@ -4,7 +4,6 @@ import org.junit.Test
 import kotlin.system.measureTimeMillis
 
 class BootLogicPerfTest {
-
     @Test
     fun testGetSystemPropertyPerf() {
         val method = BootLogic::class.java.getDeclaredMethod("getSystemProperty", String::class.java)
@@ -15,11 +14,12 @@ class BootLogicPerfTest {
             method.invoke(BootLogic, "ro.build.version.sdk")
         }
 
-        val time = measureTimeMillis {
-            for (i in 0..50) {
-                method.invoke(BootLogic, "ro.build.version.sdk")
+        val time =
+            measureTimeMillis {
+                for (i in 0..50) {
+                    method.invoke(BootLogic, "ro.build.version.sdk")
+                }
             }
-        }
         System.err.println("BASELINE_TIME_MS: " + time)
     }
 }

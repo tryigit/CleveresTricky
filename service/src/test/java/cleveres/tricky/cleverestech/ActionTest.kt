@@ -1,16 +1,19 @@
 package cleveres.tricky.cleverestech
 
 import cleveres.tricky.cleverestech.keystore.CertHack
+import cleveres.tricky.cleverestech.util.KeyboxVerifier
+import cleveres.tricky.cleverestech.util.SecureFile
+import cleveres.tricky.cleverestech.util.SecureFileOperations
+import org.json.JSONArray
+import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
-import org.junit.Rule
-import cleveres.tricky.cleverestech.util.SecureFile
-import cleveres.tricky.cleverestech.util.SecureFileOperations
 import java.io.File
 import java.io.StringReader
 import java.net.HttpURLConnection
@@ -19,12 +22,8 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.security.cert.X509Certificate
 import java.util.concurrent.TimeUnit
-import org.json.JSONObject
-import org.json.JSONArray
-import cleveres.tricky.cleverestech.util.KeyboxVerifier
 
 class ActionTest {
-
     @get:Rule
     val tempFolder = TemporaryFolder()
 
@@ -34,33 +33,19 @@ class ActionTest {
     private lateinit var originalConfigRoot: File
     private val maxPollIntervalMs = 200L
 
-    private val EC_KEY = "-----BEGIN EC PRIVATE KEY-----\n" +
-            "MHcCAQEEIAcPs+YkQGT6EDkaEH6Z9StSR7mQuKnh49K0DVqB/ZxYoAoGCCqGSM49\n" +
-            "AwEHoUQDQgAEzi23gXvUATkDmPcNPgsqe24eWmSIfuteSk8S5wJxs4ABt+O6QGAO\n" +
-            "XHqvCjNpJSbUxgz3SZefi8TWWQ1t32G/1w==\n" +
-            "-----END EC PRIVATE KEY-----"
+    private val ecKey = TestKeyboxFixtures.ecPrivateKey
+    private val testCertificate = TestKeyboxFixtures.certificate
 
-    private val TEST_CERT = "-----BEGIN CERTIFICATE-----\n" +
-            "MIIBfTCCASOgAwIBAgIUBZ47iWGUbx00hmWBPTYkakbXnigwCgYIKoZIzj0EAwIw\n" +
-            "FDESMBAGA1UEAwwJVGVzdCBDZXJ0MB4XDTI2MDEyOTIxNTI0M1oXDTI3MDEyNDIx\n" +
-            "NTI0M1owFDESMBAGA1UEAwwJVGVzdCBDZXJ0MFkwEwYHKoZIzj0CAQYIKoZIzj0D\n" +
-            "AQcDQgAEzi23gXvUATkDmPcNPgsqe24eWmSIfuteSk8S5wJxs4ABt+O6QGAOXHqv\n" +
-            "CjNpJSbUxgz3SZefi8TWWQ1t32G/16NTMFEwHQYDVR0OBBYEFCwifKyDaNaHtKvx\n" +
-            "m+0eLn/LZoTaMB8GA1UdIwQYMBaAFCwifKyDaNaHtKvxm+0eLn/LZoTaMA8GA1Ud\n" +
-            "EwEB/wQFMAMBAf8wCgYIKoZIzj0EAwIDSAAwRQIgT+CWCLXuIN5XY0c3mFN1p1FM\n" +
-            "1KAiK9pMwjbHYxNxDmYCIQDXriCpaafMnkJIqGb8UsI5XlkQD0soXYP7hd9ymW/t\n" +
-            "qg==\n" +
-            "-----END CERTIFICATE-----"
-
-    private val VALID_XML = "<?xml version=\"1.0\"?>\n" +
+    private val validXml =
+        "<?xml version=\"1.0\"?>\n" +
             "<AndroidAttestation>\n" +
             "<NumberOfKeyboxes>1</NumberOfKeyboxes>\n" +
             "<Keybox>\n" +
             "<Key algorithm=\"ecdsa\">\n" +
-            "<PrivateKey>\n" + EC_KEY + "\n</PrivateKey>\n" +
+            "<PrivateKey>\n" + ecKey + "\n</PrivateKey>\n" +
             "<CertificateChain>\n" +
             "<NumberOfCertificates>1</NumberOfCertificates>\n" +
-            "<Certificate>\n" + TEST_CERT + "\n</Certificate>\n" +
+            "<Certificate>\n" + testCertificate + "\n</Certificate>\n" +
             "</CertificateChain>\n" +
             "</Key>\n" +
             "</Keybox>\n" +
@@ -68,32 +53,71 @@ class ActionTest {
 
     @Before
     fun setUp() {
-        Logger.setImpl(object : Logger.LogImpl {
-            override fun d(tag: String, msg: String) { println("D/$tag: $msg") }
-            override fun e(tag: String, msg: String) { println("E/$tag: $msg") }
-            override fun e(tag: String, msg: String, t: Throwable?) { println("E/$tag: $msg"); t?.printStackTrace() }
-            override fun i(tag: String, msg: String) { println("I/$tag: $msg") }
-        })
+        Logger.setImpl(
+            object : Logger.LogImpl {
+                override fun d(
+                    tag: String,
+                    msg: String,
+                ) {
+                    println("D/$tag: $msg")
+                }
+
+                override fun e(
+                    tag: String,
+                    msg: String,
+                ) {
+                    println("E/$tag: $msg")
+                }
+
+                override fun e(
+                    tag: String,
+                    msg: String,
+                    t: Throwable?,
+                ) {
+                    println("E/$tag: $msg")
+                    t?.printStackTrace()
+                }
+
+                override fun i(
+                    tag: String,
+                    msg: String,
+                ) {
+                    println("I/$tag: $msg")
+                }
+            },
+        )
         configDir = tempFolder.newFolder("config")
         originalConfigRoot = Config.getConfigRoot()
         Config.setRootForTesting(configDir)
 
         originalSecureFileImpl = SecureFile.impl
-        SecureFile.impl = object : SecureFileOperations {
-            override fun writeText(file: File, content: String) {
-                file.parentFile?.mkdirs()
-                file.writeText(content)
-            }
-            override fun mkdirs(file: File, mode: Int) {
-                file.mkdirs()
-            }
-            override fun touch(file: File, mode: Int) {
-                file.parentFile?.mkdirs()
-                if (!file.exists()) file.createNewFile()
-            }
-        }
+        SecureFile.impl =
+            object : SecureFileOperations {
+                override fun writeText(
+                    file: File,
+                    content: String,
+                ) {
+                    file.parentFile?.mkdirs()
+                    file.writeText(content)
+                }
 
-        server = WebServer(0, configDir)
+                override fun mkdirs(
+                    file: File,
+                    mode: Int,
+                ) {
+                    file.mkdirs()
+                }
+
+                override fun touch(
+                    file: File,
+                    mode: Int,
+                ) {
+                    file.parentFile?.mkdirs()
+                    if (!file.exists()) file.createNewFile()
+                }
+            }
+
+        server = WebServer(0, configDir, crlFetcher = { emptySet() })
         server.start()
         // Reset CertHack
         CertHack.readFromXml(null)
@@ -132,7 +156,7 @@ class ActionTest {
         val url = URL("http://localhost:$port/api/config?token=$token")
 
         // 1. Valid XML
-        CertHack.readFromXml(StringReader(VALID_XML))
+        CertHack.readFromXml(StringReader(validXml))
 
         var conn = url.openConnection() as HttpURLConnection
         var content = conn.inputStream.bufferedReader().readText()
@@ -171,9 +195,9 @@ class ActionTest {
 
     @Test
     fun testVerifyKeyboxesIncludesLegacyAndStoredFiles() {
-        File(configDir, "keybox.xml").writeText(VALID_XML)
+        File(configDir, "keybox.xml").writeText(validXml)
         val keyboxesDir = File(configDir, "keyboxes").apply { mkdirs() }
-        File(keyboxesDir, "stored.xml").writeText(VALID_XML)
+        File(keyboxesDir, "stored.xml").writeText(validXml)
 
         val results = KeyboxVerifier.verify(configDir) { emptySet() }
         assertEquals(2, results.size)
@@ -188,8 +212,8 @@ class ActionTest {
 
     @Test
     fun testVerifyKeyboxesReportsRevokedStatus() {
-        File(configDir, "keybox.xml").writeText(VALID_XML)
-        val revokedSerial = extractCertificateSerial(VALID_XML)
+        File(configDir, "keybox.xml").writeText(validXml)
+        val revokedSerial = extractCertificateSerial(validXml)
 
         val result = KeyboxVerifier.verify(configDir) { setOf(revokedSerial) }.single()
         assertEquals("keybox.xml", result.filename)
@@ -202,8 +226,8 @@ class ActionTest {
         assertEquals(0, getConfig().getInt("keybox_count"))
         assertEquals(0, getKeyboxes().length())
 
-        assertEquals(200, postForm("/api/upload_keybox", mapOf("filename" to "first.xml", "content" to VALID_XML)).first)
-        assertEquals(200, postForm("/api/upload_keybox", mapOf("filename" to "second.xml", "content" to VALID_XML)).first)
+        assertEquals(200, postForm("/api/upload_keybox", mapOf("filename" to "first.xml", "content" to validXml)).first)
+        assertEquals(200, postForm("/api/upload_keybox", mapOf("filename" to "second.xml", "content" to validXml)).first)
 
         waitUntil("uploaded keyboxes to be listed") {
             val listed = getKeyboxes()
@@ -215,36 +239,31 @@ class ActionTest {
             getConfig().getInt("keybox_count") == 2
         }
 
-        val firstRule = JSONArray().put(
-            JSONObject()
-                .put("package", "com.example.target")
-                .put("template", "")
-                .put("keybox", "first.xml")
-                .put("permissions", JSONArray().put("CONTACTS"))
-        )
+        val firstRule =
+            JSONArray().put(
+                JSONObject()
+                    .put("package", "com.example.target")
+                    .put("template", "")
+                    .put("keybox", "first.xml"),
+            )
         assertEquals(200, postForm("/api/app_config_structured", mapOf("data" to firstRule.toString())).first)
 
         var savedRules = getStructuredAppConfig()
         assertEquals(1, savedRules.length())
         assertEquals("first.xml", savedRules.getJSONObject(0).getString("keybox"))
 
-        val secondRule = JSONArray().put(
-            JSONObject()
-                .put("package", "com.example.target")
-                .put("template", "")
-                .put("keybox", "second.xml")
-                .put("permissions", JSONArray().put("MEDIA").put("CONTACTS"))
-        )
+        val secondRule =
+            JSONArray().put(
+                JSONObject()
+                    .put("package", "com.example.target")
+                    .put("template", "")
+                    .put("keybox", "second.xml"),
+            )
         assertEquals(200, postForm("/api/app_config_structured", mapOf("data" to secondRule.toString())).first)
 
         savedRules = getStructuredAppConfig()
         assertEquals(1, savedRules.length())
         assertEquals("second.xml", savedRules.getJSONObject(0).getString("keybox"))
-        val savedPermissions = savedRules.getJSONObject(0).getJSONArray("permissions")
-        assertEquals(2, savedPermissions.length())
-        val savedPermissionList = listOf(savedPermissions.getString(0), savedPermissions.getString(1))
-        assertTrue(savedPermissionList.contains("MEDIA"))
-        assertTrue(savedPermissionList.contains("CONTACTS"))
         val rawAppConfig = File(configDir, "app_config").readText()
         assertTrue(rawAppConfig.contains("com.example.target"))
         assertTrue(rawAppConfig.contains("second.xml"))
@@ -261,56 +280,42 @@ class ActionTest {
 
     @Test
     fun testUserCanToggleFeaturesOffAndOnAndConfigReflectsState() {
-        assertFalse(getConfig().getBoolean("rkp_bypass"))
-        assertFalse(getConfig().getBoolean("drm_fix"))
-        assertFalse(getConfig().getBoolean("spoof_props"))
+        assertFalse(getConfig().getBoolean("telephony"))
 
-        assertEquals(200, postForm("/api/toggle", mapOf("setting" to "rkp_bypass", "value" to "true")).first)
-        assertEquals(200, postForm("/api/toggle", mapOf("setting" to "drm_fix", "value" to "true")).first)
-        assertEquals(200, postForm("/api/toggle", mapOf("setting" to "spoof_props", "value" to "true")).first)
+        assertEquals(200, postForm("/api/toggle", mapOf("setting" to "telephony", "value" to "true")).first)
+        assertEquals(400, postForm("/api/toggle", mapOf("setting" to "rkp_bypass", "value" to "true")).first)
+        assertEquals(400, postForm("/api/toggle", mapOf("setting" to "spoof_props", "value" to "true")).first)
 
         var config = getConfig()
-        assertEquals(true, config.getBoolean("rkp_bypass"))
-        assertEquals(true, config.getBoolean("drm_fix"))
-        assertEquals(true, config.getBoolean("spoof_props"))
-        assertTrue(File(configDir, "rkp_bypass").exists())
-        assertTrue(File(configDir, "spoof_props").exists())
-
-        val drmContent = getText("/api/file?filename=drm_fix")
-        assertTrue(drmContent.contains("drm.service.enabled=true"))
-        assertTrue(drmContent.contains("ro.com.google.widevine.level=1"))
-
-        assertEquals(200, postForm("/api/toggle", mapOf("setting" to "rkp_bypass", "value" to "false")).first)
-        assertEquals(200, postForm("/api/toggle", mapOf("setting" to "drm_fix", "value" to "false")).first)
-
-        config = getConfig()
-        assertFalse(config.getBoolean("rkp_bypass"))
-        assertFalse(config.getBoolean("drm_fix"))
-        assertTrue(config.getBoolean("spoof_props"))
+        assertTrue(config.getBoolean("telephony"))
+        assertFalse(config.has("rkp_bypass"))
+        assertFalse(config.has("spoof_props"))
+        assertTrue(File(configDir, "telephony").exists())
         assertFalse(File(configDir, "rkp_bypass").exists())
-        assertFalse(File(configDir, "drm_fix").exists())
-        assertTrue(File(configDir, "spoof_props").exists())
-
-        assertEquals(200, postForm("/api/toggle", mapOf("setting" to "spoof_props", "value" to "false")).first)
-        config = getConfig()
-        assertFalse(config.getBoolean("spoof_props"))
         assertFalse(File(configDir, "spoof_props").exists())
+
+        assertEquals(200, postForm("/api/toggle", mapOf("setting" to "telephony", "value" to "false")).first)
+
+        config = getConfig()
+        assertFalse(config.getBoolean("telephony"))
+        assertFalse(File(configDir, "telephony").exists())
     }
 
     @Test
-    fun testProfilesKeepRkpBetaDisabledByDefault() {
-        assertFalse(getConfig().getBoolean("rkp_bypass"))
-
-        val profiles = listOf("GodProfile", "DailyUse", "Minimal", "Default")
+    fun testProfilesDoNotCreateRemovedCompatibilityFlags() {
+        val profiles = listOf("maximum", "daily", "minimal", "default")
         profiles.forEach { profile ->
             assertEquals(200, postForm("/api/apply_profile", mapOf("profile" to profile)).first)
 
-            waitUntil("profile $profile to apply without enabling rkp") {
-                !File(configDir, "apply_profile").exists() && !File(configDir, "rkp_bypass").exists()
+            waitUntil("profile $profile to apply without removed flags") {
+                !File(configDir, "apply_profile").exists() &&
+                    !File(configDir, "rkp_bypass").exists() &&
+                    !File(configDir, "spoof_props").exists()
             }
 
             val config = getConfig()
-            assertFalse("rkp_bypass must stay disabled for profile=$profile", config.getBoolean("rkp_bypass"))
+            assertFalse(config.has("rkp_bypass"))
+            assertFalse(config.has("spoof_props"))
         }
     }
 
@@ -326,12 +331,16 @@ class ActionTest {
         return responseCode to body
     }
 
-    private fun postForm(path: String, params: Map<String, String>): Pair<Int, String> {
+    private fun postForm(
+        path: String,
+        params: Map<String, String>,
+    ): Pair<Int, String> {
         val url = URL("http://localhost:${server.listeningPort}$path?token=${server.token}")
         val conn = url.openConnection() as HttpURLConnection
-        val body = params.entries.joinToString("&") { (key, value) ->
-            "${URLEncoder.encode(key, StandardCharsets.UTF_8)}=${URLEncoder.encode(value, StandardCharsets.UTF_8)}"
-        }
+        val body =
+            params.entries.joinToString("&") { (key, value) ->
+                "${URLEncoder.encode(key, StandardCharsets.UTF_8)}=${URLEncoder.encode(value, StandardCharsets.UTF_8)}"
+            }
         conn.requestMethod = "POST"
         conn.doOutput = true
         conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
@@ -356,16 +365,23 @@ class ActionTest {
     }
 
     private fun extractCertificateSerial(xml: String): String {
-        return (CertHack.parseKeyboxXml(StringReader(xml))
-            .first()
-            .certificates()
-            .first() as X509Certificate)
+        return (
+            CertHack.parseKeyboxXml(StringReader(xml))
+                .first()
+                .certificates()
+                .first() as X509Certificate
+        )
             .serialNumber
             .toString(16)
             .lowercase()
     }
 
-    private fun waitUntil(conditionDescription: String, timeoutMs: Long = 2_000L, pollIntervalMs: Long = 50L, predicate: () -> Boolean) {
+    private fun waitUntil(
+        conditionDescription: String,
+        timeoutMs: Long = 2_000L,
+        pollIntervalMs: Long = 50L,
+        predicate: () -> Boolean,
+    ) {
         val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs)
         var currentSleepMs = pollIntervalMs
         var lastFailure: Throwable? = null

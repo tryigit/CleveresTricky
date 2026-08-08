@@ -2,17 +2,20 @@ package cleveres.tricky.cleverestech.util
 
 import cleveres.tricky.cleverestech.Logger
 import cleveres.tricky.cleverestech.WEB_UI_LOOPBACK_HOST
-import cleveres.tricky.cleverestech.WEB_UI_PORT
 import java.io.File
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 object KeyboxAutoCleaner {
     private fun isTokenValid(token: String): Boolean {
-        if (token.isEmpty()) return false
+        if (token.length !in 32..128) return false
         for (i in 0 until token.length) {
             val c = token[i]
-            if (!(c in 'A'..'Z' || c in 'a'..'z' || c in '0'..'9' || c == '-')) {
+            if (!(c in 'A'..'Z' || c in 'a'..'z' || c in '0'..'9' || c == '-' || c == '_')) {
                 return false
             }
         }
@@ -25,10 +28,16 @@ object KeyboxAutoCleaner {
     private val revokedDir = File(keyboxDir, "revoked")
     private val toggleFile = File(configDir, "auto_keybox_check")
     private val webPortFile = File(configDir, "web_port")
+    private val started = AtomicBoolean(false)
 
     fun start() {
-        executor.scheduleAtFixedRate({
-            runCheck()
+        if (!started.compareAndSet(false, true)) return
+        executor.scheduleWithFixedDelay({
+            try {
+                runCheck()
+            } catch (error: Throwable) {
+                Logger.e("AutoCleaner: Scheduled check failed", error)
+            }
         }, 1, 1440, TimeUnit.MINUTES) // Run 1 min after start, then every 24 hours
     }
 
@@ -39,16 +48,30 @@ object KeyboxAutoCleaner {
         val results = KeyboxVerifier.verify(configDir)
         var revokedCount = 0
 
-        if (!revokedDir.exists()) revokedDir.mkdirs()
+        SecureFile.mkdirs(revokedDir, 448)
 
         for (res in results) {
             if (res.status == KeyboxVerifier.Status.REVOKED || res.status == KeyboxVerifier.Status.INVALID) {
                 Logger.i("AutoCleaner: Keybox ${res.filename} is ${res.status}. Moving to revoked.")
                 val file = res.file
-                val target = File(revokedDir, res.filename)
-                if (file.exists()) {
+                if (file.exists() && File(res.filename).name == res.filename) {
                     try {
-                        file.renameTo(target)
+                        val initialTarget = File(revokedDir, res.filename)
+                        val target =
+                            if (initialTarget.exists()) {
+                                File(revokedDir, "${res.filename}.${System.currentTimeMillis()}.revoked")
+                            } else {
+                                initialTarget
+                            }
+                        try {
+                            Files.move(
+                                file.toPath(),
+                                target.toPath(),
+                                StandardCopyOption.ATOMIC_MOVE,
+                            )
+                        } catch (_: AtomicMoveNotSupportedException) {
+                            Files.move(file.toPath(), target.toPath())
+                        }
                         revokedCount++
                     } catch (e: Exception) {
                         Logger.e("AutoCleaner: Failed to move ${res.filename}", e)
@@ -57,30 +80,43 @@ object KeyboxAutoCleaner {
             }
         }
 
-        if (revokedCount > 0) {
-            cleveres.tricky.cleverestech.CboxManager.refresh()
-            cleveres.tricky.cleverestech.Config.updateKeyBoxes()
-            notifyUser(revokedCount)
-        }
+        cleveres.tricky.cleverestech.Config.updateKeyBoxesSync()
+        if (revokedCount > 0) notifyUser(revokedCount)
         Logger.i("AutoCleaner: Finished check. Revoked/Invalid files moved: $revokedCount")
     }
 
     private fun notifyUser(count: Int) {
         try {
-            val url = readWebUiUrl()
-            Logger.d("AutoCleaner: Posting notification for WebUI at $url")
+            val url = readWebUiUrl() ?: return
             // Post a high-priority, actionable notification
-            val cmd = arrayOf(
-                "su", "-c", "cmd notification post -S bigtext -t CleveresTricky 'Keybox Revoked Alert' '$count keybox(es) were found to be revoked/invalid and have been disabled. Check WebUI!' -a 'android.intent.action.VIEW' -d '$url'"
-            )
-            val process = ProcessBuilder(*cmd).redirectErrorStream(true).start()
-            val output = try {
-                process.inputStream.bufferedReader().use { it.readText().trim() }
-            } catch (_: Exception) { "" }
-            val exitCode = process.waitFor()
-            if (output.isNotBlank()) {
-                Logger.d("AutoCleaner: notification output: $output")
+            val cmd =
+                arrayOf(
+                    "cmd",
+                    "notification",
+                    "post",
+                    "-S",
+                    "bigtext",
+                    "-t",
+                    "CleveresTricky",
+                    "Keybox Revoked Alert",
+                    "$count keybox(es) were revoked or invalid and have been disabled. Check WebUI.",
+                    "-a",
+                    "android.intent.action.VIEW",
+                    "-d",
+                    url,
+                )
+            val nullDevice = File("/dev/null")
+            val process =
+                ProcessBuilder(*cmd)
+                    .redirectOutput(nullDevice)
+                    .redirectError(nullDevice)
+                    .start()
+            if (!process.waitFor(5, TimeUnit.SECONDS)) {
+                process.destroyForcibly()
+                Logger.e("AutoCleaner: Notification command timed out")
+                return
             }
+            val exitCode = process.exitValue()
             if (exitCode != 0) {
                 Logger.e("AutoCleaner: Failed to send notification (exit=$exitCode)")
             }
@@ -92,10 +128,10 @@ object KeyboxAutoCleaner {
     /**
      * Reads the `web_port` metadata file (`port|token`) and returns the tokenized WebUI URL.
      *
-     * Falls back to the default loopback endpoint if the file is missing or malformed so the
-     * notification still points at the local WebUI for debugging.
+     * Returns null if the file is missing or malformed so a notification never
+     * exposes a guessed or unauthenticated endpoint.
      */
-    private fun readWebUiUrl(): String {
+    private fun readWebUiUrl(): String? {
         return try {
             val raw = webPortFile.readText().trim()
             val pipeIdx = raw.indexOf('|')
@@ -103,14 +139,14 @@ object KeyboxAutoCleaner {
             val port = portStr.toIntOrNull()
             val token = if (pipeIdx != -1) raw.substring(pipeIdx + 1).trim() else ""
             if (port == null || port !in 1..65535 || token.isBlank() || !isTokenValid(token)) {
-                Logger.e("AutoCleaner: Invalid web_port content '$raw'")
-                "http://$WEB_UI_LOOPBACK_HOST:$WEB_UI_PORT"
+                Logger.e("AutoCleaner: Invalid WebUI endpoint metadata")
+                null
             } else {
                 "http://$WEB_UI_LOOPBACK_HOST:$port/?token=$token"
             }
         } catch (e: Exception) {
             Logger.e("AutoCleaner: Failed to read WebUI endpoint metadata", e)
-            "http://$WEB_UI_LOOPBACK_HOST:$WEB_UI_PORT"
+            null
         }
     }
 }

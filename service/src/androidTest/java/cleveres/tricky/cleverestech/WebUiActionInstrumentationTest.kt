@@ -12,7 +12,6 @@ import java.net.URL
 
 @RunWith(AndroidJUnit4::class)
 class WebUiActionInstrumentationTest {
-
     @Test
     fun testActionScriptUrlLoadsAuthenticatedWebUiOverLoopback() {
         val appContext = InstrumentationRegistry.getInstrumentation().targetContext

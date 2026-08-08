@@ -1,12 +1,10 @@
 package cleveres.tricky.cleverestech
 
 import cleveres.tricky.cleverestech.util.KeyboxVerifier
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ReproKeyIDConfusionTest {
-
     @Test
     fun testAmbiguousKeyID() {
         // A 32-character string that happens to be all digits.
@@ -15,13 +13,14 @@ class ReproKeyIDConfusionTest {
         // If "11112222333344445555666677778888" is in the CRL, it implies the Key with that ID is revoked.
 
         val ambiguousKey = "11112222333344445555666677778888"
-        val json = """
-        {
-          "entries": {
-            "$ambiguousKey": "REVOKED"
-          }
-        }
-        """.trimIndent()
+        val json =
+            """
+            {
+              "entries": {
+                "$ambiguousKey": "REVOKED"
+              }
+            }
+            """.trimIndent()
 
         val revoked = KeyboxVerifier.parseCrl(json)
 

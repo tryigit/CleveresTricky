@@ -1,22 +1,3 @@
-# allow hooking system server
-allow system_server system_server:process { execmem };
-allow zygote zygote:process { execmem };
-
-# allow zygote unmounting
-allow zygote adb_data_file:dir { search };
-allow zygote mnt_vendor_file:dir { search };
-allow zygote system_file:dir { mounton };
-allow zygote labeledfs:filesystem { mount };
-allow zygote fs_type:filesystem { unmount };
-
-allow zygote unlabeled:file { open read getattr };
-allow zygote zygote:capability { sys_chroot };
-allow zygote nsfs:file { open read };
-
-# TelephonyInterceptor support (System-Wide IMEI Spoofing)
+# Permit executable hook trampolines only in processes this module can target.
+allow keystore keystore:process { execmem };
 allow radio radio:process { execmem };
-allow system_file keystore:unix_dgram_socket { sendto };
-
-# Allow keystore to read unlabeled files (for libCleveresTricky.so fallback)
-allow keystore_server unlabeled:file { read open getattr map };
-allow keystore unlabeled:file { read open getattr map };

@@ -5,15 +5,15 @@ import org.junit.Test
 import java.io.StringReader
 
 class XMLParserXxeTest {
-
     @Test
     fun testDtdIsIgnoredOrRejected() {
-        val xml = """
+        val xml =
+            """
             <!DOCTYPE foo [
               <!ENTITY xxe "vulnerable">
             ]>
             <root>&xxe;</root>
-        """.trimIndent()
+            """.trimIndent()
 
         try {
             // Attempt to parse XML with DTD and entity
@@ -28,7 +28,6 @@ class XMLParserXxeTest {
             }
 
             // If it resolved to empty or literal "&xxe;", it's safe but unexpected for kxml2.
-
         } catch (e: SecurityException) {
             // Success: Explicitly rejected by our security check (DOCDECL event)
             if (e.message?.contains("DTD is not allowed") != true) {

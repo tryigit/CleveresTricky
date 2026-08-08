@@ -8,7 +8,6 @@ import org.junit.Before
 import org.junit.Test
 
 class BinderInterceptorTest {
-
     @Before
     fun setup() {
         Parcel.resetStats()
@@ -16,20 +15,21 @@ class BinderInterceptorTest {
 
     @Test
     fun testOnTransactPostTransact_ZeroSz2_ReducesObtain() {
-        val interceptor = object : BinderInterceptor() {
-            override fun onPostTransact(
-                target: IBinder,
-                code: Int,
-                flags: Int,
-                callingUid: Int,
-                callingPid: Int,
-                data: Parcel,
-                reply: Parcel?,
-                resultCode: Int
-            ): Result {
-                return BinderInterceptor.Continue
+        val interceptor =
+            object : BinderInterceptor() {
+                override fun onPostTransact(
+                    target: IBinder,
+                    code: Int,
+                    flags: Int,
+                    callingUid: Int,
+                    callingPid: Int,
+                    data: Parcel,
+                    reply: Parcel?,
+                    resultCode: Int,
+                ): Result {
+                    return BinderInterceptor.Continue
+                }
             }
-        }
 
         val data = Parcel.obtain()
         // Setup data for POST_TRANSACT (code 2)
@@ -70,20 +70,21 @@ class BinderInterceptorTest {
 
     @Test
     fun testOnTransactPostTransact_NonZeroSz2_AllocatesTwo() {
-        val interceptor = object : BinderInterceptor() {
-            override fun onPostTransact(
-                target: IBinder,
-                code: Int,
-                flags: Int,
-                callingUid: Int,
-                callingPid: Int,
-                data: Parcel,
-                reply: Parcel?,
-                resultCode: Int
-            ): Result {
-                return BinderInterceptor.Continue
+        val interceptor =
+            object : BinderInterceptor() {
+                override fun onPostTransact(
+                    target: IBinder,
+                    code: Int,
+                    flags: Int,
+                    callingUid: Int,
+                    callingPid: Int,
+                    data: Parcel,
+                    reply: Parcel?,
+                    resultCode: Int,
+                ): Result {
+                    return BinderInterceptor.Continue
+                }
             }
-        }
 
         val data = Parcel.obtain()
         // Setup data for POST_TRANSACT (code 2)
@@ -94,7 +95,7 @@ class BinderInterceptorTest {
         data.pushInt(100)
         data.pushInt(0)
         data.pushLong(10L) // sz = 10
-        data.pushLong(5L)  // sz2 = 5 (non-zero)
+        data.pushLong(5L) // sz2 = 5 (non-zero)
 
         val reply = Parcel.obtain()
 
@@ -109,11 +110,12 @@ class BinderInterceptorTest {
     @Test
     fun testOnInterceptorReplaced() {
         val replaced = java.util.concurrent.atomic.AtomicBoolean(false)
-        val interceptor = object : BinderInterceptor() {
-            override fun onInterceptorReplaced() {
-                replaced.set(true)
+        val interceptor =
+            object : BinderInterceptor() {
+                override fun onInterceptorReplaced() {
+                    replaced.set(true)
+                }
             }
-        }
 
         val data = Parcel.obtain()
         val reply = Parcel.obtain()

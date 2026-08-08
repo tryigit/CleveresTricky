@@ -3,10 +3,8 @@ package cleveres.tricky.cleverestech
 import cleveres.tricky.cleverestech.util.KeyboxVerifier
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.math.BigInteger
 
 class KeyboxVerifierNegativeTest {
-
     @Test
     fun testParseCrlWithNegativeDecimal() {
         // Serial Number -10.
@@ -14,13 +12,14 @@ class KeyboxVerifierNegativeTest {
 
         val negativeSerial = "-10"
 
-        val json = """
-        {
-          "entries": {
-            "$negativeSerial": "REVOKED"
-          }
-        }
-        """.trimIndent()
+        val json =
+            """
+            {
+              "entries": {
+                "$negativeSerial": "REVOKED"
+              }
+            }
+            """.trimIndent()
 
         val revoked = KeyboxVerifier.parseCrl(json)
 

@@ -5,7 +5,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class KeyboxVerifierLeadingZeroTest {
-
     @Test
     fun testParseCrlWithLeadingZeroDigits() {
         // "0123" consists only of digits.
@@ -13,13 +12,14 @@ class KeyboxVerifierLeadingZeroTest {
         // However, standard decimal formatting usually prohibits leading zeros.
         // "0123" is much more likely to be a Hex string "0123".
 
-        val json = """
-        {
-          "entries": {
-            "0123": "REVOKED"
-          }
-        }
-        """.trimIndent()
+        val json =
+            """
+            {
+              "entries": {
+                "0123": "REVOKED"
+              }
+            }
+            """.trimIndent()
 
         val revoked = KeyboxVerifier.parseCrl(json)
 

@@ -1,6 +1,0 @@
-## 2024-05-24 - Pre-allocating Vectors in Rust FFI bindings
-**Learning:** In the Rust `ffi.rs` implementation, dynamic allocations using `Vec::new()` within hot paths (like `rust_create_certificate_request`) can lead to unnecessary reallocations as elements are pushed. Using `Vec::with_capacity()` when the final capacity is known (like `keys_count` provided from Kotlin) avoids these reallocations and provides a zero-cost performance gain across the FFI boundary.
-**Action:** When bridging Kotlin and Rust via FFI, always use `Vec::with_capacity(size)` instead of `Vec::new()` for slices or lists where the length is explicitly passed as an argument from the host language.
-## 2024-05-24 - Avoiding split() in Kotlin hot paths
-**Learning:** Using `String.split()` in Kotlin (especially inside loops or frequent operations like `isSafeHost` handling network requests) creates unnecessary overhead by allocating intermediate lists/arrays. A simple combination of `indexOf()` and `substring()` is significantly faster and avoids garbage collection pressure.
-**Action:** Replace `split()` with `indexOf(char)` and `substring()` for simple, single-character delimiter extraction in performance-sensitive sections of the code.

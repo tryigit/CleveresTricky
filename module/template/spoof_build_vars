@@ -1,37 +1,12 @@
 MANUFACTURER=Google
 MODEL=Pixel 8 Pro
-FINGERPRINT=google/husky/husky:15/AP4A.250305.002/12737840:user/release-keys
 BRAND=google
 PRODUCT=husky
 DEVICE=husky
-RELEASE=15
-ID=AP4A.250305.002
-INCREMENTAL=12737840
-TYPE=user
-TAGS=release-keys
-SECURITY_PATCH=2025-03-05
-BOOTLOADER=husky-15.0.0
-ro.boot.verifiedbootstate=green
-ro.boot.flash.locked=1
-ro.boot.veritymode=enforcing
-ro.boot.vbmeta.device_state=locked
-ro.boot.warranty_bit=0
-ro.secure=1
-ro.debuggable=0
-ro.oem_unlock_supported=0
 
-# RKP / KeyMint Spoofing
+# Optional key-attestation identifiers. Add only values you are authorized to use.
 ATTESTATION_ID_BRAND=google
 ATTESTATION_ID_DEVICE=husky
 ATTESTATION_ID_PRODUCT=husky
 ATTESTATION_ID_MANUFACTURER=Google
 ATTESTATION_ID_MODEL=Pixel 8 Pro
-
-# Location Spoofing (requires spoof_location toggle)
-# SPOOF_LATITUDE=41.0082
-# SPOOF_LONGITUDE=28.9784
-# SPOOF_ALTITUDE=0
-# SPOOF_ACCURACY=1.0
-# SPOOF_LOCATION_RANDOM=false
-# SPOOF_LOCATION_RADIUS=500
-# SPOOF_LOCATION_INTERVAL=30

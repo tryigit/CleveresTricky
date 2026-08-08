@@ -6,7 +6,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class KeyboxVerifierAmbiguityTest {
-
     @Test
     fun testParseCrlAmbiguity() {
         // "10" is ambiguous:
@@ -17,13 +16,14 @@ class KeyboxVerifierAmbiguityTest {
         // So "10" means serial number 10 (hex "a").
         // It should NOT mean serial number 16 (hex "10").
 
-        val json = """
-        {
-          "entries": {
-            "10": "REVOKED"
-          }
-        }
-        """.trimIndent()
+        val json =
+            """
+            {
+              "entries": {
+                "10": "REVOKED"
+              }
+            }
+            """.trimIndent()
 
         val revoked = KeyboxVerifier.parseCrl(json)
         println("Revoked: $revoked")

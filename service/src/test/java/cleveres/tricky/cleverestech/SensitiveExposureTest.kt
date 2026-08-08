@@ -11,7 +11,6 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 class SensitiveExposureTest {
-
     @get:Rule
     val tempFolder = TemporaryFolder()
 
@@ -21,12 +20,32 @@ class SensitiveExposureTest {
     @Before
     fun setUp() {
         // Suppress logging
-        Logger.setImpl(object : Logger.LogImpl {
-            override fun d(tag: String, msg: String) {}
-            override fun e(tag: String, msg: String) {}
-            override fun e(tag: String, msg: String, t: Throwable?) { t?.printStackTrace() }
-            override fun i(tag: String, msg: String) {}
-        })
+        Logger.setImpl(
+            object : Logger.LogImpl {
+                override fun d(
+                    tag: String,
+                    msg: String,
+                ) {}
+
+                override fun e(
+                    tag: String,
+                    msg: String,
+                ) {}
+
+                override fun e(
+                    tag: String,
+                    msg: String,
+                    t: Throwable?,
+                ) {
+                    t?.printStackTrace()
+                }
+
+                override fun i(
+                    tag: String,
+                    msg: String,
+                ) {}
+            },
+        )
         configDir = tempFolder.newFolder("config")
 
         // Create a dummy keybox.xml

@@ -1,102 +1,112 @@
 package cleveres.tricky.cleverestech.util
 
+import cleveres.tricky.cleverestech.Logger
+import org.json.JSONObject
+import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.nio.charset.StandardCharsets
 import java.util.zip.ZipInputStream
-import org.json.JSONObject
-import cleveres.tricky.cleverestech.Logger
 
 object ZipProcessor {
     data class ProcessedPack(
-        val cboxFiles: List<Pair<String, ByteArray>>, // filename -> content
+        val cboxFiles: List<Pair<String, ByteArray>>,
         val password: String?,
-        val publicKey: String?,
-        val config: JSONObject?
     )
 
-    private const val MAX_ENTRY_SIZE = 5 * 1024 * 1024 // 5MB
-    private const val MAX_TOTAL_SIZE = 10 * 1024 * 1024 // 10MB
+    private const val MAX_ENTRY_SIZE = 5 * 1024 * 1024
+    private const val MAX_METADATA_SIZE = 64 * 1024
+    private const val MAX_TOTAL_SIZE = 10 * 1024 * 1024
+    private const val MAX_ENTRIES = 128
+    private const val MAX_CBOX_FILES = 64
+    private const val MAX_PASSWORD_CHARS = 1024
 
     fun process(inputStream: InputStream): ProcessedPack? {
         val cboxFiles = ArrayList<Pair<String, ByteArray>>()
         var password: String? = null
-        var publicKey: String? = null
-        var config: JSONObject? = null
+        var configPassword: String? = null
         var totalSize = 0
+        var entryCount = 0
 
-        try {
-            ZipInputStream(inputStream).use { zis ->
-                var entry = zis.nextEntry
+        return try {
+            ZipInputStream(inputStream).use { zip ->
+                var entry = zip.nextEntry
                 while (entry != null) {
+                    if (++entryCount > MAX_ENTRIES) throw SecurityException("ZIP has too many entries")
                     val name = entry.name
-                    if (name.contains("..") || name.contains("/") || name.contains("\\")) {
-                        throw SecurityException("Zip entry contains directory traversal: $name")
+                    if (name.isBlank() || name.contains("..") || name.contains('/') || name.contains('\\')) {
+                        throw SecurityException("ZIP contains an unsafe entry name")
                     }
 
                     if (!entry.isDirectory) {
-                        // Read content with limits
-                        val content = readEntry(zis)
-                        if (content == null) {
-                            throw SecurityException("Zip entry too large: $name")
-                        }
+                        val entryLimit =
+                            if (name == "password.txt" || name == "config.json") {
+                                MAX_METADATA_SIZE
+                            } else {
+                                MAX_ENTRY_SIZE
+                            }
+                        val content =
+                            readEntry(zip, entryLimit)
+                                ?: throw SecurityException("ZIP entry exceeds its size limit")
                         totalSize += content.size
                         if (totalSize > MAX_TOTAL_SIZE) {
-                            throw SecurityException("Total zip size exceeded limit")
+                            content.fill(0)
+                            throw SecurityException("ZIP expands beyond its total size limit")
                         }
 
                         when {
-                            name.endsWith(".cbox") -> {
+                            name.endsWith(".cbox", ignoreCase = true) -> {
+                                if (cboxFiles.size >= MAX_CBOX_FILES) {
+                                    content.fill(0)
+                                    throw SecurityException("ZIP has too many CBOX files")
+                                }
                                 cboxFiles.add(name to content)
                             }
                             name == "password.txt" -> {
                                 password = String(content, StandardCharsets.UTF_8).trim()
-                            }
-                            name == "public_key.txt" -> {
-                                publicKey = String(content, StandardCharsets.UTF_8).trim()
+                                content.fill(0)
                             }
                             name == "config.json" -> {
-                                try {
-                                    config = JSONObject(String(content, StandardCharsets.UTF_8))
-                                } catch (e: Exception) {
-                                    Logger.e("Invalid config.json in zip")
-                                }
+                                val config = JSONObject(String(content, StandardCharsets.UTF_8))
+                                configPassword = config.optString("password").ifEmpty { null }
+                                content.fill(0)
                             }
+                            else -> content.fill(0)
                         }
                     }
-                    zis.closeEntry()
-                    entry = zis.nextEntry
+                    zip.closeEntry()
+                    entry = zip.nextEntry
                 }
             }
 
-            if (cboxFiles.isEmpty()) {
-                Logger.e("No .cbox files found in zip")
-                return null
+            val effectivePassword = configPassword ?: password
+            if ((effectivePassword?.length ?: 0) > MAX_PASSWORD_CHARS || cboxFiles.isEmpty()) {
+                cboxFiles.forEach { it.second.fill(0) }
+                null
+            } else {
+                ProcessedPack(cboxFiles, effectivePassword)
             }
-
-            // Priority: config.json > individual files
-            if (config != null) {
-                if (config.has("password")) password = config.getString("password")
-                if (config.has("public_key")) publicKey = config.getString("public_key")
-            }
-
-            return ProcessedPack(cboxFiles, password, publicKey, config)
-
         } catch (e: Exception) {
-            Logger.e("Failed to process zip", e)
-            return null
+            cboxFiles.forEach { it.second.fill(0) }
+            Logger.e("Failed to process ZIP: ${e.javaClass.simpleName}")
+            null
         }
     }
 
-    private fun readEntry(zis: ZipInputStream): ByteArray? {
-        val buffer = java.io.ByteArrayOutputStream()
-        val data = ByteArray(4096)
-        var count = 0
+    private fun readEntry(
+        zip: ZipInputStream,
+        maxBytes: Int,
+    ): ByteArray? {
+        val output = ByteArrayOutputStream(minOf(maxBytes, 64 * 1024))
+        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
         var total = 0
-        while (zis.read(data).also { count = it } != -1) {
+        while (true) {
+            val count = zip.read(buffer)
+            if (count < 0) break
+            if (count == 0) continue
+            if (count > maxBytes - total) return null
+            output.write(buffer, 0, count)
             total += count
-            if (total > MAX_ENTRY_SIZE) return null
-            buffer.write(data, 0, count)
         }
-        return buffer.toByteArray()
+        return output.toByteArray()
     }
 }

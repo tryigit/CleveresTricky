@@ -1,18 +1,17 @@
 package cleveres.tricky.cleverestech
 
-import org.junit.Assert.assertEquals
+import cleveres.tricky.cleverestech.util.SecureFile
+import cleveres.tricky.cleverestech.util.SecureFileOperations
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
+import org.mockito.Mockito
 import java.io.File
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Future
-import cleveres.tricky.cleverestech.util.SecureFile
-import cleveres.tricky.cleverestech.util.SecureFileOperations
-import org.mockito.Mockito
 
 class ConfigTemplateTest {
-
     private lateinit var originalImpl: SecureFileOperations
     private lateinit var originalExecutor: ExecutorService
 
@@ -71,7 +70,7 @@ class ConfigTemplateTest {
 
         // Verify
         assertEquals("Pixel 7 Pro", Config.getBuildVar("MODEL"))
-        assertEquals("google/cheetah/cheetah:14/AP1A.240305.019.A1/11445699:user/release-keys", Config.getBuildVar("FINGERPRINT"))
+        assertEquals("google", Config.getBuildVar("BRAND"))
     }
 
     @Test

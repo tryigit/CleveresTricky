@@ -7,65 +7,48 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ConfigTest {
-
     @Test
     fun testParsePackages_normal() {
-        val lines = listOf(
-            "com.example.app1",
-            "com.example.app2"
-        )
-        val (hack, generate) = Config.parsePackages(lines.asSequence(), false)
+        val lines =
+            listOf(
+                "com.example.app1",
+                "com.example.app2",
+            )
+        val targets = Config.parsePackages(lines.asSequence())
 
-        assertTrue(hack.matches("com.example.app1"))
-        assertTrue(hack.matches("com.example.app2"))
-        assertEquals(2, hack.size)
-        assertTrue(generate.isEmpty())
+        assertTrue(targets.matches("com.example.app1"))
+        assertTrue(targets.matches("com.example.app2"))
+        assertEquals(2, targets.size)
     }
 
     @Test
-    fun testParsePackages_withGenerate() {
-        val lines = listOf(
-            "com.example.app1",
-            "com.example.app2!"
-        )
-        val (hack, generate) = Config.parsePackages(lines.asSequence(), false)
+    fun testParsePackages_migratesLegacyGenerateSuffix() {
+        val lines =
+            listOf(
+                "com.example.app1",
+                "com.example.app2!",
+            )
+        val targets = Config.parsePackages(lines.asSequence())
 
-        assertTrue(hack.matches("com.example.app1"))
-        assertEquals(1, hack.size)
-
-        assertTrue(generate.matches("com.example.app2"))
-        assertEquals(1, generate.size)
+        assertTrue(targets.matches("com.example.app1"))
+        assertTrue(targets.matches("com.example.app2"))
+        assertEquals(2, targets.size)
     }
 
     @Test
     fun testParsePackages_commentsAndWhitespace() {
-        val lines = listOf(
-            "# This is a comment",
-            "  com.example.app1  ",
-            "",
-            "com.example.app2!  "
-        )
-        val (hack, generate) = Config.parsePackages(lines.asSequence(), false)
+        val lines =
+            listOf(
+                "# This is a comment",
+                "  com.example.app1  ",
+                "",
+                "com.example.app2!  ",
+            )
+        val targets = Config.parsePackages(lines.asSequence())
 
-        assertTrue(hack.matches("com.example.app1"))
-        assertEquals(1, hack.size)
-
-        assertTrue(generate.matches("com.example.app2"))
-        assertEquals(1, generate.size)
-    }
-
-    @Test
-    fun testParsePackages_teeBrokenMode() {
-        val lines = listOf(
-            "com.example.app1",
-            "com.example.app2!"
-        )
-        // In TEE broken mode, all packages should go to generatePackages
-        val (hack, generate) = Config.parsePackages(lines.asSequence(), true)
-
-        assertTrue(hack.isEmpty())
-        assertTrue(generate.matches("com.example.app1"))
-        assertTrue(generate.matches("com.example.app2"))
+        assertTrue(targets.matches("com.example.app1"))
+        assertTrue(targets.matches("com.example.app2"))
+        assertEquals(2, targets.size)
     }
 
     private fun createTrie(rules: Set<String>): PackageTrie<Boolean> {

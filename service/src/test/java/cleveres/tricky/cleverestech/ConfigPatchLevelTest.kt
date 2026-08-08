@@ -5,7 +5,6 @@ import org.junit.Test
 import java.util.concurrent.ConcurrentHashMap
 
 class ConfigPatchLevelTest {
-
     @Test
     fun testGetPatchLevel_usesPackageName() {
         Config.reset()
@@ -20,7 +19,10 @@ class ConfigPatchLevelTest {
         val packageCacheField = Config::class.java.getDeclaredField("packageCache")
         packageCacheField.isAccessible = true
         @Suppress("UNCHECKED_CAST")
-        val packageCache = packageCacheField.get(Config) as @Suppress("UNCHECKED_CAST") ConcurrentHashMap<Int, Any>
+        val packageCache =
+            packageCacheField.get(Config) as
+                @Suppress("UNCHECKED_CAST")
+                ConcurrentHashMap<Int, Any>
         packageCache[1002] = cachedPkg
 
         // 2. Inject Security Patch Map via SecurityPatchState
@@ -29,8 +31,9 @@ class ConfigPatchLevelTest {
 
         val testPatchMap = mapOf("com.example.patched" to "2023-12-05")
 
-        val stateClass = Config::class.java.declaredClasses.find { it.simpleName == "SecurityPatchState" }
-            ?: throw ClassNotFoundException("SecurityPatchState not found")
+        val stateClass =
+            Config::class.java.declaredClasses.find { it.simpleName == "SecurityPatchState" }
+                ?: throw ClassNotFoundException("SecurityPatchState not found")
         val constructor = stateClass.getDeclaredConstructor(Map::class.java, Any::class.java)
         constructor.isAccessible = true
         val state = constructor.newInstance(testPatchMap, null)
@@ -42,7 +45,6 @@ class ConfigPatchLevelTest {
             // 2023-12-05 -> 202312
             val level = Config.getPatchLevel(1002)
             assertEquals(202312, level)
-
         } finally {
             Config.reset()
         }

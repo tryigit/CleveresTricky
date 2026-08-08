@@ -5,12 +5,12 @@ import org.junit.Test
 import java.util.regex.Pattern
 
 class CommunityStatsTest {
-
     @Test
     fun testParseMemberCount() {
-        val html = """
+        val html =
+            """
             <div class="tgme_page_extra">10 026 members, 750 online</div>
-        """.trimIndent()
+            """.trimIndent()
 
         val regex = Pattern.compile("tgme_page_extra\">([0-9 ]+) members")
         val matcher = regex.matcher(html)
@@ -25,9 +25,10 @@ class CommunityStatsTest {
 
     @Test
     fun testParseMemberCountNoMatch() {
-        val html = """
+        val html =
+            """
             <div class="something_else">No members here</div>
-        """.trimIndent()
+            """.trimIndent()
 
         val regex = Pattern.compile("tgme_page_extra\">([0-9 ]+) members")
         val matcher = regex.matcher(html)

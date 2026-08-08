@@ -1,13 +1,12 @@
 package cleveres.tricky.cleverestech
 
 import cleveres.tricky.cleverestech.util.KeyboxVerifier
-import org.junit.Assert.assertTrue
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.math.BigInteger
 
 class KeyboxVerifierLargeSerialTest {
-
     @Test
     fun testParseCrlLargeSerialNumber() {
         // A 25-digit decimal number.
@@ -23,13 +22,14 @@ class KeyboxVerifierLargeSerialTest {
         val wrongHex = BigInteger(decimalSerial, 16).toString(16)
         // 1234567890123456789012345
 
-        val json = """
-        {
-          "entries": {
-            "$decimalSerial": "REVOKED"
-          }
-        }
-        """.trimIndent()
+        val json =
+            """
+            {
+              "entries": {
+                "$decimalSerial": "REVOKED"
+              }
+            }
+            """.trimIndent()
 
         val revoked = KeyboxVerifier.parseCrl(json)
 

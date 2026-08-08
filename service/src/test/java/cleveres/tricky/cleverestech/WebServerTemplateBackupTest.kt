@@ -12,7 +12,6 @@ import java.io.File
 import java.nio.file.Files
 
 class WebServerTemplateBackupTest {
-
     private lateinit var testDir: File
     private lateinit var configDir: File
     private lateinit var originalSecureFileImpl: SecureFileOperations
@@ -27,37 +26,51 @@ class WebServerTemplateBackupTest {
         originalSecureFileImpl = SecureFile.impl
 
         // Mock SecureFile to use standard IO
-        SecureFile.impl = object : SecureFileOperations {
-            override fun writeText(file: File, content: String) {
-                file.parentFile?.mkdirs()
-                file.writeText(content)
-            }
+        SecureFile.impl =
+            object : SecureFileOperations {
+                override fun writeText(
+                    file: File,
+                    content: String,
+                ) {
+                    file.parentFile?.mkdirs()
+                    file.writeText(content)
+                }
 
-            override fun writeStream(file: File, inputStream: java.io.InputStream, limit: Long) {
-                file.parentFile?.mkdirs()
-                file.outputStream().use { output ->
-                    var totalBytes = 0L
-                    val buffer = ByteArray(8192)
-                    var bytesRead: Int
-                    while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                        if (limit > 0 && totalBytes + bytesRead > limit) {
-                            throw java.io.IOException("File size exceeds limit of $limit bytes")
+                override fun writeStream(
+                    file: File,
+                    inputStream: java.io.InputStream,
+                    limit: Long,
+                ) {
+                    file.parentFile?.mkdirs()
+                    file.outputStream().use { output ->
+                        var totalBytes = 0L
+                        val buffer = ByteArray(8192)
+                        var bytesRead: Int
+                        while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                            if (limit > 0 && totalBytes + bytesRead > limit) {
+                                throw java.io.IOException("File size exceeds limit of $limit bytes")
+                            }
+                            output.write(buffer, 0, bytesRead)
+                            totalBytes += bytesRead
                         }
-                        output.write(buffer, 0, bytesRead)
-                        totalBytes += bytesRead
                     }
                 }
-            }
 
-            override fun mkdirs(file: File, mode: Int) {
-                file.mkdirs()
-            }
+                override fun mkdirs(
+                    file: File,
+                    mode: Int,
+                ) {
+                    file.mkdirs()
+                }
 
-            override fun touch(file: File, mode: Int) {
-                file.parentFile?.mkdirs()
-                file.createNewFile()
+                override fun touch(
+                    file: File,
+                    mode: Int,
+                ) {
+                    file.parentFile?.mkdirs()
+                    file.createNewFile()
+                }
             }
-        }
     }
 
     @After

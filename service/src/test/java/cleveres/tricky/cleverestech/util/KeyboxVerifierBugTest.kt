@@ -7,17 +7,38 @@ import org.junit.BeforeClass
 import org.junit.Test
 
 class KeyboxVerifierBugTest {
-
     companion object {
         @JvmStatic
         @BeforeClass
         fun setup() {
-             Logger.setImpl(object : Logger.LogImpl {
-                override fun d(tag: String, msg: String) {}
-                override fun e(tag: String, msg: String) { println("E/$tag: $msg") }
-                override fun e(tag: String, msg: String, t: Throwable?) { println("E/$tag: $msg") }
-                override fun i(tag: String, msg: String) {}
-            })
+            Logger.setImpl(
+                object : Logger.LogImpl {
+                    override fun d(
+                        tag: String,
+                        msg: String,
+                    ) {}
+
+                    override fun e(
+                        tag: String,
+                        msg: String,
+                    ) {
+                        println("E/$tag: $msg")
+                    }
+
+                    override fun e(
+                        tag: String,
+                        msg: String,
+                        t: Throwable?,
+                    ) {
+                        println("E/$tag: $msg")
+                    }
+
+                    override fun i(
+                        tag: String,
+                        msg: String,
+                    ) {}
+                },
+            )
         }
     }
 
@@ -27,13 +48,14 @@ class KeyboxVerifierBugTest {
         // This corresponds to Hex "a".
         // It should NOT correspond to Hex "10" (Decimal 16).
 
-        val json = """
-        {
-          "entries": {
-            "10": { "status": "REVOKED" }
-          }
-        }
-        """.trimIndent()
+        val json =
+            """
+            {
+              "entries": {
+                "10": { "status": "REVOKED" }
+              }
+            }
+            """.trimIndent()
 
         val revoked = KeyboxVerifier.parseCrl(json)
         println("Revoked Set: $revoked")

@@ -1,51 +1,48 @@
+# shellcheck shell=sh
+# shellcheck disable=SC2154
 TMPDIR_FOR_VERIFY="$TMPDIR/.vunzip"
-mkdir "$TMPDIR_FOR_VERIFY"
+mkdir -p "$TMPDIR_FOR_VERIFY" || abort "! Could not create verification directory"
 
 abort_verify() {
   ui_print "*********************************************************"
   ui_print "! $1"
-  ui_print "! This zip may be corrupted, please try downloading again"
-  abort    "*********************************************************"
+  ui_print "! This zip may be corrupted; download it again"
+  abort "*********************************************************"
 }
 
-# extract <zip> <file> <target dir> <junk paths>
+verify_hash() {
+  target=$1
+  hash_file=$2
+  expected=$(tr -d '[:space:]' < "$hash_file")
+  case "$expected" in
+    *[!0-9A-Fa-f]*|'') abort_verify "Invalid checksum for $(basename "$target")" ;;
+  esac
+  [ "${#expected}" -eq 64 ] || abort_verify "Invalid checksum length for $(basename "$target")"
+  printf '%s  %s\n' "$expected" "$target" | sha256sum -c -s - \
+    || abort_verify "Failed to verify $(basename "$target")"
+}
+
+# extract <zip> <file> <target dir> [junk paths]
 extract() {
   zip=$1
   file=$2
   dir=$3
-  junk_paths=$4
-  [ -z "$junk_paths" ] && junk_paths=false
-  opts="-o"
-  [ $junk_paths = true ] && opts="-oj"
+  junk_paths=${4:-false}
 
-  file_path=""
-  hash_path=""
-  if [ $junk_paths = true ]; then
+  if [ "$junk_paths" = true ]; then
     file_path="$dir/$(basename "$file")"
     hash_path="$dir/$(basename "$file").sha256"
+    unzip -oj "$zip" "$file" -d "$dir" >&2 || abort_verify "Could not extract $file"
+    unzip -oj "$zip" "$file.sha256" -d "$dir" >&2 || abort_verify "Checksum missing for $file"
   else
     file_path="$dir/$file"
     hash_path="$dir/$file.sha256"
+    unzip -o "$zip" "$file" -d "$dir" >&2 || abort_verify "Could not extract $file"
+    unzip -o "$zip" "$file.sha256" -d "$dir" >&2 || abort_verify "Checksum missing for $file"
   fi
 
-  unzip $opts "$zip" "$file" -d "$dir" >&2
-  [ -f "$file_path" ] || abort_verify "$file not exists"
-
-  unzip $opts "$zip" "$file.sha256" -d "$dir" >&2
-  [ -f "$hash_path" ] || abort_verify "$file.sha256 not exists"
-
-  (echo "$(cat "$hash_path")  $file_path" | sha256sum -c -s -) || abort_verify "Failed to verify $file"
-  ui_print "- Verified $file" >&1
+  [ -f "$file_path" ] || abort_verify "$file does not exist"
+  [ -f "$hash_path" ] || abort_verify "Checksum missing for $file"
+  verify_hash "$file_path" "$hash_path"
+  ui_print "- Verified $file"
 }
-
-file="META-INF/com/google/android/update-binary"
-file_path="$TMPDIR_FOR_VERIFY/$file"
-hash_path="$file_path.sha256"
-unzip -o "$ZIPFILE" "META-INF/com/google/android/*" -d "$TMPDIR_FOR_VERIFY" >&2
-[ -f "$file_path" ] || abort_verify "$file not exists"
-if [ -f "$hash_path" ]; then
-  (echo "$(cat "$hash_path")  $file_path" | sha256sum -c -s -) || abort_verify "Failed to verify $file"
-  ui_print "- Verified $file" >&1
-else
-  ui_print "- Download from Magisk app"
-fi

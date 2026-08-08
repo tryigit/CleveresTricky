@@ -4,12 +4,9 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.io.File
 import java.time.Instant
-import java.time.ZoneId
-import java.util.TimeZone
 import java.util.concurrent.ConcurrentHashMap
 
 class ReproPatchLevelTimeTest {
-
     @Test
     fun testGetPatchLevelRespectsClockSource() {
         // Clear cache to prevent pollution
@@ -40,7 +37,6 @@ class ReproPatchLevelTimeTest {
 
             // Expected: 202305 (convertPatchLevel(false) returns YYYYMM)
             assertEquals("Patch level should use clockSource time", 202305, level)
-
         } finally {
             Config.clockSource = originalClock
             file.delete()
