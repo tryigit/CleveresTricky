@@ -26,23 +26,23 @@ object TestKeyboxFixtures {
         """.trimIndent()
 
     val validEcKeyboxXml =
-        """
-        <?xml version="1.0"?>
-        <AndroidAttestation>
-          <NumberOfKeyboxes>1</NumberOfKeyboxes>
-          <Keybox>
-            <Key algorithm="ecdsa">
-              <PrivateKey>
-        $ecPrivateKey
-              </PrivateKey>
-              <CertificateChain>
-                <NumberOfCertificates>1</NumberOfCertificates>
-                <Certificate>
-        $certificate
-                </Certificate>
-              </CertificateChain>
-            </Key>
-          </Keybox>
-        </AndroidAttestation>
-        """.trimIndent()
+        buildString {
+            appendLine("""<?xml version="1.0"?>""")
+            appendLine("<AndroidAttestation>")
+            appendLine("  <NumberOfKeyboxes>1</NumberOfKeyboxes>")
+            appendLine("  <Keybox>")
+            appendLine("    <Key algorithm=\"ecdsa\">")
+            appendLine("      <PrivateKey>")
+            appendLine(ecPrivateKey.prependIndent("        "))
+            appendLine("      </PrivateKey>")
+            appendLine("      <CertificateChain>")
+            appendLine("        <NumberOfCertificates>1</NumberOfCertificates>")
+            appendLine("        <Certificate>")
+            appendLine(certificate.prependIndent("          "))
+            appendLine("        </Certificate>")
+            appendLine("      </CertificateChain>")
+            appendLine("    </Key>")
+            appendLine("  </Keybox>")
+            append("</AndroidAttestation>")
+        }
 }
