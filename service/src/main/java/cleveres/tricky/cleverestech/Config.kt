@@ -26,6 +26,7 @@ import java.util.concurrent.ConcurrentHashMap
 object Config {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private const val MAX_UID_CACHE_ENTRIES = 4096
+    private const val UID_DECISION_CACHE_TTL_MS = 60 * 1000L
 
     private fun <T> putBoundedUidCache(
         cache: ConcurrentHashMap<Int, T>,
@@ -38,12 +39,14 @@ object Config {
 
     data class AppSpoofConfig(val template: String?, val keyboxFilename: String?)
 
+    private data class CachedDecision(val value: Boolean, val timestamp: Long)
+
     // Keep the ruleset and its lookup cache in one state holder so readers
     // never observe cached results for an older ruleset.
     private class TargetState(
         val hackPackages: PackageTrie<Boolean>,
     ) {
-        val hackCache = ConcurrentHashMap<Int, Boolean>()
+        val hackCache = ConcurrentHashMap<Int, CachedDecision>()
     }
 
     @Volatile
@@ -62,6 +65,29 @@ object Config {
 
     @Volatile
     var isTelephonyEnabled = false
+
+    /**
+     * Keeps generated-key responses on Android's original KeyMint/RKP path.
+     * Existing-key certificate substitution remains available through
+     * [KeystoreInterceptor] for explicitly selected UIDs.
+     */
+    @Volatile
+    var isRkpPassthroughEnabled = false
+        private set
+
+    /** Leaves configured DRM-sensitive package UIDs on the genuine keystore path. */
+    @Volatile
+    var isDrmPassthroughEnabled = false
+        private set
+
+    private class DrmState(
+        val packages: PackageTrie<Boolean>,
+    ) {
+        val cache = ConcurrentHashMap<Int, CachedDecision>()
+    }
+
+    @Volatile
+    private var drmState = DrmState(PackageTrie())
 
     @Volatile
     private var moduleHashFromVars: ByteArray? = null
@@ -381,6 +407,57 @@ object Config {
         Logger.i("Telephony is ${if (isTelephonyEnabled) "enabled" else "disabled"} (file=${f?.absolutePath}, exists=${f?.exists()})")
     }
 
+    private fun updateRkpPassthrough(f: File?) {
+        isRkpPassthroughEnabled = f?.isFile == true
+        Logger.i("RKP passthrough is ${if (isRkpPassthroughEnabled) "enabled" else "disabled"}")
+    }
+
+    private fun updateDrmPassthrough(f: File?) {
+        isDrmPassthroughEnabled = f?.isFile == true
+        drmState.cache.clear()
+        targetState.hackCache.clear()
+        Logger.i("DRM passthrough is ${if (isDrmPassthroughEnabled) "enabled" else "disabled"}")
+    }
+
+    private fun parseDrmPackages(lines: Sequence<String>): PackageTrie<Boolean> {
+        val packages = PackageTrie<Boolean>()
+        var ruleCount = 0
+        lines.forEach { line ->
+            val packageName = line.trim()
+            if (packageName.isEmpty() || packageName.startsWith("#")) return@forEach
+            require(
+                packageName.length <= 255 &&
+                    packageName.all { character ->
+                        character.isLetterOrDigit() || character == '_' || character == '.' || character == '*'
+                    },
+            ) {
+                "Invalid DRM package rule"
+            }
+            require(++ruleCount <= MAX_DRM_PACKAGE_RULES) { "Too many DRM package rules" }
+            packages.add(packageName, true)
+        }
+        return packages
+    }
+
+    private fun updateDrmPackages(f: File?) =
+        runCatching {
+            val packages =
+                if (f?.exists() == true) {
+                    require(Files.isRegularFile(f.toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+                        "drm_packages.txt must be a regular file"
+                    }
+                    require(f.length() in 0..MAX_DRM_PACKAGES_BYTES) { "drm_packages.txt has an invalid size" }
+                    f.useLines { lines -> parseDrmPackages(lines) }
+                } else {
+                    PackageTrie()
+                }
+            drmState = DrmState(packages)
+            targetState.hackCache.clear()
+            Logger.i { "Updated DRM passthrough packages: ${packages.size}" }
+        }.onFailure {
+            Logger.e("failed to update DRM passthrough packages", it)
+        }
+
     @Volatile
     private var buildVars: Map<String, String> = emptyMap()
 
@@ -624,9 +701,61 @@ object Config {
         val defaultPatch: Any?,
     ) {
         val cache = ConcurrentHashMap<Int, Any>()
+        var legacyRules = PackageTrie<Any>()
+        var globalRules = PatchRules()
+        var packageRules = PackageTrie<PatchRules>()
     }
 
+    private data class PatchRules(
+        val all: Any? = null,
+        val system: Any? = null,
+        val vendor: Any? = null,
+        val boot: Any? = null,
+    )
+
+    private class MutablePatchRules {
+        var all: Any? = null
+        var system: Any? = null
+        var vendor: Any? = null
+        var boot: Any? = null
+
+        fun set(
+            key: String,
+            value: Any,
+        ) {
+            when (key) {
+                "all" -> all = value
+                "system" -> system = value
+                "vendor" -> vendor = value
+                "boot" -> boot = value
+                else -> throw IllegalArgumentException("Unsupported patch component")
+            }
+        }
+
+        fun freeze() = PatchRules(all, system, vendor, boot)
+    }
+
+    enum class PatchDisposition {
+        KEEP,
+        OMIT,
+        REPLACE,
+    }
+
+    data class AttestationPatchComponent(
+        val disposition: PatchDisposition,
+        val value: Int = 0,
+    )
+
+    data class AttestationPatchLevels(
+        val system: AttestationPatchComponent,
+        val vendor: AttestationPatchComponent,
+        val boot: AttestationPatchComponent,
+    )
+
     private val NULL_PATCH = Any()
+    private val PATCH_DEVICE_DEFAULT = Any()
+    private val PATCH_OMIT = Any()
+    private val PATCH_PROP = Any()
 
     @Volatile
     private var securityPatchState = SecurityPatchState(emptyMap(), null)
@@ -638,13 +767,73 @@ object Config {
     private const val MAX_SECURITY_PATCH_BYTES = 1024 * 1024L
     private const val MAX_SECURITY_PATCH_RULES = 512
     private val validSecurityPatchTarget = Regex("[A-Za-z0-9_.*]{1,255}")
+    private val patchComponentNames = setOf("all", "system", "vendor", "boot")
 
     private fun parsePatchSetting(value: String): Any? {
         if (value.equals("today", ignoreCase = true)) return "today"
-        if (value in setOf("YYYY-MM-DD", "YYYY-MM", "YYYYMMDD", "YYYYMM")) return value
+        if (value.any { it == 'Y' || it == 'M' || it == 'D' }) {
+            val sample = value.replace("YYYY", "2024").replace("MM", "06").replace("DD", "15")
+            return runCatching { sample.convertPatchLevel(false) }.map { value }.getOrNull()
+        }
         return runCatching { value.convertPatchLevel(false) }
             .onFailure { Logger.w("Ignoring invalid security patch setting") }
             .getOrNull()
+    }
+
+    private fun parseComponentPatchSetting(value: String): Any? =
+        when {
+            value.equals("no", ignoreCase = true) -> PATCH_OMIT
+            value.equals("device_default", ignoreCase = true) -> PATCH_DEVICE_DEFAULT
+            value.equals("prop", ignoreCase = true) -> PATCH_PROP
+            value.equals("today", ignoreCase = true) -> "today"
+            value.any { it == 'Y' || it == 'M' || it == 'D' } -> {
+                val sample = value.replace("YYYY", "2024").replace("MM", "06").replace("DD", "15")
+                runCatching { sample.convertPatchLevel(false) }.map { value }.getOrNull()
+            }
+            else -> runCatching {
+                value.convertPatchLevel(false)
+                value
+            }.getOrNull()
+        }
+
+    private fun resolvePatchValue(
+        value: String,
+        long: Boolean,
+    ): Int {
+        val cacheKey = "${if (long) "long" else "short"}:$value"
+        val nowMs = clockSource()
+        val cachedDyn = dynamicPatchCache[cacheKey]
+        if (cachedDyn != null && (nowMs - cachedDyn.first) < DYNAMIC_PATCH_TTL) {
+            return cachedDyn.second
+        }
+
+        val now = Instant.ofEpochMilli(nowMs).atZone(ZoneId.systemDefault()).toLocalDate()
+        val effectiveDate =
+            if (value.equals("today", ignoreCase = true)) {
+                now.toString()
+            } else {
+                value
+                    .replace("YYYY", String.format("%04d", now.year))
+                    .replace("MM", String.format("%02d", now.monthValue))
+                    .replace("DD", String.format("%02d", now.dayOfMonth))
+            }
+
+        val result = effectiveDate.convertPatchLevel(long)
+        dynamicPatchCache[cacheKey] = nowMs to result
+        return result
+    }
+
+    private fun findLegacyPatch(
+        state: SecurityPatchState,
+        callingUid: Int,
+    ): Any? {
+        if (state.patches.isEmpty()) return null
+        val packages = getPackages(callingUid)
+        for (packageName in packages) {
+            val value = state.legacyRules.get(packageName) ?: state.patches[packageName]
+            if (value != null) return value
+        }
+        return null
     }
 
     fun getPatchLevel(callingUid: Int): Int {
@@ -656,21 +845,7 @@ object Config {
             if (cached != null) {
                 if (cached === NULL_PATCH) null else cached
             } else {
-                val patches = state.patches
-                val found =
-                    if (patches.isNotEmpty()) {
-                        // Use cached getPackages to avoid expensive IPC call
-                        val pkgs = getPackages(callingUid)
-                        var f: Any? = null
-                        val len = pkgs.size
-                        for (i in 0 until len) {
-                            f = patches[pkgs[i]]
-                            if (f != null) break
-                        }
-                        f ?: state.defaultPatch
-                    } else {
-                        state.defaultPatch
-                    }
+                val found = findLegacyPatch(state, callingUid) ?: state.defaultPatch
                 putBoundedUidCache(state.cache, callingUid, found ?: NULL_PATCH)
                 found
             }
@@ -679,35 +854,111 @@ object Config {
 
         if (patchVal is Int) return patchVal
 
-        val patchStr = patchVal as String
+        return runCatching { resolvePatchValue(patchVal as String, false) }
+            .onFailure { Logger.e("Could not resolve configured security patch", it) }
+            .getOrDefault(defaultLevel)
+    }
 
-        // Optimization: Check cache for dynamic strings to avoid expensive date/string operations
-        val nowMs = clockSource()
-        val cachedDyn = dynamicPatchCache[patchStr]
-        if (cachedDyn != null && (nowMs - cachedDyn.first) < DYNAMIC_PATCH_TTL) {
-            return cachedDyn.second
+    private fun resolveAttestationPatch(
+        setting: Any?,
+        long: Boolean,
+        propertyName: String,
+    ): AttestationPatchComponent =
+        when (setting) {
+            null, PATCH_DEVICE_DEFAULT -> AttestationPatchComponent(PatchDisposition.KEEP)
+            PATCH_OMIT -> AttestationPatchComponent(PatchDisposition.OMIT)
+            PATCH_PROP -> {
+                val prop = systemPropertiesGet(propertyName, "").orEmpty()
+                val value = runCatching { prop.convertPatchLevel(long) }.getOrNull()
+                if (value == null) {
+                    Logger.w("Could not resolve security patch from $propertyName")
+                    AttestationPatchComponent(PatchDisposition.KEEP)
+                } else {
+                    AttestationPatchComponent(PatchDisposition.REPLACE, value)
+                }
+            }
+            is Int -> {
+                val value = if (long && setting in 100_000..999_999) setting * 100 + 1 else setting
+                AttestationPatchComponent(PatchDisposition.REPLACE, value)
+            }
+            is String ->
+                runCatching {
+                    AttestationPatchComponent(PatchDisposition.REPLACE, resolvePatchValue(setting, long))
+                }.onFailure {
+                    Logger.e("Could not resolve dynamic attestation patch", it)
+                }.getOrDefault(AttestationPatchComponent(PatchDisposition.KEEP))
+            else -> AttestationPatchComponent(PatchDisposition.KEEP)
         }
 
-        val now = Instant.ofEpochMilli(nowMs).atZone(ZoneId.systemDefault()).toLocalDate()
-        val effectiveDate =
-            if (patchStr.equals("today", ignoreCase = true)) {
-                now.toString()
-            } else {
-                patchStr
-                    .replace("YYYY", String.format("%04d", now.year))
-                    .replace("MM", String.format("%02d", now.monthValue))
-                    .replace("DD", String.format("%02d", now.dayOfMonth))
-            }
+    private fun findComponentRules(
+        state: SecurityPatchState,
+        callingUid: Int,
+    ): PatchRules? {
+        val packages = getPackages(callingUid)
+        for (packageName in packages) {
+            val rule = state.packageRules.get(packageName)
+            if (rule != null) return rule
+        }
+        return null
+    }
 
-        val result = effectiveDate.convertPatchLevel(false)
-        dynamicPatchCache[patchStr] = nowMs to result
-        return result
+    fun getAttestationPatchLevels(callingUid: Int): AttestationPatchLevels {
+        val state = securityPatchState
+        val global = state.globalRules
+        val app = findComponentRules(state, callingUid)
+
+        fun selected(component: (PatchRules) -> Any?): Any? {
+            val appValue = app?.let { rules -> component(rules) } ?: app?.all
+            if (appValue != null) return appValue
+            return component(global) ?: global.all
+        }
+
+        val systemSetting =
+            if (app == null) {
+                findLegacyPatch(state, callingUid) ?: selected { rules -> rules.system }
+            } else {
+                selected { rules -> rules.system }
+            }
+        val system =
+            if (systemSetting == null) {
+                AttestationPatchComponent(PatchDisposition.REPLACE, getPatchLevel(callingUid))
+            } else {
+                resolveAttestationPatch(systemSetting, false, "ro.build.version.security_patch")
+            }
+        return AttestationPatchLevels(
+            system = system,
+            vendor =
+                resolveAttestationPatch(
+                    selected { rules -> rules.vendor },
+                    true,
+                    "ro.vendor.build.security_patch",
+                ),
+            boot =
+                resolveAttestationPatch(
+                    selected { rules -> rules.boot },
+                    true,
+                    "ro.bootimage.build.version.security_patch",
+                ),
+        )
     }
 
     private fun updateSecurityPatch(f: File?) =
         runCatching {
             val newPatch = mutableMapOf<String, Any>()
+            val legacyRules = PackageTrie<Any>()
             var newDefault: Any? = null
+            val globalRules = MutablePatchRules()
+            val packageRules = PackageTrie<PatchRules>()
+            var currentPackage: String? = null
+            var currentRules = globalRules
+            var sectionCount = 0
+            var ruleCount = 0
+
+            fun commitSection() {
+                val packageName = currentPackage ?: return
+                packageRules.add(packageName, currentRules.freeze())
+            }
+
             if (f != null) {
                 require(Files.isRegularFile(f.toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
                     "security_patch.txt must be a regular file"
@@ -718,29 +969,68 @@ object Config {
                 lines.forEach { line ->
                     val trimmed = line.trim()
                     if (trimmed.isNotEmpty() && !trimmed.startsWith("#")) {
+                        require(++ruleCount <= MAX_SECURITY_PATCH_RULES) {
+                            "Too many security patch rules"
+                        }
+                        if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+                            commitSection()
+                            val packageName = trimmed.substring(1, trimmed.lastIndex).trim()
+                            require(validSecurityPatchTarget.matches(packageName)) {
+                                "Invalid security patch package section"
+                            }
+                            require(++sectionCount <= MAX_SECURITY_PATCH_RULES) {
+                                "Too many security patch package sections"
+                            }
+                            currentPackage = packageName
+                            currentRules = MutablePatchRules()
+                            return@forEach
+                        }
                         val eqIdx = trimmed.indexOf('=')
                         if (eqIdx != -1) {
                             val key = trimmed.substring(0, eqIdx).trim()
                             val value = trimmed.substring(eqIdx + 1).trim()
-                            require(validSecurityPatchTarget.matches(key)) { "Invalid security patch target" }
-                            require(newPatch.size < MAX_SECURITY_PATCH_RULES || newPatch.containsKey(key)) {
-                                "Too many security patch rules"
+                            if (key in patchComponentNames) {
+                                val parsed =
+                                    parseComponentPatchSetting(value)
+                                        ?: throw IllegalArgumentException("Invalid component security patch setting")
+                                currentRules.set(key, parsed)
+                                if (currentPackage == null && key in setOf("all", "system")) {
+                                    newDefault = parsePatchSetting(value)
+                                }
+                            } else {
+                                require(currentPackage == null) {
+                                    "Only all/system/vendor/boot are valid inside package sections"
+                                }
+                                require(validSecurityPatchTarget.matches(key)) { "Invalid security patch target" }
+                                val parsed =
+                                    parsePatchSetting(value)
+                                        ?: throw IllegalArgumentException("Invalid security patch setting")
+                                newPatch[key] = parsed
+                                legacyRules.add(key, parsed)
                             }
-                            val parsed =
-                                parsePatchSetting(value)
-                                    ?: throw IllegalArgumentException("Invalid security patch setting")
-                            newPatch[key] = parsed
                         } else {
-                            newDefault = parsePatchSetting(trimmed)
-                                ?: throw IllegalArgumentException("Invalid default security patch setting")
+                            val parsed =
+                                parseComponentPatchSetting(trimmed)
+                                    ?: throw IllegalArgumentException("Invalid default security patch setting")
+                            currentRules.set("all", parsed)
+                            if (currentPackage == null) {
+                                newDefault = parsePatchSetting(trimmed)
+                            }
                         }
                     }
                 }
             }
-            securityPatchState = SecurityPatchState(newPatch, newDefault)
+            commitSection()
+            val newState = SecurityPatchState(newPatch, newDefault)
+            newState.legacyRules = legacyRules
+            newState.globalRules = globalRules.freeze()
+            newState.packageRules = packageRules
+            securityPatchState = newState
             dynamicPatchCache.clear()
             CertHack.clearCertificateCache()
-            Logger.i { "update security patch: default=$newDefault, per-app=${newPatch.size}" }
+            Logger.i {
+                "update security patch: default=$newDefault, legacy=${newPatch.size}, sections=$sectionCount"
+            }
         }.onFailure {
             Logger.e("failed to update security patch", it)
         }
@@ -767,6 +1057,9 @@ object Config {
     private const val GLOBAL_MODE_FILE = "global_mode"
     private const val TEE_BROKEN_MODE_FILE = "tee_broken_mode"
     private const val TELEPHONY_FILE = "telephony"
+    private const val RKP_PASSTHROUGH_FILE = "rkp_passthrough"
+    private const val DRM_PASSTHROUGH_FILE = "drm_passthrough"
+    private const val DRM_PACKAGES_FILE = "drm_packages.txt"
     private const val SPOOF_BUILD_VARS_FILE = "spoof_build_vars"
     private const val MODULE_HASH_FILE = "module_hash"
     private const val SECURITY_PATCH_FILE = "security_patch.txt"
@@ -776,6 +1069,8 @@ object Config {
     private const val RANDOM_ON_BOOT_FILE = "random_on_boot"
     private const val AUTO_KEYBOX_CHECK_FILE = "auto_keybox_check"
     private const val APPLY_PROFILE_FILE = "apply_profile"
+    private const val MAX_DRM_PACKAGES_BYTES = 64L * 1024
+    private const val MAX_DRM_PACKAGE_RULES = 256
     private var root = File(CONFIG_PATH)
     private val keyboxDir get() = File(root, KEYBOX_DIR)
 
@@ -889,7 +1184,12 @@ object Config {
         when (profile) {
             "maximum" -> {
                 SecureFile.touch(File(root, GLOBAL_MODE_FILE), 384)
-                removeConfigFiles(TEE_BROKEN_MODE_FILE, BootLogic.FILE_SPOOF_CN)
+                removeConfigFiles(
+                    TEE_BROKEN_MODE_FILE,
+                    BootLogic.FILE_SPOOF_CN,
+                    RKP_PASSTHROUGH_FILE,
+                    DRM_PASSTHROUGH_FILE,
+                )
                 SecureFile.touch(File(root, RANDOM_ON_BOOT_FILE), 384)
                 SecureFile.touch(File(root, BootLogic.FILE_HIDE_PROPS), 384)
                 SecureFile.touch(File(root, SPOOF_BUILD_VARS_FILE), 384)
@@ -907,6 +1207,8 @@ object Config {
                 SecureFile.touch(File(root, BootLogic.FILE_HIDE_PROPS), 384)
                 SecureFile.touch(File(root, SPOOF_BUILD_VARS_FILE), 384)
                 SecureFile.touch(File(root, AUTO_KEYBOX_CHECK_FILE), 384)
+                SecureFile.touch(File(root, RKP_PASSTHROUGH_FILE), 384)
+                SecureFile.touch(File(root, DRM_PASSTHROUGH_FILE), 384)
             }
             "minimal" -> {
                 SecureFile.touch(File(root, TEE_BROKEN_MODE_FILE), 384)
@@ -918,6 +1220,8 @@ object Config {
                     AUTO_KEYBOX_CHECK_FILE,
                     TELEPHONY_FILE,
                 )
+                SecureFile.touch(File(root, RKP_PASSTHROUGH_FILE), 384)
+                SecureFile.touch(File(root, DRM_PASSTHROUGH_FILE), 384)
             }
             "default" -> {
                 removeConfigFiles(
@@ -929,12 +1233,16 @@ object Config {
                     TELEPHONY_FILE,
                 )
                 SecureFile.touch(File(root, AUTO_KEYBOX_CHECK_FILE), 384)
+                SecureFile.touch(File(root, RKP_PASSTHROUGH_FILE), 384)
+                SecureFile.touch(File(root, DRM_PASSTHROUGH_FILE), 384)
             }
         }
 
         updateGlobalMode(File(root, GLOBAL_MODE_FILE))
         updateTeeBrokenMode(File(root, TEE_BROKEN_MODE_FILE))
         updateTelephony(File(root, TELEPHONY_FILE))
+        updateRkpPassthrough(File(root, RKP_PASSTHROUGH_FILE))
+        updateDrmPassthrough(File(root, DRM_PASSTHROUGH_FILE))
         updateBuildVars(File(root, SPOOF_BUILD_VARS_FILE))
         updateTargetPackages(File(root, TARGET_FILE))
     }
@@ -1006,6 +1314,9 @@ object Config {
                 }
 
                 TELEPHONY_FILE -> updateTelephony(f)
+                RKP_PASSTHROUGH_FILE -> updateRkpPassthrough(f)
+                DRM_PASSTHROUGH_FILE -> updateDrmPassthrough(f)
+                DRM_PACKAGES_FILE -> updateDrmPackages(f)
                 MODULE_HASH_FILE -> updateModuleHash(f)
 
                 APPLY_PROFILE_FILE -> applyProfileFromFile(f)
@@ -1035,6 +1346,9 @@ object Config {
         updateGlobalMode(File(root, GLOBAL_MODE_FILE))
         updateTeeBrokenMode(File(root, TEE_BROKEN_MODE_FILE))
         updateTelephony(File(root, TELEPHONY_FILE))
+        updateRkpPassthrough(File(root, RKP_PASSTHROUGH_FILE))
+        updateDrmPassthrough(File(root, DRM_PASSTHROUGH_FILE))
+        updateDrmPackages(File(root, DRM_PACKAGES_FILE))
         updateBuildVars(File(root, SPOOF_BUILD_VARS_FILE))
         updateModuleHash(File(root, MODULE_HASH_FILE))
         updateSecurityPatch(File(root, SECURITY_PATCH_FILE))
@@ -1149,16 +1463,44 @@ object Config {
         }
     }
 
+    private fun getCachedDecision(
+        cache: ConcurrentHashMap<Int, CachedDecision>,
+        uid: Int,
+    ): Boolean? {
+        val cached = cache[uid] ?: return null
+        val age = clockSource() - cached.timestamp
+        if (age >= 0 && age < UID_DECISION_CACHE_TTL_MS) return cached.value
+        cache.remove(uid, cached)
+        return null
+    }
+
+    private fun cacheDecision(
+        cache: ConcurrentHashMap<Int, CachedDecision>,
+        uid: Int,
+        value: Boolean,
+    ) {
+        putBoundedUidCache(cache, uid, CachedDecision(value, clockSource()))
+    }
+
     fun needHack(callingUid: Int): Boolean {
         if (isTeeBrokenMode) return false
+        if (isDrmPassthroughEnabled) {
+            val state = drmState
+            val cachedDrm = getCachedDecision(state.cache, callingUid)
+            val isDrm =
+                cachedDrm ?: checkPackages(state.packages, callingUid).also {
+                    cacheDecision(state.cache, callingUid, it)
+                }
+            if (isDrm) return false
+        }
         if (isGlobalMode) return true
 
         val state = targetState
-        val cached = state.hackCache[callingUid]
+        val cached = getCachedDecision(state.hackCache, callingUid)
         if (cached != null) return cached
 
         val result = checkPackages(state.hackPackages, callingUid)
-        putBoundedUidCache(state.hackCache, callingUid, result)
+        cacheDecision(state.hackCache, callingUid, result)
         return result
     }
 
@@ -1187,6 +1529,9 @@ object Config {
         isGlobalMode = false
         isTeeBrokenMode = false
         isTelephonyEnabled = false
+        isRkpPassthroughEnabled = false
+        isDrmPassthroughEnabled = false
+        drmState = DrmState(PackageTrie())
         clockSource = { System.currentTimeMillis() }
         cachedLegacyKeyboxes = emptyList()
         lastKeyboxModified = 0

@@ -2,6 +2,7 @@ package cleveres.tricky.cleverestech
 
 import cleveres.tricky.cleverestech.util.PackageTrie
 import org.junit.After
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -21,6 +22,7 @@ class ConfigTargetStateTest {
     private fun resetConfig() {
         setPrivateField(Config, "isTeeBrokenMode", false)
         setPrivateField(Config, "isGlobalMode", false)
+        Config.clockSource = { System.currentTimeMillis() }
 
         val packageCache =
             getPrivateField(Config, "packageCache") as
@@ -37,6 +39,8 @@ class ConfigTargetStateTest {
 
     @Test
     fun testNeedHack_caching() {
+        var now = System.currentTimeMillis()
+        Config.clockSource = { now }
         val hackTrie = PackageTrie<Boolean>()
         hackTrie.add("com.hack.me", true)
 
@@ -50,9 +54,8 @@ class ConfigTargetStateTest {
         val hackCache =
             getFieldFromTargetState(targetState, "hackCache") as
                 @Suppress("UNCHECKED_CAST")
-                ConcurrentHashMap<Int, Boolean>
+                ConcurrentHashMap<Int, Any>
         assertTrue("Cache should contain entry for 1001", hackCache.containsKey(1001))
-        assertTrue("Cache value should be true", hackCache[1001] == true)
 
         val packageCache =
             getPrivateField(Config, "packageCache") as
@@ -61,6 +64,9 @@ class ConfigTargetStateTest {
         packageCache.remove(1001)
 
         assertTrue("needHack should return cached true even if package info is gone", Config.needHack(1001))
+
+        now += 61_000
+        assertFalse("Expired UID decisions must be recalculated", Config.needHack(1001))
     }
 
     private fun createTargetState(hack: PackageTrie<Boolean>): Any {

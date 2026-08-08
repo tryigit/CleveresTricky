@@ -5,6 +5,7 @@ import cleveres.tricky.cleverestech.util.SecureFileOperations
 import fi.iki.elonen.NanoHTTPD
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -169,7 +170,14 @@ class WebServerSaveValidationTest {
 
     @Test
     fun testSecurityPatchValid() {
-        val content = "2024-01-01\nsystem=20240101"
+        val content =
+            """
+            all=YYYY-MM-05
+            vendor=device_default
+            boot=no
+            [com.google.android.gms]
+            system=20240101
+            """.trimIndent()
         val response = webServer.serve(mockSession("security_patch.txt", content))
         assertEquals(NanoHTTPD.Response.Status.OK, response.status)
     }
@@ -179,6 +187,46 @@ class WebServerSaveValidationTest {
         val content = "2024-01-01\nINJECTED <script>"
         val response = webServer.serve(mockSession("security_patch.txt", content))
         assertEquals(NanoHTTPD.Response.Status.BAD_REQUEST, response.status)
+
+        val legacyRuleInsideSection =
+            """
+            [com.example.app]
+            com.example.other=2024-01-01
+            """.trimIndent()
+        assertEquals(
+            NanoHTTPD.Response.Status.BAD_REQUEST,
+            webServer.serve(mockSession("security_patch.txt", legacyRuleInsideSection)).status,
+        )
+    }
+
+    @Test
+    fun testLegacySecurityPatchWildcardValid() {
+        val content = "system=2025-09-01\ncom.example.*=2024-01-01"
+        val response = webServer.serve(mockSession("security_patch.txt", content))
+        assertEquals(NanoHTTPD.Response.Status.OK, response.status)
+    }
+
+    @Test
+    fun testDrmPackagesValidation() {
+        val valid = "com.netflix.mediaclient\ncom.example.*\n# comment"
+        assertEquals(NanoHTTPD.Response.Status.OK, webServer.serve(mockSession("drm_packages.txt", valid)).status)
+
+        val invalid = "com.example.valid\ncom.example;reboot"
+        assertEquals(NanoHTTPD.Response.Status.BAD_REQUEST, webServer.serve(mockSession("drm_packages.txt", invalid)).status)
+    }
+
+    @Test
+    fun testBootPropsModeValidation() {
+        assertEquals(NanoHTTPD.Response.Status.OK, webServer.serve(mockSession("boot_props_mode", "auto\n")).status)
+        assertEquals(NanoHTTPD.Response.Status.OK, webServer.serve(mockSession("boot_props_mode", "force")).status)
+        assertEquals(NanoHTTPD.Response.Status.BAD_REQUEST, webServer.serve(mockSession("boot_props_mode", "always")).status)
+    }
+
+    @Test
+    fun testUnknownConfigFileIsRejected() {
+        val response = webServer.serve(mockSession("private_state", "value"))
+        assertEquals(NanoHTTPD.Response.Status.BAD_REQUEST, response.status)
+        assertFalse(File(configDir, "private_state").exists())
     }
 
     @Test

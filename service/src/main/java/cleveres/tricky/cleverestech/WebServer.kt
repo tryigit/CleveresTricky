@@ -96,19 +96,20 @@ private fun isValidTargetPkg(s: String): Boolean {
     return true
 }
 
-private fun isValidSecurityPatch(s: String): Boolean {
-    val separator = s.indexOf('=')
-    val value =
-        if (separator >= 0) {
-            val target = s.substring(0, separator)
-            if (target.isEmpty() || target.length > 255) return false
-            if (!target.all { it.isLetterOrDigit() || it == '_' || it == '.' || it == '*' }) return false
-            s.substring(separator + 1)
-        } else {
-            s
-        }
+private fun isValidSecurityPatchValue(
+    value: String,
+    allowSpecial: Boolean,
+): Boolean {
     if (value.equals("today", ignoreCase = true)) return true
-    if (value in setOf("YYYY-MM-DD", "YYYY-MM", "YYYYMMDD", "YYYYMM")) return true
+    val isSpecial =
+        value.equals("no", ignoreCase = true) ||
+            value.equals("device_default", ignoreCase = true) ||
+            value.equals("prop", ignoreCase = true)
+    if (allowSpecial && isSpecial) return true
+    if (value.any { it == 'Y' || it == 'M' || it == 'D' }) {
+        val sample = value.replace("YYYY", "2024").replace("MM", "06").replace("DD", "15")
+        return runCatching { sample.convertPatchLevel(false) }.isSuccess
+    }
     return runCatching { value.convertPatchLevel(false) }.isSuccess
 }
 
@@ -361,6 +362,8 @@ class WebServer(
                 "hide_sensitive_props",
                 "spoof_region_cn",
                 "telephony",
+                "rkp_passthrough",
+                "drm_passthrough",
             )
     }
 
@@ -616,12 +619,16 @@ class WebServer(
             json.put("hide_sensitive_props", fileExists("hide_sensitive_props"))
             json.put("spoof_region_cn", fileExists("spoof_region_cn"))
             json.put("telephony", fileExists("telephony"))
+            json.put("rkp_passthrough", fileExists("rkp_passthrough"))
+            json.put("drm_passthrough", fileExists("drm_passthrough"))
             val files = JSONArray()
             files.put("keybox.xml")
             files.put("target.txt")
             files.put("security_patch.txt")
             files.put("spoof_build_vars")
             files.put("app_config")
+            files.put("drm_packages.txt")
+            files.put("boot_props_mode")
             json.put("files", files)
             json.put("keybox_count", CertHack.getKeyboxCount())
             val templates = JSONArray()
@@ -949,10 +956,7 @@ class WebServer(
 
         if (uri == "/api/file" && method == Method.GET) {
             val filename = getParam(session, "filename")
-            if (filename != null && isValidFilename(filename)) {
-                if (filename == "keybox.xml") {
-                    return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Access denied")
-                }
+            if (filename != null && filename in EDITABLE_CONFIG_FILES) {
                 return secureResponse(Response.Status.OK, "text/plain", readFile(filename))
             }
             return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid filename")
@@ -967,7 +971,7 @@ class WebServer(
             }
             val filename = getParam(session, "filename")
             val content = getParam(session, "content")
-            if (filename != null && isValidFilename(filename) && content != null) {
+            if (filename != null && filename in EDITABLE_CONFIG_FILES && content != null) {
                 if (validateContent(filename, content)) {
                     if (saveFile(filename, content)) {
                         return secureResponse(Response.Status.OK, "text/plain", "Saved")
@@ -1566,11 +1570,14 @@ class WebServer(
             <div class="row"><label for="auto_keybox_check">Auto Keybox Check</label><input type="checkbox" class="toggle" id="auto_keybox_check" onchange="toggle('auto_keybox_check')"></div>
             <div class="row"><label for="random_on_boot">Refresh Identity on Boot</label><input type="checkbox" class="toggle" id="random_on_boot" onchange="toggle('random_on_boot')"></div>
             <div class="row"><label for="telephony">Telephony Identifier Interception</label><input type="checkbox" class="toggle" id="telephony" onchange="toggle('telephony')"></div>
-            <div style="font-size:0.8em; color:#888; margin-top:5px;">Remote provisioning remains on Android's genuine hardware path. Telephony interception requires a reboot.</div>
+            <div class="section-header">Compatibility passthrough</div>
+            <div class="row"><label for="rkp_passthrough">RKP Passthrough</label><input type="checkbox" class="toggle" id="rkp_passthrough" onchange="toggle('rkp_passthrough')"></div>
+            <div class="row"><label for="drm_passthrough">DRM App Passthrough</label><input type="checkbox" class="toggle" id="drm_passthrough" onchange="toggle('drm_passthrough')"></div>
+            <div style="font-size:0.8em; color:#888; margin-top:5px;">RKP passthrough preserves generated-key responses. DRM passthrough excludes packages in drm_packages.txt from certificate substitution.</div>
             <div class="section-header">Boot Properties</div>
             <div class="row"><label for="hide_sensitive_props">Hide Sensitive Props</label><input type="checkbox" class="toggle" id="hide_sensitive_props" onchange="toggle('hide_sensitive_props')"></div>
             <div class="row"><label for="spoof_region_cn">Spoof Region (CN)</label><input type="checkbox" class="toggle" id="spoof_region_cn" onchange="toggle('spoof_region_cn')"></div>
-            <div style="font-size:0.8em; color:#888; margin-top:5px;">Boot-property changes require a reboot and cannot alter hardware-backed verified-boot state.</div>
+            <div style="font-size:0.8em; color:#888; margin-top:5px;">Boot-property changes require a reboot. boot_props_mode supports auto, force, or disable; auto avoids known vendor/overlay conflicts.</div>
             <div style="margin-top:20px; border-top: 1px solid var(--border); padding-top: 15px;">
                 <div class="row"><span id="keyboxStatus" style="font-size:0.9em; color:var(--success);">Active</span><button onclick="runWithState(this, 'Reloading...', reloadConfig)">Reload Config</button></div>
             </div>
@@ -1763,7 +1770,7 @@ class WebServer(
 
     <div id="editor" class="content" role="tabpanel" aria-labelledby="tab_editor">
         <div class="panel">
-            <div class="row"><select id="fileSelector" onchange="loadFile()" style="width:70%;" aria-label="Select file to edit"><option value="target.txt">target.txt</option><option value="security_patch.txt">security_patch.txt</option><option value="spoof_build_vars">spoof_build_vars</option><option value="app_config">app_config</option></select><button id="revertBtn" class="danger" onclick="const btn = this; requireConfirm(btn, () => revertEditor(), 'Confirm Revert')" style="display:none; margin-right:10px;" title="Revert Changes">Revert</button><button id="saveBtn" onclick="handleSave(this)" title="Ctrl+S">Save</button></div>
+            <div class="row"><select id="fileSelector" onchange="loadFile()" style="width:70%;" aria-label="Select file to edit"><option value="target.txt">target.txt</option><option value="security_patch.txt">security_patch.txt</option><option value="spoof_build_vars">spoof_build_vars</option><option value="app_config">app_config</option><option value="drm_packages.txt">drm_packages.txt</option><option value="boot_props_mode">boot_props_mode</option></select><button id="revertBtn" class="danger" onclick="const btn = this; requireConfirm(btn, () => revertEditor(), 'Confirm Revert')" style="display:none; margin-right:10px;" title="Revert Changes">Revert</button><button id="saveBtn" onclick="handleSave(this)" title="Ctrl+S">Save</button></div>
             <textarea id="fileEditor" style="height:500px; font-family:monospace; margin-top:10px; line-height:1.4;" aria-label="File Content" onclick="editorUnsavedBypass = false;" oninput="editorUnsavedBypass = false; updateSaveButtonState()" onkeydown="if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='s'){event.preventDefault();handleSave(document.getElementById('saveBtn'));}" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
         </div>
     </div>
@@ -2437,7 +2444,7 @@ class WebServer(
                     if (!res.ok) throw new Error(await res.text());
                 const data = await res.json();
                 console.log('[CleveresTricky] config loaded:', JSON.stringify({global_mode: data.global_mode, keybox_count: data.keybox_count, tee_broken_mode: data.tee_broken_mode, telephony: data.telephony}));
-                ['global_mode', 'tee_broken_mode', 'auto_keybox_check', 'random_on_boot', 'hide_sensitive_props', 'spoof_region_cn', 'telephony'].forEach(k => {
+                ['global_mode', 'tee_broken_mode', 'auto_keybox_check', 'random_on_boot', 'hide_sensitive_props', 'spoof_region_cn', 'telephony', 'rkp_passthrough', 'drm_passthrough'].forEach(k => {
                     if(document.getElementById(k)) document.getElementById(k).checked = data[k];
                 });
                 determineActiveProfile(data);
@@ -2910,10 +2917,10 @@ class WebServer(
         }
 
         function determineActiveProfile(data) {
-            const isMaximum = data.global_mode && !data.tee_broken_mode && data.random_on_boot && data.hide_sensitive_props && data.auto_keybox_check && data.telephony && !data.spoof_region_cn;
-            const isDaily = !data.global_mode && !data.tee_broken_mode && !data.random_on_boot && data.hide_sensitive_props && data.auto_keybox_check && !data.telephony && !data.spoof_region_cn;
-            const isMinimal = !data.global_mode && data.tee_broken_mode && !data.random_on_boot && !data.hide_sensitive_props && !data.auto_keybox_check && !data.telephony && !data.spoof_region_cn;
-            const isDefault = !data.global_mode && !data.tee_broken_mode && !data.random_on_boot && !data.hide_sensitive_props && data.auto_keybox_check && !data.telephony && !data.spoof_region_cn;
+            const isMaximum = data.global_mode && !data.tee_broken_mode && data.random_on_boot && data.hide_sensitive_props && data.auto_keybox_check && data.telephony && !data.spoof_region_cn && !data.rkp_passthrough && !data.drm_passthrough;
+            const isDaily = !data.global_mode && !data.tee_broken_mode && !data.random_on_boot && data.hide_sensitive_props && data.auto_keybox_check && !data.telephony && !data.spoof_region_cn && data.rkp_passthrough && data.drm_passthrough;
+            const isMinimal = !data.global_mode && data.tee_broken_mode && !data.random_on_boot && !data.hide_sensitive_props && !data.auto_keybox_check && !data.telephony && !data.spoof_region_cn && data.rkp_passthrough && data.drm_passthrough;
+            const isDefault = !data.global_mode && !data.tee_broken_mode && !data.random_on_boot && !data.hide_sensitive_props && data.auto_keybox_check && !data.telephony && !data.spoof_region_cn && data.rkp_passthrough && data.drm_passthrough;
 
             const select = document.getElementById('profileSelect');
             if (!select) return;
@@ -3266,6 +3273,20 @@ class WebServer(
         private const val MAX_BACKUP_KEYBOXES = 64
         private const val MAX_BACKUP_ENTRY_BYTES = 1024 * 1024
         private const val MAX_BACKUP_UNCOMPRESSED_BYTES = 16 * 1024 * 1024
+        private const val MAX_SECURITY_PATCH_RULES = 512
+        private const val MAX_DRM_PACKAGE_RULES = 256
+        private const val MAX_DRM_PACKAGES_BYTES = 64 * 1024
+        private val SECURITY_PATCH_COMPONENTS = setOf("all", "system", "vendor", "boot")
+        private val EDITABLE_CONFIG_FILES =
+            setOf(
+                "target.txt",
+                "security_patch.txt",
+                "spoof_build_vars",
+                "app_config",
+                "templates.json",
+                "drm_packages.txt",
+                "boot_props_mode",
+            )
         private val BACKUP_CONFIG_FILES =
             setOf(
                 "target.txt",
@@ -3281,6 +3302,10 @@ class WebServer(
                 "hide_sensitive_props",
                 "spoof_region_cn",
                 "telephony",
+                "rkp_passthrough",
+                "drm_passthrough",
+                "drm_packages.txt",
+                "boot_props_mode",
             )
 
         fun getSafeFile(
@@ -3392,11 +3417,48 @@ class WebServer(
                 val lines = content.lineSequence()
                 return lines.all { it.isEmpty() || it.startsWith("#") || isValidTargetPkg(it) }
             }
-            if (filename == "security_patch.txt") {
+            if (filename == "drm_packages.txt") {
+                if (content.toByteArray(Charsets.UTF_8).size > MAX_DRM_PACKAGES_BYTES) return false
+                var ruleCount = 0
                 val lines = content.lineSequence()
-                return lines.all {
-                    val line = it.trim()
-                    line.isEmpty() || line.startsWith("#") || isValidSecurityPatch(line)
+                return lines.all { line ->
+                    val value = line.trim()
+                    value.isEmpty() || value.startsWith("#") ||
+                        (++ruleCount <= MAX_DRM_PACKAGE_RULES && isValidPkg(value))
+                }
+            }
+            if (filename == "boot_props_mode") {
+                return content.trim().lowercase() in setOf("auto", "force", "disable")
+            }
+            if (filename == "security_patch.txt") {
+                var inPackageSection = false
+                var ruleCount = 0
+                return content.lineSequence().all { rawLine ->
+                    val line = rawLine.trim()
+                    if (line.isEmpty() || line.startsWith("#")) return@all true
+                    if (++ruleCount > MAX_SECURITY_PATCH_RULES) return@all false
+
+                    if (line.startsWith("[") && line.endsWith("]")) {
+                        val packageName = line.substring(1, line.lastIndex).trim()
+                        inPackageSection = true
+                        return@all packageName.length <= 255 && isValidPkg(packageName)
+                    }
+
+                    val separator = line.indexOf('=')
+                    if (separator < 0) {
+                        return@all isValidSecurityPatchValue(line, allowSpecial = true)
+                    }
+
+                    val key = line.substring(0, separator).trim()
+                    val value = line.substring(separator + 1).trim()
+                    if (key.isEmpty() || value.isEmpty()) return@all false
+                    if (key in SECURITY_PATCH_COMPONENTS) {
+                        return@all isValidSecurityPatchValue(value, allowSpecial = true)
+                    }
+                    !inPackageSection &&
+                        key.length <= 255 &&
+                        isValidPkg(key) &&
+                        isValidSecurityPatchValue(value, allowSpecial = false)
                 }
             }
             if (filename == "spoof_build_vars") {
@@ -3462,8 +3524,7 @@ class WebServer(
                     return false
                 }
             }
-            // Allow others with lenient check
-            return true
+            return false
         }
 
         fun createBackupZip(configDir: File): ByteArray {

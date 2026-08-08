@@ -29,7 +29,12 @@ class SecurityLevelInterceptor : BinderInterceptor() {
         callingPid: Int,
         data: Parcel,
     ): Result =
-        if (code == generateKeyTransaction && CertHack.canHack() && Config.needHack(callingUid)) {
+        if (
+            code == generateKeyTransaction &&
+                !Config.isRkpPassthroughEnabled &&
+                CertHack.canHack() &&
+                Config.needHack(callingUid)
+        ) {
             Continue
         } else {
             Skip
@@ -45,7 +50,14 @@ class SecurityLevelInterceptor : BinderInterceptor() {
         reply: Parcel?,
         resultCode: Int,
     ): Result {
-        if (code != generateKeyTransaction || reply == null || resultCode != 0) return Skip
+        if (
+            code != generateKeyTransaction ||
+                Config.isRkpPassthroughEnabled ||
+                reply == null ||
+                resultCode != 0
+        ) {
+            return Skip
+        }
 
         val replacement = Parcel.obtain()
         return try {

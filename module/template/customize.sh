@@ -110,7 +110,8 @@ fi
 chmod 700 "$CONFIG_DIR"
 chown 0:0 "$CONFIG_DIR"
 
-for config_file in spoof_build_vars security_patch.txt target.txt auto_keybox_check; do
+for config_file in spoof_build_vars security_patch.txt target.txt drm_packages.txt boot_props_mode \
+  auto_keybox_check rkp_passthrough drm_passthrough hide_sensitive_props; do
   if [ -L "$CONFIG_DIR/$config_file" ]; then
     abort "! Refusing symlinked configuration file: $config_file"
   fi
@@ -140,11 +141,41 @@ if [ ! -f "$CONFIG_DIR/target.txt" ]; then
 fi
 [ -f "$CONFIG_DIR/target.txt" ] && chmod 600 "$CONFIG_DIR/target.txt"
 
+INSTALL_COMPAT_DEFAULTS=false
+if [ ! -f "$CONFIG_DIR/drm_packages.txt" ]; then
+  INSTALL_COMPAT_DEFAULTS=true
+  ui_print "- Adding default DRM passthrough scope"
+  extract "$ZIPFILE" 'drm_packages.txt' "$TMPDIR"
+  mv "$TMPDIR/drm_packages.txt" "$CONFIG_DIR/drm_packages.txt" \
+    || abort "! Could not install drm_packages.txt"
+fi
+[ -f "$CONFIG_DIR/drm_packages.txt" ] && chmod 600 "$CONFIG_DIR/drm_packages.txt"
+
+if [ ! -f "$CONFIG_DIR/boot_props_mode" ]; then
+  ui_print "- Adding automatic boot-property policy"
+  extract "$ZIPFILE" 'boot_props_mode' "$TMPDIR"
+  mv "$TMPDIR/boot_props_mode" "$CONFIG_DIR/boot_props_mode" \
+    || abort "! Could not install boot_props_mode"
+fi
+[ -f "$CONFIG_DIR/boot_props_mode" ] && chmod 600 "$CONFIG_DIR/boot_props_mode"
+
 if [ ! -e "$CONFIG_DIR/auto_keybox_check" ]; then
   ui_print "- Enabling daily keybox revocation checks"
   : > "$CONFIG_DIR/auto_keybox_check" \
     || abort "! Could not enable keybox revocation checks"
 fi
 chmod 600 "$CONFIG_DIR/auto_keybox_check"
+for default_flag in rkp_passthrough drm_passthrough hide_sensitive_props; do
+  if [ "$INSTALL_COMPAT_DEFAULTS" = true ] && [ ! -e "$CONFIG_DIR/$default_flag" ]; then
+    ui_print "- Enabling $default_flag"
+    : > "$CONFIG_DIR/$default_flag" \
+      || abort "! Could not enable $default_flag"
+  fi
+  [ -e "$CONFIG_DIR/$default_flag" ] && chmod 600 "$CONFIG_DIR/$default_flag"
+done
 chown 0:0 "$CONFIG_DIR/spoof_build_vars" "$CONFIG_DIR/security_patch.txt" \
-  "$CONFIG_DIR/target.txt" "$CONFIG_DIR/auto_keybox_check"
+  "$CONFIG_DIR/target.txt" "$CONFIG_DIR/drm_packages.txt" \
+  "$CONFIG_DIR/boot_props_mode" "$CONFIG_DIR/auto_keybox_check"
+[ -e "$CONFIG_DIR/rkp_passthrough" ] && chown 0:0 "$CONFIG_DIR/rkp_passthrough"
+[ -e "$CONFIG_DIR/drm_passthrough" ] && chown 0:0 "$CONFIG_DIR/drm_passthrough"
+[ -e "$CONFIG_DIR/hide_sensitive_props" ] && chown 0:0 "$CONFIG_DIR/hide_sensitive_props"

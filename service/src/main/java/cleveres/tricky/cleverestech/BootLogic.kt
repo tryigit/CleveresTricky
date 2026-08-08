@@ -15,21 +15,72 @@ object BootLogic {
 
     const val FILE_HIDE_PROPS = "hide_sensitive_props"
     const val FILE_SPOOF_CN = "spoof_region_cn"
+    const val FILE_BOOT_PROPS_MODE = "boot_props_mode"
+
+    private enum class BootPropsMode {
+        AUTO,
+        FORCE,
+        DISABLE,
+    }
 
     fun run() {
         if (!ran.compareAndSet(false, true)) return
 
         try {
-            val hideSensitive = File(configDir, FILE_HIDE_PROPS).isFile
+            val requestedHideSensitive = File(configDir, FILE_HIDE_PROPS).isFile
+            val mode = readBootPropsMode()
+            val hideSensitive = requestedHideSensitive && shouldApplySensitiveProps(mode)
             val spoofCn = File(configDir, FILE_SPOOF_CN).isFile
             if (hideSensitive || spoofCn) {
                 applyPropertyCompatibility(hideSensitive, spoofCn)
+            } else if (requestedHideSensitive) {
+                Logger.i("Boot property compatibility was skipped by ${mode.name.lowercase()} policy")
             } else {
                 Logger.i("Boot property compatibility is disabled")
             }
         } catch (e: Exception) {
             Logger.e("BootLogic failed", e)
         }
+    }
+
+    private fun readBootPropsMode(): BootPropsMode {
+        val file = File(configDir, FILE_BOOT_PROPS_MODE)
+        if (!file.isFile || file.length() !in 1..16) return BootPropsMode.AUTO
+        return when (runCatching { file.readText().trim().lowercase() }.getOrDefault("auto")) {
+            "force" -> BootPropsMode.FORCE
+            "disable" -> BootPropsMode.DISABLE
+            else -> BootPropsMode.AUTO
+        }
+    }
+
+    private fun shouldApplySensitiveProps(mode: BootPropsMode): Boolean {
+        if (mode == BootPropsMode.DISABLE) return false
+        if (mode == BootPropsMode.FORCE) return true
+
+        val shamikoExists =
+            listOf(
+                "/data/adb/modules/zygisk_shamiko",
+                "/data/adb/ksu/modules/zygisk_shamiko",
+                "/data/adb/ap/modules/zygisk_shamiko",
+            ).any { File(it).isDirectory }
+        if (shamikoExists) {
+            Logger.i("Shamiko detected; skipping overlapping property overrides in auto mode")
+            return false
+        }
+
+        val vendorIdentity =
+            listOf(
+                "ro.product.manufacturer",
+                "ro.product.brand",
+                "ro.product.vendor.manufacturer",
+                "ro.product.vendor.brand",
+            ).joinToString(" ") { getSystemProperty(it) }.lowercase()
+        val sensitiveVendor = listOf("oplus", "oppo", "oneplus", "realme").any(vendorIdentity::contains)
+        if (sensitiveVendor) {
+            Logger.i("Vendor TEE-sensitive device detected; skipping boot properties in auto mode")
+            return false
+        }
+        return true
     }
 
     /**
@@ -40,25 +91,6 @@ object BootLogic {
         hideSensitive: Boolean,
         spoofCn: Boolean,
     ) {
-        val shamikoExists =
-            listOf(
-                "/data/adb/modules/zygisk_shamiko",
-                "/data/adb/ksu/modules/zygisk_shamiko",
-                "/data/adb/ap/modules/zygisk_shamiko",
-            ).any { File(it).isDirectory }
-        if (shamikoExists && hideSensitive) {
-            Logger.i("Shamiko detected; skipping overlapping property overrides")
-            if (spoofCn) {
-                resetPropBatch(
-                    mapOf(
-                        "ro.boot.hwc" to "CN",
-                        "gsm.operator.iso-country" to "cn",
-                    ),
-                )
-            }
-            return
-        }
-
         val properties = linkedMapOf<String, String>()
         if (hideSensitive) {
             properties.putAll(

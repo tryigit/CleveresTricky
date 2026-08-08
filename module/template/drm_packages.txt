@@ -1,0 +1,7 @@
+# Packages in this list stay on Android's genuine keystore certificate path
+# while DRM App Passthrough is enabled. Wildcards are supported.
+com.netflix.mediaclient
+com.amazon.avod.thirdpartyclient
+com.disney.disneyplus
+com.wbd.stream
+com.google.android.youtube

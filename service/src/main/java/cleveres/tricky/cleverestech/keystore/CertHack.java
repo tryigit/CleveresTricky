@@ -160,15 +160,15 @@ public final class CertHack {
      */
     private static final class CacheKey {
         private final byte[] leafEncoded;
-        private final int patchLevel;
+        private final Config.AttestationPatchLevels patchLevels;
         private final int uid;
         private final int hashCode;
 
-        public CacheKey(byte[] leafEncoded, int patchLevel, int uid) {
+        public CacheKey(byte[] leafEncoded, Config.AttestationPatchLevels patchLevels, int uid) {
             this.leafEncoded = leafEncoded.clone();
-            this.patchLevel = patchLevel;
+            this.patchLevels = Objects.requireNonNull(patchLevels, "patchLevels");
             this.uid = uid;
-            this.hashCode = 31 * (31 * Arrays.hashCode(leafEncoded) + patchLevel) + uid;
+            this.hashCode = 31 * (31 * Arrays.hashCode(leafEncoded) + patchLevels.hashCode()) + uid;
         }
 
         @Override
@@ -176,13 +176,27 @@ public final class CertHack {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
             CacheKey cacheKey = (CacheKey) o;
-            return patchLevel == cacheKey.patchLevel && uid == cacheKey.uid &&
+            return uid == cacheKey.uid && patchLevels.equals(cacheKey.patchLevels) &&
                     Arrays.equals(leafEncoded, cacheKey.leafEncoded);
         }
 
         @Override
         public int hashCode() {
             return hashCode;
+        }
+    }
+
+    private static boolean replacesOriginal(Config.AttestationPatchComponent component) {
+        return component.getDisposition() != Config.PatchDisposition.KEEP;
+    }
+
+    private static void addPatchTag(
+            List<ASN1TaggedObject> tags,
+            int tag,
+            Config.AttestationPatchComponent component
+    ) {
+        if (component.getDisposition() == Config.PatchDisposition.REPLACE && component.getValue() > 0) {
+            tags.add(new DERTaggedObject(true, tag, new ASN1Integer(component.getValue())));
         }
     }
 
@@ -375,8 +389,8 @@ public final class CertHack {
         if (leafEncoded == null) return null;
         try {
             State currentState = state;
-            int patchLevel = Config.INSTANCE.getPatchLevel(uid);
-            CacheKey cacheKey = new CacheKey(leafEncoded, patchLevel, uid);
+            Config.AttestationPatchLevels patchLevels = Config.INSTANCE.getAttestationPatchLevels(uid);
+            CacheKey cacheKey = new CacheKey(leafEncoded, patchLevels, uid);
             // Thread-safe map, no synchronization needed for get
             Certificate[] cached = currentState.certificateCache.get(cacheKey);
             return cached == null ? null : cached.clone();
@@ -393,8 +407,8 @@ public final class CertHack {
         try {
             State currentState = state;
             byte[] leafEncoded = caList[0].getEncoded();
-            int patchLevel = Config.INSTANCE.getPatchLevel(uid);
-            CacheKey cacheKey = new CacheKey(leafEncoded, patchLevel, uid);
+            Config.AttestationPatchLevels patchLevels = Config.INSTANCE.getAttestationPatchLevels(uid);
+            CacheKey cacheKey = new CacheKey(leafEncoded, patchLevels, uid);
 
             Map<CacheKey, Certificate[]> cache = currentState.certificateCache;
             synchronized (cache) {
@@ -457,9 +471,12 @@ public final class CertHack {
                     rootOfTrust = taggedObject.getBaseObject().toASN1Primitive();
                     continue;
                 }
-                // Replace module hash and the OS patch level only when a valid
-                // replacement exists; otherwise preserve the genuine tag.
-                if ((tag == 724 && moduleHash != null) || (tag == 706 && patchLevel > 0)) {
+                // Component policy decides whether each genuine patch tag is
+                // preserved, replaced, or omitted. Unknown tags remain intact.
+                if ((tag == 724 && moduleHash != null) ||
+                        (tag == 706 && replacesOriginal(patchLevels.getSystem())) ||
+                        (tag == 718 && replacesOriginal(patchLevels.getVendor())) ||
+                        (tag == 719 && replacesOriginal(patchLevels.getBoot()))) {
                     continue;
                 }
                 // Filter ID Attestation tags ONLY if we are overriding THAT specific tag
@@ -470,9 +487,9 @@ public final class CertHack {
                 allTags.add(taggedObject);
             }
 
-            if (patchLevel > 0) {
-                allTags.add(new DERTaggedObject(true, 706, new ASN1Integer(patchLevel)));
-            }
+            addPatchTag(allTags, 706, patchLevels.getSystem());
+            addPatchTag(allTags, 718, patchLevels.getVendor());
+            addPatchTag(allTags, 719, patchLevels.getBoot());
 
             // Add spoofed ID Attestation tags
             if (hasIdAttestation) {
