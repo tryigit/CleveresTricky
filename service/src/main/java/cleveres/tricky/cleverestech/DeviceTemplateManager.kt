@@ -303,7 +303,7 @@ object DeviceTemplateManager {
 
     private fun waitForInit() {
         while (true) {
-            val future = initFuture ?: return
+            val future = synchronized(this) { initFuture } ?: return
             try {
                 future.get()
             } catch (_: java.util.concurrent.CancellationException) {
@@ -312,7 +312,7 @@ object DeviceTemplateManager {
                 Logger.e("Error waiting for template initialization", e)
                 return
             }
-            if (future === initFuture) return
+            if (synchronized(this) { future === initFuture }) return
         }
     }
 
