@@ -727,6 +727,57 @@ class WebServer(
         return (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()) / 1024
     }
 
+    private fun readProcessStartTicks(pid: Int): Long? {
+        if (pid <= 0) return null
+        val statFile = File("/proc/$pid/stat")
+        return runCatching {
+            if (!Files.isRegularFile(statFile.toPath(), LinkOption.NOFOLLOW_LINKS) || statFile.length() > 16 * 1024) {
+                return@runCatching null
+            }
+            val stat = statFile.readText()
+            val commandEnd = stat.lastIndexOf(')')
+            if (commandEnd < 0) return@runCatching null
+            stat.substring(commandEnd + 1)
+                .trim()
+                .splitToSequence(' ')
+                .filter { it.isNotEmpty() }
+                .elementAtOrNull(19)
+                ?.toLongOrNull()
+        }.getOrNull()
+    }
+
+    private fun readNativeRuntimeStatus(): JSONObject {
+        val unavailable = JSONObject().put("state", "unavailable").put("alive", false)
+        val statusFile = File(configDir, "native_runtime_status")
+        if (!Files.isRegularFile(statusFile.toPath(), LinkOption.NOFOLLOW_LINKS) || statusFile.length() !in 1..4096) {
+            return unavailable
+        }
+        return runCatching {
+            val values = LinkedHashMap<String, String>()
+            statusFile.useLines { lines ->
+                lines.take(16).forEach { line ->
+                    val separator = line.indexOf('=')
+                    if (separator > 0 && separator < line.lastIndex) {
+                        values[line.substring(0, separator)] = line.substring(separator + 1)
+                    }
+                }
+            }
+            if (values["version"] != "1") return@runCatching unavailable
+            val state = values["state"]?.takeIf { it in setOf("starting", "active", "failed") }
+                ?: return@runCatching unavailable
+            val pid = values["pid"]?.toIntOrNull()?.takeIf { it > 0 } ?: 0
+            val recordedStartTicks = values["start_ticks"]?.toLongOrNull()?.takeIf { it > 0 } ?: 0L
+            val currentStartTicks = readProcessStartTicks(pid)
+            val alive = pid > 0 && recordedStartTicks > 0 && currentStartTicks == recordedStartTicks
+            JSONObject()
+                .put("state", state)
+                .put("alive", alive)
+                .put("pid", pid)
+                .put("entry", values["entry"] ?: "unknown")
+                .put("timestamp_ms", values["timestamp_ms"]?.toLongOrNull() ?: 0L)
+        }.getOrElse { unavailable }
+    }
+
     override fun serve(session: IHTTPSession): Response {
         return try {
             serveInternal(session)
@@ -1568,6 +1619,7 @@ class WebServer(
             json.put("real_ram_kb", getRamUsageKb())
             json.put("real_cpu", getCpuUsagePercent())
             json.put("environment", getEnvironmentInfo())
+            json.put("native_runtime", readNativeRuntimeStatus())
             return secureResponse(Response.Status.OK, "application/json", json.toString())
         }
 
@@ -3728,6 +3780,8 @@ class WebServer(
             const health = document.getElementById('runtimeHealth');
             const healthText = document.getElementById('runtimeHealthText');
             const healthBadge = document.getElementById('runtimeHealthBadge');
+            const nativeRuntime = data.native_runtime || {};
+            const nativeActive = nativeRuntime.state === 'active' && nativeRuntime.alive === true;
             if (health && healthText && healthBadge) {
                 const keyboxCount = Number(data.keybox_count || 0);
                 let state = 'ok';
@@ -3737,6 +3791,16 @@ class WebServer(
                     state = 'error';
                     badge = 'PAUSED';
                     message = 'Spoof Engine is paused, so runtime interception paths are parked.';
+                } else if (!nativeActive) {
+                    state = 'error';
+                    badge = nativeRuntime.state === 'failed' ? 'NATIVE FAILED' : 'NATIVE OFFLINE';
+                    if (nativeRuntime.state === 'starting') {
+                        message = 'The runtime is configured to run, but native activation is still in progress.';
+                    } else if (nativeRuntime.state === 'failed') {
+                        message = 'The last native activation attempt failed. Open Logs and inspect the first CleveresTricky error.';
+                    } else {
+                        message = 'The runtime is configured to run, but no live native activation snapshot matches the current target process.';
+                    }
                 } else if (data.tee_broken_mode) {
                     state = 'warn';
                     badge = 'SAFE MODE';
@@ -3744,11 +3808,11 @@ class WebServer(
                 } else if (keyboxCount <= 0) {
                     state = 'warn';
                     badge = 'NO KEYS';
-                    message = 'The runtime controller is active, but no verified keybox is currently active.';
+                    message = 'The native runtime is active, but no verified keybox is currently active.';
                 } else if (!data.global_mode) {
-                    message = 'Runtime controller is active with ' + keyboxCount + ' verified keybox' + (keyboxCount === 1 ? '' : 'es') + '. Targeted mode is enabled, so app rules determine scope.';
+                    message = 'Native runtime is active with ' + keyboxCount + ' verified keybox' + (keyboxCount === 1 ? '' : 'es') + '. Targeted mode is enabled, so app rules determine scope.';
                 } else {
-                    message = 'Runtime controller is active with ' + keyboxCount + ' verified keybox' + (keyboxCount === 1 ? '' : 'es') + '. Global application scope is enabled.';
+                    message = 'Native runtime is active with ' + keyboxCount + ' verified keybox' + (keyboxCount === 1 ? '' : 'es') + '. Global application scope is enabled.';
                 }
                 health.dataset.state = state;
                 healthBadge.textContent = badge;
@@ -3756,7 +3820,7 @@ class WebServer(
             }
 
             const features = [
-                { id: 'spoof_enabled', name: 'Spoof Engine', activity: data.spoof_enabled ? 'Runtime controller active' : 'Interceptors parked', scope: 'All spoof and hook paths', desc: 'Master switch; boot-disabled mode avoids native injection entirely.' },
+                { id: 'spoof_enabled', name: 'Spoof Engine', activity: data.spoof_enabled ? (nativeActive ? 'Native runtime active' : 'Configured; native runtime unavailable') : 'Interceptors parked', scope: 'All spoof and hook paths', desc: 'Master switch; boot-disabled mode avoids native injection entirely.' },
                 { id: 'global_mode', name: 'Global Mode', activity: 'UID decision only', scope: 'Resolved application UIDs', desc: 'Targets every eligible app while protecting system and RKP infrastructure UIDs.' },
                 { id: 'tee_broken_mode', name: 'Certificate Safe Mode', activity: 'No certificate rewrite', scope: 'Keystore interception', desc: 'Keeps genuine KeyMint responses when certificate substitution is paused.' },
                 { id: 'auto_keybox_check', name: 'Automatic Keybox Check', activity: data.spoof_enabled && data.auto_keybox_check ? 'Scheduled background check' : 'Worker stopped', scope: 'Authorized key material', desc: 'Revalidates key material and revocation state at a bounded interval.' },
