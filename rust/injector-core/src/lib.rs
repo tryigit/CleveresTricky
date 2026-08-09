@@ -11,6 +11,8 @@ use std::panic::catch_unwind;
 mod abi;
 #[cfg(target_os = "android")]
 mod engine;
+#[cfg(any(target_os = "android", test))]
+mod health;
 #[cfg(target_os = "android")]
 mod logging;
 #[cfg(target_os = "android")]
@@ -22,9 +24,21 @@ mod symbol_resolver;
 
 #[cfg(target_os = "android")]
 pub fn run_cli() -> i32 {
-    catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let arguments: Vec<std::ffi::OsString> = std::env::args_os().collect();
-        engine::run(&arguments)
-    }))
-    .unwrap_or(1)
+    let arguments: Vec<std::ffi::OsString> = std::env::args_os().collect();
+    health::record(&arguments, health::NativeRuntimeState::Starting);
+    match catch_unwind(std::panic::AssertUnwindSafe(|| engine::run(&arguments))) {
+        Ok(code) => {
+            let state = if code == 0 {
+                health::NativeRuntimeState::Active
+            } else {
+                health::NativeRuntimeState::Failed
+            };
+            health::record(&arguments, state);
+            code
+        }
+        Err(_) => {
+            health::record(&arguments, health::NativeRuntimeState::Failed);
+            1
+        }
+    }
 }
