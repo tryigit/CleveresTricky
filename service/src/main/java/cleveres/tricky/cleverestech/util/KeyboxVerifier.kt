@@ -106,15 +106,20 @@ object KeyboxVerifier {
         val keyboxDir = File(configDir, "keyboxes")
         if (Files.isDirectory(keyboxDir.toPath(), LinkOption.NOFOLLOW_LINKS)) {
             val files = ArrayList<File>(MAX_KEYBOX_FILES)
-            Files.newDirectoryStream(keyboxDir.toPath()).use { entries ->
-                for (path in entries) {
-                    val file = path.toFile()
-                    if (!file.name.endsWith(".xml", ignoreCase = true) || !isSafeKeyboxFile(file)) continue
-                    if (files.size >= MAX_KEYBOX_FILES) {
-                        return listOf(Result(File(""), "Global", Status.ERROR, "Too many keybox files"))
+            try {
+                Files.newDirectoryStream(keyboxDir.toPath()).use { entries ->
+                    for (path in entries) {
+                        val file = path.toFile()
+                        if (!file.name.endsWith(".xml", ignoreCase = true) || !isSafeKeyboxFile(file)) continue
+                        if (files.size >= MAX_KEYBOX_FILES) {
+                            return listOf(Result(File(""), "Global", Status.ERROR, "Too many keybox files"))
+                        }
+                        files.add(file)
                     }
-                    files.add(file)
                 }
+            } catch (error: IOException) {
+                Logger.e("Failed to scan keybox directory", error)
+                return listOf(Result(File(""), "Global", Status.ERROR, "Failed to scan keybox directory"))
             }
             files.sortBy { it.name }
             for (file in files) {
@@ -311,14 +316,11 @@ object KeyboxVerifier {
         }
 
         var added = false
-        var isDecimal = true
+        var isDecimal = decStr[0] != '-'
         if (decStr.length > 1 && decStr.startsWith("0")) {
             isDecimal = false
-        } else {
-            for (i in 0 until decStr.length) {
-                if (i == 0 && decStr[i] == '-' && decStr.length > 1) {
-                    continue
-                }
+        } else if (isDecimal) {
+            for (i in decStr.indices) {
                 if (!Character.isDigit(decStr[i])) {
                     isDecimal = false
                     break
