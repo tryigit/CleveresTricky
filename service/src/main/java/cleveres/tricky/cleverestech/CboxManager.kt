@@ -6,6 +6,7 @@ import cleveres.tricky.cleverestech.util.DeviceKeyManager
 import cleveres.tricky.cleverestech.util.KeyboxVerifier
 import cleveres.tricky.cleverestech.util.SecureFile
 import java.io.File
+import java.io.IOException
 import java.io.StringReader
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
@@ -49,7 +50,15 @@ object CboxManager {
             return
         }
 
-        val files = listCboxFiles(directory)
+        val files =
+            try {
+                listCboxFiles(directory)
+            } catch (error: IOException) {
+                unlockedCache.clear()
+                lockedFiles.clear()
+                Logger.e("Failed to scan CBOX directory", error)
+                return
+            }
         if (files == null) {
             unlockedCache.clear()
             lockedFiles.clear()
@@ -173,6 +182,7 @@ object CboxManager {
 
     fun isLocked(filename: String): Boolean = lockedFiles.contains(filename)
 
+    @Throws(IOException::class)
     private fun listCboxFiles(directory: File): List<File>? {
         val files = ArrayList<File>(MAX_CBOX_FILES)
         Files.newDirectoryStream(directory.toPath()).use { entries ->
@@ -299,14 +309,18 @@ object CboxManager {
         directory: File,
         currentFiles: Set<String>,
     ) {
-        Files.newDirectoryStream(directory.toPath()) { path ->
-            path.fileName.toString().endsWith(".cbox.cache", ignoreCase = true)
-        }.use { entries ->
-            for (path in entries) {
-                val cache = path.toFile()
-                val sourceName = cache.name.removeSuffix(".cache")
-                if (sourceName !in currentFiles) deleteCacheSafely(cache)
+        try {
+            Files.newDirectoryStream(directory.toPath()) { path ->
+                path.fileName.toString().endsWith(".cbox.cache", ignoreCase = true)
+            }.use { entries ->
+                for (path in entries) {
+                    val cache = path.toFile()
+                    val sourceName = cache.name.removeSuffix(".cache")
+                    if (sourceName !in currentFiles) deleteCacheSafely(cache)
+                }
             }
+        } catch (error: IOException) {
+            Logger.w("Could not scan orphaned CBOX caches")
         }
     }
 
