@@ -6,6 +6,7 @@ DEBUG=@DEBUG@
 SONAME=@SONAME@
 SUPPORTED_ABIS="@SUPPORTED_ABIS@"
 MIN_SDK=@MIN_SDK@
+MAX_SDK=@MAX_SDK@
 
 if [ "$BOOTMODE" ] && [ "$KSU" ]; then
   ui_print "- Installing from KernelSU app"
@@ -29,7 +30,6 @@ fi
 VERSION=$(grep_prop version "${TMPDIR}/module.prop")
 ui_print "- Installing $SONAME $VERSION"
 
-# check architecture
 case " $SUPPORTED_ABIS " in
   *" $ARCH "*) support=true ;;
   *) support=false ;;
@@ -40,16 +40,18 @@ else
   ui_print "- Device platform: $ARCH (Supported)"
 fi
 
-# Check Android API after validating the installer-provided value.
 case "$API" in
   ''|*[!0-9]*) abort "! Invalid Android SDK value: $API" ;;
 esac
 if [ "$API" -lt "$MIN_SDK" ]; then
   ui_print "! Unsupported sdk: $API"
   abort "! Minimal supported sdk is $MIN_SDK"
-else
-  ui_print "- Device sdk: $API (Supported)"
 fi
+if [ "$API" -gt "$MAX_SDK" ]; then
+  ui_print "! Unsupported sdk: $API"
+  abort "! Maximum validated sdk is $MAX_SDK"
+fi
+ui_print "- Device sdk: $API (Supported)"
 
 ui_print "- Extracting verify.sh"
 unzip -o "$ZIPFILE" 'verify.sh' -d "$TMPDIR" >&2 \
@@ -76,9 +78,9 @@ extract "$ZIPFILE" 'service.sh'      "$MODPATH"
 extract "$ZIPFILE" 'service.apk'     "$MODPATH"
 extract "$ZIPFILE" 'sepolicy.rule'   "$MODPATH"
 extract "$ZIPFILE" 'daemon'          "$MODPATH"
-chmod 755 "$MODPATH/daemon"
+chmod 755 "$MODPATH/daemon" || abort "! Could not make daemon executable"
 extract "$ZIPFILE" 'action.sh'       "$MODPATH"
-chmod 755 "$MODPATH/action.sh"
+chmod 755 "$MODPATH/action.sh" || abort "! Could not make action.sh executable"
 
 case "$ARCH" in
   "x64")
@@ -97,18 +99,21 @@ case "$ARCH" in
 esac
 
 chmod 755 "$MODPATH/inject" "$MODPATH/daemon" "$MODPATH/service.sh" \
-  "$MODPATH/post-fs-data.sh"
+  "$MODPATH/post-fs-data.sh" || abort "! Could not set module executable permissions"
 
 CONFIG_DIR=/data/adb/cleverestricky
 if [ -L "$CONFIG_DIR" ]; then
   abort "! Refusing symlinked configuration directory: $CONFIG_DIR"
 fi
+if [ -e "$CONFIG_DIR" ] && [ ! -d "$CONFIG_DIR" ]; then
+  abort "! Configuration path is not a directory: $CONFIG_DIR"
+fi
 if [ ! -d "$CONFIG_DIR" ]; then
   ui_print "- Creating configuration directory"
-  mkdir -p "$CONFIG_DIR"
+  mkdir -p "$CONFIG_DIR" || abort "! Could not create configuration directory"
 fi
-chmod 700 "$CONFIG_DIR"
-chown 0:0 "$CONFIG_DIR"
+chmod 700 "$CONFIG_DIR" || abort "! Could not secure configuration directory"
+chown 0:0 "$CONFIG_DIR" || abort "! Could not set configuration directory ownership"
 
 for config_file in spoof_build_vars security_patch.txt target.txt drm_packages.txt boot_props_mode \
   spoof_enabled spoof_switch_initialized spoof_build_identity global_mode tee_broken_mode \
@@ -119,17 +124,18 @@ for config_file in spoof_build_vars security_patch.txt target.txt drm_packages.t
   fi
 done
 
-# Migrate existing installations once without re-enabling a switch the user
-# intentionally disabled on a later update.
+FIRST_CONFIG_INIT=false
 if [ ! -e "$CONFIG_DIR/spoof_switch_initialized" ]; then
+  FIRST_CONFIG_INIT=true
   ui_print "- Enabling the master Spoof Engine switch"
   [ -e "$CONFIG_DIR/spoof_enabled" ] || : > "$CONFIG_DIR/spoof_enabled" \
     || abort "! Could not enable the Spoof Engine"
   : > "$CONFIG_DIR/spoof_switch_initialized" \
     || abort "! Could not write the Spoof Engine migration marker"
 fi
-chmod 600 "$CONFIG_DIR/spoof_switch_initialized"
-[ -e "$CONFIG_DIR/spoof_enabled" ] && chmod 600 "$CONFIG_DIR/spoof_enabled"
+chmod 600 "$CONFIG_DIR/spoof_switch_initialized" || abort "! Could not secure migration marker"
+[ ! -e "$CONFIG_DIR/spoof_enabled" ] || chmod 600 "$CONFIG_DIR/spoof_enabled" \
+  || abort "! Could not secure Spoof Engine switch"
 
 if [ ! -f "$CONFIG_DIR/spoof_build_vars" ]; then
   ui_print "- Adding default spoof_build_vars"
@@ -137,7 +143,7 @@ if [ ! -f "$CONFIG_DIR/spoof_build_vars" ]; then
   mv "$TMPDIR/spoof_build_vars" "$CONFIG_DIR/spoof_build_vars" \
     || abort "! Could not install spoof_build_vars"
 fi
-[ -f "$CONFIG_DIR/spoof_build_vars" ] && chmod 600 "$CONFIG_DIR/spoof_build_vars"
+chmod 600 "$CONFIG_DIR/spoof_build_vars" || abort "! Could not secure spoof_build_vars"
 
 if [ ! -f "$CONFIG_DIR/security_patch.txt" ]; then
   ui_print "- Adding default security_patch.txt"
@@ -145,7 +151,7 @@ if [ ! -f "$CONFIG_DIR/security_patch.txt" ]; then
   mv "$TMPDIR/security_patch.txt" "$CONFIG_DIR/security_patch.txt" \
     || abort "! Could not install security_patch.txt"
 fi
-[ -f "$CONFIG_DIR/security_patch.txt" ] && chmod 600 "$CONFIG_DIR/security_patch.txt"
+chmod 600 "$CONFIG_DIR/security_patch.txt" || abort "! Could not secure security_patch.txt"
 
 if [ ! -f "$CONFIG_DIR/target.txt" ]; then
   ui_print "- Adding default target scope"
@@ -153,17 +159,16 @@ if [ ! -f "$CONFIG_DIR/target.txt" ]; then
   mv "$TMPDIR/target.txt" "$CONFIG_DIR/target.txt" \
     || abort "! Could not install target.txt"
 fi
-[ -f "$CONFIG_DIR/target.txt" ] && chmod 600 "$CONFIG_DIR/target.txt"
+chmod 600 "$CONFIG_DIR/target.txt" || abort "! Could not secure target.txt"
 
-INSTALL_COMPAT_DEFAULTS=false
+INSTALL_COMPAT_DEFAULTS=$FIRST_CONFIG_INIT
 if [ ! -f "$CONFIG_DIR/drm_packages.txt" ]; then
-  INSTALL_COMPAT_DEFAULTS=true
   ui_print "- Adding default DRM passthrough scope"
   extract "$ZIPFILE" 'drm_packages.txt' "$TMPDIR"
   mv "$TMPDIR/drm_packages.txt" "$CONFIG_DIR/drm_packages.txt" \
     || abort "! Could not install drm_packages.txt"
 fi
-[ -f "$CONFIG_DIR/drm_packages.txt" ] && chmod 600 "$CONFIG_DIR/drm_packages.txt"
+chmod 600 "$CONFIG_DIR/drm_packages.txt" || abort "! Could not secure drm_packages.txt"
 
 if [ ! -f "$CONFIG_DIR/boot_props_mode" ]; then
   ui_print "- Adding automatic boot-property policy"
@@ -171,28 +176,33 @@ if [ ! -f "$CONFIG_DIR/boot_props_mode" ]; then
   mv "$TMPDIR/boot_props_mode" "$CONFIG_DIR/boot_props_mode" \
     || abort "! Could not install boot_props_mode"
 fi
-[ -f "$CONFIG_DIR/boot_props_mode" ] && chmod 600 "$CONFIG_DIR/boot_props_mode"
+chmod 600 "$CONFIG_DIR/boot_props_mode" || abort "! Could not secure boot_props_mode"
 
 if [ "$INSTALL_COMPAT_DEFAULTS" = true ] && [ ! -e "$CONFIG_DIR/auto_keybox_check" ]; then
   ui_print "- Enabling daily keybox revocation checks"
   : > "$CONFIG_DIR/auto_keybox_check" \
     || abort "! Could not enable keybox revocation checks"
 fi
-[ -e "$CONFIG_DIR/auto_keybox_check" ] && chmod 600 "$CONFIG_DIR/auto_keybox_check"
+[ ! -e "$CONFIG_DIR/auto_keybox_check" ] || chmod 600 "$CONFIG_DIR/auto_keybox_check" \
+  || abort "! Could not secure keybox revocation switch"
 for default_flag in rkp_passthrough drm_passthrough hide_sensitive_props; do
   if [ "$INSTALL_COMPAT_DEFAULTS" = true ] && [ ! -e "$CONFIG_DIR/$default_flag" ]; then
     ui_print "- Enabling $default_flag"
     : > "$CONFIG_DIR/$default_flag" \
       || abort "! Could not enable $default_flag"
   fi
-  [ -e "$CONFIG_DIR/$default_flag" ] && chmod 600 "$CONFIG_DIR/$default_flag"
+  [ ! -e "$CONFIG_DIR/$default_flag" ] || chmod 600 "$CONFIG_DIR/$default_flag" \
+    || abort "! Could not secure $default_flag"
 done
 chown 0:0 "$CONFIG_DIR/spoof_build_vars" "$CONFIG_DIR/security_patch.txt" \
   "$CONFIG_DIR/target.txt" "$CONFIG_DIR/drm_packages.txt" \
-  "$CONFIG_DIR/boot_props_mode" "$CONFIG_DIR/spoof_switch_initialized"
-[ -e "$CONFIG_DIR/auto_keybox_check" ] && chown 0:0 "$CONFIG_DIR/auto_keybox_check"
-[ -e "$CONFIG_DIR/spoof_enabled" ] && chown 0:0 "$CONFIG_DIR/spoof_enabled"
-[ -e "$CONFIG_DIR/spoof_build_identity" ] && chown 0:0 "$CONFIG_DIR/spoof_build_identity"
-[ -e "$CONFIG_DIR/rkp_passthrough" ] && chown 0:0 "$CONFIG_DIR/rkp_passthrough"
-[ -e "$CONFIG_DIR/drm_passthrough" ] && chown 0:0 "$CONFIG_DIR/drm_passthrough"
-[ -e "$CONFIG_DIR/hide_sensitive_props" ] && chown 0:0 "$CONFIG_DIR/hide_sensitive_props"
+  "$CONFIG_DIR/boot_props_mode" "$CONFIG_DIR/spoof_switch_initialized" \
+  || abort "! Could not set configuration file ownership"
+[ ! -e "$CONFIG_DIR/auto_keybox_check" ] || chown 0:0 "$CONFIG_DIR/auto_keybox_check" \
+  || abort "! Could not set keybox revocation switch ownership"
+[ ! -e "$CONFIG_DIR/spoof_enabled" ] || chown 0:0 "$CONFIG_DIR/spoof_enabled" \
+  || abort "! Could not set Spoof Engine switch ownership"
+[ ! -e "$CONFIG_DIR/spoof_build_identity" ] || chown 0:0 "$CONFIG_DIR/spoof_build_identity"
+[ ! -e "$CONFIG_DIR/rkp_passthrough" ] || chown 0:0 "$CONFIG_DIR/rkp_passthrough"
+[ ! -e "$CONFIG_DIR/drm_passthrough" ] || chown 0:0 "$CONFIG_DIR/drm_passthrough"
+[ ! -e "$CONFIG_DIR/hide_sensitive_props" ] || chown 0:0 "$CONFIG_DIR/hide_sensitive_props"
