@@ -171,4 +171,23 @@ mod tests {
         assert!(snapshot.contains("pid=123\n"));
         assert!(snapshot.contains("start_ticks=456\n"));
     }
+
+    #[test]
+    fn rejects_invalid_status_identity_inputs() {
+        let invalid_pid = vec![
+            OsString::from("inject"),
+            OsString::from("12x"),
+            OsString::from("/module/lib.so"),
+            OsString::from("entry"),
+        ];
+        assert_eq!(parse_target_pid(&invalid_pid), None);
+
+        let invalid_entry = vec![
+            OsString::from("inject"),
+            OsString::from("123"),
+            OsString::from("/module/lib.so"),
+            OsString::from("../entry"),
+        ];
+        assert_eq!(sanitize_entry(&invalid_entry), "unknown");
+    }
 }
