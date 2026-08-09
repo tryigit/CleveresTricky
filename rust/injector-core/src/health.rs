@@ -1,15 +1,24 @@
 use std::ffi::OsString;
-use std::fs::{self, OpenOptions};
-use std::io::{self, Write};
 use std::os::unix::ffi::OsStrExt;
+
+#[cfg(target_os = "android")]
+use std::fs::{self, OpenOptions};
+#[cfg(target_os = "android")]
+use std::io::{self, Write};
+#[cfg(target_os = "android")]
 use std::os::unix::fs::OpenOptionsExt;
+#[cfg(target_os = "android")]
 use std::path::Path;
+#[cfg(target_os = "android")]
 use std::time::{SystemTime, UNIX_EPOCH};
 
+#[cfg(target_os = "android")]
 const STATUS_DIRECTORY: &str = "/data/adb/cleverestricky";
+#[cfg(target_os = "android")]
 const STATUS_FILENAME: &str = "native_runtime_status";
 const MAXIMUM_PID_BYTES: usize = 10;
 const MAXIMUM_ENTRY_BYTES: usize = 32;
+#[cfg(target_os = "android")]
 const MAXIMUM_PROC_STAT_BYTES: u64 = 16 * 1024;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -63,6 +72,7 @@ fn parse_process_start_ticks(stat: &str) -> Option<u64> {
     remainder.split_ascii_whitespace().nth(19)?.parse().ok()
 }
 
+#[cfg(target_os = "android")]
 fn read_process_start_ticks(pid: i32) -> Option<u64> {
     if pid <= 0 {
         return None;
@@ -76,6 +86,7 @@ fn read_process_start_ticks(pid: i32) -> Option<u64> {
     parse_process_start_ticks(&stat)
 }
 
+#[cfg(target_os = "android")]
 fn timestamp_millis() -> u128 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -100,6 +111,7 @@ fn encode_snapshot(
     )
 }
 
+#[cfg(target_os = "android")]
 fn write_snapshot(arguments: &[OsString], state: NativeRuntimeState) -> io::Result<()> {
     let directory = Path::new(STATUS_DIRECTORY);
     let directory_metadata = fs::symlink_metadata(directory)?;
@@ -140,6 +152,7 @@ fn write_snapshot(arguments: &[OsString], state: NativeRuntimeState) -> io::Resu
     result
 }
 
+#[cfg(target_os = "android")]
 pub(crate) fn record(arguments: &[OsString], state: NativeRuntimeState) {
     let _ = write_snapshot(arguments, state);
 }
@@ -147,6 +160,13 @@ pub(crate) fn record(arguments: &[OsString], state: NativeRuntimeState) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn serializes_every_runtime_state() {
+        assert_eq!(NativeRuntimeState::Starting.as_str(), "starting");
+        assert_eq!(NativeRuntimeState::Active.as_str(), "active");
+        assert_eq!(NativeRuntimeState::Failed.as_str(), "failed");
+    }
 
     #[test]
     fn parses_process_start_time_after_parenthesized_command() {
