@@ -46,8 +46,7 @@ class BinderInterceptorTest {
         data.pushInt(100)
         data.pushInt(0)
         data.pushLong(0L)
-        data.pushLong(1L)
-        data.pushLong(0L)
+        data.pushLong(Long.SIZE_BYTES.toLong())
 
         val reply = Parcel.obtain()
         Parcel.resetStats()
