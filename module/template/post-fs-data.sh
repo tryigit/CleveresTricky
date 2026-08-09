@@ -1,12 +1,14 @@
 #!/system/bin/sh
 MODDIR=${0%/*}
 CONFIG_DIR="/data/adb/cleverestricky"
+CONFIG_ROOT_SAFE=false
 
-# Keep private material root-only. Apply labels without recursively crossing
-# into unexpected mounts or following symlinks.
 if [ -d "$CONFIG_DIR" ] && [ ! -L "$CONFIG_DIR" ]; then
-  chown 0:0 "$CONFIG_DIR" 2>/dev/null
-  chmod 700 "$CONFIG_DIR"
+  if chown 0:0 "$CONFIG_DIR" 2>/dev/null && chmod 700 "$CONFIG_DIR"; then
+    CONFIG_ROOT_SAFE=true
+  else
+    log -t CleveresTricky "Config root permissions could not be secured; early config processing was skipped"
+  fi
   chcon u:object_r:system_file:s0 "$CONFIG_DIR" 2>/dev/null
   find "$CONFIG_DIR" -xdev -maxdepth 2 -type d -exec chmod 700 {} + 2>/dev/null
   find "$CONFIG_DIR" -xdev -maxdepth 2 -type f -exec chmod 600 {} + 2>/dev/null
@@ -14,18 +16,12 @@ if [ -d "$CONFIG_DIR" ] && [ ! -L "$CONFIG_DIR" ]; then
     -exec chcon u:object_r:system_file:s0 {} + 2>/dev/null
 fi
 
-# Apply boot-only property views before Zygote snapshots android.os.Build.
-# Every value comes from a fixed property name or a strictly bounded config
-# field, and resetprop receives it as a quoted argument rather than shell code.
 promote_staged_identity() {
   staged_file="$CONFIG_DIR/spoof_build_vars.next"
   active_file="$CONFIG_DIR/spoof_build_vars"
 
+  [ "$CONFIG_ROOT_SAFE" = true ] || return 0
   if [ ! -e "$staged_file" ] && [ ! -L "$staged_file" ]; then
-    return 0
-  fi
-  if [ ! -d "$CONFIG_DIR" ] || [ -L "$CONFIG_DIR" ]; then
-    log -t CleveresTricky "Unsafe config directory; staged identity was ignored"
     return 0
   fi
   if [ -L "$staged_file" ]; then
@@ -55,8 +51,10 @@ promote_staged_identity() {
     return 0
   fi
 
-  chown 0:0 "$staged_file" 2>/dev/null
-  chmod 600 "$staged_file" || return 0
+  if ! chown 0:0 "$staged_file" 2>/dev/null || ! chmod 600 "$staged_file"; then
+    log -t CleveresTricky "Staged identity permissions could not be secured"
+    return 0
+  fi
   chcon u:object_r:system_file:s0 "$staged_file" 2>/dev/null
   if mv -f "$staged_file" "$active_file"; then
     log -t CleveresTricky "Activated the prepared identity snapshot"
@@ -66,6 +64,7 @@ promote_staged_identity() {
 }
 
 apply_early_properties() {
+  [ "$CONFIG_ROOT_SAFE" = true ] || return 0
   [ -f "$CONFIG_DIR/spoof_enabled" ] || return 0
   [ ! -L "$CONFIG_DIR/spoof_enabled" ] || return 0
   command -v resetprop >/dev/null 2>&1 || {
@@ -227,10 +226,7 @@ apply_early_properties() {
 promote_staged_identity
 apply_early_properties
 
-# Label the service archive and injected native payloads for platform access.
 find "$MODDIR" -maxdepth 1 -name '*.apk' -exec chcon u:object_r:system_file:s0 {} + 2>/dev/null
 find "$MODDIR" -maxdepth 1 -name '*.so' -exec chcon u:object_r:system_file:s0 {} + 2>/dev/null
-
-# Executables need to be executable by daemon
 [ -f "$MODDIR/inject" ] && chcon u:object_r:system_file:s0 "$MODDIR/inject" 2>/dev/null
 [ -f "$MODDIR/daemon" ] && chcon u:object_r:system_file:s0 "$MODDIR/daemon" 2>/dev/null
