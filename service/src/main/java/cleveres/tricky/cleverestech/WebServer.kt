@@ -1799,6 +1799,23 @@ class WebServer(
         .resource-summary { display: flex; justify-content: space-around; align-items: center; background: #1a1a1a; padding: 20px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.2); }
         .resource-stat { text-align: center; padding: 10px; flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; }
         .resource-stat-mid { border-left: 1px solid var(--border); border-right: 1px solid var(--border); }
+        .resource-stat-label { font-size: 0.78em; color: #888; text-transform: uppercase; letter-spacing: 0.04em; }
+        .resource-stat-value { margin-top: 5px; font-size: 1.12em; font-weight: 700; color: var(--accent); overflow-wrap: anywhere; }
+        .info-health { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; align-items: start; padding: 16px 18px; margin-bottom: 16px; background: #1a1a1a; border: 1px solid var(--border); border-radius: 12px; }
+        .info-health[data-state="ok"] { border-color: rgba(52, 211, 153, 0.45); }
+        .info-health[data-state="warn"] { border-color: rgba(251, 191, 36, 0.55); }
+        .info-health[data-state="error"] { border-color: rgba(239, 68, 68, 0.55); }
+        .info-health-copy { min-width: 0; line-height: 1.5; overflow-wrap: anywhere; }
+        .info-health-copy strong { display: block; margin-bottom: 4px; color: #fff; font-size: 1em; }
+        .info-health-copy span { color: #aaa; font-size: 0.9em; }
+        .info-health-badge { display: inline-flex; align-items: center; justify-content: center; min-height: 32px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--border); font-size: 0.72em; font-weight: 700; letter-spacing: 0.06em; white-space: nowrap; }
+        .info-health[data-state="ok"] .info-health-badge { color: var(--success); background: rgba(52, 211, 153, 0.1); border-color: rgba(52, 211, 153, 0.35); }
+        .info-health[data-state="warn"] .info-health-badge { color: #FBBF24; background: rgba(251, 191, 36, 0.1); border-color: rgba(251, 191, 36, 0.35); }
+        .info-health[data-state="error"] .info-health-badge { color: var(--danger); background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.35); }
+        .info-section-copy { margin: 0 0 14px; color: #999; font-size: 0.9em; line-height: 1.55; overflow-wrap: anywhere; }
+        #info { overflow-x: hidden; }
+        #info .responsive-table { table-layout: fixed; }
+        #info .responsive-table td { overflow-wrap: anywhere; }
         #fileEditor { height: min(500px, 60dvh) !important; resize: vertical; }
         #logViewer { height: min(400px, 55dvh) !important; resize: vertical; }
         @media screen and (max-width: 600px) {
@@ -1825,9 +1842,27 @@ class WebServer(
             .identity-actions button { width: 100%; }
             .island { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
             .island.active { min-width: 0; width: 100%; padding-left: 16px; }
-            .resource-summary { flex-direction: column; gap: 10px; background: transparent; border: none; padding: 0; box-shadow: none; }
-            .resource-stat { width: 100%; padding: 15px; background: #1a1a1a; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 5px; flex-direction: row; justify-content: space-between; }
-            .resource-stat-mid { border-left: none; border-right: none; }
+            .info-health { grid-template-columns: 1fr; gap: 10px; padding: 14px; }
+            .info-health-badge { justify-self: start; }
+            .resource-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; background: transparent; border: none; padding: 0; box-shadow: none; }
+            .resource-stat { width: auto; min-width: 0; min-height: 84px; padding: 14px; background: #1a1a1a; border-radius: 12px; border: 1px solid var(--border); margin: 0; flex-direction: column; align-items: flex-start; justify-content: center; text-align: left; }
+            .resource-stat:first-child { grid-column: 1 / -1; min-height: 72px; }
+            .resource-stat-mid { border-left: 1px solid var(--border); border-right: 1px solid var(--border); }
+            .resource-stat-value { font-size: 1.05em; }
+            #info .panel { min-width: 0; }
+            #info .responsive-table tr { margin-bottom: 12px; }
+            #info .responsive-table td { align-items: flex-start; gap: 12px; padding: 12px 14px; }
+            #info .responsive-table td::before { flex: 0 0 92px; min-width: 92px; margin-right: 0; }
+            #info .responsive-table td > div, #info .responsive-table td > span { min-width: 0; max-width: calc(100% - 104px); text-align: left; overflow-wrap: anywhere; }
+            #info .responsive-table td input[type="checkbox"].toggle { margin-left: auto; }
+        }
+        @media screen and (max-width: 380px) {
+            .resource-summary { grid-template-columns: 1fr; }
+            .resource-stat:first-child { grid-column: auto; }
+            #info .responsive-table td { display: grid; grid-template-columns: 1fr; gap: 6px; }
+            #info .responsive-table td::before { min-width: 0; }
+            #info .responsive-table td > div, #info .responsive-table td > span { max-width: 100%; }
+            #info .responsive-table td input[type="checkbox"].toggle { margin-left: 0; }
         }
         @media screen and (max-height: 520px) and (orientation: landscape) {
             #fileEditor, #logViewer { height: 48dvh !important; }
@@ -2032,13 +2067,20 @@ class WebServer(
 
     <div id="info" class="content" role="tabpanel" aria-labelledby="tab_info">
         <div class="panel" style="background:var(--bg); border:none; padding:0; box-shadow:none;">
+            <div id="runtimeHealth" class="info-health" data-state="warn" role="status" aria-live="polite">
+                <div class="info-health-copy">
+                    <strong>Runtime Health</strong>
+                    <span id="runtimeHealthText">Checking module state...</span>
+                </div>
+                <span id="runtimeHealthBadge" class="info-health-badge">CHECKING</span>
+            </div>
             <div id="resourceSummary" class="resource-summary">
                 <div style="color:#888;"><div class="inline-spinner"></div> Loading resource usage...</div>
             </div>
             
             <div class="panel">
                 <h3 data-i18n="resource_monitor_title">Resource Monitor</h3>
-                <p style="font-size:0.9em; color:#888;">The summary reports measured daemon CPU and resident memory. The table describes when each feature runs, without presenting synthetic per-feature estimates.</p>
+                <p class="info-section-copy">Measured daemon CPU and resident memory are shown above. Runtime rows describe configuration and execution scope. Hardware bootloader and root-of-trust warnings can remain visible because this page reports module state, not a physically relocked device.</p>
                 <table id="resourceTable" class="responsive-table">
                     <thead>
                         <tr>
@@ -3623,6 +3665,16 @@ class WebServer(
              } catch(e) {
                  if (controller.signal.aborted) return;
                  console.error(e);
+                 const health = document.getElementById('runtimeHealth');
+                 const healthText = document.getElementById('runtimeHealthText');
+                 const healthBadge = document.getElementById('runtimeHealthBadge');
+                 const summary = document.getElementById('resourceSummary');
+                 const tbody = document.getElementById('resourceBody');
+                 if (health) health.dataset.state = 'error';
+                 if (healthBadge) healthBadge.textContent = 'UNAVAILABLE';
+                 if (healthText) healthText.textContent = 'Runtime resource data could not be read. Open Logs and check the first CleveresTricky error.';
+                 if (summary) summary.innerHTML = '<div style="color:var(--danger); overflow-wrap:anywhere;">Resource data unavailable.</div>';
+                 if (tbody) tbody.innerHTML = '<tr><td colspan="4" style="color:var(--danger); padding:14px;">Resource monitor unavailable. Check module logs.</td></tr>';
                  notify('Error: ' + e.message, 'error');
              } finally {
                  if (resourceUsageController === controller) resourceUsageController = null;
@@ -3641,9 +3693,39 @@ class WebServer(
 
             if (summaryDiv) {
                 summaryDiv.innerHTML = 
-                    '<div class="resource-stat"><div style="font-size:0.8em; color:#888; text-transform:uppercase;">Environment</div><div style="font-size:1.2em; font-weight:bold; color:var(--accent);">' + escapeHtml(env) + '</div></div>' +
-                    '<div class="resource-stat resource-stat-mid"><div style="font-size:0.8em; color:#888; text-transform:uppercase;">Process CPU</div><div style="font-size:1.2em; font-weight:bold; color:var(--success);">' + escapeHtml(cpu) + '%</div></div>' +
-                    '<div class="resource-stat"><div style="font-size:0.8em; color:#888; text-transform:uppercase;">Process RSS</div><div style="font-size:1.2em; font-weight:bold; color:#60A5FA;">' + escapeHtml(ramMb) + ' MB</div></div>';
+                    '<div class="resource-stat"><div class="resource-stat-label">Environment</div><div class="resource-stat-value">' + escapeHtml(env) + '</div></div>' +
+                    '<div class="resource-stat resource-stat-mid"><div class="resource-stat-label">Process CPU</div><div class="resource-stat-value" style="color:var(--success);">' + escapeHtml(cpu) + '%</div></div>' +
+                    '<div class="resource-stat"><div class="resource-stat-label">Process RSS</div><div class="resource-stat-value" style="color:#60A5FA;">' + escapeHtml(ramMb) + ' MB</div></div>';
+            }
+
+            const health = document.getElementById('runtimeHealth');
+            const healthText = document.getElementById('runtimeHealthText');
+            const healthBadge = document.getElementById('runtimeHealthBadge');
+            if (health && healthText && healthBadge) {
+                const keyboxCount = Number(data.keybox_count || 0);
+                let state = 'ok';
+                let badge = 'READY';
+                let message;
+                if (!data.spoof_enabled) {
+                    state = 'error';
+                    badge = 'PAUSED';
+                    message = 'Spoof Engine is paused, so runtime interception paths are parked.';
+                } else if (data.tee_broken_mode) {
+                    state = 'warn';
+                    badge = 'SAFE MODE';
+                    message = 'Certificate Safe Mode is enabled, so certificate substitution is intentionally disabled.';
+                } else if (keyboxCount <= 0) {
+                    state = 'warn';
+                    badge = 'NO KEYS';
+                    message = 'The runtime controller is active, but no verified keybox is currently active.';
+                } else if (!data.global_mode) {
+                    message = 'Runtime controller is active with ' + keyboxCount + ' verified keybox' + (keyboxCount === 1 ? '' : 'es') + '. Targeted mode is enabled, so app rules determine scope.';
+                } else {
+                    message = 'Runtime controller is active with ' + keyboxCount + ' verified keybox' + (keyboxCount === 1 ? '' : 'es') + '. Global application scope is enabled.';
+                }
+                health.dataset.state = state;
+                healthBadge.textContent = badge;
+                healthText.textContent = message + ' Hardware bootloader and root-of-trust state remain genuine.';
             }
 
             const features = [
