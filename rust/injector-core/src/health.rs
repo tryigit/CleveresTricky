@@ -33,7 +33,9 @@ fn parse_target_pid(arguments: &[OsString]) -> Option<i32> {
         return None;
     }
     let value = raw.iter().try_fold(0i32, |current, digit| {
-        current.checked_mul(10)?.checked_add(i32::from(digit - b'0'))
+        current
+            .checked_mul(10)?
+            .checked_add(i32::from(digit - b'0'))
     })?;
     (value > 0).then_some(value)
 }
@@ -88,7 +90,11 @@ fn encode_snapshot(
 ) -> String {
     format!(
         "version=1\nstate={}\npid={}\nstart_ticks={}\nentry={}\ntimestamp_ms={}\n",
-        state.as_str(), pid, start_ticks, entry, timestamp_ms
+        state.as_str(),
+        pid,
+        start_ticks,
+        entry,
+        timestamp_ms
     )
 }
 
