@@ -100,7 +100,6 @@ object ServerManager {
                 if (!wasPlaintext) stored.fill(0)
                 plaintext.fill(0)
             }
-            // Migrate legacy plaintext credentials to encrypted storage.
             if (wasPlaintext) saveServers()
         } catch (e: Exception) {
             serversList.clear()
@@ -316,9 +315,7 @@ object ServerManager {
         value: String,
     ) {
         require(validHeaderName.matches(name)) { "Invalid authentication header name" }
-        require(
-            name.lowercase() !in restrictedHeaders,
-        ) { "Restricted authentication header" }
+        require(name.lowercase() !in restrictedHeaders) { "Restricted authentication header" }
         require(value.length <= 8192 && '\r' !in value && '\n' !in value) {
             "Invalid authentication header value"
         }
@@ -387,7 +384,6 @@ object ServerManager {
             conn.instanceFollowRedirects = false
             conn.setRequestProperty("Accept-Encoding", "identity")
 
-            // Apply Auth
             when (server.authType) {
                 "BEARER" -> {
                     val token = server.authData.optString("token")
@@ -415,10 +411,10 @@ object ServerManager {
                 }
                 "CUSTOM" -> {
                     val headers = server.authData.optJSONObject("headers")
-                    headers?.keys()?.forEach { k ->
-                        val value = headers.getString(k)
-                        requireSafeHeader(k, value)
-                        conn.setRequestProperty(k, value)
+                    headers?.keys()?.forEach { key ->
+                        val value = headers.getString(key)
+                        requireSafeHeader(key, value)
+                        conn.setRequestProperty(key, value)
                     }
                 }
             }
@@ -429,8 +425,7 @@ object ServerManager {
                 return false
             }
 
-            // Cap response size to prevent OOM from malicious servers
-            val maxResponseSize = 10 * 1024 * 1024 // 10MB
+            val maxResponseSize = 10 * 1024 * 1024
             val contentLength = conn.contentLengthLong
             if (contentLength > maxResponseSize) {
                 server.lastStatus = "RESPONSE_TOO_LARGE"
@@ -445,18 +440,17 @@ object ServerManager {
                         )
                     val chunk = ByteArray(8192)
                     var totalRead = 0
-                    var n: Int
-                    while (input.read(chunk).also { n = it } != -1) {
-                        totalRead += n
+                    var count: Int
+                    while (input.read(chunk).also { count = it } != -1) {
+                        totalRead += count
                         if (totalRead > maxResponseSize) {
                             throw SecurityException("Server response exceeds ${maxResponseSize / 1024 / 1024}MB limit")
                         }
-                        buffer.write(chunk, 0, n)
+                        buffer.write(chunk, 0, count)
                     }
                     buffer.toByteArray()
                 }
 
-            // Process Content
             val result =
                 try {
                     processContent(bytes, server)
@@ -518,61 +512,54 @@ object ServerManager {
         val magic = if (bytes.size >= 4) String(bytes.copyOfRange(0, 4), StandardCharsets.US_ASCII) else ""
 
         if (magic == "CBOX") {
-            // Direct CBOX
-            val pwd = server.contentPassword ?: ""
-            val stream = ByteArrayInputStream(bytes)
-            val payload = CboxDecryptor.decrypt(stream, pwd)
+            val password = server.contentPassword ?: ""
+            val payload = CboxDecryptor.decrypt(ByteArrayInputStream(bytes), password)
             if (payload != null) {
-                // Verify signature if key provided
-                if (!server.contentPublicKey.isNullOrBlank()) {
-                    if (!CboxDecryptor.verifySignature(payload, server.contentPublicKey!!)) {
-                        Logger.e("Signature verification failed for server ${server.name}")
-                        return Pair(emptyList(), null)
-                    }
+                if (!server.contentPublicKey.isNullOrBlank() &&
+                    !CboxDecryptor.verifySignature(payload, server.contentPublicKey!!)
+                ) {
+                    Logger.e("Signature verification failed for server ${server.name}")
+                    return Pair(emptyList(), null)
                 }
-                val kbs = CertHack.parseKeyboxXml(StringReader(payload.xmlContent), "server_${server.name}")
-                if (kbs.isNotEmpty()) {
-                    return Pair(kbs, payload.xmlContent)
+                val keyboxes = CertHack.parseKeyboxXml(StringReader(payload.xmlContent), "server_${server.name}")
+                if (keyboxes.isNotEmpty()) {
+                    return Pair(keyboxes, payload.xmlContent)
                 }
             }
         } else if (bytes.size > 4 && bytes[0] == 0x50.toByte() && bytes[1] == 0x4B.toByte()) {
-            // ZIP
-            val stream = ByteArrayInputStream(bytes)
-            val pack = ZipProcessor.process(stream)
+            val pack = ZipProcessor.process(ByteArrayInputStream(bytes))
             if (pack != null) {
                 try {
                     val allKeys = ArrayList<CertHack.KeyBox>()
-                    val pwd = pack.password ?: server.contentPassword ?: ""
-                    // Only a key configured out-of-band is a trust anchor.
-                    val pubKey = server.contentPublicKey
+                    val password = pack.password ?: server.contentPassword ?: ""
+                    val publicKey = server.contentPublicKey
 
                     for ((name, content) in pack.cboxFiles) {
-                        val cboxStream = ByteArrayInputStream(content)
-                        val payload = CboxDecryptor.decrypt(cboxStream, pwd)
+                        val payload = CboxDecryptor.decrypt(ByteArrayInputStream(content), password)
                         if (payload == null) {
                             Logger.e("Could not decrypt zip entry $name")
                             return Pair(emptyList(), null)
                         }
-                        if (!pubKey.isNullOrBlank() &&
-                            !CboxDecryptor.verifySignature(payload, pubKey)
+                        if (!publicKey.isNullOrBlank() &&
+                            !CboxDecryptor.verifySignature(payload, publicKey)
                         ) {
                             Logger.e("Signature verification failed for zip entry $name")
                             return Pair(emptyList(), null)
                         }
-                        val kbs =
+                        val keyboxes =
                             CertHack.parseKeyboxXml(
                                 StringReader(payload.xmlContent),
                                 "server_${server.name}_$name",
                             )
-                        if (kbs.isEmpty()) {
+                        if (keyboxes.isEmpty()) {
                             Logger.e("Zip entry contains no valid keybox records: $name")
                             return Pair(emptyList(), null)
                         }
-                        if (kbs.size > MAX_REMOTE_KEYBOXES - allKeys.size) {
+                        if (keyboxes.size > MAX_REMOTE_KEYBOXES - allKeys.size) {
                             Logger.e("Server archive exceeds the keybox-count limit")
                             return Pair(emptyList(), null)
                         }
-                        allKeys.addAll(kbs)
+                        allKeys.addAll(keyboxes)
                     }
 
                     if (allKeys.isNotEmpty()) {
@@ -583,16 +570,15 @@ object ServerManager {
                 }
             }
         } else {
-            // Assume Plain XML
             if (!server.contentPublicKey.isNullOrBlank()) {
                 Logger.e("Signed server refused unsigned plain XML")
                 return Pair(emptyList(), null)
             }
             val xml = String(bytes, StandardCharsets.UTF_8)
             if (xml.contains("AndroidAttestation")) {
-                val kbs = CertHack.parseKeyboxXml(StringReader(xml), "server_${server.name}")
-                if (kbs.isNotEmpty()) {
-                    return Pair(kbs, xml)
+                val keyboxes = CertHack.parseKeyboxXml(StringReader(xml), "server_${server.name}")
+                if (keyboxes.isNotEmpty()) {
+                    return Pair(keyboxes, xml)
                 }
             }
         }
@@ -605,13 +591,13 @@ object ServerManager {
     ) {
         val plaintext = xml.toByteArray(StandardCharsets.UTF_8)
         try {
-            val enc = DeviceKeyManager.encrypt(plaintext)
-            if (enc != null) {
+            val encrypted = DeviceKeyManager.encrypt(plaintext)
+            if (encrypted != null) {
                 try {
                     val file = File(Config.keyboxDirectory.parentFile, "server_cache_$serverId.enc")
-                    SecureFile.writeBytes(file, enc)
+                    SecureFile.writeBytes(file, encrypted)
                 } finally {
-                    enc.fill(0)
+                    encrypted.fill(0)
                 }
             }
         } catch (e: Exception) {
@@ -721,6 +707,7 @@ object ServerManager {
         scheduler.scheduleWithFixedDelay(
             {
                 try {
+                    if (!Config.isSpoofEnabled) return@scheduleWithFixedDelay
                     val now = System.currentTimeMillis()
                     val dueServers =
                         serversList
@@ -728,8 +715,10 @@ object ServerManager {
                                 server.enabled &&
                                     server.autoRefresh &&
                                     (
-                                        server.lastChecked == 0L ||
-                                            now - server.lastChecked >= TimeUnit.HOURS.toMillis(server.refreshIntervalHours.toLong())
+                                        server.lastChecked <= 0L ||
+                                            server.lastChecked > now ||
+                                            now - server.lastChecked >=
+                                            TimeUnit.HOURS.toMillis(server.refreshIntervalHours.toLong())
                                     )
                             }
                             .sortedBy { it.priority }
@@ -754,8 +743,6 @@ object ServerManager {
     }
 
     private const val MAX_SERVERS = 64
-
-    // Keep canonical cache documents within CertHack's per-document parser bound.
     private const val MAX_REMOTE_KEYBOXES = 64
     private const val MAX_CONFIG_BYTES = 2L * 1024 * 1024
     private const val MAX_CACHE_BYTES = 16L * 1024 * 1024
