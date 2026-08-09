@@ -8,6 +8,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 const STATUS_DIRECTORY: &str = "/data/adb/cleverestricky";
 const STATUS_FILENAME: &str = "native_runtime_status";
+const MAXIMUM_PID_BYTES: usize = 10;
+const MAXIMUM_ENTRY_BYTES: usize = 32;
 const MAXIMUM_PROC_STAT_BYTES: u64 = 16 * 1024;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -29,7 +31,7 @@ impl NativeRuntimeState {
 
 fn parse_target_pid(arguments: &[OsString]) -> Option<i32> {
     let raw = arguments.get(1)?.as_os_str().as_bytes();
-    if raw.is_empty() || raw.len() > 10 || !raw.iter().all(u8::is_ascii_digit) {
+    if raw.is_empty() || raw.len() > MAXIMUM_PID_BYTES || !raw.iter().all(u8::is_ascii_digit) {
         return None;
     }
     let value = raw.iter().try_fold(0i32, |current, digit| {
@@ -44,7 +46,7 @@ fn sanitize_entry(arguments: &[OsString]) -> String {
     arguments
         .get(3)
         .map(|value| value.as_os_str().as_bytes())
-        .filter(|value| !value.is_empty() && value.len() <= 32)
+        .filter(|value| !value.is_empty() && value.len() <= MAXIMUM_ENTRY_BYTES)
         .filter(|value| {
             value
                 .iter()
