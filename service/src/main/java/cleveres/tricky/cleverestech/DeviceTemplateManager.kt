@@ -74,6 +74,8 @@ object DeviceTemplateManager {
                 }
             },
         ).apply { allowCoreThreadTimeOut(true) }
+
+    @Volatile
     private var initFuture: Future<*>? = null
     private val initializationGeneration = AtomicLong()
 
@@ -219,9 +221,10 @@ object DeviceTemplateManager {
     private fun cancelPendingInitialization() {
         val previous = initFuture ?: return
         previous.cancel(false)
-        if (previous is Runnable && executor is ThreadPoolExecutor) {
-            executor.remove(previous)
-            executor.purge()
+        val threadPool = executor as? ThreadPoolExecutor
+        if (previous is Runnable && threadPool != null) {
+            threadPool.remove(previous)
+            threadPool.purge()
         }
         initFuture = null
     }
@@ -301,7 +304,7 @@ object DeviceTemplateManager {
     private fun waitForInit() {
         try {
             initFuture?.get()
-        } catch (e: java.util.concurrent.CancellationException) {
+        } catch (_: java.util.concurrent.CancellationException) {
             return
         } catch (e: Exception) {
             Logger.e("Error waiting for template initialization", e)
