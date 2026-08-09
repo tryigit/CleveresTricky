@@ -14,6 +14,14 @@ jobs:
       - name: Check out
         uses: actions/checkout@v7
 
+      - name: Print Android stub sources
+        shell: bash
+        run: |
+          find stub service/src/test -type f \( -name 'Parcel.java' -o -name 'Parcel.kt' -o -name 'Binder.java' -o -name 'Binder.kt' \) -print | while read -r file; do
+            echo "=== SOURCE: $file ==="
+            cat "$file"
+          done
+
       - name: Setup Java
         uses: actions/setup-java@v5
         with:
