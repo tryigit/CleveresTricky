@@ -239,7 +239,8 @@ pub unsafe extern "C" fn rust_parse_binder_stream(
                     safe_read::<u32>(transaction, cache.sender_euid_offset),
                     safe_read::<u64>(transaction, cache.data_size_offset),
                     safe_read::<usize>(transaction, cache.data_ptr_offset),
-                ) else {
+                )
+                else {
                     return false;
                 };
                 let Some(raw_ptr) = (buffer_pointer as usize).checked_add(position) else {
@@ -435,10 +436,7 @@ mod tests {
             | (BINDER_TYPE << IOC_TYPE_SHIFT)
             | TRANSACTION_NUMBER;
         let first_end = mem::size_of::<u32>() + payload_size;
-        let mut probe = vec![
-            0u8;
-            first_end + mem::size_of::<u32>() + second_payload_size
-        ];
+        let mut probe = vec![0u8; first_end + mem::size_of::<u32>() + second_payload_size];
         write_at(&mut probe, 0, first_command);
         write_at(&mut probe, first_end, second_command);
         assert!(!validate_binder_probe(&probe, payload_size));
