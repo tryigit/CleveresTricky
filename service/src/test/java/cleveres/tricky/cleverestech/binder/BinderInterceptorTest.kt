@@ -46,8 +46,8 @@ class BinderInterceptorTest {
         data.pushInt(100)
         data.pushInt(0)
         data.pushLong(0L)
-        // The JVM Parcel test double exposes the declared response size once its queue is drained.
-        data.pushLong(Long.SIZE_BYTES.toLong())
+        data.pushLong(1L)
+        data.pushLong(0L)
 
         val reply = Parcel.obtain()
         Parcel.resetStats()
