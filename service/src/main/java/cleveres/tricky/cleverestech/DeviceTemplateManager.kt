@@ -302,12 +302,17 @@ object DeviceTemplateManager {
     }
 
     private fun waitForInit() {
-        try {
-            initFuture?.get()
-        } catch (_: java.util.concurrent.CancellationException) {
-            return
-        } catch (e: Exception) {
-            Logger.e("Error waiting for template initialization", e)
+        while (true) {
+            val future = initFuture ?: return
+            try {
+                future.get()
+            } catch (_: java.util.concurrent.CancellationException) {
+                continue
+            } catch (e: Exception) {
+                Logger.e("Error waiting for template initialization", e)
+                return
+            }
+            if (future === initFuture) return
         }
     }
 
@@ -372,21 +377,21 @@ object DeviceTemplateManager {
     private fun saveTemplatesInternal(configDir: File) {
         try {
             val array = JSONArray()
-            templates.values.forEach { t ->
+            templates.values.forEach { template ->
                 val obj = JSONObject()
-                obj.put("id", t.id)
-                obj.put("manufacturer", t.manufacturer)
-                obj.put("model", t.model)
-                obj.put("fingerprint", t.fingerprint)
-                obj.put("brand", t.brand)
-                obj.put("product", t.product)
-                obj.put("device", t.device)
-                obj.put("release", t.release)
-                obj.put("buildId", t.buildId)
-                obj.put("incremental", t.incremental)
-                obj.put("type", t.type)
-                obj.put("tags", t.tags)
-                obj.put("securityPatch", t.securityPatch)
+                obj.put("id", template.id)
+                obj.put("manufacturer", template.manufacturer)
+                obj.put("model", template.model)
+                obj.put("fingerprint", template.fingerprint)
+                obj.put("brand", template.brand)
+                obj.put("product", template.product)
+                obj.put("device", template.device)
+                obj.put("release", template.release)
+                obj.put("buildId", template.buildId)
+                obj.put("incremental", template.incremental)
+                obj.put("type", template.type)
+                obj.put("tags", template.tags)
+                obj.put("securityPatch", template.securityPatch)
                 array.put(obj)
             }
             SecureFile.writeText(File(configDir, TEMPLATES_FILE), array.toString(4))
