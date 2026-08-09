@@ -49,10 +49,13 @@ object CboxManager {
             return
         }
 
-        val files =
-            directory.listFiles { file ->
-                validFilename.matches(file.name) && isSafeCbox(file)
-            }?.sortedBy { it.name }.orEmpty()
+        val files = listCboxFiles(directory)
+        if (files == null) {
+            unlockedCache.clear()
+            lockedFiles.clear()
+            Logger.e("CBOX pool rejected because it exceeds the file limit")
+            return
+        }
         val currentFiles = files.mapTo(HashSet()) { it.name }
         val revoked = if (files.isEmpty()) emptySet() else KeyboxVerifier.fetchCrl()
 
@@ -170,6 +173,20 @@ object CboxManager {
 
     fun isLocked(filename: String): Boolean = lockedFiles.contains(filename)
 
+    private fun listCboxFiles(directory: File): List<File>? {
+        val files = ArrayList<File>(MAX_CBOX_FILES)
+        Files.newDirectoryStream(directory.toPath()).use { entries ->
+            for (path in entries) {
+                val file = path.toFile()
+                if (!validFilename.matches(file.name) || !isSafeCbox(file)) continue
+                if (files.size >= MAX_CBOX_FILES) return null
+                files.add(file)
+            }
+        }
+        files.sortBy { it.name }
+        return files
+    }
+
     private fun loadCached(
         file: File,
         revoked: Set<String>,
@@ -282,12 +299,15 @@ object CboxManager {
         directory: File,
         currentFiles: Set<String>,
     ) {
-        directory
-            .listFiles { file -> file.name.endsWith(".cbox.cache", ignoreCase = true) }
-            ?.forEach { cache ->
+        Files.newDirectoryStream(directory.toPath()) { path ->
+            path.fileName.toString().endsWith(".cbox.cache", ignoreCase = true)
+        }.use { entries ->
+            for (path in entries) {
+                val cache = path.toFile()
                 val sourceName = cache.name.removeSuffix(".cache")
                 if (sourceName !in currentFiles) deleteCacheSafely(cache)
             }
+        }
     }
 
     private fun deleteCacheSafely(file: File) {
@@ -320,5 +340,6 @@ object CboxManager {
     private const val MIN_CBOX_BYTES = 4L + 4L + 16L + 12L + 16L
     private const val MAX_CBOX_BYTES = 10L * 1024 * 1024 + 36L
     private const val MAX_CACHE_BYTES = 16L * 1024 * 1024
+    private const val MAX_CBOX_FILES = 64
     private const val MAX_PASSWORD_CHARS = 1024
 }
