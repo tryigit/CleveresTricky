@@ -191,5 +191,13 @@ mod tests {
             OsString::from("../entry"),
         ];
         assert_eq!(sanitize_entry(&invalid_entry), "unknown");
+
+        let oversized_entry = vec![
+            OsString::from("inject"),
+            OsString::from("123"),
+            OsString::from("/module/lib.so"),
+            OsString::from("x".repeat(MAXIMUM_ENTRY_BYTES + 1)),
+        ];
+        assert_eq!(sanitize_entry(&oversized_entry), "unknown");
     }
 }
