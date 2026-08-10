@@ -22,11 +22,9 @@ class PackageTrieTest {
         val trie = PackageTrie<String>()
         trie.add("com.google.*", "config_google")
 
-        // "com.google.*" means prefix "com.google." so "com.google" (exact) is not matched by wildcard unless explicit
         assertNull(trie.get("com.google"))
         assertEquals("config_google", trie.get("com.google.android"))
         assertEquals("config_google", trie.get("com.google.android.gms"))
-
         assertNull(trie.get("com.goo"))
     }
 
@@ -38,8 +36,6 @@ class PackageTrieTest {
 
         assertEquals("generic", trie.get("com.google.android"))
         assertEquals("specific", trie.get("com.google.maps"))
-
-        // Exact match doesn't imply prefix match unless wildcard is used
         assertEquals("generic", trie.get("com.google.maps.beta"))
     }
 
@@ -63,26 +59,34 @@ class PackageTrieTest {
     }
 
     @Test
-    fun testBranchingOptimization() {
+    fun testBranchingLookup() {
         val trie = PackageTrie<String>()
-        // Small branching (<= 4)
         trie.add("a", "1")
         trie.add("b", "2")
         trie.add("c", "3")
         trie.add("d", "4")
+        trie.add("e", "5")
+        trie.add("f", "6")
 
         assertEquals("1", trie.get("a"))
         assertEquals("2", trie.get("b"))
         assertEquals("3", trie.get("c"))
         assertEquals("4", trie.get("d"))
-        assertNull(trie.get("e"))
-
-        // Large branching (> 4) to trigger binary search path
-        trie.add("e", "5")
-        trie.add("f", "6")
-
-        assertEquals("1", trie.get("a"))
         assertEquals("5", trie.get("e"))
         assertEquals("6", trie.get("f"))
+        assertNull(trie.get("g"))
+    }
+
+    @Test
+    fun duplicateRulesDoNotInflateSize() {
+        val trie = PackageTrie<String>()
+        trie.add("com.example.app", "first")
+        trie.add("com.example.app", "second")
+        trie.add("com.example.*", "wildcard-first")
+        trie.add("com.example.*", "wildcard-second")
+
+        assertEquals(2, trie.size)
+        assertEquals("second", trie.get("com.example.app"))
+        assertEquals("wildcard-second", trie.get("com.example.other"))
     }
 }
