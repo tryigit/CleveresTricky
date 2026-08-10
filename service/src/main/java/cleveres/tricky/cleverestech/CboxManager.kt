@@ -189,8 +189,8 @@ object CboxManager {
             for (path in entries) {
                 val file = path.toFile()
                 if (!validFilename.matches(file.name) || !isSafeCbox(file)) continue
-                if (files.size >= MAX_CBOX_FILES) return null
                 files.add(file)
+                if (files.size >= MAX_CBOX_FILES) break
             }
         }
         files.sortBy { it.name }
