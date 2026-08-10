@@ -15,6 +15,7 @@ val verName: String by rootProject.extra
 val commitHash: String by rootProject.extra
 val abiList: List<String> by rootProject.extra
 val androidMinSdkVersion: Int by rootProject.extra
+val androidTargetSdkVersion: Int by rootProject.extra
 val author: String by rootProject.extra
 val description: String by rootProject.extra
 val moduleDescription = description
@@ -193,6 +194,7 @@ afterEvaluate {
                             "SONAME" to moduleId,
                             "SUPPORTED_ABIS" to supportedAbis,
                             "MIN_SDK" to androidMinSdkVersion.toString(),
+                            "MAX_SDK" to androidTargetSdkVersion.toString(),
                         )
                     filter<ReplaceTokens>("tokens" to tokens)
                     filter<FixCrLfFilter>("eol" to FixCrLfFilter.CrLf.newInstance("lf"))
