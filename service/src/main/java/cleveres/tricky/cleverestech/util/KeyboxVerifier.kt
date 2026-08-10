@@ -316,11 +316,12 @@ object KeyboxVerifier {
         }
 
         var added = false
-        var isDecimal = decStr[0] != '-'
-        if (decStr.length > 1 && decStr.startsWith("0")) {
+        val digitStart = if (decStr[0] == '-') 1 else 0
+        var isDecimal = digitStart < decStr.length
+        if (isDecimal && decStr.length - digitStart > 1 && decStr[digitStart] == '0') {
             isDecimal = false
         } else if (isDecimal) {
-            for (i in decStr.indices) {
+            for (i in digitStart until decStr.length) {
                 if (!Character.isDigit(decStr[i])) {
                     isDecimal = false
                     break
@@ -330,12 +331,15 @@ object KeyboxVerifier {
 
         if (isDecimal) {
             try {
-                val hexStr = java.math.BigInteger(decStr).toString(16)
+                val number = java.math.BigInteger(decStr)
+                val hexStr = number.toString(16)
                 set.add(hexStr)
-                val hexLen = hexStr.length
-                for (targetLen in HASH_LENGTHS) {
-                    if (hexLen < targetLen) {
-                        set.add(ZEROS.substring(0, targetLen - hexLen) + hexStr)
+                if (number.signum() >= 0) {
+                    val hexLen = hexStr.length
+                    for (targetLen in HASH_LENGTHS) {
+                        if (hexLen < targetLen) {
+                            set.add(ZEROS.substring(0, targetLen - hexLen) + hexStr)
+                        }
                     }
                 }
                 added = true
