@@ -3,7 +3,11 @@ package cleveres.tricky.cleverestech
 import cleveres.tricky.cleverestech.util.SecureFile
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.IOException
+import java.nio.ByteBuffer
+import java.nio.charset.CodingErrorAction
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.util.concurrent.ExecutorService
@@ -15,7 +19,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
 data class DeviceTemplate(
-    val id: String, // unique ID, e.g. "pixel8pro"
+    val id: String,
     val manufacturer: String,
     val model: String,
     val fingerprint: String,
@@ -70,15 +74,19 @@ object DeviceTemplateManager {
                 }
             },
         ).apply { allowCoreThreadTimeOut(true) }
+
+    @Volatile
     private var initFuture: Future<*>? = null
     private val initializationGeneration = AtomicLong()
 
     @androidx.annotation.VisibleForTesting
+    @Synchronized
     fun setExecutorForTesting(newExecutor: ExecutorService) {
+        initializationGeneration.incrementAndGet()
+        cancelPendingInitialization()
         executor = newExecutor
     }
 
-    // Compatibility examples. They are not a claim about Play Integrity eligibility.
     private val builtInTemplates =
         listOf(
             DeviceTemplate(
@@ -200,18 +208,25 @@ object DeviceTemplateManager {
             ),
         )
 
+    @Synchronized
     fun initialize(configDir: File) {
         val generation = initializationGeneration.incrementAndGet()
-        synchronized(this) {
-            templates = builtInTemplates.associateByTo(LinkedHashMap()) { it.id.lowercase() }
-            cachedList = null
-        }
+        templates = builtInTemplates.associateByTo(LinkedHashMap()) { it.id.lowercase() }
+        cachedList = null
+        cancelPendingInitialization()
+        initFuture = executor.submit { loadCustomTemplates(configDir, generation) }
+    }
 
-        // Load user-provided templates without blocking service startup.
-        initFuture =
-            executor.submit {
-                loadCustomTemplates(configDir, generation)
-            }
+    @Synchronized
+    private fun cancelPendingInitialization() {
+        val previous = initFuture ?: return
+        previous.cancel(false)
+        val threadPool = executor as? ThreadPoolExecutor
+        if (previous is Runnable && threadPool != null) {
+            threadPool.remove(previous)
+            threadPool.purge()
+        }
+        initFuture = null
     }
 
     private fun loadCustomTemplates(
@@ -221,8 +236,13 @@ object DeviceTemplateManager {
         val file = File(configDir, TEMPLATES_FILE)
         if (Files.isRegularFile(file.toPath(), LinkOption.NOFOLLOW_LINKS)) {
             try {
-                require(file.length() in 1..MAX_TEMPLATES_BYTES) { "templates.json has an invalid size" }
-                val json = file.readText()
+                val beforeLength = file.length()
+                val beforeModified = file.lastModified()
+                require(beforeLength in 1..MAX_TEMPLATES_BYTES) { "templates.json has an invalid size" }
+                val json = readTextBounded(file)
+                require(
+                    file.length() == beforeLength && file.lastModified() == beforeModified,
+                ) { "templates.json changed while it was being read" }
                 val array = JSONArray(json)
                 require(array.length() <= MAX_TEMPLATES) { "templates.json contains too many templates" }
                 val list = ArrayList<DeviceTemplate>()
@@ -246,7 +266,6 @@ object DeviceTemplateManager {
                 Logger.e("Failed to load templates.json", e)
             }
         } else if (!file.exists()) {
-            // Save built-ins to file for user editing
             synchronized(this) {
                 if (initializationGeneration.get() != generation) return
                 saveTemplatesInternal(configDir)
@@ -256,11 +275,44 @@ object DeviceTemplateManager {
         }
     }
 
+    private fun readTextBounded(file: File): String {
+        val output = ByteArrayOutputStream(minOf(file.length(), 64 * 1024L).toInt())
+        Files.newInputStream(file.toPath()).use { input ->
+            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+            var total = 0L
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                if (count == 0) continue
+                total += count
+                if (total > MAX_TEMPLATES_BYTES) throw IOException("templates.json exceeds its size limit")
+                output.write(buffer, 0, count)
+            }
+        }
+        val bytes = output.toByteArray()
+        return try {
+            Charsets.UTF_8.newDecoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT)
+                .decode(ByteBuffer.wrap(bytes))
+                .toString()
+        } finally {
+            bytes.fill(0)
+        }
+    }
+
     private fun waitForInit() {
-        try {
-            initFuture?.get()
-        } catch (e: Exception) {
-            Logger.e("Error waiting for template initialization", e)
+        while (true) {
+            val future = synchronized(this) { initFuture } ?: return
+            try {
+                future.get()
+            } catch (_: java.util.concurrent.CancellationException) {
+                continue
+            } catch (e: Exception) {
+                Logger.e("Error waiting for template initialization", e)
+                return
+            }
+            if (synchronized(this) { future === initFuture }) return
         }
     }
 
@@ -325,21 +377,21 @@ object DeviceTemplateManager {
     private fun saveTemplatesInternal(configDir: File) {
         try {
             val array = JSONArray()
-            templates.values.forEach { t ->
+            templates.values.forEach { template ->
                 val obj = JSONObject()
-                obj.put("id", t.id)
-                obj.put("manufacturer", t.manufacturer)
-                obj.put("model", t.model)
-                obj.put("fingerprint", t.fingerprint)
-                obj.put("brand", t.brand)
-                obj.put("product", t.product)
-                obj.put("device", t.device)
-                obj.put("release", t.release)
-                obj.put("buildId", t.buildId)
-                obj.put("incremental", t.incremental)
-                obj.put("type", t.type)
-                obj.put("tags", t.tags)
-                obj.put("securityPatch", t.securityPatch)
+                obj.put("id", template.id)
+                obj.put("manufacturer", template.manufacturer)
+                obj.put("model", template.model)
+                obj.put("fingerprint", template.fingerprint)
+                obj.put("brand", template.brand)
+                obj.put("product", template.product)
+                obj.put("device", template.device)
+                obj.put("release", template.release)
+                obj.put("buildId", template.buildId)
+                obj.put("incremental", template.incremental)
+                obj.put("type", template.type)
+                obj.put("tags", template.tags)
+                obj.put("securityPatch", template.securityPatch)
                 array.put(obj)
             }
             SecureFile.writeText(File(configDir, TEMPLATES_FILE), array.toString(4))
