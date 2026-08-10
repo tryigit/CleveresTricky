@@ -186,7 +186,7 @@ object CboxManager {
                 if (!validFilename.matches(file.name) || !isSafeCbox(file)) continue
                 if (files.size < MAX_CBOX_FILES) {
                     files.add(file)
-                } else if (file.name < files.peek().name) {
+                } else if (file.name < requireNotNull(files.peek()).name) {
                     files.poll()
                     files.add(file)
                 }
