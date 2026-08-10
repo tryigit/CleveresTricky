@@ -32,6 +32,7 @@ object KeyboxVerifier {
     private const val DEFAULT_CRL_URL = "https://android.googleapis.com/attestation/status"
     private const val MAX_CRL_BYTES = 8L * 1024 * 1024
     private const val MAX_CRL_ENTRIES = 1_000_000
+    private const val MAX_CRL_KEY_CHARS = 128
     private const val MAX_KEYBOX_XML_BYTES = 10L * 1024 * 1024
     private const val MAX_KEYBOX_FILES = 64
 
@@ -66,7 +67,7 @@ object KeyboxVerifier {
     private var cachedCrl: Set<String>? = null
     private var cachedEtag: String? = null
     private var lastFetchTime: Long = 0
-    private const val CACHE_TTL = 24 * 60 * 60 * 1000L // 24 hours
+    private const val CACHE_TTL = 24 * 60 * 60 * 1000L
     private val cacheLock = java.util.concurrent.locks.ReentrantLock()
 
     private fun isHex(str: String): Boolean {
@@ -97,23 +98,30 @@ object KeyboxVerifier {
             return listOf(Result(File(""), "Global", Status.ERROR, "Config directory not found"))
         }
 
-        // Check legacy keybox.xml
         val legacyFile = File(configDir, "keybox.xml")
         if (isSafeKeyboxFile(legacyFile)) {
             results.add(checkFile(legacyFile, revokedSerials))
         }
 
-        // Check jukebox files
         val keyboxDir = File(configDir, "keyboxes")
         if (Files.isDirectory(keyboxDir.toPath(), LinkOption.NOFOLLOW_LINKS)) {
-            val files =
-                keyboxDir
-                    .listFiles { file ->
-                        file.name.endsWith(".xml", ignoreCase = true) && isSafeKeyboxFile(file)
-                    }.orEmpty()
-            if (files.size > MAX_KEYBOX_FILES) {
-                return listOf(Result(File(""), "Global", Status.ERROR, "Too many keybox files"))
+            val files = ArrayList<File>(MAX_KEYBOX_FILES)
+            try {
+                Files.newDirectoryStream(keyboxDir.toPath()).use { entries ->
+                    for (path in entries) {
+                        val file = path.toFile()
+                        if (!file.name.endsWith(".xml", ignoreCase = true) || !isSafeKeyboxFile(file)) continue
+                        if (files.size >= MAX_KEYBOX_FILES) {
+                            return listOf(Result(File(""), "Global", Status.ERROR, "Too many keybox files"))
+                        }
+                        files.add(file)
+                    }
+                }
+            } catch (error: IOException) {
+                Logger.e("Failed to scan keybox directory", error)
+                return listOf(Result(File(""), "Global", Status.ERROR, "Failed to scan keybox directory"))
             }
+            files.sortBy { it.name }
             for (file in files) {
                 results.add(checkFile(file, revokedSerials))
             }
@@ -127,7 +135,11 @@ object KeyboxVerifier {
         val now = System.currentTimeMillis()
         cacheLock.lock()
         try {
-            if (cachedCrl != null && (now - lastFetchTime) < CACHE_TTL) {
+            if (
+                cachedCrl != null &&
+                now >= lastFetchTime &&
+                now - lastFetchTime < CACHE_TTL
+            ) {
                 return cachedCrl
             }
 
@@ -224,8 +236,9 @@ object KeyboxVerifier {
                     entriesFound = true
                     jsonReader.beginObject()
                     while (jsonReader.hasNext()) {
-                        jsonReader.nextName() // Skip key
-                        jsonReader.skipValue() // Skip value
+                        val key = jsonReader.nextName()
+                        if (key.length > MAX_CRL_KEY_CHARS) throw IOException("CRL entry key is too long")
+                        jsonReader.skipValue()
                         count++
                         if (count > MAX_CRL_ENTRIES) throw IOException("CRL has too many entries")
                     }
@@ -241,7 +254,7 @@ object KeyboxVerifier {
         } finally {
             try {
                 jsonReader.close()
-            } catch (e: Exception) {
+            } catch (_: Exception) {
             }
         }
         return if (entriesFound) count else -1
@@ -263,7 +276,8 @@ object KeyboxVerifier {
                     while (jsonReader.hasNext()) {
                         if (++entriesProcessed > MAX_CRL_ENTRIES) throw IOException("CRL has too many entries")
                         val decStr = jsonReader.nextName()
-                        jsonReader.skipValue() // Value is "REVOKED"
+                        if (decStr.length > MAX_CRL_KEY_CHARS) throw IOException("CRL entry key is too long")
+                        jsonReader.skipValue()
                         processEntry(decStr, set)
                     }
                     jsonReader.endObject()
@@ -282,7 +296,7 @@ object KeyboxVerifier {
         } finally {
             try {
                 jsonReader.close()
-            } catch (e: Exception) {
+            } catch (_: Exception) {
             }
         }
 
@@ -296,17 +310,17 @@ object KeyboxVerifier {
         decStr: String,
         set: HashSet<String>,
     ) {
-        var added = false
+        if (decStr.isEmpty() || decStr.length > MAX_CRL_KEY_CHARS) {
+            Logger.e("Rejected invalid CRL entry key length")
+            return
+        }
 
-        // Try treating as Decimal first (Spec compliant)
-        var isDecimal = true
+        var added = false
+        var isDecimal = decStr[0] != '-'
         if (decStr.length > 1 && decStr.startsWith("0")) {
             isDecimal = false
-        } else {
-            for (i in 0 until decStr.length) {
-                if (i == 0 && decStr[i] == '-' && decStr.length > 1) {
-                    continue
-                }
+        } else if (isDecimal) {
+            for (i in decStr.indices) {
                 if (!Character.isDigit(decStr[i])) {
                     isDecimal = false
                     break
@@ -314,51 +328,38 @@ object KeyboxVerifier {
             }
         }
 
-        if (isDecimal && decStr.isNotEmpty()) {
+        if (isDecimal) {
             try {
                 val hexStr = java.math.BigInteger(decStr).toString(16)
                 set.add(hexStr)
-
-                // BigInteger removes leading zeros. Hashes are fixed length (MD5=32, SHA1=40, SHA256=64).
-                // If this decimal is actually a hash, we might need the padded version.
                 val hexLen = hexStr.length
                 for (targetLen in HASH_LENGTHS) {
                     if (hexLen < targetLen) {
                         set.add(ZEROS.substring(0, targetLen - hexLen) + hexStr)
                     }
                 }
-
                 added = true
-            } catch (e: Exception) {
-                // Should not happen, but safe fallback
+            } catch (_: Exception) {
             }
         }
 
-        // Ambiguity handling
-        // If the string matches a hash length and format, we include it as a raw hex string
-        // regardless of whether it was also parsed as a decimal serial number.
-        // This prevents "Fail Open" scenarios where a hash composed entirely of digits
-        // would otherwise be ignored as a hash.
         if (decStr.length == 32 || decStr.length == 40 || decStr.length == 64) {
             if (isHex(decStr)) {
                 set.add(decStr.lowercase())
             }
         }
 
-        if (!added) {
-            // Try treating as Hex (literal) as fallback
-            if (isHex(decStr)) {
-                try {
-                    val hexStr = java.math.BigInteger(decStr, 16).toString(16)
-                    set.add(hexStr)
-                    added = true
-                } catch (e: Exception) {
-                }
+        if (!added && isHex(decStr)) {
+            try {
+                val hexStr = java.math.BigInteger(decStr, 16).toString(16)
+                set.add(hexStr)
+                added = true
+            } catch (_: Exception) {
             }
         }
 
         if (!added) {
-            Logger.e("Failed to parse CRL entry key: $decStr")
+            Logger.e("Failed to parse CRL entry key")
         }
     }
 
@@ -414,10 +415,8 @@ object KeyboxVerifier {
         if (chain.isEmpty()) return Status.INVALID
 
         for (cert in chain) {
-            if (cert is X509Certificate) {
-                if (isRevoked(cert, revokedSerials)) {
-                    return Status.REVOKED
-                }
+            if (cert is X509Certificate && isRevoked(cert, revokedSerials)) {
+                return Status.REVOKED
             }
         }
         return Status.VALID
@@ -428,22 +427,13 @@ object KeyboxVerifier {
         cert: X509Certificate,
         revokedSerials: Set<String>,
     ): Boolean {
-        // 1. Serial Number (Hex)
         val sn = cert.serialNumber.toString(16)
         if (revokedSerials.contains(sn)) return true
 
-        // 2. Key ID Checks (Hash of Public Key)
         val publicKeyEncoded = cert.publicKey.encoded
-
-        // SHA-1 (40 chars)
         if (checkHash(publicKeyEncoded, "SHA-1", revokedSerials)) return true
-
-        // SHA-256 (64 chars)
         if (checkHash(publicKeyEncoded, "SHA-256", revokedSerials)) return true
-
-        // MD5 (32 chars)
         if (checkHash(publicKeyEncoded, "MD5", revokedSerials)) return true
-
         return false
     }
 
@@ -473,10 +463,9 @@ object KeyboxVerifier {
                 md.reset()
             }
             val digest = md.digest(data)
-            // Convert to Hex String (Zero Padded)
             val hex = digest.toHexString(hexFormat)
             return set.contains(hex)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             return false
         }
     }
