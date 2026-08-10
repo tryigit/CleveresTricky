@@ -13,6 +13,7 @@ import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.security.DigestInputStream
 import java.security.MessageDigest
+import java.util.PriorityQueue
 import java.util.concurrent.ConcurrentHashMap
 
 private fun ByteArray.indexOfFrom(
@@ -59,12 +60,6 @@ object CboxManager {
                 Logger.e("Failed to scan CBOX directory", error)
                 return
             }
-        if (files == null) {
-            unlockedCache.clear()
-            lockedFiles.clear()
-            Logger.e("CBOX pool rejected because it exceeds the file limit")
-            return
-        }
         val currentFiles = files.mapTo(HashSet()) { it.name }
         val revoked = if (files.isEmpty()) emptySet() else KeyboxVerifier.fetchCrl()
 
@@ -183,18 +178,21 @@ object CboxManager {
     fun isLocked(filename: String): Boolean = lockedFiles.contains(filename)
 
     @Throws(IOException::class)
-    private fun listCboxFiles(directory: File): List<File>? {
-        val files = ArrayList<File>(MAX_CBOX_FILES)
+    private fun listCboxFiles(directory: File): List<File> {
+        val files = PriorityQueue<File>(MAX_CBOX_FILES, compareByDescending { it.name })
         Files.newDirectoryStream(directory.toPath()).use { entries ->
             for (path in entries) {
                 val file = path.toFile()
                 if (!validFilename.matches(file.name) || !isSafeCbox(file)) continue
-                files.add(file)
-                if (files.size >= MAX_CBOX_FILES) break
+                if (files.size < MAX_CBOX_FILES) {
+                    files.add(file)
+                } else if (file.name < files.peek().name) {
+                    files.poll()
+                    files.add(file)
+                }
             }
         }
-        files.sortBy { it.name }
-        return files
+        return files.sortedBy { it.name }
     }
 
     private fun loadCached(
