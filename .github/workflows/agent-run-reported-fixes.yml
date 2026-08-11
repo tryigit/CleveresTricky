@@ -19,6 +19,12 @@ jobs:
           ref: agent/fix-kernelsu-artifact-and-hardening
           fetch-depth: 0
 
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+
       - name: Execute patch payload
         shell: bash
         run: |
