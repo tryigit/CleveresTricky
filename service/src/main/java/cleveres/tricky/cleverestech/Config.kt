@@ -199,6 +199,7 @@ object Config {
     fun getModuleHash(): ByteArray? = moduleHash ?: moduleHashFromVars
 
     fun getAppConfig(uid: Int): AppSpoofConfig? {
+        PolicyState.profileAppConfig(uid)?.let { return it }
         val state = appConfigState
         if (state.configs.isEmpty()) {
             cacheValue(state.cache, uid, null)
@@ -220,6 +221,7 @@ object Config {
     }
 
     fun getAppPrivacyMode(uid: Int): AppPrivacyMode {
+        PolicyState.profilePrivacyMode(uid)?.let { return it }
         val state = appConfigState
         if (!state.hasPrivacyRules) {
             cacheValue(state.privacyCache, uid, AppPrivacyMode.INHERIT)
@@ -243,12 +245,20 @@ object Config {
     }
 
     val shouldInterceptTelephony: Boolean
-        get() = isSpoofEnabled && (isTelephonyEnabled || appConfigState.hasPrivacyRules)
+        get() =
+            PolicyState.isFeatureEnabled(PolicyState.Feature.TELEPHONY_IDENTITY) ||
+                (isSpoofEnabled && appConfigState.hasPrivacyRules) ||
+                PolicyState.hasTelephonyProfileWork()
 
-    fun shouldApplyTelephonyPrivacy(uid: Int): Boolean =
-        isSpoofEnabled &&
-            (isTelephonyEnabled || getAppPrivacyMode(uid) != AppPrivacyMode.INHERIT) &&
+    val shouldInterceptDrm: Boolean
+        get() = (isSpoofEnabled && appConfigState.hasPrivacyRules) || PolicyState.hasDrmProfileWork()
+
+    fun shouldApplyTelephonyPrivacy(uid: Int): Boolean {
+        val legacyPrivacy = !PolicyState.usesV2() && isSpoofEnabled && getAppPrivacyMode(uid) != AppPrivacyMode.INHERIT
+        val configuredPrivacy = PolicyState.usesV2() && getAppPrivacyMode(uid) != AppPrivacyMode.INHERIT
+        return (PolicyState.isFeatureEnabled(PolicyState.Feature.TELEPHONY_IDENTITY, uid) || legacyPrivacy || configuredPrivacy) &&
             isTargetedUid(uid)
+    }
 
     internal fun updateAppConfigs(f: File?) =
         runCatching {
@@ -389,8 +399,6 @@ object Config {
         }.onFailure {
             Logger.e("failed to update target files", it)
         }
-
-    private var keyboxPoller: FilePoller? = null
 
     @Volatile
     private var cachedLegacyKeyboxes: List<CertHack.KeyBox> = emptyList()
@@ -552,8 +560,6 @@ object Config {
                 "updateKeyBoxes: ${verifiedKeyboxes.size}/${allKeyboxes.size} verified keyboxes active",
             )
 
-            // Update poller for legacy file consistency
-            keyboxPoller?.updateLastModified()
         }.onFailure {
             Logger.e("failed to update keyboxes", it)
         }
@@ -575,6 +581,7 @@ object Config {
             rkpInfrastructureCache.clear()
         }
         isSpoofEnabled = enabled
+        PolicyState.onLegacySettingsChanged()
         KeyboxAutoCleaner.setEnabled(isRegularFlagFile(File(root, AUTO_KEYBOX_CHECK_FILE)))
         Logger.i("Identity Spoof Engine is ${if (enabled) "enabled" else "disabled"}; core protection is unchanged")
         if (changed) signalRuntimeController()
@@ -582,6 +589,7 @@ object Config {
 
     private fun updateBuildIdentity(f: File?) {
         isBuildIdentityEnabled = isRegularFlagFile(f)
+        PolicyState.onLegacySettingsChanged()
         Logger.i("Build identity spoofing is ${if (isBuildIdentityEnabled) "enabled" else "disabled"}")
     }
 
@@ -594,6 +602,7 @@ object Config {
         val enabled = isRegularFlagFile(f)
         val changed = isTelephonyEnabled != enabled
         isTelephonyEnabled = enabled
+        PolicyState.onLegacySettingsChanged()
         Logger.i("Telephony is ${if (isTelephonyEnabled) "enabled" else "disabled"}")
         if (changed) signalRuntimeController()
     }
@@ -631,7 +640,15 @@ object Config {
             TELEPHONY_FILE -> updateTelephony(file)
             RKP_PASSTHROUGH_FILE -> updateRkpPassthrough(file)
             DRM_PASSTHROUGH_FILE -> updateDrmPassthrough(file)
-            RANDOM_ON_BOOT_FILE -> updateRandomOnBoot(file)
+            RANDOM_ON_BOOT_FILE -> {
+                PolicyState.onLegacySettingsChanged()
+                updateRandomOnBoot(file)
+            }
+            BootLogic.FILE_SPOOF_CN -> PolicyState.onLegacySettingsChanged()
+            PolicyState.STATE_FILE -> {
+                PolicyState.reload().getOrThrow()
+                updateRandomOnBoot(File(root, RANDOM_ON_BOOT_FILE))
+            }
             AUTO_KEYBOX_CHECK_FILE -> KeyboxAutoCleaner.setEnabled(file != null)
         }
     }
@@ -649,6 +666,7 @@ object Config {
             updateModuleHash(restoredFile(MODULE_HASH_FILE)).getOrThrow()
             updateSecurityPatch(restoredFile(SECURITY_PATCH_FILE)).getOrThrow()
             updateAppConfigs(restoredFile(APP_CONFIG_FILE)).getOrThrow()
+            PolicyState.reload().getOrThrow()
             refreshPrivacySeed().getOrThrow()
             updateTargetPackages(restoredFile(TARGET_FILE)).getOrThrow()
         }
@@ -744,7 +762,7 @@ object Config {
         tag: String,
         uid: Int,
     ): ByteArray? {
-        if (!isSpoofEnabled) return null
+        if (!PolicyState.isFeatureEnabled(PolicyState.Feature.ATTESTATION_IDENTITY, uid)) return null
         when (getAppPrivacyMode(uid)) {
             AppPrivacyMode.REDACT -> return ByteArray(0)
             AppPrivacyMode.ISOLATE -> {
@@ -1641,6 +1659,7 @@ object Config {
             newState.globalRules = globalRules.freeze()
             newState.packageRules = packageRules
             securityPatchState = newState
+            PolicyState.onLegacySettingsChanged()
             dynamicPatchCache.clear()
             CertHack.clearCertificateCache()
             Logger.i {
@@ -1742,6 +1761,7 @@ object Config {
         privacySeed?.fill(0)
         privacySeed = null
         root = newRoot
+        PolicyState.setRootForTesting(newRoot)
     }
 
     internal fun getConfigRoot(): File = root
@@ -1929,6 +1949,7 @@ object Config {
         updateDrmPassthrough(File(root, DRM_PASSTHROUGH_FILE))
         updateBuildVars(File(root, SPOOF_BUILD_VARS_FILE))
         updateTargetPackages(File(root, TARGET_FILE))
+        PolicyState.synchronizeBuiltInProfile()
         updateRandomOnBoot(File(root, RANDOM_ON_BOOT_FILE))
         KeyboxAutoCleaner.setEnabled(isRegularFlagFile(File(root, AUTO_KEYBOX_CHECK_FILE)))
     }
@@ -1994,7 +2015,13 @@ object Config {
 
     @Synchronized
     private fun updateRandomOnBoot(f: File?) {
-        if (!isSpoofEnabled || !isRegularFlagFile(f)) {
+        val enabled =
+            if (PolicyState.usesV2()) {
+                PolicyState.isFeatureEnabled(PolicyState.Feature.IDENTITY_REFRESH)
+            } else {
+                isSpoofEnabled && isRegularFlagFile(f)
+            }
+        if (!enabled) {
             discardStagedRandomization()
             return
         }
@@ -2023,6 +2050,10 @@ object Config {
                 KEYBOX_FILE -> updateKeyBoxes()
                 SPOOF_BUILD_VARS_FILE -> updateBuildVars(f)
                 SECURITY_PATCH_FILE -> updateSecurityPatch(f)
+                PolicyState.STATE_FILE -> {
+                    PolicyState.reload()
+                    updateRandomOnBoot(File(root, RANDOM_ON_BOOT_FILE))
+                }
                 APP_CONFIG_FILE -> updateAppConfigs(f)
                 PRIVACY_SEED_FILE -> refreshPrivacySeed()
                 CUSTOM_TEMPLATES_FILE -> updateCustomTemplates(f)
@@ -2048,7 +2079,11 @@ object Config {
                 TELEPHONY_FILE -> updateTelephony(f)
                 RKP_PASSTHROUGH_FILE -> updateRkpPassthrough(f)
                 DRM_PASSTHROUGH_FILE -> updateDrmPassthrough(f)
-                RANDOM_ON_BOOT_FILE -> updateRandomOnBoot(f)
+                RANDOM_ON_BOOT_FILE -> {
+                    PolicyState.onLegacySettingsChanged()
+                    updateRandomOnBoot(f)
+                }
+                BootLogic.FILE_SPOOF_CN -> PolicyState.onLegacySettingsChanged()
                 DRM_PACKAGES_FILE -> updateDrmPackages(f)
                 MODULE_HASH_FILE -> updateModuleHash(f)
                 AUTO_KEYBOX_CHECK_FILE -> KeyboxAutoCleaner.setEnabled(isRegularFlagFile(f))
@@ -2090,6 +2125,7 @@ object Config {
         updateModuleHash(File(root, MODULE_HASH_FILE))
         updateSecurityPatch(File(root, SECURITY_PATCH_FILE))
         updateAppConfigs(File(root, APP_CONFIG_FILE))
+        PolicyState.initialize(root).getOrThrow()
         refreshPrivacySeed().getOrThrow()
 
         updateRandomOnBoot(File(root, RANDOM_ON_BOOT_FILE))
@@ -2111,13 +2147,6 @@ object Config {
 
         ConfigObserver.startWatching()
         KeyboxDirObserver.startWatching()
-        keyboxPoller?.stop()
-        keyboxPoller =
-            FilePoller(File(root, KEYBOX_FILE), 30_000) {
-                Logger.i("Detected keybox change via polling")
-                updateKeyBoxes()
-            }
-        keyboxPoller?.start()
     }
 
     @Volatile
@@ -2219,6 +2248,7 @@ object Config {
         appState.cache.remove(uid)
         appState.privacyCache.remove(uid)
         appState.identityCache.remove(uid)
+        PolicyState.invalidateUid(uid)
         targetState.hackCache.remove(uid)
         drmState.cache.remove(uid)
         rkpInfrastructureCache.remove(uid)
