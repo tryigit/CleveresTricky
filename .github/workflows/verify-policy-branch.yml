@@ -18,4 +18,4 @@ jobs:
           java-version: '21'
           cache: gradle
       - uses: gradle/actions/setup-gradle@v5
-      - run: ./gradlew :service:compileDebugKotlin :service:compileDebugJavaWithJavac --warning-mode=fail --stacktrace
+      - run: ./gradlew :service:compileDebugKotlin :service:compileDebugJavaWithJavac --warning-mode=fail --console=plain --stacktrace
