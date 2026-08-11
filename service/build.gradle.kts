@@ -80,6 +80,7 @@ android {
     lint {
         checkReleaseBuilds = false
         abortOnError = true
+        warningsAsErrors = true
     }
 
     buildFeatures {
@@ -108,17 +109,11 @@ kotlin {
     }
 }
 
-tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
-    if (name.contains("UnitTest", ignoreCase = true)) {
-        compilerOptions.allWarningsAsErrors.set(false)
-        compilerOptions.suppressWarnings.set(true)
-    }
-}
-
 dependencies {
     compileOnly(project(":stub"))
     implementation(libs.annotation)
     implementation(libs.bcpkix.jdk18on)
+    implementation(libs.bcprov.jdk18on)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     testImplementation(libs.junit)
     testImplementation(project(":stub"))
