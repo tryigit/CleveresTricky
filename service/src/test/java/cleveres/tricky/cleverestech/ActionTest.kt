@@ -289,6 +289,7 @@ class ActionTest {
                 "global_mode",
                 "auto_keybox_check",
                 "random_on_boot",
+                "spoof_region_cn",
                 "telephony",
                 "rkp_passthrough",
                 "drm_passthrough",
@@ -297,7 +298,6 @@ class ActionTest {
             listOf(
                 "tee_broken_mode",
                 "hide_sensitive_props",
-                "spoof_region_cn",
                 "rkp_bypass",
                 "spoof_props",
             )
