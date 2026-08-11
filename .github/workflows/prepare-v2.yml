@@ -19,20 +19,8 @@ jobs:
           from pathlib import Path
           path = Path('service/src/main/java/cleveres/tricky/cleverestech/PolicyState.kt')
           text = path.read_text()
-          old = '''    private fun resolvedFeatures(packages: Array<String>): FeatureSet {
-              val current = snapshot
-              val base = activeProfile(current)?.let { current.features.withOverrides(it.featureOverrides) } ?: current.features
-              val selected = selectProfile(packages, current).profile
-              return selected?.let { base.withOverrides(it.featureOverrides) } ?: base
-          }
-'''
-          new = '''    private fun resolvedFeatures(packages: Array<String>): FeatureSet {
-              val current = snapshot
-              val base = activeProfile(current)?.let { current.features.withOverrides(it.featureOverrides) } ?: current.features
-              val selected = selectProfile(packages, current).let { it.profile }
-              return selected?.let { base.withOverrides(it.featureOverrides) } ?: base
-          }
-'''
+          old = """    private fun resolvedFeatures(packages: Array<String>): FeatureSet {\n        val current = snapshot\n        val base = activeProfile(current)?.let { current.features.withOverrides(it.featureOverrides) } ?: current.features\n        val selected = selectProfile(packages, current).profile\n        return selected?.let { base.withOverrides(it.featureOverrides) } ?: base\n    }\n"""
+          new = """    private fun resolvedFeatures(packages: Array<String>): FeatureSet {\n        val current = snapshot\n        val base = activeProfile(current)?.let { current.features.withOverrides(it.featureOverrides) } ?: current.features\n        val selected = selectProfile(packages, current).let { it.profile }\n        return selected?.let { base.withOverrides(it.featureOverrides) } ?: base\n    }\n"""
           if text.count(old) != 1:
               raise SystemExit('resolvedFeatures block mismatch')
           path.write_text(text.replace(old, new, 1))
