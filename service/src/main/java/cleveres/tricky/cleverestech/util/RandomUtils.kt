@@ -6,6 +6,7 @@ object RandomUtils {
     private const val CHAR_POOL = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
     private const val HEX_POOL = "0123456789ABCDEF"
     private const val MAX_IDENTIFIER_LENGTH = 64
+    private const val MAX_DISTINCT_ATTEMPTS = 16
 
     private val secureRandom: SecureRandom
         get() = requireNotNull(threadLocalRandom.get()) { "ThreadLocal SecureRandom must not be null" }
@@ -76,5 +77,19 @@ object RandomUtils {
     fun <T> choose(values: List<T>): T? {
         if (values.isEmpty()) return null
         return values[secureRandom.nextInt(values.size)]
+    }
+
+    fun <T> generateDistinctPair(
+        generator: () -> T,
+        areEquivalent: (T, T) -> Boolean = { first, second -> first == second },
+    ): Pair<T, T> {
+        val first = generator()
+        repeat(MAX_DISTINCT_ATTEMPTS) {
+            val second = generator()
+            if (!areEquivalent(first, second)) {
+                return first to second
+            }
+        }
+        throw IllegalStateException("Failed to generate distinct random values")
     }
 }

@@ -1947,19 +1947,24 @@ object Config {
         try {
             val spoofFile = File(root, SPOOF_BUILD_VARS_FILE)
             val stagedFile = File(root, STAGED_BUILD_VARS_FILE)
+            val (imei, imei2) = RandomUtils.generateDistinctPair { RandomUtils.generateLuhn(15, "35") }
+            val (imsi, imsi2) = RandomUtils.generateDistinctPair { RandomUtils.generateDigits(15, "310260") }
+            val (iccid, iccid2) = RandomUtils.generateDistinctPair { RandomUtils.generateLuhn(20, "8901") }
+            val (meid, meid2) = RandomUtils.generateDistinctPair { RandomUtils.generateHex(14) }
+            val (phoneNumber, phoneNumber2) = RandomUtils.generateDistinctPair { "+1${RandomUtils.generateDigits(10)}" }
             val replacements =
                 linkedMapOf(
-                    "ATTESTATION_ID_IMEI" to RandomUtils.generateLuhn(15, "35"),
-                    "ATTESTATION_ID_IMEI2" to RandomUtils.generateLuhn(15, "35"),
+                    "ATTESTATION_ID_IMEI" to imei,
+                    "ATTESTATION_ID_IMEI2" to imei2,
                     "ATTESTATION_ID_SERIAL" to RandomUtils.generateRandomSerial(12),
-                    "ATTESTATION_ID_IMSI" to RandomUtils.generateDigits(15, "310260"),
-                    "ATTESTATION_ID_IMSI2" to RandomUtils.generateDigits(15, "310260"),
-                    "ATTESTATION_ID_ICCID" to RandomUtils.generateLuhn(20, "8901"),
-                    "ATTESTATION_ID_ICCID2" to RandomUtils.generateLuhn(20, "8901"),
-                    "ATTESTATION_ID_MEID" to RandomUtils.generateHex(14),
-                    "ATTESTATION_ID_MEID2" to RandomUtils.generateHex(14),
-                    "ATTESTATION_ID_PHONE_NUMBER" to "+1${RandomUtils.generateDigits(10)}",
-                    "ATTESTATION_ID_PHONE_NUMBER2" to "+1${RandomUtils.generateDigits(10)}",
+                    "ATTESTATION_ID_IMSI" to imsi,
+                    "ATTESTATION_ID_IMSI2" to imsi2,
+                    "ATTESTATION_ID_ICCID" to iccid,
+                    "ATTESTATION_ID_ICCID2" to iccid2,
+                    "ATTESTATION_ID_MEID" to meid,
+                    "ATTESTATION_ID_MEID2" to meid2,
+                    "ATTESTATION_ID_PHONE_NUMBER" to phoneNumber,
+                    "ATTESTATION_ID_PHONE_NUMBER2" to phoneNumber2,
                 )
             val currentTemplate = buildVars["TEMPLATE"]
             val templateCandidates = templates.keys.filterNot { it.equals(currentTemplate, ignoreCase = true) }

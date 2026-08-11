@@ -80,4 +80,10 @@ class RandomUtilsTest {
         assertThrows(IllegalArgumentException::class.java) { RandomUtils.generateDigits(3, "1234") }
         assertThrows(IllegalArgumentException::class.java) { RandomUtils.generateRandomSerial(0) }
     }
+
+    @Test
+    fun testGenerateDistinctPairReturnsDifferentValues() {
+        val (first, second) = RandomUtils.generateDistinctPair { RandomUtils.generateDigits(15, "310260") }
+        assertTrue(first != second)
+    }
 }

@@ -7,6 +7,7 @@ import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -185,6 +186,11 @@ class WebServerIdentityTest {
         assertEquals(14, json.getString("meid2").length)
         assertTrue(json.getString("phone_number").startsWith("+1"))
         assertTrue(json.getString("phone_number2").startsWith("+1"))
+        assertNotEquals(json.getString("imei"), json.getString("imei2"))
+        assertNotEquals(json.getString("imsi"), json.getString("imsi2"))
+        assertNotEquals(json.getString("iccid"), json.getString("iccid2"))
+        assertNotEquals(json.getString("meid"), json.getString("meid2"))
+        assertNotEquals(json.getString("phone_number"), json.getString("phone_number2"))
         assertTrue(json.getString("imei").isNotBlank())
         assertTrue(json.getString("iccid2").isNotBlank())
     }
