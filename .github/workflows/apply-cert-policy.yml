@@ -1,0 +1,44 @@
+name: Apply certificate patch preservation
+
+on:
+  push:
+    branches: [ "granular-policy-state-v2" ]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+          path = Path('service/src/main/java/cleveres/tricky/cleverestech/keystore/CertHack.java')
+          text = path.read_text()
+
+          def swap(old, new, count=1):
+              global text
+              actual = text.count(old)
+              if actual != count:
+                  raise SystemExit(f'expected {count}, found {actual}: {old[:100]!r}')
+              text = text.replace(old, new, count)
+
+          swap('import cleveres.tricky.cleverestech.Logger;\n', 'import cleveres.tricky.cleverestech.Logger;\nimport cleveres.tricky.cleverestech.PolicyState;\n')
+          swap('    private static void addPatchTag(\n            List<ASN1TaggedObject> tags,\n            int tag,\n            Config.AttestationPatchComponent component\n    ) {\n        if (component.getDisposition() == Config.PatchDisposition.REPLACE && component.getValue() > 0) {\n            tags.add(new DERTaggedObject(true, tag, new ASN1Integer(component.getValue())));\n        }\n    }\n', '    private static Integer readPatchTag(ASN1Sequence sequence, int targetTag)\n            throws CertificateParsingException {\n        Integer result = null;\n        for (ASN1Encodable value : sequence) {\n            if (!(value instanceof ASN1TaggedObject taggedObject) || taggedObject.getTagNo() != targetTag) continue;\n            int parsed;\n            try {\n                parsed = ASN1Integer.getInstance(taggedObject.getBaseObject()).getValue().intValueExact();\n            } catch (Throwable error) {\n                throw new CertificateParsingException("Invalid security patch authorization", error);\n            }\n            if (result != null && result != parsed) {\n                throw new CertificateParsingException("Conflicting security patch authorizations");\n            }\n            result = parsed;\n        }\n        return result;\n    }\n\n    private static Integer readCapturedPatch(\n            ASN1Sequence teeEnforced,\n            ASN1Sequence softwareEnforced,\n            int tag\n    ) throws CertificateParsingException {\n        Integer teeValue = readPatchTag(teeEnforced, tag);\n        Integer softwareValue = readPatchTag(softwareEnforced, tag);\n        if (teeValue != null && softwareValue != null && !teeValue.equals(softwareValue)) {\n            throw new CertificateParsingException("Conflicting security patch authorization lists");\n        }\n        return teeValue != null ? teeValue : softwareValue;\n    }\n\n    private static void addPatchTag(\n            List<ASN1TaggedObject> teeTags,\n            List<ASN1TaggedObject> softwareTags,\n            int tag,\n            Config.AttestationPatchComponent component,\n            boolean wasTee,\n            boolean wasSoftware\n    ) {\n        if (component.getDisposition() != Config.PatchDisposition.REPLACE || component.getValue() <= 0) return;\n        DERTaggedObject replacement = new DERTaggedObject(true, tag, new ASN1Integer(component.getValue()));\n        if (wasTee || !wasSoftware) teeTags.add(replacement);\n        if (wasSoftware) softwareTags.add(replacement);\n    }\n')
+          swap('            Config.AttestationPatchLevels patchLevels = Config.INSTANCE.getAttestationPatchLevels(uid);\n\n', '')
+          swap('            boolean supportsModuleHash = attestationVersion >= 400 && keyMintVersion >= 400;\n\n            List<ASN1TaggedObject> teeTags', '            boolean supportsModuleHash = attestationVersion >= 400 && keyMintVersion >= 400;\n            boolean systemWasTee = containsTag(teeEnforced, 706);\n            boolean systemWasSoftware = containsTag(softwareEnforced, 706);\n            boolean vendorWasTee = containsTag(teeEnforced, 718);\n            boolean vendorWasSoftware = containsTag(softwareEnforced, 718);\n            boolean bootWasTee = containsTag(teeEnforced, 719);\n            boolean bootWasSoftware = containsTag(softwareEnforced, 719);\n            Integer capturedSystem = readCapturedPatch(teeEnforced, softwareEnforced, 706);\n            Integer capturedVendor = readCapturedPatch(teeEnforced, softwareEnforced, 718);\n            Integer capturedBoot = readCapturedPatch(teeEnforced, softwareEnforced, 719);\n            Config.AttestationPatchLevels patchLevels = PolicyState.INSTANCE.resolveAttestationPatchLevels(\n                    uid, capturedSystem, capturedVendor, capturedBoot);\n\n            List<ASN1TaggedObject> teeTags')
+          swap('                if (!(asn1Encodable instanceof ASN1TaggedObject taggedObject)) {\n                    Logger.e("Unexpected ASN1 element type in TEE enforced: " + asn1Encodable.getClass().getName());\n                    continue;\n                }\n', '                if (!(asn1Encodable instanceof ASN1TaggedObject taggedObject)) {\n                    throw new CertificateParsingException("Invalid TEE authorization-list element");\n                }\n')
+          swap('                if (!(asn1Encodable instanceof ASN1TaggedObject taggedObject)) {\n                    Logger.e("Unexpected ASN1 element type in software enforced: " +\n                            asn1Encodable.getClass().getName());\n                    continue;\n                }\n                if (taggedObject.getTagNo() == 724 && supportsModuleHash) {\n', '                if (!(asn1Encodable instanceof ASN1TaggedObject taggedObject)) {\n                    throw new CertificateParsingException("Invalid software authorization-list element");\n                }\n                int tag = taggedObject.getTagNo();\n                if (tag == 724 && supportsModuleHash) {\n')
+          swap('                    if (originalModuleHash == null) originalModuleHash = taggedObject;\n                    continue;\n                }\n                softwareTags.add(taggedObject);\n            }\n\n            addPatchTag(teeTags, 706, patchLevels.getSystem());\n            addPatchTag(teeTags, 718, patchLevels.getVendor());\n            addPatchTag(teeTags, 719, patchLevels.getBoot());\n', '                    if (originalModuleHash == null) originalModuleHash = taggedObject;\n                    continue;\n                }\n                if ((tag == 706 && replacesOriginal(patchLevels.getSystem())) ||\n                        (tag == 718 && replacesOriginal(patchLevels.getVendor())) ||\n                        (tag == 719 && replacesOriginal(patchLevels.getBoot()))) {\n                    continue;\n                }\n                softwareTags.add(taggedObject);\n            }\n\n            addPatchTag(teeTags, softwareTags, 706, patchLevels.getSystem(), systemWasTee, systemWasSoftware);\n            addPatchTag(teeTags, softwareTags, 718, patchLevels.getVendor(), vendorWasTee, vendorWasSoftware);\n            addPatchTag(teeTags, softwareTags, 719, patchLevels.getBoot(), bootWasTee, bootWasSoftware);\n')
+
+          path.write_text(text)
+          PY
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add service/src/main/java/cleveres/tricky/cleverestech/keystore/CertHack.java
+          git commit -m "fix: preserve attestation patch authorizations"
+          git push origin HEAD:granular-policy-state-v2
