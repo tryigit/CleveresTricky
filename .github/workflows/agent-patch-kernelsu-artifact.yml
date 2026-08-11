@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - agent/fix-kernelsu-artifact-and-hardening
+  pull_request:
+    branches:
+      - master
 
 permissions:
   contents: write
