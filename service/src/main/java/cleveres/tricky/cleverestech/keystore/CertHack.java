@@ -55,6 +55,7 @@ import java.util.Objects;
 
 import cleveres.tricky.cleverestech.Config;
 import cleveres.tricky.cleverestech.Logger;
+import cleveres.tricky.cleverestech.PolicyState;
 import cleveres.tricky.cleverestech.UtilKt;
 
 public final class CertHack {
@@ -201,14 +202,50 @@ public final class CertHack {
         return component.getDisposition() != Config.PatchDisposition.KEEP;
     }
 
-    private static void addPatchTag(
-            List<ASN1TaggedObject> tags,
-            int tag,
-            Config.AttestationPatchComponent component
-    ) {
-        if (component.getDisposition() == Config.PatchDisposition.REPLACE && component.getValue() > 0) {
-            tags.add(new DERTaggedObject(true, tag, new ASN1Integer(component.getValue())));
+    private static Integer readPatchTag(ASN1Sequence sequence, int targetTag)
+            throws CertificateParsingException {
+        Integer result = null;
+        for (ASN1Encodable value : sequence) {
+            if (!(value instanceof ASN1TaggedObject taggedObject) || taggedObject.getTagNo() != targetTag) continue;
+            int parsed;
+            try {
+                parsed = ASN1Integer.getInstance(taggedObject.getBaseObject()).getValue().intValueExact();
+            } catch (Throwable error) {
+                throw new CertificateParsingException("Invalid security patch authorization", error);
+            }
+            if (result != null && result != parsed) {
+                throw new CertificateParsingException("Conflicting security patch authorizations");
+            }
+            result = parsed;
         }
+        return result;
+    }
+
+    private static Integer readCapturedPatch(
+            ASN1Sequence teeEnforced,
+            ASN1Sequence softwareEnforced,
+            int tag
+    ) throws CertificateParsingException {
+        Integer teeValue = readPatchTag(teeEnforced, tag);
+        Integer softwareValue = readPatchTag(softwareEnforced, tag);
+        if (teeValue != null && softwareValue != null && !teeValue.equals(softwareValue)) {
+            throw new CertificateParsingException("Conflicting security patch authorization lists");
+        }
+        return teeValue != null ? teeValue : softwareValue;
+    }
+
+    private static void addPatchTag(
+            List<ASN1TaggedObject> teeTags,
+            List<ASN1TaggedObject> softwareTags,
+            int tag,
+            Config.AttestationPatchComponent component,
+            boolean wasTee,
+            boolean wasSoftware
+    ) {
+        if (component.getDisposition() != Config.PatchDisposition.REPLACE || component.getValue() <= 0) return;
+        DERTaggedObject replacement = new DERTaggedObject(true, tag, new ASN1Integer(component.getValue()));
+        if (wasTee || !wasSoftware) teeTags.add(replacement);
+        if (wasSoftware) softwareTags.add(replacement);
     }
 
     static Map<Integer, byte[]> selectPresentAttestationIdOverrides(
@@ -484,8 +521,6 @@ public final class CertHack {
                 if (cached != null) return cached.clone();
             }
 
-            Config.AttestationPatchLevels patchLevels = Config.INSTANCE.getAttestationPatchLevels(uid);
-
             X509Certificate leaf;
             if (caList[0] instanceof X509Certificate) {
                 leaf = (X509Certificate) caList[0];
@@ -522,6 +557,17 @@ public final class CertHack {
             int attestationVersion = ASN1Integer.getInstance(encodables[0]).getValue().intValueExact();
             int keyMintVersion = ASN1Integer.getInstance(encodables[2]).getValue().intValueExact();
             boolean supportsModuleHash = attestationVersion >= 400 && keyMintVersion >= 400;
+            boolean systemWasTee = containsTag(teeEnforced, 706);
+            boolean systemWasSoftware = containsTag(softwareEnforced, 706);
+            boolean vendorWasTee = containsTag(teeEnforced, 718);
+            boolean vendorWasSoftware = containsTag(softwareEnforced, 718);
+            boolean bootWasTee = containsTag(teeEnforced, 719);
+            boolean bootWasSoftware = containsTag(softwareEnforced, 719);
+            Integer capturedSystem = readCapturedPatch(teeEnforced, softwareEnforced, 706);
+            Integer capturedVendor = readCapturedPatch(teeEnforced, softwareEnforced, 718);
+            Integer capturedBoot = readCapturedPatch(teeEnforced, softwareEnforced, 719);
+            Config.AttestationPatchLevels patchLevels = PolicyState.INSTANCE.resolveAttestationPatchLevels(
+                    uid, capturedSystem, capturedVendor, capturedBoot);
 
             List<ASN1TaggedObject> teeTags = new ArrayList<>();
             List<ASN1TaggedObject> softwareTags = new ArrayList<>();
@@ -540,8 +586,7 @@ public final class CertHack {
 
             for (ASN1Encodable asn1Encodable : teeEnforced) {
                 if (!(asn1Encodable instanceof ASN1TaggedObject taggedObject)) {
-                    Logger.e("Unexpected ASN1 element type in TEE enforced: " + asn1Encodable.getClass().getName());
-                    continue;
+                    throw new CertificateParsingException("Invalid TEE authorization-list element");
                 }
                 int tag = taggedObject.getTagNo();
                 if (tag == 704) {
@@ -566,20 +611,24 @@ public final class CertHack {
 
             for (ASN1Encodable asn1Encodable : softwareEnforced) {
                 if (!(asn1Encodable instanceof ASN1TaggedObject taggedObject)) {
-                    Logger.e("Unexpected ASN1 element type in software enforced: " +
-                            asn1Encodable.getClass().getName());
+                    throw new CertificateParsingException("Invalid software authorization-list element");
+                }
+                int tag = taggedObject.getTagNo();
+                if (tag == 724 && supportsModuleHash) {
+                    if (originalModuleHash == null) originalModuleHash = taggedObject;
                     continue;
                 }
-                if (taggedObject.getTagNo() == 724 && supportsModuleHash) {
-                    if (originalModuleHash == null) originalModuleHash = taggedObject;
+                if ((tag == 706 && replacesOriginal(patchLevels.getSystem())) ||
+                        (tag == 718 && replacesOriginal(patchLevels.getVendor())) ||
+                        (tag == 719 && replacesOriginal(patchLevels.getBoot()))) {
                     continue;
                 }
                 softwareTags.add(taggedObject);
             }
 
-            addPatchTag(teeTags, 706, patchLevels.getSystem());
-            addPatchTag(teeTags, 718, patchLevels.getVendor());
-            addPatchTag(teeTags, 719, patchLevels.getBoot());
+            addPatchTag(teeTags, softwareTags, 706, patchLevels.getSystem(), systemWasTee, systemWasSoftware);
+            addPatchTag(teeTags, softwareTags, 718, patchLevels.getVendor(), vendorWasTee, vendorWasSoftware);
+            addPatchTag(teeTags, softwareTags, 719, patchLevels.getBoot(), bootWasTee, bootWasSoftware);
 
             Map<Integer, byte[]> presentIdAttestationTags =
                     selectPresentAttestationIdOverrides(configuredIdAttestationTags, originalOverriddenIdTags);
