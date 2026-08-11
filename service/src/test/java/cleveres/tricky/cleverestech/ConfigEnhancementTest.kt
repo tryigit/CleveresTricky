@@ -7,6 +7,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
+import java.nio.file.Files
 
 class ConfigEnhancementTest {
     @Test
@@ -56,36 +57,46 @@ class ConfigEnhancementTest {
 
     @Test
     fun testAttestationIdFallback() {
-        // Clear build vars
-        Config.updateBuildVars(null)
+        val root = Files.createTempDirectory("config_enhancement_").toFile()
+        try {
+            Config.reset()
+            Config.setRootForTesting(root)
+            File(root, "spoof_enabled").createNewFile()
+            Config.refreshRuntimeSetting("spoof_enabled")
 
-        // Create temp file for build vars
-        val f = File.createTempFile("spoof_build_vars", null)
-        f.deleteOnExit()
-        f.writeText(
-            """
-            MANUFACTURER=FallbackMan
-            MODEL=FallbackModel
-            ATTESTATION_ID_BRAND=ExplicitBrand
-            """.trimIndent(),
-        )
+            // Clear build vars
+            Config.updateBuildVars(null)
 
-        Config.updateBuildVars(f)
+            // Create temp file for build vars
+            val f = File(root, "spoof_build_vars")
+            f.writeText(
+                """
+                MANUFACTURER=FallbackMan
+                MODEL=FallbackModel
+                ATTESTATION_ID_BRAND=ExplicitBrand
+                """.trimIndent(),
+            )
 
-        // Verify Build Vars
-        assertEquals("FallbackMan", Config.getBuildVar("MANUFACTURER"))
+            Config.updateBuildVars(f)
 
-        // Verify Fallback to Build Var
-        val manBytes = Config.getAttestationId("MANUFACTURER", 0)
-        assertNotNull(manBytes)
-        assertEquals("FallbackMan", String(manBytes!!))
+            // Verify Build Vars
+            assertEquals("FallbackMan", Config.getBuildVar("MANUFACTURER"))
 
-        // Verify Explicit Override
-        val brandBytes = Config.getAttestationId("BRAND", 0)
-        assertNotNull(brandBytes)
-        assertEquals("ExplicitBrand", String(brandBytes!!))
+            // Verify Fallback to Build Var
+            val manBytes = Config.getAttestationId("MANUFACTURER", 0)
+            assertNotNull(manBytes)
+            assertEquals("FallbackMan", String(manBytes!!))
 
-        // Verify Missing
-        assertNull(Config.getAttestationId("MISSING", 0))
+            // Verify Explicit Override
+            val brandBytes = Config.getAttestationId("BRAND", 0)
+            assertNotNull(brandBytes)
+            assertEquals("ExplicitBrand", String(brandBytes!!))
+
+            // Verify Missing
+            assertNull(Config.getAttestationId("MISSING", 0))
+        } finally {
+            root.deleteRecursively()
+            Config.reset()
+        }
     }
 }

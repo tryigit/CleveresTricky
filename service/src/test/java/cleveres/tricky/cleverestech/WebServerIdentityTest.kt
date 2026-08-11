@@ -191,7 +191,7 @@ class WebServerIdentityTest {
 
     @Test
     fun `auto identity persists Pixel beta build fields without enabling identity engine`() {
-        val response = request("POST", "/api/auto_identity")
+        val response = request("POST", "/api/auto_identity", "")
         assertEquals(200, response.first)
         val data = JSONObject(response.second)
         assertEquals("Pixel Test", data.getString("model"))

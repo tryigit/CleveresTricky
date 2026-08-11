@@ -48,7 +48,7 @@ class ConfigRkpProtectionTest {
         assertFalse(Config.needHack(10_108))
 
         invokeUpdater("updateSpoofEnabled", null)
-        assertFalse(Config.needHack(10_107))
+        assertTrue(Config.needHack(10_107))
     }
 
     private fun invokeUpdater(

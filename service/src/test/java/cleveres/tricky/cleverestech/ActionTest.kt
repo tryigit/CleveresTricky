@@ -287,14 +287,19 @@ class ActionTest {
                 "spoof_enabled",
                 "spoof_build_identity",
                 "global_mode",
-                "tee_broken_mode",
                 "auto_keybox_check",
                 "random_on_boot",
-                "hide_sensitive_props",
-                "spoof_region_cn",
                 "telephony",
                 "rkp_passthrough",
                 "drm_passthrough",
+            )
+        val removedSettings =
+            listOf(
+                "tee_broken_mode",
+                "hide_sensitive_props",
+                "spoof_region_cn",
+                "rkp_bypass",
+                "spoof_props",
             )
 
         settings.forEach { setting ->
@@ -303,14 +308,13 @@ class ActionTest {
             assertTrue(getConfig().getBoolean(setting))
             assertTrue(File(configDir, setting).isFile)
         }
-        assertEquals(400, postForm("/api/toggle", mapOf("setting" to "rkp_bypass", "value" to "true")).first)
-        assertEquals(400, postForm("/api/toggle", mapOf("setting" to "spoof_props", "value" to "true")).first)
 
         var config = getConfig()
-        assertFalse(config.has("rkp_bypass"))
-        assertFalse(config.has("spoof_props"))
-        assertFalse(File(configDir, "rkp_bypass").exists())
-        assertFalse(File(configDir, "spoof_props").exists())
+        removedSettings.forEach { setting ->
+            assertEquals(400, postForm("/api/toggle", mapOf("setting" to setting, "value" to "true")).first)
+            assertFalse(config.has(setting))
+            assertFalse(File(configDir, setting).exists())
+        }
 
         settings.forEach { setting ->
             assertEquals(200, postForm("/api/toggle", mapOf("setting" to setting, "value" to "false")).first)
@@ -320,6 +324,7 @@ class ActionTest {
 
         config = getConfig()
         settings.forEach { setting -> assertFalse(config.getBoolean(setting)) }
+        removedSettings.forEach { setting -> assertFalse(config.has(setting)) }
     }
 
     @Test

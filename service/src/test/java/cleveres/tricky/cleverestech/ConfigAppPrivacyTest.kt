@@ -25,6 +25,8 @@ class ConfigAppPrivacyTest {
         SecureFile.impl = MockSecureFileOperations()
         configDir = tempFolder.newFolder("config")
         Config.setRootForTesting(configDir)
+        File(configDir, "spoof_enabled").createNewFile()
+        Config.refreshRuntimeSetting("spoof_enabled")
     }
 
     @After

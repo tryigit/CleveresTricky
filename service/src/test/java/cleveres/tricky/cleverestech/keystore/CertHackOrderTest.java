@@ -60,8 +60,15 @@ public class CertHackOrderTest {
         field.set(Config.INSTANCE, map);
     }
 
+    private void setSpoofEnabled(boolean enabled) throws Exception {
+        Field field = Config.class.getDeclaredField("isSpoofEnabled");
+        field.setAccessible(true);
+        field.setBoolean(Config.INSTANCE, enabled);
+    }
+
     private void resetConfig() throws Exception {
         setAttestationId("BRAND", null);
+        setSpoofEnabled(false);
         Field moduleHash = Config.class.getDeclaredField("moduleHash");
         moduleHash.setAccessible(true);
         moduleHash.set(Config.INSTANCE, null);
@@ -111,6 +118,7 @@ public class CertHackOrderTest {
         resetConfig();
         byte[] expectedBrand = "Google".getBytes(StandardCharsets.UTF_8);
         setAttestationId("BRAND", expectedBrand);
+        setSpoofEnabled(true);
 
         KeyPairGenerator kpg = KeyPairGenerator.getInstance("RSA", "BC");
         kpg.initialize(2048);
