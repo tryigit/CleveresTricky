@@ -25,7 +25,7 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      - name: Execute patch payload
+      - name: Execute non-workflow patch payload
         shell: bash
         run: |
           set -euo pipefail
@@ -66,7 +66,13 @@ jobs:
               payload.pop()
           if not payload or in_triple:
               raise SystemExit('Patch payload extraction is incomplete')
+
           script = '\n'.join(payload) + '\n'
+          build_start = script.find('# Build/release workflow:')
+          webui_start = script.find('# KernelSU/APatch JS bridge compatibility.')
+          if build_start < 0 or webui_start < 0 or webui_start <= build_start:
+              raise SystemExit('Could not isolate non-workflow patch payload')
+          script = script[:build_start] + script[webui_start:]
           script = script.replace(
               "new_key_parser = '''private fun decodeBootDigest(value: String?): ByteArray? {",
               "new_key_parser = '''@OptIn(ExperimentalStdlibApi::class)\\nprivate fun decodeBootDigest(value: String?): ByteArray? {",
@@ -97,11 +103,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Workflow files are written/removed separately through the GitHub connector,
-          # because the Actions token intentionally lacks the workflows permission.
-          git checkout HEAD -- .github/workflows/build.yml \
-            .github/workflows/agent-patch-kernelsu-artifact.yml \
-            .github/workflows/agent-run-reported-fixes.yml
           rm -f .github/AGENT_PR_NOTES*.tmp
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
