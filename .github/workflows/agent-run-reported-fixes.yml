@@ -1,0 +1,80 @@
+name: Run reported stability fixes
+
+on:
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.head_ref == 'agent/fix-kernelsu-artifact-and-hardening'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out patch branch
+        uses: actions/checkout@v7
+        with:
+          ref: agent/fix-kernelsu-artifact-and-hardening
+          fetch-depth: 0
+
+      - name: Execute patch payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+
+          workflow = Path('.github/workflows/agent-patch-kernelsu-artifact.yml').read_text().splitlines()
+          start = None
+          run_line = None
+          for index, line in enumerate(workflow):
+              if line == '      - name: Patch reported issues':
+                  start = index
+                  break
+          if start is None:
+              raise SystemExit('Patch step not found')
+          for index in range(start + 1, len(workflow)):
+              if workflow[index] == '        run: |':
+                  run_line = index + 1
+                  break
+          if run_line is None:
+              raise SystemExit('Patch run block not found')
+
+          payload = []
+          for line in workflow[run_line:]:
+              if line.startswith('      - name:'):
+                  break
+              if line and not line.startswith('          '):
+                  raise SystemExit(f'Unexpected patch indentation: {line!r}')
+              payload.append(line[10:] if line else '')
+          if not payload:
+              raise SystemExit('Patch payload is empty')
+          Path('/tmp/reported-fixes.sh').write_text('\n'.join(payload) + '\n')
+          PY
+          bash /tmp/reported-fixes.sh
+
+      - name: Run focused regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check module/template/webroot/bridge.js
+          node module/webui-tests/bridge.test.js
+          ./gradlew :service:testDebugUnitTest --tests cleveres.tricky.cleverestech.UtilTest --console=plain
+
+      - name: Commit clean patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/agent-patch-kernelsu-artifact.yml .github/workflows/agent-run-reported-fixes.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/build.yml \
+            module/template/webroot/bridge.js \
+            module/template/webroot/index.html \
+            module/webui-tests/bridge.test.js \
+            service/src/main/java/cleveres/tricky/cleverestech/Util.kt \
+            service/src/test/java/cleveres/tricky/cleverestech/UtilTest.kt
+          git commit -m "fix: harden KernelSU delivery and WebUI runtime"
+          git push origin HEAD:agent/fix-kernelsu-artifact-and-hardening
