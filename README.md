@@ -129,3 +129,11 @@ Use the WebUI Logs screen or Android logcat with the CleveresTricky tag when dia
 Project history is recorded in [CHANGELOG.md](CHANGELOG.md). Contribution guidance is in [CONTRIBUTING.md](CONTRIBUTING.md). Translation information is in [LANGUAGES.md](LANGUAGES.md). Theme information is in [THEME.md](THEME.md).
 
 The official [Android attestation documentation](https://source.android.com/docs/security/features/keystore/attestation), [Play Integrity verdict documentation](https://developer.android.com/google/play/integrity/verdicts), and [KernelSU module guide](https://kernelsu.org/guide/module.html) remain authoritative for their platforms.
+
+## Granular optional identity controls
+
+CleveresTricky now resolves optional identity behavior through independent controls for Device and Build Identity, Attestation Identity, Telephony Identity, Region Identity, Identity Refresh, and Security Patch. Security Patch is independent from Device and Build Identity. A configuration can present a different supported patch level without enabling Build Identity, or present a different Build Identity while all patch levels remain genuine.
+
+Core Keystore interception, genuine platform KeyMint and StrongBox private key operations, root of trust handling, Binder safety, and required boot compatibility remain independent from these optional controls. The interface describes captured device state, configured presentation state, and effective application visible state separately. It does not claim to change physical bootloader state, verified boot measurements, firmware, or a remote integrity verdict.
+
+The Security Patch view exposes System, Vendor, and Boot as independent policies. Profiles can assign coherent optional settings to applications, and the Effective State inspector reports the resolver output that runtime decisions use.

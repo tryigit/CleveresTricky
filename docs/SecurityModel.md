@@ -33,3 +33,11 @@ A hostile root process can modify the runtime and read unlocked secrets. Userspa
 Remote services can change policy independently. The module cannot guarantee acceptance outside the device.
 
 [Return to the project overview](../README.md)
+
+## Policy state security
+
+Version two policy state keeps the existing root owned configuration boundary. Reads reject symbolic links and non regular files, enforce bounded sizes and field counts, validate enums, dates, package rules, profile names, template names, and keybox references, and publish validated snapshots atomically through the existing secure file writer. A previous valid snapshot is retained as last known good state.
+
+Certificate reconstruction preserves unrelated valid authorization tags and rejects malformed authorization list layouts. RKP passthrough, DRM passthrough, keybox validation, revocation handling, encrypted backup handling, Binder validation, and genuine hardware private key operations remain protected. Profiles store only safe keybox references. Diagnostics and WebUI responses never expose key material or protected credentials.
+
+Optional presentation state does not change the physical bootloader, verified boot measurements, vbmeta, firmware, or the device hardware root of trust. Core boot and Keystore compatibility remains independent from optional identity features.

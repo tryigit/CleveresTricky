@@ -31,3 +31,11 @@ The service accepts a bounded validated profile request, updates protected confi
 Profile application does not replace keyboxes, application lists, templates, or user backups. Reboot after a profile changes early boot identity behavior.
 
 [Return to the project overview](../README.md)
+
+## Profiles version two
+
+Built in presets remain available. User defined named profiles can store application assignments, an identity template reference, a validated keybox reference, privacy mode, independent System, Vendor, and Boot patch policies, optional identity feature overrides, and compatible RKP or DRM choices. Private keybox contents are never copied into a profile.
+
+Profile creation, edit, rename, duplicate, delete, assignment, import, export, and activation pass through the same validated policy state. Activation publishes one immutable snapshot only after complete validation. Invalid input does not replace the current snapshot. Exact assignment conflicts are rejected and shared UID resolution is deterministic.
+
+The previous valid policy snapshot is retained as last known good state. A malformed replacement is never partially applied. Existing preset requests and legacy configuration remain supported when no version two state is present.

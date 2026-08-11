@@ -56,3 +56,12 @@
 - Removed repository-root experiments, generated binaries/screenshots, obsolete audits, duplicated implementations, and ignored tests for deleted features.
 
 Earlier release history is available on [GitHub Releases](https://github.com/tryigit/CleveresTricky/releases).
+
+## Granular policy state
+
+* Added independent Device and Build, Attestation, Telephony, Region, Identity Refresh, and Security Patch controls.
+* Added independent System, Vendor, and Boot patch policies with genuine, property, manual, automatic, and omit resolution.
+* Preserved genuine patch authorizations during unrelated certificate modification and retained authorization list placement.
+* Added named profiles, effective state inspection, runtime component status, atomic policy activation, and last known good recovery.
+* Parked optional runtime work when its resolved feature is disabled and removed redundant keybox polling.
+* Extended tests for patch preservation, automatic calendar resolution, feature independence, profile resolution, shared UID behavior, malformed input, recovery, and safe file handling.

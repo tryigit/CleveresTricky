@@ -23,3 +23,13 @@ Dynamic property and date results use bounded caches. Changing the file replaces
 Patch rules modify supported certificate fields only. They do not install security updates, change kernel code, repair vendor firmware, or make a device current. Use values that match the environment being tested and understand that a remote verifier can consider other evidence.
 
 [Return to the project overview](../README.md)
+
+## Independent patch policies
+
+System, Vendor, and Boot patch levels are resolved independently. Each component supports Device, Property, Manual, Automatic, and Omit modes. Device preserves the genuine authorization value. Property reads the matching Android property for that component. Manual accepts a strictly validated calendar date. Automatic evaluates the corresponding captured value first and then the corresponding property when no captured value is available. Omit removes only the selected component.
+
+Automatic mode uses calendar arithmetic. The default age threshold is six months. A stale source resolves to day five of the previous calendar month. A recent captured value remains genuine. January correctly resolves through the previous December and leap year calendar rules are handled by the platform date API. The result is live reload compatible and cached by source date, current month, and threshold.
+
+Captured means the genuine authorization value observed from Android attestation. Configured means the selected policy. Effective means the value that the runtime resolver will expose. An unrelated certificate modification preserves genuine System, Vendor, and Boot authorization tags, including their original software or TEE authorization list location. Malformed authorization layouts fail closed.
+
+Existing security_patch.txt rules remain supported. When no patch override is active, genuine patch values remain untouched.

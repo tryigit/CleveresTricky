@@ -37,3 +37,9 @@ For a media application where the goal is to avoid exposing the genuine DRM `dev
 The privacy policy covers the telephony, attestation, and supported stable AIDL DRM identity paths implemented by the module. It does not claim to block sensors, clipboard access, location, VPN checks, accessibility checks, account identifiers, other vendor fingerprinting surfaces, or arbitrary code inside another application process.
 
 [Return to the project overview](../README.md)
+
+## Profile resolution
+
+Application assignments in named profiles participate in the same resolver as runtime policy decisions. The most specific matching rule is chosen deterministically. Shared UIDs are evaluated with sorted package names so repeated requests produce the same result. The Effective State inspector reports the matched application rule, matched profile, and resulting scope without interpreting configuration a second time.
+
+Legacy application rules continue to work when no version two profile supplies the relevant configuration. Package input is validated before activation.

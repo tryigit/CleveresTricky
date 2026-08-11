@@ -45,3 +45,9 @@ Native outputs use section collection, hidden visibility, stack protection, imme
 Keep optional Identity Spoof Engine off when identity substitution and DRM identifier privacy are not needed. Disable Telephony Identity and Automatic Keybox Check unless required. Core Keystore and boot protection remain active because they are the baseline module behavior.
 
 [Return to the project overview](../README.md)
+
+## Optional work scheduling
+
+Optional runtime work follows the resolved feature snapshot. Telephony interception is not retained when no global, active, or assigned profile requires telephony or privacy handling. DRM privacy interception follows the same scoped rule. Identity Refresh does not prepare a next boot snapshot while disabled. Region processing is skipped while disabled. Security Patch returns genuine authorization values without dynamic date resolution while disabled.
+
+Configuration uses immutable state replacement, bounded caches, event driven file observation, and targeted cache invalidation. The legacy periodic keybox file poller is no longer needed because keybox updates use the existing observer path. No new polling loop is introduced.

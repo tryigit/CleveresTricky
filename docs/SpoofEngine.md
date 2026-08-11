@@ -25,3 +25,9 @@ Global Mode controls application scope independently from Spoof Engine. Fresh in
 Tamper detection still forces a safe service state. In that state the WebUI can present the warning, but native interception does not start.
 
 [Return to the project overview](../README.md)
+
+## Optional feature state
+
+Identity behavior is resolved as independent optional features. Device and Build Identity controls app visible Build fields. Attestation Identity controls supported identity substitutions inside attestation responses. Telephony Identity controls supported telephony identity APIs. Region Identity controls region presentation. Identity Refresh controls next boot identity generation. Security Patch is separate and can be enabled without any Build Identity change.
+
+Disabling optional identity features does not disable core Keystore interception, genuine KeyMint or StrongBox key operations, root of trust handling, boot compatibility, Binder validation, or certificate compatibility foundations. Optional interceptors stay parked when no active or assigned configuration requires them.

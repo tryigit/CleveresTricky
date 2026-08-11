@@ -35,3 +35,9 @@ Automatic mode detects common overlapping fingerprint providers and leaves optio
 Build Identity changes supported userspace views. It does not change the real hardware model, firmware, kernel, verified boot measurement, or hardware trust root.
 
 [Return to the project overview](../README.md)
+
+## Feature separation
+
+Device and Build Identity is an optional feature with its own lifecycle. It covers supported Build fields such as manufacturer, brand, model, product, device, fingerprint, build identifier, incremental value, release, type, and tags. Values captured during early boot still require a reboot when changed.
+
+Security Patch is not part of Device and Build Identity. Build Identity can be enabled while System, Vendor, and Boot patch authorizations remain genuine. Security Patch can also be enabled while Build Identity is disabled. Region, Telephony, Attestation Identity, and Identity Refresh are resolved separately.

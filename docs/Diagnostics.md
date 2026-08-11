@@ -37,3 +37,9 @@ RKP or protected playback differences should be checked with their passthrough c
 Disable Spoof Engine before boot to prevent native injection and early property changes. If the WebUI is unavailable, disable the module from KernelSU or APatch and reboot. Preserve logs and a protected configuration backup before resetting data.
 
 [Return to the project overview](../README.md)
+
+## Runtime and effective state
+
+Diagnostics exposes the state of each optional component and the core Keystore path. Optional components can report disabled, active, reboot required, or waiting for configuration. Disabled feature paths return before feature specific derivation or cache work. Core Keystore status is shown separately because it is independent from optional identity controls.
+
+The Effective State inspector accepts an installed application and reports the matched rule and profile, scope, identity template, keybox reference, privacy policy, optional feature decisions, configured and effective patch values, RKP and DRM state, genuine platform KeyMint and StrongBox operation state, provider coexistence result, and reboot requirement. Private key material is never returned.
