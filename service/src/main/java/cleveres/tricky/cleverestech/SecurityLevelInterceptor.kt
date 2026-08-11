@@ -33,7 +33,7 @@ class SecurityLevelInterceptor : BinderInterceptor() {
     ): Result {
         return if (
             code == generateKeyTransaction &&
-            !Config.isRkpPassthroughEnabled &&
+            !PolicyState.rkpPassthrough(callingUid) &&
             CertHack.canHack() &&
             Config.needHack(callingUid)
         ) {
@@ -59,7 +59,7 @@ class SecurityLevelInterceptor : BinderInterceptor() {
     ): Result {
         if (
             code != generateKeyTransaction ||
-            Config.isRkpPassthroughEnabled ||
+            PolicyState.rkpPassthrough(callingUid) ||
             reply == null ||
             resultCode != 0 ||
             !CertHack.canHack() ||

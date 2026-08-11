@@ -496,7 +496,9 @@ object DrmInterceptor {
         }
 
         private fun shouldProtectUid(uid: Int): Boolean =
-            Config.isSpoofEnabled && Config.getAppPrivacyMode(uid) == Config.AppPrivacyMode.ISOLATE
+            Config.getAppPrivacyMode(uid) == Config.AppPrivacyMode.ISOLATE &&
+                (PolicyState.usesV2() || Config.isSpoofEnabled) &&
+                PolicyState.profileDrmPassthrough(uid) != true
     }
 
     private fun resolveTransactionCode(

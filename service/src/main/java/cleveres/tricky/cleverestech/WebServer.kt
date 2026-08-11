@@ -1928,6 +1928,7 @@ class WebServer(
                 "templates.json",
                 "drm_packages.txt",
                 "boot_props_mode",
+                PolicyState.STATE_FILE,
             )
         private val BACKUP_CONFIG_FILES =
             setOf(
@@ -1953,6 +1954,7 @@ class WebServer(
                 "drm_passthrough",
                 "drm_packages.txt",
                 "boot_props_mode",
+                PolicyState.STATE_FILE,
             )
         private val APP_RULE_FIELDS = setOf("package", "template", "keybox", "privacy")
 
@@ -2055,6 +2057,9 @@ class WebServer(
         ): Boolean {
             if (filename in WEB_UI_SETTINGS) return content.isEmpty()
             // Basic validation based on known file types
+            if (filename == PolicyState.STATE_FILE) {
+                return PolicyState.validateStateJson(content, validateReferences = false).isSuccess
+            }
             if (filename == "target.txt") {
                 var ruleCount = 0
                 val lines = content.lineSequence()

@@ -35,11 +35,10 @@ object BootLogic {
 
         try {
             val mode = readBootPropsMode()
-            val requestedBuildIdentity = Config.isSpoofEnabled && Config.isBuildIdentityEnabled
+            val requestedBuildIdentity = PolicyState.isFeatureEnabled(PolicyState.Feature.BUILD_IDENTITY)
             val buildIdentity = requestedBuildIdentity && shouldApplyBuildIdentity(mode)
             val spoofCn =
-                Config.isSpoofEnabled &&
-                    isRegularFile(File(configDir, FILE_SPOOF_CN)) &&
+                PolicyState.isFeatureEnabled(PolicyState.Feature.REGION_IDENTITY) &&
                     mode != BootPropsMode.DISABLE
 
             // Bootloader / verified-boot property protection is a core module feature.
@@ -170,7 +169,6 @@ object BootLogic {
                 copy("INCREMENTAL", "ro.build.version.incremental")
                 copy("TYPE", "ro.build.type")
                 copy("TAGS", "ro.build.tags")
-                copy("SECURITY_PATCH", "ro.build.version.security_patch")
             }
         }
 

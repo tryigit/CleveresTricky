@@ -82,7 +82,8 @@ fun main(args: Array<String>) {
             // spoofing must never unregister it or park the native Binder hook.
             var ksSuccess = KeystoreInterceptor.isRunning()
             var telSuccess = !Config.shouldInterceptTelephony || TelephonyInterceptor.isRunning()
-            var drmSuccess = !identityEngineEnabled || DrmInterceptor.isRunning()
+            val drmEnabled = Config.shouldInterceptDrm
+            var drmSuccess = !drmEnabled || DrmInterceptor.isRunning()
 
             val ksJob =
                 if (!ksSuccess) {
@@ -112,7 +113,7 @@ fun main(args: Array<String>) {
                 }
 
             val drmJob =
-                if (identityEngineEnabled && !drmSuccess) {
+                if (drmEnabled && !drmSuccess) {
                     launch(Dispatchers.IO) {
                         try {
                             drmSuccess = DrmInterceptor.tryRunDrmInterceptor()
@@ -140,17 +141,17 @@ fun main(args: Array<String>) {
             }
             previousTelephonyState = if (telephonyStopPending) null else telephonyEnabled
 
-            if (!identityEngineEnabled && (previousDrmEngineState != false || drmStopPending)) {
+            if (!drmEnabled && (previousDrmEngineState != false || drmStopPending)) {
                 val wasPending = drmStopPending
                 drmStopPending = !DrmInterceptor.stopDrmInterceptor()
                 if (drmStopPending && !wasPending) {
                     Logger.w("DRM privacy hook cleanup is incomplete; retry scheduled")
                 }
                 drmSuccess = !drmStopPending
-            } else if (identityEngineEnabled) {
+            } else if (drmEnabled) {
                 drmStopPending = false
             }
-            previousDrmEngineState = if (drmStopPending) null else identityEngineEnabled
+            previousDrmEngineState = if (drmStopPending) null else drmEnabled
 
             if (!ksSuccess) Logger.d("Core Keystore interceptor is not ready; retry scheduled")
             if (!telSuccess) Logger.d("Telephony interceptor not ready yet")
