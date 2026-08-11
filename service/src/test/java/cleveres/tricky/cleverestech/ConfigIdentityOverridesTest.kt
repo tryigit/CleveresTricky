@@ -7,6 +7,7 @@ import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
 import java.io.File
+import java.nio.file.Files
 
 class ConfigIdentityOverridesTest {
     @Before
@@ -21,7 +22,7 @@ class ConfigIdentityOverridesTest {
 
     @Test
     fun `identity engine gates attestation ids without clearing stored values`() {
-        val root = createTempDir(prefix = "identity_engine_").apply { deleteOnExit() }
+        val root = Files.createTempDirectory("identity_engine_").toFile().apply { deleteOnExit() }
         Config.setRootForTesting(root)
         val imei = RandomUtils.generateLuhn(15, "35")
         val vars = File(root, "spoof_build_vars").apply { writeText("ATTESTATION_ID_IMEI=$imei\n") }
