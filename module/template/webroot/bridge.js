@@ -41,6 +41,43 @@
         return `CT_BRIDGE=''; for CT_PATH in ${paths}; do [ -x "$CT_PATH" ] && { CT_BRIDGE="$CT_PATH"; break; }; done; [ -n "$CT_BRIDGE" ] || { echo 'Native WebUI bridge is unavailable' >&2; exit 127; }; exec "$CT_BRIDGE" ${args.map(value => `'${value}'`).join(' ')}`;
     }
 
+    function normalizeExecResult(values) {
+        let errno = values[0];
+        let stdout = values[1];
+        let stderr = values[2];
+
+        if (values.length === 1 && errno && typeof errno === 'object' && !Array.isArray(errno)) {
+            const result = errno;
+            errno = result.errno ?? result.code ?? 0;
+            stdout = result.stdout ?? result.out ?? '';
+            stderr = result.stderr ?? result.err ?? '';
+        } else if (values.length === 1 && typeof errno === 'string') {
+            const raw = errno.trim();
+            let parsed = null;
+            try { parsed = JSON.parse(raw); } catch (_) {}
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) &&
+                ('errno' in parsed || 'stdout' in parsed || 'stderr' in parsed || 'code' in parsed)) {
+                errno = parsed.errno ?? parsed.code ?? 0;
+                stdout = parsed.stdout ?? parsed.out ?? '';
+                stderr = parsed.stderr ?? parsed.err ?? '';
+            } else {
+                // Newer/alternate WebUI hosts may deliver stdout as the only callback argument.
+                // Commands are fixed and their outputs are validated by the caller, so preserve
+                // that output instead of treating it as an errno value.
+                errno = 0;
+                stdout = raw;
+                stderr = '';
+            }
+        }
+
+        const numericErrno = Number(errno);
+        return {
+            errno: Number.isFinite(numericErrno) ? numericErrno : -1,
+            stdout: String(stdout ?? '').trim(),
+            stderr: String(stderr ?? '').trim()
+        };
+    }
+
     function execNative(args, timeoutMs) {
         if (!nativeApi || typeof nativeApi.exec !== 'function') return Promise.reject(new Error('Open this page from the KernelSU or APatch WebUI button'));
         const boundedTimeout = Math.min(Math.max(Number(timeoutMs) || 60000, 1000), 125000);
@@ -53,13 +90,14 @@
                 delete global[callbackName];
                 reject(new Error('Native bridge timed out'));
             }, boundedTimeout + 5000);
-            global[callbackName] = (errno, stdout, stderr) => {
+            global[callbackName] = (...values) => {
                 if (settled) return;
                 settled = true;
                 clearTimeout(timer);
                 delete global[callbackName];
-                if (Number(errno) === 0) resolve(String(stdout || '').trim());
-                else reject(new Error(String(stderr || stdout || `Native bridge failed with code ${errno}`).trim()));
+                const result = normalizeExecResult(values);
+                if (result.errno === 0) resolve(result.stdout);
+                else reject(new Error(result.stderr || result.stdout || `Native bridge failed with code ${result.errno}`));
             };
             try {
                 nativeApi.exec(shellCommand(args), '{}', callbackName);

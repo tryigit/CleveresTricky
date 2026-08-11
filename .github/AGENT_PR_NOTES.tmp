@@ -1,1 +1,0 @@
-Temporary same-repository trigger marker. The patch runner removes only its workflow files; this marker will be deleted before review.

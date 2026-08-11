@@ -72,24 +72,25 @@ private fun getVerifiedBootKeyDigest(): ByteArray? {
 }
 
 @OptIn(ExperimentalStdlibApi::class)
+private fun decodeBootDigest(value: String?): ByteArray? {
+    if (value?.length != 64) return null
+    val decoded = runCatching { value.hexToByteArray() }.getOrNull() ?: return null
+    if (decoded.size == 32 && decoded.any { it != 0.toByte() }) return decoded
+    decoded.fill(0)
+    return null
+}
+
+@OptIn(ExperimentalStdlibApi::class)
 fun getBootKeyFromProp(): ByteArray? {
     val keys = listOf("ro.boot.vbmeta.public_key_digest", "ro.boot.verifiedbootkey")
     for (key in keys) {
-        val b = systemPropertiesGet(key, null)
-        if (b != null && b.length == 64) {
-            val decoded = runCatching { b.hexToByteArray() }.getOrNull()
-            if (decoded?.size == 32) return decoded
-        }
+        decodeBootDigest(systemPropertiesGet(key, null))?.let { return it }
     }
     return null
 }
 
 @OptIn(ExperimentalStdlibApi::class)
-fun getBootHashFromProp(): ByteArray? {
-    val b = systemPropertiesGet("ro.boot.vbmeta.digest", null) ?: return null
-    if (b.length != 64) return null
-    return runCatching { b.hexToByteArray() }.getOrNull()?.takeIf { it.size == 32 }
-}
+fun getBootHashFromProp(): ByteArray? = decodeBootDigest(systemPropertiesGet("ro.boot.vbmeta.digest", null))
 
 val patchLevel by lazy {
     runCatching { Build.VERSION.SECURITY_PATCH.convertPatchLevel(false) }

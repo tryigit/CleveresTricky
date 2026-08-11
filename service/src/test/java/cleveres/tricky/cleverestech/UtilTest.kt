@@ -54,6 +54,33 @@ class UtilTest {
     }
 
     @Test
+    fun testGetBootKeyFromProp_ignoresZeroSentinelAndFallsBack() {
+        val expected = ByteArray(32) { 0xBC.toByte() }
+        setProp("ro.boot.vbmeta.public_key_digest", "0".repeat(64))
+        setProp("ro.boot.verifiedbootkey", expected.toHexString())
+
+        assertArrayEquals(expected, getBootKeyFromProp())
+    }
+
+    @Test
+    fun testGetBootKeyFromProp_rejectsZeroSentinel() {
+        setProp("ro.boot.vbmeta.public_key_digest", "0".repeat(64))
+        setProp("ro.boot.verifiedbootkey", "0".repeat(64))
+
+        assertNull(getBootKeyFromProp())
+    }
+
+    @Test
+    fun testGetBootHashFromProp_rejectsZeroSentinel() {
+        setProp("ro.boot.vbmeta.digest", "0".repeat(64))
+        assertNull(getBootHashFromProp())
+
+        val expected = ByteArray(32) { 0xCD.toByte() }
+        setProp("ro.boot.vbmeta.digest", expected.toHexString())
+        assertArrayEquals(expected, getBootHashFromProp())
+    }
+
+    @Test
     fun testGetBootKeyFromProp_missing() {
         setProp("ro.boot.vbmeta.public_key_digest", "")
         setProp("ro.boot.verifiedbootkey", "")
