@@ -80,6 +80,7 @@ fun main(args: Array<String>) {
             // spoofing must never unregister it or park the native Binder hook.
             var ksSuccess = KeystoreInterceptor.isRunning()
             var telSuccess = !Config.shouldInterceptTelephony || TelephonyInterceptor.isRunning()
+            var drmSuccess = DrmInterceptor.isRunning()
 
             val ksJob =
                 if (!ksSuccess) {
@@ -108,8 +109,22 @@ fun main(args: Array<String>) {
                     null
                 }
 
+            val drmJob =
+                if (!drmSuccess) {
+                    launch(Dispatchers.IO) {
+                        try {
+                            drmSuccess = DrmInterceptor.tryRunDrmInterceptor()
+                        } catch (e: Exception) {
+                            Logger.e("DRM interceptor threw unexpected exception", e)
+                        }
+                    }
+                } else {
+                    null
+                }
+
             ksJob?.join()
             telJob?.join()
+            drmJob?.join()
 
             if (!telephonyEnabled && (previousTelephonyState != false || telephonyStopPending)) {
                 val wasPending = telephonyStopPending
@@ -125,10 +140,11 @@ fun main(args: Array<String>) {
 
             if (!ksSuccess) Logger.d("Core Keystore interceptor is not ready; retry scheduled")
             if (!telSuccess) Logger.d("Telephony interceptor not ready yet")
+            if (!drmSuccess) Logger.d("DRM interceptor not ready yet")
 
             try {
                 Config.awaitRuntimeController(
-                    if (ksSuccess && telSuccess && !telephonyStopPending) 30_000 else 1_000,
+                    if (ksSuccess && telSuccess && drmSuccess && !telephonyStopPending) 30_000 else 1_000,
                 )
             } catch (_: InterruptedException) {
                 Thread.currentThread().interrupt()

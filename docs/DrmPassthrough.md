@@ -4,7 +4,7 @@
 
 DRM Keystore Passthrough keeps selected media applications on Android's genuine Keystore certificate path. It prevents CleveresTricky attestation compatibility handling from leaking into applications where modified certificate chains can interfere with protected playback.
 
-This feature is deliberately scoped to Keystore and attestation compatibility. It does **not** hook or alter MediaDrm, Widevine license exchange, provisioning, content keys, DRM HAL decisions, or the reported Widevine security level.
+This feature keeps DRM-sensitive packages on Android's genuine keystore certificate path, and the runtime now also attaches a native Binder interception path for the platform DRM service so security-level replies can be normalized only for configured non-passthrough callers.
 
 ## Package policy
 
@@ -24,11 +24,11 @@ The package list has no effect while the dedicated passthrough control is disabl
 
 Package count, file size, line length, and wildcard form are bounded. Invalid input leaves the previous valid policy active. Unknown package resolution does not become a broad substitution decision.
 
-The DRM subsystem itself remains owned by Android and the device DRM implementation. CleveresTricky only controls whether its own Keystore certificate substitution is allowed for a configured application.
+The DRM subsystem itself remains owned by Android and the device DRM implementation. CleveresTricky only intercepts bounded Binder reply fields and still does not replace license exchange, provisioning, content keys, or OEM DRM HAL ownership.
 
 ## Limits
 
-This feature does not implement DRM, create licenses, bypass content protection, or spoof a Widevine security level. It cannot repair a device whose DRM provisioning, OEMCrypto implementation, vendor DRM HAL, or hardware backed DRM state is independently broken.
+This feature does not implement DRM, create licenses, or repair a device whose DRM provisioning, OEMCrypto implementation, vendor DRM HAL, or hardware backed DRM state is independently broken.
 
 If protected playback behaves differently, enable DRM Keystore Passthrough, confirm the package is listed, restart the application, and review the log for the caller and policy decision.
 

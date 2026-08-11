@@ -8,6 +8,7 @@
 - Restored keyboxes, module hashes, settings, and runtime configuration as one exact state without retaining stale files or caches.
 - Corrected KeyMint 4 module hash placement, preserved authorization lists, and allowed valid EC and RSA cross-algorithm certificate signing.
 - Added Android 17 installation and Binder runtime support, bounded large Binder response parsing, and expanded the interception queue capacity.
+- Added a real Android `media.drm` Binder interception lifecycle that can normalize targeted DRM security-level replies while keeping passthrough package controls in effect.
 
 ## V2.5.0
 
