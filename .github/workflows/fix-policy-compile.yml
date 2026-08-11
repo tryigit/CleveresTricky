@@ -17,78 +17,39 @@ jobs:
           set -euo pipefail
           python3 <<'PY'
           from pathlib import Path
-
           config = Path('service/src/main/java/cleveres/tricky/cleverestech/Config.kt')
           text = config.read_text()
-          old = '''        KeyboxDirObserver.stopWatching()
-        keyboxPoller?.stop()
-        keyboxPoller = null
-        targetBypassPoller?.stop()
-'''
-          new = '''        KeyboxDirObserver.stopWatching()
-        targetBypassPoller?.stop()
-'''
+          old = "        KeyboxDirObserver.stopWatching()\n        keyboxPoller?.stop()\n        keyboxPoller = null\n        targetBypassPoller?.stop()\n"
+          new = "        KeyboxDirObserver.stopWatching()\n        targetBypassPoller?.stop()\n"
           if text.count(old) != 1:
               raise SystemExit('Config poller reset block mismatch')
           text = text.replace(old, new, 1)
-          old = '''        runtimeController = null
-        runtimeControllerScheduled = false
-        targetState.runtimeController = null
-    }
-'''
-          new = '''        runtimeController = null
-        runtimeControllerScheduled = false
-        targetState.runtimeController = null
-        PolicyState.resetForTesting()
-    }
-'''
+          old = "        runtimeController = null\n        runtimeControllerScheduled = false\n        targetState.runtimeController = null\n    }\n"
+          new = "        runtimeController = null\n        runtimeControllerScheduled = false\n        targetState.runtimeController = null\n        PolicyState.resetForTesting()\n    }\n"
           if text.count(old) != 1:
               raise SystemExit('Config reset tail mismatch')
           config.write_text(text.replace(old, new, 1))
-
           policy = Path('service/src/main/java/cleveres/tricky/cleverestech/PolicyState.kt')
           text = policy.read_text()
+          if text.count('    internal data class Snapshot(\n') != 1 or text.count('    internal fun parseStateJson(\n') != 1:
+              raise SystemExit('Policy visibility block mismatch')
           text = text.replace('    internal data class Snapshot(\n', '    private data class Snapshot(\n', 1)
           text = text.replace('    internal fun parseStateJson(\n', '    private fun parseStateJson(\n', 1)
-          old = '''        val sourceDate =
-            when {
-                component == "system" && propertyDate != null -> propertyDate
-                capturedDate != null -> capturedDate
-                else -> propertyDate
-            } ?: return Config.AttestationPatchComponent(Config.PatchDisposition.KEEP)
-'''
-          new = '''        val sourceDate = capturedDate ?: propertyDate
-            ?: return Config.AttestationPatchComponent(Config.PatchDisposition.KEEP)
-'''
+          old = "        val sourceDate =\n            when {\n                component == \"system\" && propertyDate != null -> propertyDate\n                capturedDate != null -> capturedDate\n                else -> propertyDate\n            } ?: return Config.AttestationPatchComponent(Config.PatchDisposition.KEEP)\n"
+          new = "        val sourceDate = capturedDate ?: propertyDate\n            ?: return Config.AttestationPatchComponent(Config.PatchDisposition.KEEP)\n"
           if text.count(old) != 1:
               raise SystemExit('Automatic patch source block mismatch')
           text = text.replace(old, new, 1)
-          old = '''        return runCatching { file.readText().trim().lowercase(Locale.ROOT).takeIf { it in allowed } ?: fallback }.getOrDefault(fallback)
-'''
-          new = '''        return runCatching {
-            Files.newInputStream(file.toPath(), LinkOption.NOFOLLOW_LINKS).bufferedReader(Charsets.UTF_8).use { reader ->
-                reader.readText().trim().lowercase(Locale.ROOT).takeIf { it in allowed } ?: fallback
-            }
-        }.getOrDefault(fallback)
-'''
+          old = "        return runCatching { file.readText().trim().lowercase(Locale.ROOT).takeIf { it in allowed } ?: fallback }.getOrDefault(fallback)\n"
+          new = "        return runCatching {\n            Files.newInputStream(file.toPath(), LinkOption.NOFOLLOW_LINKS).bufferedReader(Charsets.UTF_8).use { reader ->\n                reader.readText().trim().lowercase(Locale.ROOT).takeIf { it in allowed } ?: fallback\n            }\n        }.getOrDefault(fallback)\n"
           if text.count(old) != 1:
               raise SystemExit('Small setting reader mismatch')
           text = text.replace(old, new, 1)
-          anchor = '''    @androidx.annotation.VisibleForTesting
-    internal fun setRootForTesting(directory: File) {
-'''
-          helper = '''    @androidx.annotation.VisibleForTesting
-    internal fun installStateForTesting(text: String) {
-        snapshot = parseStateJson(text, recovery = "test", validateReferences = false)
-        initialized = true
-        invalidateResolutionCaches()
-    }
-
-'''
+          anchor = "    @androidx.annotation.VisibleForTesting\n    internal fun setRootForTesting(directory: File) {\n"
+          helper = "    @androidx.annotation.VisibleForTesting\n    internal fun installStateForTesting(text: String) {\n        snapshot = parseStateJson(text, recovery = \"test\", validateReferences = false)\n        initialized = true\n        invalidateResolutionCaches()\n    }\n\n"
           if text.count(anchor) != 1:
               raise SystemExit('Testing helper anchor mismatch')
-          text = text.replace(anchor, helper + anchor, 1)
-          policy.write_text(text)
+          policy.write_text(text.replace(anchor, helper + anchor, 1))
           PY
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
