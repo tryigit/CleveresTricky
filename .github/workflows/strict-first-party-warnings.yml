@@ -1,0 +1,51 @@
+name: Strict first party warnings
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android-and-webui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v6.3.0
+      - uses: android-actions/setup-android@v4
+      - run: ./gradlew ktlintCheck :service:lintDebug :stub:lintDebug :encryptor-app:lintDebug testDebugUnitTest --warning-mode=fail --console=plain --stacktrace
+      - run: node --check module/template/webroot/bridge.js
+      - run: node --check module/template/webroot/policy.js
+      - shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('fs')
+          const html = fs.readFileSync('module/template/webroot/index.html', 'utf8')
+          const blocks = [...html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/gi)]
+            .filter(match => !/\bsrc\s*=/.test(match[1]))
+          if (blocks.length !== 1) throw new Error('Unexpected inline script count')
+          new Function(blocks[0][2])
+          NODE
+
+  rust:
+    runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: "-D warnings"
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace --verbose
