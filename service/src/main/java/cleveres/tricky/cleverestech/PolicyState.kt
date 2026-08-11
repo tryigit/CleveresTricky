@@ -148,7 +148,7 @@ object PolicyState {
         val specificity: Int,
     )
 
-    internal data class Snapshot(
+    private data class Snapshot(
         val explicit: Boolean,
         val features: FeatureSet,
         val patch: PatchSet,
@@ -299,7 +299,7 @@ object PolicyState {
         return parseStateJson(text, recovery)
     }
 
-    internal fun parseStateJson(
+    private fun parseStateJson(
         text: String,
         recovery: String = "configured",
         validateReferences: Boolean = true,
@@ -733,12 +733,8 @@ object PolicyState {
     ): Config.AttestationPatchComponent {
         val capturedDate = captured?.let { patchToDate(it, long) }
         val propertyDate = readPropertyDate(component)
-        val sourceDate =
-            when {
-                component == "system" && propertyDate != null -> propertyDate
-                capturedDate != null -> capturedDate
-                else -> propertyDate
-            } ?: return Config.AttestationPatchComponent(Config.PatchDisposition.KEEP)
+        val sourceDate = capturedDate ?: propertyDate
+            ?: return Config.AttestationPatchComponent(Config.PatchDisposition.KEEP)
         val now = currentDateSource()
         val cacheKey = AutoCacheKey(component, sourceDate, YearMonth.from(now), thresholdMonths, capturedDate != null)
         automaticCache[cacheKey]?.let { return it }
@@ -930,7 +926,11 @@ object PolicyState {
     private fun readSmallSetting(filename: String, allowed: Set<String>, fallback: String): String {
         val file = File(root, filename)
         if (!Files.isRegularFile(file.toPath(), LinkOption.NOFOLLOW_LINKS) || file.length() !in 1..64) return fallback
-        return runCatching { file.readText().trim().lowercase(Locale.ROOT).takeIf { it in allowed } ?: fallback }.getOrDefault(fallback)
+        return runCatching {
+            Files.newInputStream(file.toPath(), LinkOption.NOFOLLOW_LINKS).bufferedReader(Charsets.UTF_8).use { reader ->
+                reader.readText().trim().lowercase(Locale.ROOT).takeIf { it in allowed } ?: fallback
+            }
+        }.getOrDefault(fallback)
     }
 
     fun runtimeJson(): JSONObject {
@@ -1131,6 +1131,13 @@ object PolicyState {
 
     fun invalidateUid(uid: Int) {
         uidResolutionCache.remove(uid)
+    }
+
+    @androidx.annotation.VisibleForTesting
+    internal fun installStateForTesting(text: String) {
+        snapshot = parseStateJson(text, recovery = "test", validateReferences = false)
+        initialized = true
+        invalidateResolutionCaches()
     }
 
     @androidx.annotation.VisibleForTesting

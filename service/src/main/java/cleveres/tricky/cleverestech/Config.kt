@@ -2354,7 +2354,6 @@ object Config {
     fun reset() {
         ConfigObserver.stopWatching()
         KeyboxDirObserver.stopWatching()
-        keyboxPoller?.stop()
         KeyboxAutoCleaner.setEnabled(false)
         scope.coroutineContext.cancelChildren()
 
@@ -2390,5 +2389,6 @@ object Config {
         lastKeyboxModified = 0
         lastKeyboxLength = 0
         directoryKeyboxCache.clear()
+        PolicyState.resetForTesting()
     }
 }
