@@ -29,6 +29,7 @@ jobs:
           workflow = Path('.github/workflows/agent-patch-kernelsu-artifact.yml').read_text().splitlines()
           start = None
           run_line = None
+          end = None
           for index, line in enumerate(workflow):
               if line == '      - name: Patch reported issues':
                   start = index
@@ -41,14 +42,18 @@ jobs:
                   break
           if run_line is None:
               raise SystemExit('Patch run block not found')
+          for index in range(run_line, len(workflow)):
+              if workflow[index] == '      - name: Run focused regressions':
+                  end = index
+                  break
+          if end is None:
+              raise SystemExit('Patch step end not found')
 
           payload = []
-          for line in workflow[run_line:]:
-              if line.startswith('      - name:'):
-                  break
-              if line and not line.startswith('          '):
-                  raise SystemExit(f'Unexpected patch indentation: {line!r}')
-              payload.append(line[10:] if line else '')
+          for line in workflow[run_line:end]:
+              payload.append(line[10:] if line.startswith('          ') else line)
+          while payload and payload[-1] == '':
+              payload.pop()
           if not payload:
               raise SystemExit('Patch payload is empty')
           Path('/tmp/reported-fixes.sh').write_text('\n'.join(payload) + '\n')
@@ -67,10 +72,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          rm -f .github/AGENT_PR_NOTES*.tmp
           git rm .github/workflows/agent-patch-kernelsu-artifact.yml .github/workflows/agent-run-reported-fixes.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .github/workflows/build.yml \
+          git add -A .github \
             module/template/webroot/bridge.js \
             module/template/webroot/index.html \
             module/webui-tests/bridge.test.js \
