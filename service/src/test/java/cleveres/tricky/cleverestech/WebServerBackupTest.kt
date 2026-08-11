@@ -94,6 +94,9 @@ class WebServerBackupTest {
         File(configDir, "app_config").writeText("com.example.app null null isolate")
         File(configDir, "keybox.xml").writeText(TestKeyboxFixtures.validEcKeyboxXml)
         File(configDir, "module_hash").writeText("ab".repeat(32))
+        val policyState =
+            """{"version":2,"features":{"buildIdentity":true,"attestationIdentity":false,"telephonyIdentity":false,"regionIdentity":false,"identityRefresh":false,"securityPatch":true},"securityPatch":{"automaticThresholdMonths":6,"system":{"mode":"manual","value":"2026-07-05"},"vendor":{"mode":"device_default"},"boot":{"mode":"no"}},"profiles":[],"activeProfile":null}"""
+        File(configDir, PolicyState.STATE_FILE).writeText(policyState)
         File(configDir, "ignored_file.txt").writeText("should not be backed up")
         Config.updateAppConfigs(File(configDir, "app_config")).getOrThrow()
         val privacySeed = File(configDir, "privacy_seed")
@@ -133,6 +136,7 @@ class WebServerBackupTest {
         assertArrayEquals(originalPrivacySeed, File(configDir, "privacy_seed").readBytes())
         assertEquals(TestKeyboxFixtures.validEcKeyboxXml, File(configDir, "keybox.xml").readText())
         assertEquals("ab".repeat(32), File(configDir, "module_hash").readText())
+        assertEquals(policyState, File(configDir, PolicyState.STATE_FILE).readText())
 
         assertTrue(File(configDir, "keyboxes/kb1.xml").exists())
         assertEquals(TestKeyboxFixtures.validEcKeyboxXml, File(configDir, "keyboxes/kb1.xml").readText())
