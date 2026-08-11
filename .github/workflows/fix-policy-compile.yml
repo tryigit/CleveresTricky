@@ -19,13 +19,13 @@ jobs:
           from pathlib import Path
           config = Path('service/src/main/java/cleveres/tricky/cleverestech/Config.kt')
           text = config.read_text()
-          old = "        KeyboxDirObserver.stopWatching()\n        keyboxPoller?.stop()\n        keyboxPoller = null\n        targetBypassPoller?.stop()\n"
-          new = "        KeyboxDirObserver.stopWatching()\n        targetBypassPoller?.stop()\n"
+          old = "        KeyboxDirObserver.stopWatching()\n        keyboxPoller?.stop()\n        KeyboxAutoCleaner.setEnabled(false)\n"
+          new = "        KeyboxDirObserver.stopWatching()\n        KeyboxAutoCleaner.setEnabled(false)\n"
           if text.count(old) != 1:
               raise SystemExit('Config poller reset block mismatch')
           text = text.replace(old, new, 1)
-          old = "        runtimeController = null\n        runtimeControllerScheduled = false\n        targetState.runtimeController = null\n    }\n"
-          new = "        runtimeController = null\n        runtimeControllerScheduled = false\n        targetState.runtimeController = null\n        PolicyState.resetForTesting()\n    }\n"
+          old = "        directoryKeyboxCache.clear()\n    }\n}"
+          new = "        directoryKeyboxCache.clear()\n        PolicyState.resetForTesting()\n    }\n}"
           if text.count(old) != 1:
               raise SystemExit('Config reset tail mismatch')
           config.write_text(text.replace(old, new, 1))
