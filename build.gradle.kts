@@ -67,6 +67,12 @@ fun Project.configureBaseExtension() {
             versionName = verName
         }
 
+        lint {
+            checkReleaseBuilds = false
+            abortOnError = true
+            warningsAsErrors = true
+        }
+
         compileOptions {
             sourceCompatibility = androidSourceCompatibility
             targetCompatibility = androidTargetCompatibility
@@ -86,6 +92,7 @@ fun Project.configureBaseExtension() {
         lint {
             checkReleaseBuilds = false
             abortOnError = true
+            warningsAsErrors = true
         }
 
         compileOptions {
@@ -111,7 +118,7 @@ subprojects {
 
     tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
         compilerOptions {
-            allWarningsAsErrors.set(!name.contains("UnitTest") && !project.name.contains("encryptor-app"))
+            allWarningsAsErrors.set(true)
         }
     }
 
