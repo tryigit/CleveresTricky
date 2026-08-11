@@ -29,7 +29,8 @@ jobs:
 
       - name: "🐚 Shell Script Linting (Shellcheck)"
         run: |
-          sudo apt-get update && sudo apt-get install -y shellcheck
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
           shellcheck module/template/*.sh
 
       - name: "🎨 Kotlin Format & Quality (Ktlint)"
@@ -38,8 +39,10 @@ jobs:
       - name: "📱 Android Static Analysis (Lint)"
         run: ./gradlew :service:lintDebug :stub:lintDebug :encryptor-app:lintDebug
 
-      - name: "Native source and documentation policy"
+      - name: Native source and documentation policy
+        shell: bash
         run: |
+          set -euo pipefail
           unexpected_native=$(find . -type f \
             \( -name '*.c' -o -name '*.C' -o -name '*.cc' -o -name '*.cpp' \
                -o -name '*.cxx' -o -name '*.c++' -o -name '*.m' -o -name '*.mm' \
@@ -54,6 +57,7 @@ jobs:
             printf '%s\n' "$unexpected_native"
             exit 1
           fi
+
           unexpected_headers=$(find . -type f \
             \( -name '*.h' -o -name '*.hh' -o -name '*.hpp' -o -name '*.hxx' \
                -o -name '*.h++' -o -name '*.inc' -o -name '*.inl' \
@@ -84,6 +88,7 @@ jobs:
             printf '%s\n' "$unexpected_headers"
             exit 1
           fi
+
           long_dash_pattern=$(printf '\342\200\224|\342\200\223')
           if grep -RInE --exclude-dir=.git --exclude-dir=build --exclude-dir=target \
             "$long_dash_pattern" .; then
@@ -148,52 +153,54 @@ jobs:
           fetch-depth: 0
 
       - name: "🔒 SELinux Policy Validation"
+        shell: bash
         run: |
-          echo "=== Checking sepolicy.rule for missing semicolons ==="
-          ERRORS=0
-          LINE_NUM=0
+          set -euo pipefail
+          errors=0
+          line_num=0
           while IFS= read -r line; do
-            LINE_NUM=$((LINE_NUM + 1))
-            trimmed=$(echo "$line" | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
+            line_num=$((line_num + 1))
+            trimmed=$(printf '%s' "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
             [ -z "$trimmed" ] && continue
             [[ "$trimmed" == \#* ]] && continue
             [[ "$trimmed" == type\ * ]] && continue
-
-            if echo "$trimmed" | grep -qE '^(allow|dontaudit|neverallow|auditallow) '; then
-              statement=$(echo "$trimmed" | sed 's/#.*//' | sed 's/[[:space:]]*$//')
+            if [[ "$trimmed" =~ ^(allow|dontaudit|neverallow|auditallow)[[:space:]] ]]; then
+              statement=$(printf '%s' "$trimmed" | sed 's/#.*//;s/[[:space:]]*$//')
               if [[ "$statement" != *";" ]]; then
-                echo "::error file=module/template/sepolicy.rule,line=$LINE_NUM::Missing semicolon: $trimmed"
-                ERRORS=$((ERRORS + 1))
+                echo "::error file=module/template/sepolicy.rule,line=$line_num::Missing semicolon: $trimmed"
+                errors=$((errors + 1))
               fi
             fi
           done < module/template/sepolicy.rule
-          if [ "$ERRORS" -gt 0 ]; then exit 1; fi
+          [ "$errors" -eq 0 ]
 
       - name: "📱 KernelSU/APatch Module Structure Validation"
+        shell: bash
         run: |
-          ERRORS=0
-          for f in module.prop customize.sh service.sh post-fs-data.sh sepolicy.rule webroot/index.html webroot/bridge.js; do
+          set -euo pipefail
+          errors=0
+          for f in module.prop customize.sh verify.sh service.sh post-fs-data.sh sepolicy.rule webroot/index.html webroot/bridge.js; do
             if [ ! -f "module/template/$f" ]; then
               echo "::error::Missing required module file: module/template/$f"
-              ERRORS=$((ERRORS + 1))
+              errors=$((errors + 1))
             fi
           done
           if [ -e module/template/action.sh ]; then
             echo "::error::Legacy external WebUI launcher must not be packaged"
-            ERRORS=$((ERRORS + 1))
+            errors=$((errors + 1))
           fi
-          for script in module/template/customize.sh module/template/service.sh module/template/post-fs-data.sh; do
-            if [ -f "$script" ]; then
-              if ! bash -n "$script" 2>/dev/null; then
-                echo "::error file=$script::Shell syntax error"
-                ERRORS=$((ERRORS + 1))
-              fi
+          for script in module/template/customize.sh module/template/verify.sh module/template/service.sh module/template/post-fs-data.sh; do
+            if [ -f "$script" ] && ! bash -n "$script"; then
+              echo "::error file=$script::Shell syntax error"
+              errors=$((errors + 1))
             fi
           done
-          if [ "$ERRORS" -gt 0 ]; then exit 1; fi
+          [ "$errors" -eq 0 ]
 
       - name: Native WebUI syntax validation
+        shell: bash
         run: |
+          set -euo pipefail
           node --check module/template/webroot/bridge.js
           node <<'NODE'
           const fs = require('fs')
@@ -203,6 +210,9 @@ jobs:
           if (blocks.length !== 1) throw new Error('Unexpected inline script count')
           new Function(blocks[0][2])
           NODE
+
+      - name: Native WebUI behavior tests
+        run: node module/webui-tests/bridge.test.js
 
       - name: Setup Java
         uses: actions/setup-java@v5
@@ -231,87 +241,6 @@ jobs:
         id: unit_tests
         run: ./gradlew testDebugUnitTest --console=plain --stacktrace
 
-      - name: Report Failed Tests
-        if: ${{ failure() && steps.unit_tests.outcome == 'failure' }}
-        shell: bash
-        run: |
-          python3 <<'PY'
-          import glob
-          import os
-          import xml.etree.ElementTree as ET
-
-          def local_name(tag):
-              return tag.rsplit("}", 1)[-1]
-
-          def command_escape(value):
-              return (value or "").replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-
-          def property_escape(value):
-              return command_escape(value).replace(":", "%3A").replace(",", "%2C")
-
-          reports = sorted(glob.glob("**/build/test-results/**/TEST-*.xml", recursive=True))
-          failures = []
-          parse_errors = []
-          for report in reports:
-              try:
-                  root = ET.parse(report).getroot()
-              except (ET.ParseError, OSError) as exc:
-                  parse_errors.append((report, str(exc)))
-                  continue
-              for case in root.iter():
-                  if local_name(case.tag) != "testcase":
-                      continue
-                  failure = None
-                  for child in case:
-                      if local_name(child.tag) in {"failure", "error"}:
-                          failure = child
-                          break
-                  if failure is None:
-                      continue
-                  failures.append((
-                      report,
-                      case.get("classname", "unknown"),
-                      case.get("name", "unknown"),
-                      (failure.get("message") or "").strip(),
-                      (failure.text or "").strip(),
-                  ))
-
-          for report, error in parse_errors:
-              print(f"::warning title=JUnit parse warning::{command_escape(report + ': ' + error)}")
-
-          summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
-          summary = []
-          if not failures:
-              message = "Gradle reported a unit-test failure, but no failed JUnit testcase was found. Inspect the Gradle output above."
-              print(f"::error title=Unit test failure::{command_escape(message)}")
-              summary.extend(["## Unit test failure", "", message, ""])
-          else:
-              summary.extend([f"## Failed unit tests ({len(failures)})", ""])
-              for index, (report, classname, name, message, trace) in enumerate(failures, 1):
-                  label = f"{classname} > {name}"
-                  detail = message or (trace.splitlines()[0] if trace else "Test failed")
-                  print(f"::error title={property_escape(label)}::{command_escape(detail)}")
-                  print(f"\n=== FAILED TEST {index}/{len(failures)}: {label} ===")
-                  print(f"Report: {report}")
-                  if message:
-                      print(f"Message: {message}")
-                  if trace:
-                      print("Stack trace:")
-                      print(trace[:12000])
-                      if len(trace) > 12000:
-                          print("... stack trace truncated after 12000 characters ...")
-                  summary.extend([f"### {index}. `{label}`", "", f"Report: `{report}`", ""])
-                  if message:
-                      summary.extend([f"**Message:** {message}", ""])
-                  if trace:
-                      summary.extend(["```text", trace[:4000], "```", ""])
-
-          print(f"\nParsed {len(reports)} JUnit report files; found {len(failures)} failed test cases.")
-          if summary_path:
-              with open(summary_path, "a", encoding="utf-8") as output:
-                  output.write("\n".join(summary) + "\n")
-          PY
-
       - name: Upload failed test reports
         if: ${{ failure() && steps.unit_tests.outcome == 'failure' }}
         uses: actions/upload-artifact@v7
@@ -329,46 +258,91 @@ jobs:
           ./gradlew zipDebug
           ./gradlew :encryptor-app:assembleRelease
 
-      - name: Verify native artifact hardening
+      - name: Verify module archive layout
+        shell: bash
         run: |
+          set -euo pipefail
+          shopt -s nullglob
+          for variant in release debug; do
+            archives=(module/release/*-"$variant".zip)
+            if [ "${#archives[@]}" -ne 1 ]; then
+              echo "::error::Expected exactly one $variant module zip, found ${#archives[@]}"
+              exit 1
+            fi
+            archive="${archives[0]}"
+            unzip -tq "$archive" >/dev/null
+            entries=$(unzip -Z1 "$archive")
+            for required in module.prop customize.sh verify.sh service.sh post-fs-data.sh sepolicy.rule; do
+              if ! grep -Fx "$required" <<<"$entries" >/dev/null; then
+                echo "::error file=$archive::Missing required root entry: $required"
+                exit 1
+              fi
+            done
+          done
+
+      - name: Verify native artifact hardening
+        shell: bash
+        run: |
+          set -euo pipefail
+          fail() {
+            file=$1
+            shift
+            echo "::error file=$file::$*"
+            exit 1
+          }
+
           module_root=module/build/outputs/module/release/lib
           for abi in arm64-v8a x86_64; do
             injector="$module_root/$abi/inject"
             webui_bridge="$module_root/$abi/webui_bridge"
             library="$module_root/$abi/libcleverestricky.so"
+
             for binary in "$injector" "$webui_bridge" "$library"; do
-              test -s "$binary"
-              readelf -W -l "$binary" | grep -q 'GNU_RELRO'
-              readelf -W -d "$binary" | grep -q 'BIND_NOW'
-              readelf -W -l "$binary" | awk '
+              test -s "$binary" || fail "$binary" "Native artifact is missing or empty"
+              program_headers=$(readelf -W -l "$binary")
+              dynamic_section=$(readelf -W -d "$binary")
+              grep -F 'GNU_RELRO' <<<"$program_headers" >/dev/null || \
+                fail "$binary" "GNU_RELRO segment is missing"
+              grep -F 'BIND_NOW' <<<"$dynamic_section" >/dev/null || \
+                fail "$binary" "Immediate binding (BIND_NOW) is missing"
+              if ! awk '
                 $1 == "GNU_STACK" { found = 1; if ($0 ~ /RWE/) exit 2 }
                 END { if (!found) exit 1 }
-              '
+              ' <<<"$program_headers"; then
+                fail "$binary" "GNU_STACK is missing or executable"
+              fi
             done
-            readelf -W -l "$injector" | grep -q '/system/bin/linker64'
-            readelf -W -l "$webui_bridge" | grep -q '/system/bin/linker64'
-            exports=$(readelf -W --dyn-syms "$library" |
-              awk '$5 == "GLOBAL" && $7 != "UND" && $8 != "" { print $8 }' |
-              sort -u)
+
+            injector_headers=$(readelf -W -l "$injector")
+            webui_headers=$(readelf -W -l "$webui_bridge")
+            grep -F '/system/bin/linker64' <<<"$injector_headers" >/dev/null || \
+              fail "$injector" "Unexpected Android program interpreter"
+            grep -F '/system/bin/linker64' <<<"$webui_headers" >/dev/null || \
+              fail "$webui_bridge" "Unexpected Android program interpreter"
+
+            dyn_symbols=$(readelf -W --dyn-syms "$library")
+            exports=$(awk '$5 == "GLOBAL" && $7 != "UND" && $8 != "" { print $8 }' \
+              <<<"$dyn_symbols" | sort -u)
             expected_exports=$(printf 'entry\nresume')
-            test "$exports" = "$expected_exports"
+            if [ "$exports" != "$expected_exports" ]; then
+              actual=$(printf '%s\n' "$exports" | paste -sd ',' -)
+              fail "$library" "Unexpected exported symbols: ${actual:-<none>} (expected: entry,resume)"
+            fi
           done
 
-      - name: Upload release zip
+      - name: Upload release module zip
         uses: actions/upload-artifact@v7
         with:
-          name: CleveresTricky-release
           path: "module/release/*-release.zip"
           if-no-files-found: error
-          compression-level: 0
+          archive: false
 
-      - name: Upload debug zip
+      - name: Upload debug module zip
         uses: actions/upload-artifact@v7
         with:
-          name: CleveresTricky-debug
           path: "module/release/*-debug.zip"
           if-no-files-found: error
-          compression-level: 0
+          archive: false
 
       - name: Upload Encryptor App
         uses: actions/upload-artifact@v7
@@ -391,23 +365,41 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Download release zip
+      - name: Download release module zip
         uses: actions/download-artifact@v8
         with:
-          name: CleveresTricky-release
+          pattern: "CleveresTricky-*-release.zip"
           path: release-assets
+          merge-multiple: true
+          skip-decompress: true
 
-      - name: Download debug zip
+      - name: Download debug module zip
         uses: actions/download-artifact@v8
         with:
-          name: CleveresTricky-debug
+          pattern: "CleveresTricky-*-debug.zip"
           path: release-assets
+          merge-multiple: true
+          skip-decompress: true
 
       - name: Download Encryptor App
         uses: actions/download-artifact@v8
         with:
           name: EncryptorApp
           path: release-assets
+
+      - name: Verify release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          release_zips=(release-assets/*-release.zip)
+          debug_zips=(release-assets/*-debug.zip)
+          apks=(release-assets/*.apk)
+          [ "${#release_zips[@]}" -eq 1 ] || { echo "::error::Expected one release module zip"; exit 1; }
+          [ "${#debug_zips[@]}" -eq 1 ] || { echo "::error::Expected one debug module zip"; exit 1; }
+          [ "${#apks[@]}" -ge 1 ] || { echo "::error::Encryptor APK is missing"; exit 1; }
+          unzip -tq "${release_zips[0]}" >/dev/null
+          unzip -tq "${debug_zips[0]}" >/dev/null
 
       - name: Check release version
         id: release_version
