@@ -43,6 +43,7 @@ fun main(args: Array<String>) {
         try {
             Config.initialize()
             BootLogic.run()
+            CertificatePolicyWatcher.start(configDir)
         } catch (e: Exception) {
             Logger.e("Failed to initialize Config/BootLogic", e)
             Logger.e("Main: Exiting so the module supervisor can retry initialization")
@@ -131,6 +132,7 @@ fun main(args: Array<String>) {
                 )
             } catch (_: InterruptedException) {
                 Thread.currentThread().interrupt()
+                CertificatePolicyWatcher.stop()
                 Logger.i("Main: Runtime controller interrupted, shutting down")
                 return@runBlocking
             }
