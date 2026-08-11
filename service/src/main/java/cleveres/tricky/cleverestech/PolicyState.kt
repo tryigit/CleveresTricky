@@ -4,7 +4,6 @@ import cleveres.tricky.cleverestech.util.SecureFile
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
-import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.time.DateTimeException
@@ -149,7 +148,7 @@ object PolicyState {
         val specificity: Int,
     )
 
-    private data class Snapshot(
+    internal data class Snapshot(
         val explicit: Boolean,
         val features: FeatureSet,
         val patch: PatchSet,
@@ -177,6 +176,13 @@ object PolicyState {
         val conflict: Boolean,
     )
 
+    private data class UidResolution(
+        val generation: Long,
+        val packages: Array<String>,
+        val selection: SelectedProfile,
+        val features: FeatureSet,
+    )
+
     private data class CapturedPatch(
         val system: Int?,
         val vendor: Int?,
@@ -195,6 +201,7 @@ object PolicyState {
     private val generationCounter = AtomicLong(0)
     private val automaticCache = ConcurrentHashMap<AutoCacheKey, Config.AttestationPatchComponent>()
     private val capturedByPackage = ConcurrentHashMap<String, CapturedPatch>()
+    private val uidResolutionCache = ConcurrentHashMap<Int, UidResolution>()
 
     @Volatile
     private var initialized = false
@@ -203,7 +210,17 @@ object PolicyState {
     private var root = File("/data/adb/cleverestricky")
 
     @Volatile
-    private var snapshot = legacySnapshot("legacy")
+    private var snapshot =
+        Snapshot(
+            explicit = false,
+            features = FeatureSet(false, false, false, false, false, false),
+            patch = defaultPatchSet(),
+            profiles = emptyMap(),
+            activeProfile = null,
+            assignments = emptyList(),
+            generation = generationCounter.incrementAndGet(),
+            recovery = "bootstrap",
+        )
 
     @Volatile
     internal var currentDateSource: () -> LocalDate = { LocalDate.now() }
@@ -214,6 +231,7 @@ object PolicyState {
     private const val MAX_TOTAL_ASSIGNMENTS = 2048
     private const val MAX_CAPTURED_PACKAGES = 512
     private const val MAX_AUTO_CACHE = 128
+    private const val MAX_UID_RESOLUTIONS = 1024
     private const val CAPTURE_TTL_MS = 15 * 60 * 1000L
     private val profileNamePattern = Regex("[A-Za-z0-9][A-Za-z0-9 _.-]{0,63}")
     private val packagePattern = Regex("[A-Za-z0-9_.*]{1,255}")
@@ -265,7 +283,9 @@ object PolicyState {
                 invalidateResolutionCaches()
                 Logger.e("Configured policy state is invalid; using last-known-good state", error)
             } else {
-                throw error
+                snapshot = legacySnapshot("invalid_config_fallback")
+                invalidateResolutionCaches()
+                Logger.e("Configured policy state is invalid; using legacy-safe state", error)
             }
         }
     }
@@ -279,7 +299,11 @@ object PolicyState {
         return parseStateJson(text, recovery)
     }
 
-    internal fun parseStateJson(text: String, recovery: String = "configured"): Snapshot {
+    internal fun parseStateJson(
+        text: String,
+        recovery: String = "configured",
+        validateReferences: Boolean = true,
+    ): Snapshot {
         require(text.toByteArray(Charsets.UTF_8).size in 1..MAX_STATE_BYTES) { "Policy state has an invalid size" }
         val rootObject = JSONObject(text)
         requireOnlyKeys(rootObject, setOf("version", "features", "securityPatch", "profiles", "activeProfile"))
@@ -303,7 +327,7 @@ object PolicyState {
         val assignments = buildAssignments(profiles.values)
         val activeProfile = nullableString(rootObject, "activeProfile")
         if (activeProfile != null) require(findProfile(profiles, activeProfile) != null) { "Active profile does not exist" }
-        validateAssignedProfileReferences(profiles.values)
+        if (validateReferences) validateAssignedProfileReferences(profiles.values)
         return Snapshot(
             explicit = true,
             features = features,
@@ -315,6 +339,12 @@ object PolicyState {
             recovery = recovery,
         )
     }
+
+    fun validateStateJson(text: String, validateReferences: Boolean): Result<Unit> =
+        runCatching {
+            parseStateJson(text, validateReferences = validateReferences)
+            Unit
+        }
 
     private fun parseFeatureSet(value: JSONObject): FeatureSet {
         requireOnlyKeys(value, Feature.entries.mapTo(linkedSetOf()) { it.jsonName })
@@ -592,13 +622,30 @@ object PolicyState {
     private fun resolvedFeatures(packages: Array<String>): FeatureSet {
         val current = snapshot
         val base = activeProfile(current)?.let { current.features.withOverrides(it.featureOverrides) } ?: current.features
-        val selected = selectProfile(packages, current).let { it.profile }
+        val selected = selectProfile(packages, current).profile
         return selected?.let { base.withOverrides(it.featureOverrides) } ?: base
     }
 
+    private fun resolveUid(uid: Int): UidResolution {
+        val current = snapshot
+        val packages = Config.getPackages(uid)
+        uidResolutionCache[uid]?.let { cached ->
+            if (cached.generation == current.generation && cached.packages.contentEquals(packages)) return cached
+        }
+        val selection = selectProfile(packages, current)
+        val base = activeProfile(current)?.let { current.features.withOverrides(it.featureOverrides) } ?: current.features
+        val features = selection.profile?.let { base.withOverrides(it.featureOverrides) } ?: base
+        val resolved = UidResolution(current.generation, packages.clone(), selection, features)
+        if (uidResolutionCache.size >= MAX_UID_RESOLUTIONS && !uidResolutionCache.containsKey(uid)) uidResolutionCache.clear()
+        uidResolutionCache[uid] = resolved
+        return resolved
+    }
+
+    fun usesV2(): Boolean = snapshot.explicit
+
     fun isFeatureEnabled(feature: Feature): Boolean = resolvedFeatures(emptyArray()).enabled(feature)
 
-    fun isFeatureEnabled(feature: Feature, uid: Int): Boolean = resolvedFeatures(Config.getPackages(uid)).enabled(feature)
+    fun isFeatureEnabled(feature: Feature, uid: Int): Boolean = resolveUid(uid).features.enabled(feature)
 
     fun hasTelephonyProfileWork(): Boolean {
         val current = snapshot
@@ -608,19 +655,20 @@ object PolicyState {
         }
     }
 
+    fun hasDrmProfileWork(): Boolean = snapshot.profiles.values.any { it.privacy == Config.AppPrivacyMode.ISOLATE }
+
     fun profileAppConfig(uid: Int): Config.AppSpoofConfig? {
-        val profile = selectProfile(Config.getPackages(uid)).profile ?: return null
+        val profile = resolveUid(uid).selection.profile ?: return null
         if (profile.template == null && profile.keybox == null && profile.privacy == Config.AppPrivacyMode.INHERIT) return null
         return Config.AppSpoofConfig(profile.template, profile.keybox, profile.privacy)
     }
 
-    fun profilePrivacyMode(uid: Int): Config.AppPrivacyMode? = selectProfile(Config.getPackages(uid)).profile?.privacy
+    fun profilePrivacyMode(uid: Int): Config.AppPrivacyMode? = resolveUid(uid).selection.profile?.privacy
 
     fun rkpPassthrough(uid: Int): Boolean =
-        selectProfile(Config.getPackages(uid)).profile?.rkpPassthrough ?: Config.isRkpPassthroughEnabled
+        resolveUid(uid).selection.profile?.rkpPassthrough ?: Config.isRkpPassthroughEnabled
 
-    fun drmPassthrough(uid: Int): Boolean =
-        selectProfile(Config.getPackages(uid)).profile?.drmPassthrough ?: Config.isDrmPassthroughEnabled
+    fun profileDrmPassthrough(uid: Int): Boolean? = resolveUid(uid).selection.profile?.drmPassthrough
 
     fun resolveAttestationPatchLevels(
         uid: Int,
@@ -628,13 +676,14 @@ object PolicyState {
         capturedVendor: Int?,
         capturedBoot: Int?,
     ): Config.AttestationPatchLevels {
-        val packages = Config.getPackages(uid)
-        val features = resolvedFeatures(packages)
+        val resolvedUid = resolveUid(uid)
+        val packages = resolvedUid.packages
+        val features = resolvedUid.features
         recordCaptured(packages, capturedSystem, capturedVendor, capturedBoot)
         if (!features.securityPatch) return keepPatchLevels()
         val current = snapshot
         if (!current.explicit) return Config.getAttestationPatchLevels(uid)
-        val selected = selectProfile(packages, current).profile
+        val selected = resolvedUid.selection.profile
         val basePatch = current.patch
         return Config.AttestationPatchLevels(
             system = resolvePatchComponent("system", selected?.systemPatch ?: basePatch.system, false, capturedSystem, basePatch.thresholdMonths),
@@ -811,7 +860,7 @@ object PolicyState {
             .put("securityPatchOverride", features.securityPatch)
             .put("securityPatch", patchJson)
             .put("rkp", if (profile?.rkpPassthrough ?: Config.isRkpPassthroughEnabled) "genuine_passthrough" else "certificate_compatibility")
-            .put("drm", if (profile?.drmPassthrough ?: Config.isDrmPassthroughEnabled) "genuine_passthrough" else "configured_path")
+            .put("drm", if (profile?.drmPassthrough == true) "genuine_passthrough" else if (profile?.drmPassthrough == false) "configured_path" else "inherit")
             .put("keyMint", "genuine_platform_keymint_strongbox")
             .put("keystoreCore", if (KeystoreInterceptor.isRunning()) "active" else "waiting")
             .put("providerCoexistence", providerMode)
@@ -963,6 +1012,14 @@ object PolicyState {
                     val requested = payload.getString("name")
                     if (requested.lowercase(Locale.ROOT) in builtInProfiles) {
                         Config.applyProfile(requested)
+                        val synced = snapshot
+                        persistAndPublish(
+                            synced.copy(
+                                activeProfile = null,
+                                generation = generationCounter.incrementAndGet(),
+                                recovery = "configured",
+                            ),
+                        )
                         return@runCatching stateJson()
                     }
                     val profile = findProfile(profiles, requested) ?: throw IllegalArgumentException("Profile not found")
@@ -1054,6 +1111,7 @@ object PolicyState {
             SecureFile.writeText(File(root, LAST_GOOD_FILE), previousText)
         }
         SecureFile.writeText(File(root, STATE_FILE), serialized)
+        if (!previous.explicit) SecureFile.writeText(File(root, LAST_GOOD_FILE), serialized)
         publish(parsed, persistPrevious = false)
     }
 
@@ -1068,6 +1126,11 @@ object PolicyState {
     private fun invalidateResolutionCaches() {
         automaticCache.clear()
         capturedByPackage.clear()
+        uidResolutionCache.clear()
+    }
+
+    fun invalidateUid(uid: Int) {
+        uidResolutionCache.remove(uid)
     }
 
     @androidx.annotation.VisibleForTesting
@@ -1086,5 +1149,6 @@ object PolicyState {
         snapshot = legacySnapshot("legacy")
         automaticCache.clear()
         capturedByPackage.clear()
+        uidResolutionCache.clear()
     }
 }
