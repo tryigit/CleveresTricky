@@ -1,0 +1,225 @@
+name: Apply KernelSU artifact fix
+
+on:
+  push:
+    branches:
+      - agent/fix-kernelsu-artifact-and-hardening
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+        with:
+          ref: agent/fix-kernelsu-artifact-and-hardening
+          fetch-depth: 0
+
+      - name: Patch build workflow
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/workflows/build.yml')
+          text = path.read_text()
+
+          build_anchor = '''      - name: Build Android Artifacts
+        run: |
+          ./gradlew zipRelease
+          ./gradlew zipDebug
+          ./gradlew :encryptor-app:assembleRelease
+
+'''
+          archive_validation = '''      - name: Verify module archive layout
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          for variant in release debug; do
+            archives=(module/release/*-"$variant".zip)
+            if [ "${#archives[@]}" -ne 1 ]; then
+              echo "::error::Expected exactly one $variant module zip, found ${#archives[@]}"
+              exit 1
+            fi
+            archive="${archives[0]}"
+            unzip -tq "$archive" >/dev/null
+            entries=$(unzip -Z1 "$archive")
+            for required in module.prop customize.sh verify.sh service.sh post-fs-data.sh sepolicy.rule; do
+              if ! grep -Fx "$required" <<<"$entries" >/dev/null; then
+                echo "::error file=$archive::Missing required root entry: $required"
+                exit 1
+              fi
+            done
+          done
+
+'''
+          if archive_validation not in text:
+              if build_anchor not in text:
+                  raise SystemExit('Build Android Artifacts anchor not found')
+              text = text.replace(build_anchor, build_anchor + archive_validation, 1)
+
+          old_native = '''      - name: Verify native artifact hardening
+        run: |
+          module_root=module/build/outputs/module/release/lib
+          for abi in arm64-v8a x86_64; do
+            injector="$module_root/$abi/inject"
+            webui_bridge="$module_root/$abi/webui_bridge"
+            library="$module_root/$abi/libcleverestricky.so"
+            for binary in "$injector" "$webui_bridge" "$library"; do
+              test -s "$binary"
+              readelf -W -l "$binary" | grep -q 'GNU_RELRO'
+              readelf -W -d "$binary" | grep -q 'BIND_NOW'
+              readelf -W -l "$binary" | awk '
+                $1 == "GNU_STACK" { found = 1; if ($0 ~ /RWE/) exit 2 }
+                END { if (!found) exit 1 }
+              '
+            done
+            readelf -W -l "$injector" | grep -q '/system/bin/linker64'
+            readelf -W -l "$webui_bridge" | grep -q '/system/bin/linker64'
+            exports=$(readelf -W --dyn-syms "$library" |
+              awk '$5 == "GLOBAL" && $7 != "UND" && $8 != "" { print $8 }' |
+              sort -u)
+            expected_exports=$(printf 'entry\\nresume')
+            test "$exports" = "$expected_exports"
+          done
+'''
+          new_native = '''      - name: Verify native artifact hardening
+        shell: bash
+        run: |
+          set -euo pipefail
+          fail() {
+            file=$1
+            shift
+            echo "::error file=$file::$*"
+            exit 1
+          }
+
+          module_root=module/build/outputs/module/release/lib
+          for abi in arm64-v8a x86_64; do
+            injector="$module_root/$abi/inject"
+            webui_bridge="$module_root/$abi/webui_bridge"
+            library="$module_root/$abi/libcleverestricky.so"
+            for binary in "$injector" "$webui_bridge" "$library"; do
+              test -s "$binary" || fail "$binary" "Native artifact is missing or empty"
+              program_headers=$(readelf -W -l "$binary")
+              dynamic_section=$(readelf -W -d "$binary")
+              grep -F 'GNU_RELRO' <<<"$program_headers" >/dev/null || \\
+                fail "$binary" "GNU_RELRO segment is missing"
+              grep -F 'BIND_NOW' <<<"$dynamic_section" >/dev/null || \\
+                fail "$binary" "Immediate binding (BIND_NOW) is missing"
+              if ! awk '
+                $1 == "GNU_STACK" { found = 1; if ($0 ~ /RWE/) exit 2 }
+                END { if (!found) exit 1 }
+              ' <<<"$program_headers"; then
+                fail "$binary" "GNU_STACK is missing or executable"
+              fi
+            done
+
+            injector_headers=$(readelf -W -l "$injector")
+            webui_headers=$(readelf -W -l "$webui_bridge")
+            grep -F '/system/bin/linker64' <<<"$injector_headers" >/dev/null || \\
+              fail "$injector" "Unexpected Android program interpreter"
+            grep -F '/system/bin/linker64' <<<"$webui_headers" >/dev/null || \\
+              fail "$webui_bridge" "Unexpected Android program interpreter"
+
+            dyn_symbols=$(readelf -W --dyn-syms "$library")
+            exports=$(awk '$5 == "GLOBAL" && $7 != "UND" && $8 != "" { print $8 }' \\
+              <<<"$dyn_symbols" | sort -u)
+            expected_exports=$(printf 'entry\\nresume')
+            if [ "$exports" != "$expected_exports" ]; then
+              actual=$(printf '%s\\n' "$exports" | paste -sd ',' -)
+              fail "$library" "Unexpected exported symbols: ${actual:-<none>} (expected: entry,resume)"
+            fi
+          done
+'''
+          if old_native not in text:
+              raise SystemExit('Old native hardening block not found')
+          text = text.replace(old_native, new_native, 1)
+
+          old_release_upload = '''      - name: Upload release zip
+        uses: actions/upload-artifact@v7
+        with:
+          name: CleveresTricky-release
+          path: "module/release/*-release.zip"
+          if-no-files-found: error
+          compression-level: 0
+'''
+          new_release_upload = '''      - name: Upload release module zip
+        uses: actions/upload-artifact@v7
+        with:
+          path: "module/release/*-release.zip"
+          if-no-files-found: error
+          archive: false
+'''
+          if old_release_upload not in text:
+              raise SystemExit('Release upload block not found')
+          text = text.replace(old_release_upload, new_release_upload, 1)
+
+          old_debug_upload = '''      - name: Upload debug zip
+        uses: actions/upload-artifact@v7
+        with:
+          name: CleveresTricky-debug
+          path: "module/release/*-debug.zip"
+          if-no-files-found: error
+          compression-level: 0
+'''
+          new_debug_upload = '''      - name: Upload debug module zip
+        uses: actions/upload-artifact@v7
+        with:
+          path: "module/release/*-debug.zip"
+          if-no-files-found: error
+          archive: false
+'''
+          if old_debug_upload not in text:
+              raise SystemExit('Debug upload block not found')
+          text = text.replace(old_debug_upload, new_debug_upload, 1)
+
+          old_release_download = '''      - name: Download release zip
+        uses: actions/download-artifact@v8
+        with:
+          name: CleveresTricky-release
+          path: release-assets
+'''
+          new_release_download = '''      - name: Download release zip
+        uses: actions/download-artifact@v8
+        with:
+          pattern: "CleveresTricky-*-release.zip"
+          path: release-assets
+          merge-multiple: true
+          skip-decompress: true
+'''
+          if old_release_download not in text:
+              raise SystemExit('Release download block not found')
+          text = text.replace(old_release_download, new_release_download, 1)
+
+          old_debug_download = '''      - name: Download debug zip
+        uses: actions/download-artifact@v8
+        with:
+          name: CleveresTricky-debug
+          path: release-assets
+'''
+          new_debug_download = '''      - name: Download debug zip
+        uses: actions/download-artifact@v8
+        with:
+          pattern: "CleveresTricky-*-debug.zip"
+          path: release-assets
+          merge-multiple: true
+          skip-decompress: true
+'''
+          if old_debug_download not in text:
+              raise SystemExit('Debug download block not found')
+          text = text.replace(old_debug_download, new_debug_download, 1)
+
+          path.write_text(text)
+          PY
+
+          git rm .github/workflows/agent-patch-kernelsu-artifact.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/build.yml
+          git commit -m "fix: publish flashable KernelSU artifacts"
+          git push origin HEAD:agent/fix-kernelsu-artifact-and-hardening
