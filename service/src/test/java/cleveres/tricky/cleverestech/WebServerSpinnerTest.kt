@@ -72,8 +72,13 @@ class WebServerSpinnerTest {
         // Verify HTML for Spinner
         assertTrue("Missing Spinner Div", html.contains("<div class=\"spinner\"></div>"))
 
-        // Verify JS Logic
-        assertTrue("Missing notifyTimeout logic", html.contains("if (notifyTimeout) clearTimeout(notifyTimeout);"))
-        assertTrue("Missing type working check", html.contains("if (type === 'working') {"))
+        // Verify notification lifecycle. Working notifications remain visible until a later
+        // notify() call clears them; normal and error notifications receive bounded timeouts.
+        assertTrue("Missing notifyTimeout cleanup", html.contains("if (notifyTimeout) clearTimeout(notifyTimeout);"))
+        assertTrue("Working notifications must not auto dismiss", html.contains("if (type !== 'working') {"))
+        assertTrue(
+            "Missing bounded error notification timeout",
+            html.contains("type === 'error' ? 6000 : 3000"),
+        )
     }
 }
