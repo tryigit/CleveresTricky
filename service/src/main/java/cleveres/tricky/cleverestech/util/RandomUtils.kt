@@ -51,8 +51,9 @@ object RandomUtils {
         require(prefix.length <= length) { "Prefix cannot exceed identifier length" }
         require(prefix.all(Char::isDigit)) { "Prefix must contain only decimal digits" }
 
+        val rng = secureRandom
         val result = StringBuilder(length).append(prefix)
-        while (result.length < length) result.append(secureRandom.nextInt(10))
+        while (result.length < length) result.append(rng.nextInt(10))
         return result.toString()
     }
 
