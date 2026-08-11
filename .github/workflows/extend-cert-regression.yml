@@ -1,0 +1,40 @@
+name: Extend certificate regression
+
+on:
+  push:
+    branches: [ "granular-policy-state-v2" ]
+
+permissions:
+  contents: write
+
+jobs:
+  extend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+          path = Path('service/src/test/java/cleveres/tricky/cleverestech/keystore/CertHackOrderTest.java')
+          text = path.read_text()
+          replacements = [
+              ('    private X509Certificate generateCertWithBrandAndVendorPatch(KeyPair kp) throws Exception {\n', '    private X509Certificate generateCertWithIdentityAndPatchLevels(KeyPair kp) throws Exception {\n'),
+              ('        teeEnforced.add(new DERTaggedObject(\n                true,\n                710,\n                new DEROctetString("OriginalBrand".getBytes(StandardCharsets.UTF_8))));\n        teeEnforced.add(new DERTaggedObject(true, 718, new ASN1Integer(20240101)));\n', '        teeEnforced.add(new DERTaggedObject(true, 706, new ASN1Integer(202401)));\n        teeEnforced.add(new DERTaggedObject(\n                true,\n                710,\n                new DEROctetString("OriginalBrand".getBytes(StandardCharsets.UTF_8))));\n        teeEnforced.add(new DERTaggedObject(true, 718, new ASN1Integer(20240205)));\n        teeEnforced.add(new DERTaggedObject(true, 719, new ASN1Integer(20240305)));\n'),
+              ('        X509Certificate cert = generateCertWithBrandAndVendorPatch(kp);\n', '        X509Certificate cert = generateCertWithIdentityAndPatchLevels(kp);\n'),
+              ('            boolean foundBrand = false;\n            boolean foundVendorPatch = false;\n', '            boolean foundBrand = false;\n            Integer systemPatch = null;\n            Integer vendorPatch = null;\n            Integer bootPatch = null;\n'),
+              ('                if (tag == 718) {\n                    foundVendorPatch = true;\n                }\n                if (tag == 710 || tag == 718) {\n', '                if (tag == 706) {\n                    systemPatch = ASN1Integer.getInstance(taggedObject.getBaseObject()).getValue().intValueExact();\n                }\n                if (tag == 718) {\n                    vendorPatch = ASN1Integer.getInstance(taggedObject.getBaseObject()).getValue().intValueExact();\n                }\n                if (tag == 719) {\n                    bootPatch = ASN1Integer.getInstance(taggedObject.getBaseObject()).getValue().intValueExact();\n                }\n                if (tag == 706 || tag == 710 || tag == 718 || tag == 719) {\n'),
+              ('            Assert.assertTrue("BRAND (710) missing", foundBrand);\n            Assert.assertTrue("VendorPatchLevel (718) missing", foundVendorPatch);\n', '            Assert.assertTrue("BRAND (710) missing", foundBrand);\n            Assert.assertEquals(Integer.valueOf(202401), systemPatch);\n            Assert.assertEquals(Integer.valueOf(20240205), vendorPatch);\n            Assert.assertEquals(Integer.valueOf(20240305), bootPatch);\n'),
+          ]
+          for old, new in replacements:
+              if text.count(old) != 1:
+                  raise SystemExit(f'CertHackOrderTest mismatch: {old[:100]!r} count={text.count(old)}')
+              text = text.replace(old, new, 1)
+          path.write_text(text)
+          PY
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add service/src/test/java/cleveres/tricky/cleverestech/keystore/CertHackOrderTest.java
+          git commit -m "test: preserve genuine patch authorizations"
+          git push origin HEAD:granular-policy-state-v2
