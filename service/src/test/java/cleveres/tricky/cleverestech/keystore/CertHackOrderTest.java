@@ -74,7 +74,7 @@ public class CertHackOrderTest {
         moduleHash.set(Config.INSTANCE, null);
     }
 
-    private X509Certificate generateCertWithBrandAndVendorPatch(KeyPair kp) throws Exception {
+    private X509Certificate generateCertWithIdentityAndPatchLevels(KeyPair kp) throws Exception {
         X500Name issuer = new X500Name("CN=Test");
         BigInteger serial = BigInteger.ONE;
         Date notBefore = new Date();
@@ -99,11 +99,13 @@ public class CertHackOrderTest {
         rootOfTrust.add(new ASN1Enumerated(0));
         rootOfTrust.add(new DEROctetString(new byte[32]));
         teeEnforced.add(new DERTaggedObject(true, 704, new DERSequence(rootOfTrust)));
+        teeEnforced.add(new DERTaggedObject(true, 706, new ASN1Integer(202401)));
         teeEnforced.add(new DERTaggedObject(
                 true,
                 710,
                 new DEROctetString("OriginalBrand".getBytes(StandardCharsets.UTF_8))));
-        teeEnforced.add(new DERTaggedObject(true, 718, new ASN1Integer(20240101)));
+        teeEnforced.add(new DERTaggedObject(true, 718, new ASN1Integer(20240205)));
+        teeEnforced.add(new DERTaggedObject(true, 719, new ASN1Integer(20240305)));
         keyDesc.add(new DERSequence(teeEnforced));
 
         ASN1ObjectIdentifier oid = new ASN1ObjectIdentifier("1.3.6.1.4.1.11129.2.1.17");
@@ -123,7 +125,7 @@ public class CertHackOrderTest {
         KeyPairGenerator kpg = KeyPairGenerator.getInstance("RSA", "BC");
         kpg.initialize(2048);
         KeyPair kp = kpg.generateKeyPair();
-        X509Certificate cert = generateCertWithBrandAndVendorPatch(kp);
+        X509Certificate cert = generateCertWithIdentityAndPatchLevels(kp);
         CertHack.KeyBox keyBox = new CertHack.KeyBox(kp, Collections.singletonList(cert), "test.xml");
 
         Map<String, List<CertHack.KeyBox>> newKeyboxes = new HashMap<>();
@@ -151,7 +153,9 @@ public class CertHackOrderTest {
 
             int lastRelevantTag = -1;
             boolean foundBrand = false;
-            boolean foundVendorPatch = false;
+            Integer systemPatch = null;
+            Integer vendorPatch = null;
+            Integer bootPatch = null;
             for (ASN1Encodable encodable : teeEnforced) {
                 ASN1TaggedObject taggedObject = (ASN1TaggedObject) encodable;
                 int tag = taggedObject.getTagNo();
@@ -161,10 +165,16 @@ public class CertHackOrderTest {
                             taggedObject.getBaseObject()).getOctets();
                     Assert.assertArrayEquals(expectedBrand, actualBrand);
                 }
-                if (tag == 718) {
-                    foundVendorPatch = true;
+                if (tag == 706) {
+                    systemPatch = ASN1Integer.getInstance(taggedObject.getBaseObject()).getValue().intValueExact();
                 }
-                if (tag == 710 || tag == 718) {
+                if (tag == 718) {
+                    vendorPatch = ASN1Integer.getInstance(taggedObject.getBaseObject()).getValue().intValueExact();
+                }
+                if (tag == 719) {
+                    bootPatch = ASN1Integer.getInstance(taggedObject.getBaseObject()).getValue().intValueExact();
+                }
+                if (tag == 706 || tag == 710 || tag == 718 || tag == 719) {
                     if (lastRelevantTag != -1) {
                         Assert.assertTrue(
                                 "Tags out of order: " + lastRelevantTag + " came before " + tag,
@@ -174,7 +184,9 @@ public class CertHackOrderTest {
                 }
             }
             Assert.assertTrue("BRAND (710) missing", foundBrand);
-            Assert.assertTrue("VendorPatchLevel (718) missing", foundVendorPatch);
+            Assert.assertEquals(Integer.valueOf(202401), systemPatch);
+            Assert.assertEquals(Integer.valueOf(20240205), vendorPatch);
+            Assert.assertEquals(Integer.valueOf(20240305), bootPatch);
         } finally {
             stateField.set(null, previousState);
             resetConfig();
