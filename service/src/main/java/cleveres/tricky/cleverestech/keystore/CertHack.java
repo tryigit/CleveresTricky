@@ -67,8 +67,8 @@ public final class CertHack {
     private static final int MAX_LEAF_CERTIFICATE_BYTES = 64 * 1024;
     private static final int MAX_ATTESTATION_EXTENSION_BYTES = 64 * 1024;
     private static final String[] ATTESTATION_ID_NAMES =
-            {"BRAND", "DEVICE", "PRODUCT", "SERIAL", "IMEI", "MEID", "MANUFACTURER", "MODEL"};
-    private static final int[] ATTESTATION_ID_TAGS = {710, 711, 712, 713, 714, 715, 716, 717};
+            {"BRAND", "DEVICE", "PRODUCT", "SERIAL", "IMEI", "MEID", "MANUFACTURER", "MODEL", "IMEI2"};
+    private static final int[] ATTESTATION_ID_TAGS = {710, 711, 712, 713, 714, 715, 716, 717, 723};
     private static final Comparator<ASN1TaggedObject> TAG_COMPARATOR =
             Comparator.comparingInt(ASN1TaggedObject::getTagNo);
 
