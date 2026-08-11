@@ -1,12 +1,9 @@
-name: Apply KernelSU artifact fix
+name: Apply reported stability fixes
 
 on:
   push:
     branches:
       - agent/fix-kernelsu-artifact-and-hardening
-  pull_request:
-    branches:
-      - master
 
 permissions:
   contents: write
@@ -21,12 +18,22 @@ jobs:
           ref: agent/fix-kernelsu-artifact-and-hardening
           fetch-depth: 0
 
-      - name: Patch build workflow
+      - name: Patch reported issues
         shell: bash
         run: |
+          set -euo pipefail
           python3 <<'PY'
           from pathlib import Path
 
+          def replace_once(text, old, new, label):
+              if new in text:
+                  return text
+              if old not in text:
+                  raise SystemExit(f'{label} anchor not found')
+              return text.replace(old, new, 1)
+
+          # Build/release workflow: validate the actual module archive, avoid pipefail/SIGPIPE
+          # false negatives in readelf checks, and upload the generated module ZIP directly.
           path = Path('.github/workflows/build.yml')
           text = path.read_text()
 
@@ -139,9 +146,7 @@ jobs:
             fi
           done
 '''
-          if old_native not in text:
-              raise SystemExit('Old native hardening block not found')
-          text = text.replace(old_native, new_native, 1)
+          text = replace_once(text, old_native, new_native, 'native hardening')
 
           old_release_upload = '''      - name: Upload release zip
         uses: actions/upload-artifact@v7
@@ -158,9 +163,7 @@ jobs:
           if-no-files-found: error
           archive: false
 '''
-          if old_release_upload not in text:
-              raise SystemExit('Release upload block not found')
-          text = text.replace(old_release_upload, new_release_upload, 1)
+          text = replace_once(text, old_release_upload, new_release_upload, 'release upload')
 
           old_debug_upload = '''      - name: Upload debug zip
         uses: actions/upload-artifact@v7
@@ -177,9 +180,7 @@ jobs:
           if-no-files-found: error
           archive: false
 '''
-          if old_debug_upload not in text:
-              raise SystemExit('Debug upload block not found')
-          text = text.replace(old_debug_upload, new_debug_upload, 1)
+          text = replace_once(text, old_debug_upload, new_debug_upload, 'debug upload')
 
           old_release_download = '''      - name: Download release zip
         uses: actions/download-artifact@v8
@@ -195,9 +196,7 @@ jobs:
           merge-multiple: true
           skip-decompress: true
 '''
-          if old_release_download not in text:
-              raise SystemExit('Release download block not found')
-          text = text.replace(old_release_download, new_release_download, 1)
+          text = replace_once(text, old_release_download, new_release_download, 'release download')
 
           old_debug_download = '''      - name: Download debug zip
         uses: actions/download-artifact@v8
@@ -213,16 +212,425 @@ jobs:
           merge-multiple: true
           skip-decompress: true
 '''
-          if old_debug_download not in text:
-              raise SystemExit('Debug download block not found')
-          text = text.replace(old_debug_download, new_debug_download, 1)
+          text = replace_once(text, old_debug_download, new_debug_download, 'debug download')
 
+          webui_syntax = '''      - name: Native WebUI syntax validation
+        run: |
+          node --check module/template/webroot/bridge.js
+          node <<'NODE'
+'''
+          webui_tests = '''      - name: Native WebUI behavior tests
+        run: node module/webui-tests/bridge.test.js
+
+'''
+          if webui_tests not in text:
+              marker = '''          NODE
+
+      - name: Setup Java
+'''
+              if marker not in text:
+                  raise SystemExit('Native WebUI validation end anchor not found')
+              text = text.replace(marker, '''          NODE
+
+''' + webui_tests + '''      - name: Setup Java
+''', 1)
           path.write_text(text)
+
+          # KernelSU/APatch JS bridge compatibility. Some manager versions invoke the callback
+          # with one result object/string rather than the legacy errno/stdout/stderr triplet.
+          path = Path('module/template/webroot/bridge.js')
+          text = path.read_text()
+          old_exec = '''    function execNative(args, timeoutMs) {
+        if (!nativeApi || typeof nativeApi.exec !== 'function') return Promise.reject(new Error('Open this page from the KernelSU or APatch WebUI button'));
+        const boundedTimeout = Math.min(Math.max(Number(timeoutMs) || 60000, 1000), 125000);
+        return new Promise((resolve, reject) => {
+            const callbackName = `ct_exec_${Date.now()}_${callbackCounter++}`;
+            let settled = false;
+            const timer = setTimeout(() => {
+                if (settled) return;
+                settled = true;
+                delete global[callbackName];
+                reject(new Error('Native bridge timed out'));
+            }, boundedTimeout + 5000);
+            global[callbackName] = (errno, stdout, stderr) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timer);
+                delete global[callbackName];
+                if (Number(errno) === 0) resolve(String(stdout || '').trim());
+                else reject(new Error(String(stderr || stdout || `Native bridge failed with code ${errno}`).trim()));
+            };
+            try {
+                nativeApi.exec(shellCommand(args), '{}', callbackName);
+            } catch (error) {
+                settled = true;
+                clearTimeout(timer);
+                delete global[callbackName];
+                reject(error);
+            }
+        });
+    }
+'''
+          new_exec = '''    function normalizeExecResult(values) {
+        let errno = values[0];
+        let stdout = values[1];
+        let stderr = values[2];
+
+        if (values.length === 1 && errno && typeof errno === 'object' && !Array.isArray(errno)) {
+            const result = errno;
+            errno = result.errno ?? result.code ?? 0;
+            stdout = result.stdout ?? result.out ?? '';
+            stderr = result.stderr ?? result.err ?? '';
+        } else if (values.length === 1 && typeof errno === 'string') {
+            const raw = errno.trim();
+            let parsed = null;
+            try { parsed = JSON.parse(raw); } catch (_) {}
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) &&
+                ('errno' in parsed || 'stdout' in parsed || 'stderr' in parsed || 'code' in parsed)) {
+                errno = parsed.errno ?? parsed.code ?? 0;
+                stdout = parsed.stdout ?? parsed.out ?? '';
+                stderr = parsed.stderr ?? parsed.err ?? '';
+            } else {
+                // Newer/alternate WebUI hosts may deliver stdout as the only callback argument.
+                // Commands are fixed and their outputs are validated by the caller, so preserve
+                // that output instead of treating it as an errno value.
+                errno = 0;
+                stdout = raw;
+                stderr = '';
+            }
+        }
+
+        const numericErrno = Number(errno);
+        return {
+            errno: Number.isFinite(numericErrno) ? numericErrno : -1,
+            stdout: String(stdout ?? '').trim(),
+            stderr: String(stderr ?? '').trim()
+        };
+    }
+
+    function execNative(args, timeoutMs) {
+        if (!nativeApi || typeof nativeApi.exec !== 'function') return Promise.reject(new Error('Open this page from the KernelSU or APatch WebUI button'));
+        const boundedTimeout = Math.min(Math.max(Number(timeoutMs) || 60000, 1000), 125000);
+        return new Promise((resolve, reject) => {
+            const callbackName = `ct_exec_${Date.now()}_${callbackCounter++}`;
+            let settled = false;
+            const timer = setTimeout(() => {
+                if (settled) return;
+                settled = true;
+                delete global[callbackName];
+                reject(new Error('Native bridge timed out'));
+            }, boundedTimeout + 5000);
+            global[callbackName] = (...values) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timer);
+                delete global[callbackName];
+                const result = normalizeExecResult(values);
+                if (result.errno === 0) resolve(result.stdout);
+                else reject(new Error(result.stderr || result.stdout || `Native bridge failed with code ${result.errno}`));
+            };
+            try {
+                nativeApi.exec(shellCommand(args), '{}', callbackName);
+            } catch (error) {
+                settled = true;
+                clearTimeout(timer);
+                delete global[callbackName];
+                reject(error);
+            }
+        });
+    }
+'''
+          text = replace_once(text, old_exec, new_exec, 'bridge exec callback')
+          path.write_text(text)
+
+          # WebUI safe-area/layout and bounded notifications.
+          path = Path('module/template/webroot/index.html')
+          text = path.read_text()
+          replacements = [
+              (
+                  '''        .island-container { display: flex; justify-content: center; position: fixed; top: max(12px, env(safe-area-inset-top)); left: 0; right: 0; padding: 0 max(12px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left)); box-sizing: border-box; z-index: 1000; pointer-events: none; }\n''',
+                  '''        .island-container { display: flex; justify-content: center; position: fixed; top: calc(env(safe-area-inset-top) + 10px); left: 0; right: 0; padding: 0 max(12px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left)); box-sizing: border-box; z-index: 1000; pointer-events: none; }\n''',
+                  'island container'
+              ),
+              (
+                  '''        .island { background: #000; color: #fff; border-radius: 30px; min-height: 35px; width: auto; max-width: 90%; display: flex; align-items: center; justify-content: center; transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); box-shadow: 0 4px 15px rgba(0,0,0,0.5); font-size: 0.8em; font-weight: 500; opacity: 0; transform: translateY(-20px) scale(0.9); pointer-events: auto; padding: 0; white-space: nowrap; }\n''',
+                  '''        .island { background: #000; color: #fff; border-radius: 24px; min-height: 35px; width: auto; max-width: min(90vw, 680px); display: flex; align-items: center; justify-content: center; transition: opacity 0.25s ease, transform 0.25s ease; box-shadow: 0 4px 15px rgba(0,0,0,0.5); font-size: 0.8em; font-weight: 500; opacity: 0; transform: translateY(-12px) scale(0.96); pointer-events: auto; padding: 0; white-space: normal; overflow-wrap: anywhere; }\n''',
+                  'island style'
+              ),
+              (
+                  '''        .island.active { min-width: 250px; padding: 8px 12px 8px 24px; opacity: 1; transform: translateY(0) scale(1); font-size: 0.9em; min-height: 44px; }\n''',
+                  '''        .island.active { width: min(90vw, 680px); padding: 10px 10px 10px 18px; opacity: 1; transform: translateY(0) scale(1); font-size: 0.9em; min-height: 44px; max-height: min(42dvh, 320px); overflow: auto; box-sizing: border-box; }\n''',
+                  'island active'
+              ),
+              (
+                  '''        #islandText { flex: 1; }\n''',
+                  '''        #islandText { flex: 1; min-width: 0; line-height: 1.4; }\n''',
+                  'island text'
+              ),
+              (
+                  '''        h1 { text-align: center; font-weight: 200; letter-spacing: 2px; margin: 25px 0; color: var(--accent); font-size: 1.5em; text-transform: uppercase; }\n''',
+                  '''        h1 { text-align: center; font-weight: 200; letter-spacing: 2px; margin: 0; padding: calc(env(safe-area-inset-top) + 18px) max(20px, env(safe-area-inset-right)) 18px max(20px, env(safe-area-inset-left)); color: var(--accent); font-size: 1.5em; line-height: 1.2; text-transform: uppercase; box-sizing: border-box; }\n''',
+                  'page title safe area'
+              ),
+              (
+                  '''        .tabs { display: flex; justify-content: flex-start; border-bottom: 1px solid var(--border); background: var(--panel); overflow-x: auto; position: sticky; top: 0; z-index: 100; -webkit-overflow-scrolling: touch; scrollbar-width: none; scroll-snap-type: x proximity; touch-action: pan-x; padding-top: env(safe-area-inset-top); }\n''',
+                  '''        .tabs { display: flex; justify-content: flex-start; border-bottom: 1px solid var(--border); background: var(--panel); overflow-x: auto; position: sticky; top: env(safe-area-inset-top); z-index: 100; -webkit-overflow-scrolling: touch; scrollbar-width: none; scroll-snap-type: x proximity; touch-action: pan-x; padding-top: 0; }\n''',
+                  'tabs safe area'
+              )
+          ]
+          for old, new, label in replacements:
+              text = replace_once(text, old, new, label)
+
+          old_notify = '''        let notifyTimeout;
+        function notify(msg, type = 'normal') {
+if (notifyTimeout) clearTimeout(notifyTimeout);
+const island = document.getElementById('island');
+
+const div = document.createElement('div');
+div.innerText = msg;
+const safeMsg = div.innerHTML;
+
+document.getElementById('islandText').innerHTML = safeMsg;
+island.className = 'island active ' + type;
+if (type === 'working') {
+} else {
+    notifyTimeout = setTimeout(() => island.classList.remove('active'), 3000);
+}
+        }
+'''
+          new_notify = '''        let notifyTimeout;
+        function normalizeUiMessage(value) {
+let message = String(value ?? '');
+try {
+    const envelope = JSON.parse(message);
+    if (envelope && envelope.version === 1 && Number.isInteger(envelope.status) && typeof envelope.body === 'string') {
+        const padded = envelope.body.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((envelope.body.length + 3) % 4);
+        const bytes = Uint8Array.from(atob(padded), char => char.charCodeAt(0));
+        const body = new TextDecoder('utf-8', { fatal: false }).decode(bytes).trim();
+        if (body) {
+            try {
+                const parsedBody = JSON.parse(body);
+                message = parsedBody.error || parsedBody.message || parsedBody.details || body;
+            } catch (_) {
+                message = body;
+            }
+        } else {
+            message = `HTTP ${envelope.status} ${envelope.statusText || ''}`.trim();
+        }
+    }
+} catch (_) {}
+if (message.length > 1200) message = message.slice(0, 1197) + '...';
+return message;
+        }
+        function notify(msg, type = 'normal') {
+if (notifyTimeout) clearTimeout(notifyTimeout);
+const island = document.getElementById('island');
+const text = document.getElementById('islandText');
+text.textContent = normalizeUiMessage(msg);
+island.className = 'island active ' + type;
+if (type !== 'working') {
+    notifyTimeout = setTimeout(() => island.classList.remove('active'), type === 'error' ? 6000 : 3000);
+}
+        }
+'''
+          text = replace_once(text, old_notify, new_notify, 'notification handling')
+          path.write_text(text)
+
+          # Reject sentinel all-zero verified-boot digests so vbmeta parsing can provide
+          # the real digest instead of writing an obviously invalid RootOfTrust value.
+          path = Path('service/src/main/java/cleveres/tricky/cleverestech/Util.kt')
+          text = path.read_text()
+          old_key_parser = '''@OptIn(ExperimentalStdlibApi::class)
+fun getBootKeyFromProp(): ByteArray? {
+    val keys = listOf("ro.boot.vbmeta.public_key_digest", "ro.boot.verifiedbootkey")
+    for (key in keys) {
+        val b = systemPropertiesGet(key, null)
+        if (b != null && b.length == 64) {
+            val decoded = runCatching { b.hexToByteArray() }.getOrNull()
+            if (decoded?.size == 32) return decoded
+        }
+    }
+    return null
+}
+
+@OptIn(ExperimentalStdlibApi::class)
+fun getBootHashFromProp(): ByteArray? {
+    val b = systemPropertiesGet("ro.boot.vbmeta.digest", null) ?: return null
+    if (b.length != 64) return null
+    return runCatching { b.hexToByteArray() }.getOrNull()?.takeIf { it.size == 32 }
+}
+'''
+          new_key_parser = '''private fun decodeBootDigest(value: String?): ByteArray? {
+    if (value?.length != 64) return null
+    val decoded = runCatching { value.hexToByteArray() }.getOrNull() ?: return null
+    if (decoded.size == 32 && decoded.any { it != 0.toByte() }) return decoded
+    decoded.fill(0)
+    return null
+}
+
+@OptIn(ExperimentalStdlibApi::class)
+fun getBootKeyFromProp(): ByteArray? {
+    val keys = listOf("ro.boot.vbmeta.public_key_digest", "ro.boot.verifiedbootkey")
+    for (key in keys) {
+        decodeBootDigest(systemPropertiesGet(key, null))?.let { return it }
+    }
+    return null
+}
+
+@OptIn(ExperimentalStdlibApi::class)
+fun getBootHashFromProp(): ByteArray? = decodeBootDigest(systemPropertiesGet("ro.boot.vbmeta.digest", null))
+'''
+          text = replace_once(text, old_key_parser, new_key_parser, 'boot digest parser')
+          path.write_text(text)
+
+          path = Path('service/src/test/java/cleveres/tricky/cleverestech/UtilTest.kt')
+          text = path.read_text()
+          test_anchor = '''    @Test
+    fun testGetBootKeyFromProp_missing() {
+'''
+          extra_tests = '''    @Test
+    fun testGetBootKeyFromProp_ignoresZeroSentinelAndFallsBack() {
+        val expected = ByteArray(32) { 0xBC.toByte() }
+        setProp("ro.boot.vbmeta.public_key_digest", "0".repeat(64))
+        setProp("ro.boot.verifiedbootkey", expected.toHexString())
+
+        assertArrayEquals(expected, getBootKeyFromProp())
+    }
+
+    @Test
+    fun testGetBootKeyFromProp_rejectsZeroSentinel() {
+        setProp("ro.boot.vbmeta.public_key_digest", "0".repeat(64))
+        setProp("ro.boot.verifiedbootkey", "0".repeat(64))
+
+        assertNull(getBootKeyFromProp())
+    }
+
+    @Test
+    fun testGetBootHashFromProp_rejectsZeroSentinel() {
+        setProp("ro.boot.vbmeta.digest", "0".repeat(64))
+        assertNull(getBootHashFromProp())
+
+        val expected = ByteArray(32) { 0xCD.toByte() }
+        setProp("ro.boot.vbmeta.digest", expected.toHexString())
+        assertArrayEquals(expected, getBootHashFromProp())
+    }
+
+'''
+          if extra_tests not in text:
+              if test_anchor not in text:
+                  raise SystemExit('UtilTest anchor not found')
+              text = text.replace(test_anchor, extra_tests + test_anchor, 1)
+          path.write_text(text)
+
+          # Browserless regression tests for KernelSU callback shapes and protocol decoding.
+          test_path = Path('module/webui-tests/bridge.test.js')
+          test_path.parent.mkdir(parents=True, exist_ok=True)
+          test_path.write_text(r'''const assert = require('assert');
+const fs = require('fs');
+const vm = require('vm');
+
+const bridgeSource = fs.readFileSync('module/template/webroot/bridge.js', 'utf8');
+
+function encodeBody(value) {
+    return Buffer.from(value, 'utf8').toString('base64url');
+}
+
+function envelope(body = '{"status":"ok"}') {
+    return JSON.stringify({
+        version: 1,
+        status: 200,
+        statusText: '200 OK',
+        mimeType: 'application/json',
+        size: Buffer.byteLength(body),
+        body: encodeBody(body)
+    });
+}
+
+function createBridge(callbackFactory) {
+    const context = {
+        console,
+        setTimeout,
+        clearTimeout,
+        URL,
+        URLSearchParams,
+        TextEncoder,
+        TextDecoder,
+        Uint8Array,
+        ArrayBuffer,
+        Blob,
+        Headers,
+        FormData,
+        File: globalThis.File || class File extends Blob {},
+        DOMException,
+        atob: value => Buffer.from(value, 'base64').toString('binary'),
+        btoa: value => Buffer.from(value, 'binary').toString('base64')
+    };
+    context.window = context;
+    context.ksu = {
+        exec(_command, _options, callbackName) {
+            callbackFactory(context[callbackName]);
+        },
+        enableEdgeToEdge() {},
+        enableInsets() {},
+        listPackages() { return '[]'; }
+    };
+    vm.createContext(context);
+    vm.runInContext(bridgeSource, context, { filename: 'bridge.js' });
+    return context.CleveresBridge;
+}
+
+async function main() {
+    const raw = envelope();
+
+    for (const callbackFactory of [
+        callback => callback(0, raw, ''),
+        callback => callback(raw),
+        callback => callback({ errno: 0, stdout: raw, stderr: '' }),
+        callback => callback(JSON.stringify({ errno: 0, stdout: raw, stderr: '' }))
+    ]) {
+        const bridge = createBridge(callbackFactory);
+        const response = await bridge.fetch('/api/config');
+        assert.strictEqual(response.status, 200);
+        assert.strictEqual(response.ok, true);
+        assert.deepStrictEqual(await response.json(), { status: 'ok' });
+    }
+
+    const failing = createBridge(callback => callback(5, '', 'permission denied'));
+    await assert.rejects(() => failing.fetch('/api/config'), /permission denied/);
+
+    const malformed = createBridge(callback => callback('{"version":1,"status":200}'));
+    await assert.rejects(() => malformed.fetch('/api/config'), /Invalid response/);
+
+    console.log('Native WebUI bridge compatibility tests passed');
+}
+
+main().catch(error => {
+    console.error(error);
+    process.exit(1);
+});
+''')
           PY
 
+      - name: Run focused regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check module/template/webroot/bridge.js
+          node module/webui-tests/bridge.test.js
+          ./gradlew :service:testDebugUnitTest --tests cleveres.tricky.cleverestech.UtilTest --console=plain
+
+      - name: Commit patch
+        shell: bash
+        run: |
+          set -euo pipefail
           git rm .github/workflows/agent-patch-kernelsu-artifact.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .github/workflows/build.yml
-          git commit -m "fix: publish flashable KernelSU artifacts"
+          git add .github/workflows/build.yml \
+            module/template/webroot/bridge.js \
+            module/template/webroot/index.html \
+            module/webui-tests/bridge.test.js \
+            service/src/main/java/cleveres/tricky/cleverestech/Util.kt \
+            service/src/test/java/cleveres/tricky/cleverestech/UtilTest.kt
+          git commit -m "fix: harden KernelSU delivery and WebUI runtime"
           git push origin HEAD:agent/fix-kernelsu-artifact-and-hardening
