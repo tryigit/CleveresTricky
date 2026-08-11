@@ -1,6 +1,7 @@
 package cleveres.tricky.cleverestech.util
 
 import org.junit.After
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Before
 import org.junit.Test
@@ -66,5 +67,16 @@ class DeviceKeyManagerTest {
         // Verify KeyStore.getInstance was called only once (optimization)
         keyStoreStaticMock.verify({ KeyStore.getInstance("AndroidKeyStore") }, times(1))
         verify(keyStoreMock, times(1)).load(null)
+    }
+
+    @Test
+    fun testEncryptDecryptRoundTrip() {
+        val data = ByteArray(4096) { index -> (index and 0xFF).toByte() }
+        val encrypted = DeviceKeyManager.encrypt(data)
+        assertNotNull(encrypted)
+
+        val decrypted = DeviceKeyManager.decrypt(requireNotNull(encrypted))
+        assertNotNull(decrypted)
+        assertArrayEquals(data, decrypted)
     }
 }
