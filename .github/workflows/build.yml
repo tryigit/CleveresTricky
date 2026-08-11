@@ -7,36 +7,131 @@ on:
     branches: [ "master" ]
   workflow_dispatch:
 
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
   contents: read
 
 jobs:
+  changes:
+    name: "🧭 Change Detection"
+    runs-on: ubuntu-latest
+    outputs:
+      rust: ${{ steps.filter.outputs.rust }}
+      gradle: ${{ steps.filter.outputs.gradle }}
+      shell: ${{ steps.filter.outputs.shell }}
+      webui: ${{ steps.filter.outputs.webui }}
+      build: ${{ steps.filter.outputs.build }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Classify changed files
+        id: filter
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "$GITHUB_EVENT_NAME" != "pull_request" ]]; then
+            for key in rust gradle shell webui build; do
+              echo "$key=true" >> "$GITHUB_OUTPUT"
+            done
+            exit 0
+          fi
+
+          base="${{ github.event.pull_request.base.sha }}"
+          head="${{ github.event.pull_request.head.sha }}"
+          changed_files=$(git diff --name-only "$base" "$head")
+          printf '%s\n' "$changed_files"
+
+          has_match() {
+            grep -Eq "$1" <<<"$changed_files"
+          }
+
+          rust=false
+          gradle=false
+          shell=false
+          webui=false
+          build=false
+
+          if has_match '^rust/'; then
+            rust=true
+          fi
+
+          if has_match '(^|/)(build\.gradle(\.kts)?|gradle\.properties)$|^settings\.gradle\.kts$|^gradle/|\.(kt|kts|java|xml)$'; then
+            gradle=true
+          fi
+
+          if has_match '\.sh$'; then
+            shell=true
+          fi
+
+          if has_match '^module/(template/webroot|webui-tests)/'; then
+            webui=true
+          fi
+
+          if grep -Ev '^(README\.md$|docs/|\.github/)' <<<"$changed_files" | grep -q .; then
+            build=true
+          fi
+
+          echo "rust=$rust" >> "$GITHUB_OUTPUT"
+          echo "gradle=$gradle" >> "$GITHUB_OUTPUT"
+          echo "shell=$shell" >> "$GITHUB_OUTPUT"
+          echo "webui=$webui" >> "$GITHUB_OUTPUT"
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+
   quality-gate:
     name: "🛡️ Quality Gate & Linting"
     runs-on: ubuntu-latest
+    needs: changes
     steps:
       - name: Check out
         uses: actions/checkout@v7
 
+      - name: Validate Bouncy Castle coordinates
+        if: needs.changes.outputs.gradle == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for artifact in bcpkix-jdk18on bcprov-jdk18on; do
+            version=$(sed -n "s/^${artifact} = \"\([^\"]*\)\"/\1/p" gradle/libs.versions.toml | head -n1)
+            if [[ -z "$version" ]]; then
+              echo "::error::Missing version for $artifact"
+              exit 1
+            fi
+            url="https://repo.maven.apache.org/maven2/org/bouncycastle/${artifact}/${version}/${artifact}-${version}.pom"
+            echo "Checking $artifact:$version"
+            curl --fail --silent --show-error --location --retry 3 --retry-all-errors --output /dev/null "$url"
+          done
+
       - name: Setup Java
+        if: needs.changes.outputs.gradle == 'true'
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
 
       - name: Setup Gradle
+        if: needs.changes.outputs.gradle == 'true'
         uses: gradle/actions/setup-gradle@v6.3.0
 
       - name: "🐚 Shell Script Linting (Shellcheck)"
+        if: needs.changes.outputs.shell == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y shellcheck
           shellcheck module/template/*.sh
 
       - name: "🎨 Kotlin Format & Quality (Ktlint)"
+        if: needs.changes.outputs.gradle == 'true'
         run: ./gradlew ktlintCheck
 
       - name: "📱 Android Static Analysis (Lint)"
+        if: needs.changes.outputs.gradle == 'true'
         run: ./gradlew :service:lintDebug :stub:lintDebug :encryptor-app:lintDebug
 
       - name: Native source and documentation policy
@@ -103,7 +198,8 @@ jobs:
   rust-test:
     name: "🦀 Rust Checks & Tests"
     runs-on: ubuntu-latest
-    needs: quality-gate
+    needs: [changes, quality-gate]
+    if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true' }}
     env:
       RUSTFLAGS: "-D warnings"
     defaults:
@@ -144,7 +240,8 @@ jobs:
   build:
     name: "🛠️ Build Module"
     runs-on: ubuntu-latest
-    needs: rust-test
+    needs: [changes, quality-gate, rust-test]
+    if: ${{ always() && needs.quality-gate.result == 'success' && (needs.rust-test.result == 'success' || needs.rust-test.result == 'skipped') && (github.event_name != 'pull_request' || needs.changes.outputs.build == 'true') }}
     steps:
       - name: Check out
         uses: actions/checkout@v7
@@ -198,6 +295,7 @@ jobs:
           [ "$errors" -eq 0 ]
 
       - name: Native WebUI syntax validation
+        if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.webui == 'true' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -212,6 +310,7 @@ jobs:
           NODE
 
       - name: Native WebUI behavior tests
+        if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.webui == 'true' }}
         run: node module/webui-tests/bridge.test.js
 
       - name: Setup Java
@@ -232,12 +331,14 @@ jobs:
           targets: aarch64-linux-android,x86_64-linux-android
 
       - name: Lint Android Rust targets
+        if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true' }}
         working-directory: rust
         run: |
           cargo clippy --workspace --all-targets --target aarch64-linux-android -- -D warnings
           cargo clippy --workspace --all-targets --target x86_64-linux-android -- -D warnings
 
       - name: Run Unit Tests
+        if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.gradle == 'true' }}
         id: unit_tests
         run: ./gradlew testDebugUnitTest --console=plain --stacktrace
 
