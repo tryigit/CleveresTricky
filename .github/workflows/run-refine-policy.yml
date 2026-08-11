@@ -1,0 +1,24 @@
+name: Run resolver refinements
+
+on:
+  push:
+    branches: [ "granular-policy-state-v2" ]
+
+permissions:
+  contents: write
+
+jobs:
+  refine:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: python3 .tmp/refine_policy.py
+      - shell: bash
+        run: |
+          set -euo pipefail
+          rm .tmp/refine_policy.py
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add service/src/main/java/cleveres/tricky/cleverestech/PolicyState.kt service/src/main/java/cleveres/tricky/cleverestech/Config.kt service/src/test/java/cleveres/tricky/cleverestech/PolicyStateTest.kt .tmp/refine_policy.py
+          git commit -m "fix: tighten policy resolution"
+          git push origin HEAD:granular-policy-state-v2
