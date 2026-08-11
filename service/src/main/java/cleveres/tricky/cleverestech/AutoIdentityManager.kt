@@ -282,7 +282,7 @@ object AutoIdentityManager {
             .replace("&nbsp;", " ")
             .replace("&#39;", "'")
             .replace("&quot;", "\"")
-            .replace(Regex("\\s+"), " ")
+            .replace(Regex("\s+"), " ")
             .trim()
 
     private object NetworkFetcher : Fetcher {
