@@ -9,7 +9,13 @@ updates:
     open-pull-requests-limit: 10
     allow:
       - dependency-type: "direct"
-      - dependency-type: "indirect"
+    groups:
+      bouncycastle:
+        patterns:
+          - "org.bouncycastle:*"
+        update-types:
+          - "minor"
+          - "patch"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
