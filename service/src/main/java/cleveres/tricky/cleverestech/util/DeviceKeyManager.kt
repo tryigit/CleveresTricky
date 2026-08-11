@@ -126,20 +126,22 @@ object DeviceKeyManager {
             val cipher = Cipher.getInstance(AES_MODE)
             cipher.init(Cipher.ENCRYPT_MODE, key)
             val iv = cipher.iv
-            var ciphertext: ByteArray? = null
+            var pendingOutput: ByteArray? = null
             try {
                 if (iv.size != GCM_IV_LENGTH) return null
-                val encrypted = cipher.doFinal(data)
-                ciphertext = encrypted
-
-                val result = ByteArray(1 + iv.size + encrypted.size)
+                val encryptedSize = cipher.getOutputSize(data.size)
+                val result = ByteArray(1 + iv.size + encryptedSize)
+                pendingOutput = result
                 result[0] = iv.size.toByte()
                 System.arraycopy(iv, 0, result, 1, iv.size)
-                System.arraycopy(encrypted, 0, result, 1 + iv.size, encrypted.size)
+
+                val written = cipher.doFinal(data, 0, data.size, result, 1 + iv.size)
+                check(written == encryptedSize) { "Unexpected AES-GCM output size" }
+                pendingOutput = null
                 return result
             } finally {
                 iv.fill(0)
-                ciphertext?.fill(0)
+                pendingOutput?.fill(0)
             }
         } catch (e: Exception) {
             Logger.e("$TAG: Encrypt failed", e)
@@ -159,19 +161,17 @@ object DeviceKeyManager {
             val iv = ByteArray(ivLen)
             System.arraycopy(data, 1, iv, 0, ivLen)
 
-            val ciphertextLen = data.size - 1 - ivLen
+            val ciphertextOffset = 1 + ivLen
+            val ciphertextLen = data.size - ciphertextOffset
             if (ciphertextLen < GCM_TAG_LENGTH) return null
-            val ciphertext = ByteArray(ciphertextLen)
-            System.arraycopy(data, 1 + ivLen, ciphertext, 0, ciphertextLen)
 
             val cipher = Cipher.getInstance(AES_MODE)
             val spec = GCMParameterSpec(128, iv)
             cipher.init(Cipher.DECRYPT_MODE, key, spec)
             return try {
-                cipher.doFinal(ciphertext)
+                cipher.doFinal(data, ciphertextOffset, ciphertextLen)
             } finally {
                 iv.fill(0)
-                ciphertext.fill(0)
             }
         } catch (e: Exception) {
             Logger.e("$TAG: Decrypt failed", e)
