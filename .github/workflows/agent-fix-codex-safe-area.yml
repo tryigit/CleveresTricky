@@ -1,0 +1,34 @@
+name: Apply Codex safe area fix
+
+on:
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.head_ref == 'agent/fix-kernelsu-artifact-and-hardening'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out patch branch
+        uses: actions/checkout@v7
+        with:
+          ref: agent/fix-kernelsu-artifact-and-hardening
+          fetch-depth: 0
+
+      - name: Remove duplicate mobile top inset
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -c "from pathlib import Path; p=Path('module/template/webroot/index.html'); s=p.read_text(); old='.tabs { padding-top: env(safe-area-inset-top); }'; n=s.replace(old, '', 1); p.write_text(n) if n != s else None"
+          if git diff --quiet -- module/template/webroot/index.html; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add module/template/webroot/index.html
+          git commit -m "fix: avoid duplicate mobile safe area inset"
+          git push origin HEAD:agent/fix-kernelsu-artifact-and-hardening
