@@ -1,0 +1,97 @@
+name: Fix policy compile
+
+on:
+  push:
+    branches: [ "granular-policy-state-v2" ]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+
+          config = Path('service/src/main/java/cleveres/tricky/cleverestech/Config.kt')
+          text = config.read_text()
+          old = '''        KeyboxDirObserver.stopWatching()
+        keyboxPoller?.stop()
+        keyboxPoller = null
+        targetBypassPoller?.stop()
+'''
+          new = '''        KeyboxDirObserver.stopWatching()
+        targetBypassPoller?.stop()
+'''
+          if text.count(old) != 1:
+              raise SystemExit('Config poller reset block mismatch')
+          text = text.replace(old, new, 1)
+          old = '''        runtimeController = null
+        runtimeControllerScheduled = false
+        targetState.runtimeController = null
+    }
+'''
+          new = '''        runtimeController = null
+        runtimeControllerScheduled = false
+        targetState.runtimeController = null
+        PolicyState.resetForTesting()
+    }
+'''
+          if text.count(old) != 1:
+              raise SystemExit('Config reset tail mismatch')
+          config.write_text(text.replace(old, new, 1))
+
+          policy = Path('service/src/main/java/cleveres/tricky/cleverestech/PolicyState.kt')
+          text = policy.read_text()
+          text = text.replace('    internal data class Snapshot(\n', '    private data class Snapshot(\n', 1)
+          text = text.replace('    internal fun parseStateJson(\n', '    private fun parseStateJson(\n', 1)
+          old = '''        val sourceDate =
+            when {
+                component == "system" && propertyDate != null -> propertyDate
+                capturedDate != null -> capturedDate
+                else -> propertyDate
+            } ?: return Config.AttestationPatchComponent(Config.PatchDisposition.KEEP)
+'''
+          new = '''        val sourceDate = capturedDate ?: propertyDate
+            ?: return Config.AttestationPatchComponent(Config.PatchDisposition.KEEP)
+'''
+          if text.count(old) != 1:
+              raise SystemExit('Automatic patch source block mismatch')
+          text = text.replace(old, new, 1)
+          old = '''        return runCatching { file.readText().trim().lowercase(Locale.ROOT).takeIf { it in allowed } ?: fallback }.getOrDefault(fallback)
+'''
+          new = '''        return runCatching {
+            Files.newInputStream(file.toPath(), LinkOption.NOFOLLOW_LINKS).bufferedReader(Charsets.UTF_8).use { reader ->
+                reader.readText().trim().lowercase(Locale.ROOT).takeIf { it in allowed } ?: fallback
+            }
+        }.getOrDefault(fallback)
+'''
+          if text.count(old) != 1:
+              raise SystemExit('Small setting reader mismatch')
+          text = text.replace(old, new, 1)
+          anchor = '''    @androidx.annotation.VisibleForTesting
+    internal fun setRootForTesting(directory: File) {
+'''
+          helper = '''    @androidx.annotation.VisibleForTesting
+    internal fun installStateForTesting(text: String) {
+        snapshot = parseStateJson(text, recovery = "test", validateReferences = false)
+        initialized = true
+        invalidateResolutionCaches()
+    }
+
+'''
+          if text.count(anchor) != 1:
+              raise SystemExit('Testing helper anchor mismatch')
+          text = text.replace(anchor, helper + anchor, 1)
+          policy.write_text(text)
+          PY
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add service/src/main/java/cleveres/tricky/cleverestech/Config.kt service/src/main/java/cleveres/tricky/cleverestech/PolicyState.kt
+          git commit -m "fix: harden policy state compilation"
+          git push origin HEAD:granular-policy-state-v2
