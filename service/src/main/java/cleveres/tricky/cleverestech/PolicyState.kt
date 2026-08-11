@@ -592,7 +592,7 @@ object PolicyState {
     private fun resolvedFeatures(packages: Array<String>): FeatureSet {
         val current = snapshot
         val base = activeProfile(current)?.let { current.features.withOverrides(it.featureOverrides) } ?: current.features
-        val selected = selectProfile(packages, current).profile
+        val selected = selectProfile(packages, current).let { it.profile }
         return selected?.let { base.withOverrides(it.featureOverrides) } ?: base
     }
 
