@@ -11,7 +11,6 @@ import org.junit.Test
 import java.io.File
 import java.nio.file.Files
 import java.time.LocalDate
-import java.util.concurrent.ConcurrentHashMap
 
 class PolicyStateTest {
     private lateinit var root: File
@@ -402,15 +401,6 @@ class PolicyStateTest {
         uid: Int,
         packages: Array<String>,
     ) {
-        val cachedPackageClass = Class.forName("cleveres.tricky.cleverestech.Config\$CachedPackage")
-        val constructor =
-            cachedPackageClass.getDeclaredConstructor(Array<String>::class.java, Long::class.javaPrimitiveType)
-        constructor.isAccessible = true
-        val cached = constructor.newInstance(packages, System.currentTimeMillis())
-        val field = Config::class.java.getDeclaredField("packageCache")
-        field.isAccessible = true
-        @Suppress("UNCHECKED_CAST")
-        val cache = field.get(Config) as ConcurrentHashMap<Int, Any>
-        cache[uid] = cached
+        Config.setPackagesForTesting(uid, packages)
     }
 }

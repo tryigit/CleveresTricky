@@ -172,7 +172,7 @@ object PolicyState {
 
     private data class SelectedProfile(
         val profile: Profile?,
-        val matchedPackage: String?,
+        val matchedRule: String?,
         val conflict: Boolean,
     )
 
@@ -234,7 +234,7 @@ object PolicyState {
     private const val MAX_UID_RESOLUTIONS = 1024
     private const val CAPTURE_TTL_MS = 15 * 60 * 1000L
     private val profileNamePattern = Regex("[A-Za-z0-9][A-Za-z0-9 _.-]{0,63}")
-    private val packagePattern = Regex("[A-Za-z0-9_.*]{1,255}")
+    private val packagePattern = Regex("(?:[A-Za-z_][A-Za-z0-9_]*|\*)(?:\.(?:[A-Za-z_][A-Za-z0-9_]*|\*))*")
     private val keyboxPattern = Regex("[A-Za-z0-9_.-]{5,128}")
     private val builtInProfiles = setOf("maximum", "daily", "default", "minimal")
     private val isoDate = DateTimeFormatter.ISO_LOCAL_DATE
@@ -580,16 +580,16 @@ object PolicyState {
             return SelectedProfile(activeProfile(snapshotValue), null, false)
         }
         val normalizedPackages = packages.asSequence().filter(packagePattern::matches).distinct().sorted().toList()
-        val matches = ArrayList<Pair<String, Profile>>()
+        val matches = ArrayList<Pair<Assignment, Profile>>()
         normalizedPackages.forEach { packageName ->
             val assignment = snapshotValue.assignments.firstOrNull { wildcardMatches(it.pattern, packageName) }
             val profile = assignment?.let { findProfile(snapshotValue.profiles, it.profileName) }
-            if (profile != null) matches += packageName to profile
+            if (assignment != null && profile != null) matches += assignment to profile
         }
         if (matches.isEmpty()) return SelectedProfile(activeProfile(snapshotValue), null, false)
         val selected = matches.first()
         val conflict = matches.asSequence().map { it.second.name.lowercase(Locale.ROOT) }.distinct().take(2).count() > 1
-        return SelectedProfile(selected.second, selected.first, conflict)
+        return SelectedProfile(selected.second, selected.first.pattern, conflict)
     }
 
     private fun wildcardMatches(pattern: String, value: String): Boolean {
@@ -644,15 +644,25 @@ object PolicyState {
 
     fun isFeatureEnabled(feature: Feature, uid: Int): Boolean = resolveUid(uid).features.enabled(feature)
 
+    private fun hasRuntimeScope(profile: Profile, current: Snapshot): Boolean =
+        profile.applications.isNotEmpty() || current.activeProfile?.equals(profile.name, ignoreCase = true) == true
+
     fun hasTelephonyProfileWork(): Boolean {
         val current = snapshot
         if (current.features.telephonyIdentity) return true
         return current.profiles.values.any { profile ->
-            profile.featureOverrides[Feature.TELEPHONY_IDENTITY] == true || profile.privacy != Config.AppPrivacyMode.INHERIT
+            hasRuntimeScope(profile, current) &&
+                (profile.featureOverrides[Feature.TELEPHONY_IDENTITY] == true ||
+                    profile.privacy != Config.AppPrivacyMode.INHERIT)
         }
     }
 
-    fun hasDrmProfileWork(): Boolean = snapshot.profiles.values.any { it.privacy == Config.AppPrivacyMode.ISOLATE }
+    fun hasDrmProfileWork(): Boolean {
+        val current = snapshot
+        return current.profiles.values.any { profile ->
+            hasRuntimeScope(profile, current) && profile.privacy == Config.AppPrivacyMode.ISOLATE
+        }
+    }
 
     fun profileAppConfig(uid: Int): Config.AppSpoofConfig? {
         val profile = resolveUid(uid).selection.profile ?: return null
@@ -838,10 +848,10 @@ object PolicyState {
         val providerMode = readSmallSetting("boot_props_mode", setOf("auto", "force", "disable"), "auto")
         return JSONObject()
             .put("package", packageName)
-            .put("matchedApplicationRule", selected.matchedPackage ?: legacyRule?.let { packageName } ?: JSONObject.NULL)
+            .put("matchedApplicationRule", selected.matchedRule ?: legacyRule?.let { packageName } ?: JSONObject.NULL)
             .put("matchedProfile", profile?.name ?: JSONObject.NULL)
             .put("profileConflict", selected.conflict)
-            .put("scope", if (selected.matchedPackage != null || legacyRule != null) "targeted" else if (Config.isGlobalMode) "global" else "unmatched")
+            .put("scope", if (selected.matchedRule != null || legacyRule != null) "targeted" else if (Config.isGlobalMode) "global" else "unmatched")
             .put("identityTemplate", appConfig?.template ?: JSONObject.NULL)
             .put("keyboxReference", appConfig?.keyboxFilename ?: JSONObject.NULL)
             .put("privacy", appConfig?.privacyMode?.configValue ?: Config.AppPrivacyMode.INHERIT.configValue)

@@ -344,6 +344,15 @@ object Config {
             Logger.e("failed to update app configs", it)
         }
 
+    @androidx.annotation.VisibleForTesting
+    internal fun setPackagesForTesting(
+        uid: Int,
+        packages: Array<String>,
+    ) {
+        putBoundedUidCache(packageCache, uid, CachedPackage(packages.clone(), System.currentTimeMillis()))
+        PolicyState.invalidateUid(uid)
+    }
+
     fun parsePackages(lines: Sequence<String>): PackageTrie<Boolean> = parsePackages(lines, Int.MAX_VALUE)
 
     private fun parsePackages(
