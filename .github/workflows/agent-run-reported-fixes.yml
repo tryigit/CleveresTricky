@@ -27,36 +27,49 @@ jobs:
           from pathlib import Path
 
           workflow = Path('.github/workflows/agent-patch-kernelsu-artifact.yml').read_text().splitlines()
-          start = None
-          run_line = None
-          end = None
-          for index, line in enumerate(workflow):
-              if line == '      - name: Patch reported issues':
-                  start = index
-                  break
+          start = next((i for i, line in enumerate(workflow) if line == '      - name: Patch reported issues'), None)
           if start is None:
               raise SystemExit('Patch step not found')
-          for index in range(start + 1, len(workflow)):
-              if workflow[index] == '        run: |':
-                  run_line = index + 1
-                  break
+          run_line = next((i + 1 for i in range(start + 1, len(workflow)) if workflow[i] == '        run: |'), None)
           if run_line is None:
               raise SystemExit('Patch run block not found')
-          for index in range(run_line, len(workflow)):
-              if workflow[index] == '      - name: Run focused regressions':
-                  end = index
-                  break
+          end = next((i for i in range(run_line, len(workflow)) if workflow[i] == '      - name: Run focused regressions'), None)
           if end is None:
               raise SystemExit('Patch step end not found')
 
           payload = []
-          for line in workflow[run_line:end]:
-              payload.append(line[10:] if line.startswith('          ') else line)
+          in_python = False
+          in_triple = False
+          for raw in workflow[run_line:end]:
+              if in_python and in_triple:
+                  line = raw
+              else:
+                  line = raw[10:] if raw.startswith('          ') else raw
+              payload.append(line)
+
+              if not in_python and line == "python3 <<'PY'":
+                  in_python = True
+                  continue
+              if in_python and not in_triple and line == 'PY':
+                  in_python = False
+                  continue
+              if in_python:
+                  # The source helper intentionally stores Python triple-quoted string
+                  # contents at their literal indentation rather than YAML indentation.
+                  # Toggle only on odd occurrences so those string bodies are preserved.
+                  if line.count("'''") % 2 == 1:
+                      in_triple = not in_triple
+
           while payload and payload[-1] == '':
               payload.pop()
-          if not payload:
-              raise SystemExit('Patch payload is empty')
-          Path('/tmp/reported-fixes.sh').write_text('\n'.join(payload) + '\n')
+          if not payload or in_triple:
+              raise SystemExit('Patch payload extraction is incomplete')
+          script = '\n'.join(payload) + '\n'
+          script = script.replace(
+              "new_key_parser = '''private fun decodeBootDigest(value: String?): ByteArray? {",
+              "new_key_parser = '''@OptIn(ExperimentalStdlibApi::class)\\nprivate fun decodeBootDigest(value: String?): ByteArray? {",
+          )
+          Path('/tmp/reported-fixes.sh').write_text(script)
           PY
           bash /tmp/reported-fixes.sh
 
