@@ -93,19 +93,23 @@ jobs:
           node module/webui-tests/bridge.test.js
           ./gradlew :service:testDebugUnitTest --tests cleveres.tricky.cleverestech.UtilTest --console=plain
 
-      - name: Commit clean patch
+      - name: Commit non-workflow fixes
         shell: bash
         run: |
           set -euo pipefail
+          # Workflow files are written/removed separately through the GitHub connector,
+          # because the Actions token intentionally lacks the workflows permission.
+          git checkout HEAD -- .github/workflows/build.yml \
+            .github/workflows/agent-patch-kernelsu-artifact.yml \
+            .github/workflows/agent-run-reported-fixes.yml
           rm -f .github/AGENT_PR_NOTES*.tmp
-          git rm .github/workflows/agent-patch-kernelsu-artifact.yml .github/workflows/agent-run-reported-fixes.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A .github \
-            module/template/webroot/bridge.js \
+          git add module/template/webroot/bridge.js \
             module/template/webroot/index.html \
             module/webui-tests/bridge.test.js \
             service/src/main/java/cleveres/tricky/cleverestech/Util.kt \
             service/src/test/java/cleveres/tricky/cleverestech/UtilTest.kt
-          git commit -m "fix: harden KernelSU delivery and WebUI runtime"
+          git add -u .github
+          git commit -m "fix: harden KernelSU WebUI and root of trust handling"
           git push origin HEAD:agent/fix-kernelsu-artifact-and-hardening
