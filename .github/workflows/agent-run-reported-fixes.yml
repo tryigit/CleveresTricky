@@ -53,12 +53,8 @@ jobs:
               if in_python and not in_triple and line == 'PY':
                   in_python = False
                   continue
-              if in_python:
-                  # The source helper intentionally stores Python triple-quoted string
-                  # contents at their literal indentation rather than YAML indentation.
-                  # Toggle only on odd occurrences so those string bodies are preserved.
-                  if line.count("'''") % 2 == 1:
-                      in_triple = not in_triple
+              if in_python and line.count("'''") % 2 == 1:
+                  in_triple = not in_triple
 
           while payload and payload[-1] == '':
               payload.pop()
@@ -72,6 +68,16 @@ jobs:
           Path('/tmp/reported-fixes.sh').write_text(script)
           PY
           bash /tmp/reported-fixes.sh
+          python3 <<'PY'
+          from pathlib import Path
+          path = Path('module/webui-tests/bridge.test.js')
+          text = path.read_text()
+          old = "        assert.deepStrictEqual(await response.json(), { status: 'ok' });"
+          new = "        assert.strictEqual(JSON.stringify(await response.json()), JSON.stringify({ status: 'ok' }));"
+          if old not in text and new not in text:
+              raise SystemExit('Bridge assertion anchor not found')
+          path.write_text(text.replace(old, new, 1))
+          PY
 
       - name: Run focused regressions
         shell: bash
