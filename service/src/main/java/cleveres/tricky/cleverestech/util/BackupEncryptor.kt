@@ -42,24 +42,28 @@ object BackupEncryptor {
         val salt = ByteArray(SALT_LENGTH).also(secureRandom::nextBytes)
         val iv = ByteArray(IV_LENGTH).also(secureRandom::nextBytes)
         val keyBytes = deriveKey(password, salt)
-        var ciphertext: ByteArray? = null
+        var pendingOutput: ByteArray? = null
         try {
-            val header =
-                ByteBuffer.allocate(HEADER_LENGTH)
-                    .put(magicBytes)
-                    .putInt(VERSION)
-                    .put(salt)
-                    .put(iv)
-                    .array()
             val cipher = Cipher.getInstance(AES_TRANSFORMATION)
             cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(keyBytes, "AES"), GCMParameterSpec(128, iv))
-            cipher.updateAAD(header)
-            val encrypted = cipher.doFinal(plaintext)
-            ciphertext = encrypted
-            return header + encrypted
+
+            val encryptedSize = cipher.getOutputSize(plaintext.size)
+            val result = ByteArray(HEADER_LENGTH + encryptedSize)
+            pendingOutput = result
+            ByteBuffer.wrap(result)
+                .put(magicBytes)
+                .putInt(VERSION)
+                .put(salt)
+                .put(iv)
+            cipher.updateAAD(result, 0, HEADER_LENGTH)
+
+            val written = cipher.doFinal(plaintext, 0, plaintext.size, result, HEADER_LENGTH)
+            check(written == encryptedSize) { "Unexpected AES-GCM output size" }
+            pendingOutput = null
+            return result
         } finally {
             keyBytes.fill(0)
-            ciphertext?.fill(0)
+            pendingOutput?.fill(0)
             salt.fill(0)
             iv.fill(0)
         }
@@ -85,24 +89,27 @@ object BackupEncryptor {
 
         val salt = ByteArray(SALT_LENGTH).also(buffer::get)
         val iv = ByteArray(IV_LENGTH).also(buffer::get)
-        val encryptedData = ByteArray(buffer.remaining()).also(buffer::get)
         val keyBytes = deriveKey(password, salt)
         try {
             val cipher = Cipher.getInstance(AES_TRANSFORMATION)
             cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(keyBytes, "AES"), GCMParameterSpec(128, iv))
             if (version == VERSION) cipher.updateAAD(data, 0, HEADER_LENGTH)
-            return cipher.doFinal(encryptedData)
+            return cipher.doFinal(data, HEADER_LENGTH, data.size - HEADER_LENGTH)
         } finally {
             keyBytes.fill(0)
-            encryptedData.fill(0)
             salt.fill(0)
             iv.fill(0)
             magic.fill(0)
         }
     }
 
-    fun isEncryptedBackup(bytes: ByteArray): Boolean =
-        bytes.size >= magicBytes.size && bytes.copyOfRange(0, magicBytes.size).contentEquals(magicBytes)
+    fun isEncryptedBackup(bytes: ByteArray): Boolean {
+        if (bytes.size < magicBytes.size) return false
+        for (index in magicBytes.indices) {
+            if (bytes[index] != magicBytes[index]) return false
+        }
+        return true
+    }
 
     private fun deriveKey(
         password: String,
