@@ -8,16 +8,16 @@ plugins {
     alias(libs.plugins.agp.app)
 }
 
-val moduleId: String by rootProject.extra
-val moduleName: String by rootProject.extra
-val verCode: Int by rootProject.extra
-val verName: String by rootProject.extra
-val commitHash: String by rootProject.extra
-val abiList: List<String> by rootProject.extra
-val androidMinSdkVersion: Int by rootProject.extra
-val androidMaxSupportedSdkVersion: Int by rootProject.extra
-val author: String by rootProject.extra
-val description: String by rootProject.extra
+val moduleId = rootProject.extra["moduleId"] as String
+val moduleName = rootProject.extra["moduleName"] as String
+val verCode = rootProject.extra["verCode"] as Int
+val verName = rootProject.extra["verName"] as String
+val commitHash = rootProject.extra["commitHash"] as String
+val abiList = (rootProject.extra["abiList"] as List<*>).map { it as String }
+val androidMinSdkVersion = rootProject.extra["androidMinSdkVersion"] as Int
+val androidMaxSupportedSdkVersion = rootProject.extra["androidMaxSupportedSdkVersion"] as Int
+val author = rootProject.extra["author"] as String
+val description = rootProject.extra["description"] as String
 val moduleDescription = description
 
 android {
@@ -79,226 +79,201 @@ fun commandExists(command: String): Boolean {
     }
 }
 
-tasks.register<Exec>("installCargoNdk") {
-    group = "rust"
-    description = "Installs cargo-ndk if not present"
-    onlyIf { commandExists("cargo") }
-    if (isWindowsHost) {
-        commandLine("cmd", "/c", "cargo ndk --version >NUL 2>&1 || cargo install cargo-ndk --locked")
-    } else {
-        commandLine("sh", "-c", "cargo ndk --version >/dev/null 2>&1 || cargo install cargo-ndk --locked")
+fun resolveRustupBinary(): String? {
+    val envRustup = System.getenv("RUSTUP")?.takeIf { it.isNotBlank() }
+    if (envRustup != null && File(envRustup).isFile) return envRustup
+
+    val cargoHome =
+        System.getenv("CARGO_HOME")
+            ?.takeIf { it.isNotBlank() }
+            ?: File(System.getProperty("user.home"), ".cargo").absolutePath
+    val rustupName = if (isWindowsHost) "rustup.exe" else "rustup"
+    val cargoRustup = File(cargoHome, "bin/$rustupName")
+    if (cargoRustup.isFile) return cargoRustup.absolutePath
+
+    return if (commandExists("rustup")) "rustup" else null
+}
+
+fun String.runCommand(
+    workingDir: File = rootDir,
+    extraEnv: Map<String, String> = emptyMap(),
+) {
+    val arguments = split(" ").filter { it.isNotEmpty() }.toMutableList()
+    val rustup = resolveRustupBinary()
+    if (arguments.firstOrNull() == "rustup" && rustup != null) {
+        arguments[0] = rustup
+    }
+    exec {
+        commandLine(arguments)
+        this.workingDir = workingDir
+        environment(extraEnv)
     }
 }
 
-tasks.register<Exec>("installRustTargets") {
-    group = "rust"
-    description = "Installs Android Rust targets via rustup"
-    onlyIf { commandExists("rustup") }
-    commandLine(
-        "rustup",
-        "target",
-        "add",
-        "aarch64-linux-android",
-        "x86_64-linux-android",
+val rustProject = rootProject.file("native")
+val rustTargetDir = layout.buildDirectory.dir("rust-target")
+val rustToolchain = "nightly-2025-06-23"
+val hostRustOs =
+    when {
+        isWindowsHost -> "windows"
+        System.getProperty("os.name").startsWith("Mac", ignoreCase = true) -> "macos"
+        else -> "linux"
+    }
+val hostRustArch =
+    when (System.getProperty("os.arch").lowercase()) {
+        "amd64", "x86_64" -> "x86_64"
+        "aarch64", "arm64" -> "aarch64"
+        else -> System.getProperty("os.arch").lowercase()
+    }
+val ndkHostTag =
+    when {
+        isWindowsHost -> "windows-x86_64"
+        hostRustOs == "macos" && hostRustArch == "aarch64" -> "darwin-arm64"
+        hostRustOs == "macos" -> "darwin-x86_64"
+        else -> "linux-x86_64"
+    }
+val rustAndroidTargetByAbi =
+    mapOf(
+        "arm64-v8a" to "aarch64-linux-android",
+        "armeabi-v7a" to "armv7-linux-androideabi",
+        "x86_64" to "x86_64-linux-android",
+        "x86" to "i686-linux-android",
     )
-    dependsOn("installCargoNdk")
+val rustCcPrefixByAbi =
+    mapOf(
+        "arm64-v8a" to "aarch64-linux-android",
+        "armeabi-v7a" to "armv7a-linux-androideabi",
+        "x86_64" to "x86_64-linux-android",
+        "x86" to "i686-linux-android",
+    )
+
+val prepareRust by tasks.registering {
+    inputs.file(rootProject.file("rust-toolchain.toml"))
+    outputs.file(layout.buildDirectory.file("rust-toolchain-ready"))
+    doLast {
+        val rustup = resolveRustupBinary()
+        if (rustup == null) {
+            throw GradleException("rustup is required to build native Rust components")
+        }
+        val rustupCommand = if (rustup == "rustup") "rustup" else rustup
+        "$rustupCommand toolchain install $rustToolchain --profile minimal --component rust-src".runCommand()
+        rustAndroidTargetByAbi.values.forEach { target ->
+            "$rustupCommand target add --toolchain $rustToolchain $target".runCommand()
+        }
+        layout.buildDirectory.file("rust-toolchain-ready").get().asFile.writeText(rustToolchain)
+    }
 }
 
-tasks.register<Exec>("cargoBuild") {
-    group = "rust"
-    description = "Builds the Rust native library and injector for all Android targets using cargo-ndk"
-    workingDir = file("../rust")
-
-    doFirst {
-        if (!commandExists("cargo") || !commandExists("rustup")) {
-            throw GradleException("Rust and rustup are required to build the native attestation core")
+val buildRust by tasks.registering {
+    dependsOn(prepareRust)
+    inputs.dir(rustProject)
+    inputs.file(rootProject.file("Cargo.toml"))
+    inputs.file(rootProject.file("Cargo.lock"))
+    inputs.file(rootProject.file("rust-toolchain.toml"))
+    outputs.dir(rustTargetDir)
+    doLast {
+        val sdkDir = android.sdkDirectory
+        val ndkVersion = android.ndkVersion
+        val ndkDir = File(sdkDir, "ndk/$ndkVersion")
+        val toolchainBin = File(ndkDir, "toolchains/llvm/prebuilt/$ndkHostTag/bin")
+        if (!toolchainBin.isDirectory) {
+            throw GradleException("Android NDK toolchain not found at ${toolchainBin.absolutePath}")
+        }
+        abiList.forEach { abi ->
+            val rustTarget = rustAndroidTargetByAbi[abi]
+                ?: throw GradleException("Unsupported ABI for Rust build: $abi")
+            val ccPrefix = rustCcPrefixByAbi[abi]
+                ?: throw GradleException("Unsupported ABI for Rust linker: $abi")
+            val clangName = if (isWindowsHost) "$ccPrefix${androidMinSdkVersion}-clang.cmd" else "$ccPrefix${androidMinSdkVersion}-clang"
+            val clang = File(toolchainBin, clangName)
+            if (!clang.isFile) {
+                throw GradleException("Android clang not found at ${clang.absolutePath}")
+            }
+            val linkerKey = "CARGO_TARGET_${rustTarget.uppercase().replace('-', '_')}_LINKER"
+            val env =
+                mapOf(
+                    "CARGO_TARGET_DIR" to rustTargetDir.get().asFile.absolutePath,
+                    linkerKey to clang.absolutePath,
+                )
+            "cargo +$rustToolchain build --release --target $rustTarget".runCommand(rustProject, env)
         }
     }
-
-    dependsOn("installRustTargets")
-
-    environment("RUSTFLAGS", "-D warnings")
-
-    commandLine(
-        "cargo",
-        "ndk",
-        "--platform",
-        androidMinSdkVersion.toString(),
-        "-t",
-        "arm64-v8a",
-        "-t",
-        "x86_64",
-        "build",
-        "--release",
-        "-p",
-        "cleverestricky-native-core",
-        "-p",
-        "cleverestricky-injector-core",
-        "-p",
-        "cleverestricky-webui-bridge",
-    )
 }
 
-tasks.named("preBuild") {
-    dependsOn("cargoBuild")
-}
-
-afterEvaluate {
-    android.buildTypes.forEach { buildType ->
-        val variantLowered = buildType.name.lowercase()
-        val variantCapped = buildType.name.replaceFirstChar { it.uppercaseChar() }
-        val buildTypeCapped = buildType.name.replaceFirstChar { it.uppercase() }
-        val buildTypeLowered = buildType.name.lowercase()
-        val supportedAbis =
-            abiList.map {
-                when (it) {
-                    "arm64-v8a" -> "arm64"
-                    "armeabi-v7a" -> "arm"
-                    "x86" -> "x86"
-                    "x86_64" -> "x64"
-                    else -> error("unsupported abi $it")
-                }
-            }.joinToString(" ")
-
-        val moduleDir = layout.buildDirectory.file("outputs/module/$variantLowered")
-        val zipFileName =
-            "$moduleName-$verName-$verCode-$commitHash-$buildTypeLowered.zip".replace(' ', '-')
-
-        val prepareModuleFilesTask =
-            tasks.register<Sync>("prepareModuleFiles$variantCapped") {
-                group = "module"
-                dependsOn(
-                    "assemble$variantCapped",
-                    ":service:package$buildTypeCapped",
-                )
-                into(moduleDir)
-                from(rootProject.layout.projectDirectory.file("README.md"))
-                from(layout.projectDirectory.file("template")) {
-                    exclude("module.prop", "customize.sh", "post-fs-data.sh", "service.sh", "daemon", "webroot/index.html")
-                    filter<FixCrLfFilter>("eol" to FixCrLfFilter.CrLf.newInstance("lf"))
-                }
-                from(layout.projectDirectory.file("template")) {
-                    include("module.prop")
-                    expand(
-                        "moduleId" to moduleId,
-                        "moduleName" to moduleName,
-                        "versionName" to "$verName ($verCode-$commitHash-$variantLowered)",
-                        "versionCode" to verCode,
-                        "author" to author,
-                        "description" to moduleDescription,
-                    )
-                }
-                from(layout.projectDirectory.file("template")) {
-                    include("customize.sh", "post-fs-data.sh", "service.sh", "daemon", "webroot/index.html")
-                    val tokens =
-                        mapOf(
-                            "DEBUG" to if (buildTypeLowered == "debug") "true" else "false",
-                            "SONAME" to moduleId,
-                            "SUPPORTED_ABIS" to supportedAbis,
-                            "MIN_SDK" to androidMinSdkVersion.toString(),
-                            "MAX_SDK" to androidMaxSupportedSdkVersion.toString(),
-                        )
-                    filter<ReplaceTokens>("tokens" to tokens)
-                    filter<FixCrLfFilter>("eol" to FixCrLfFilter.CrLf.newInstance("lf"))
-                }
-                from(project(":service").tasks.getByName("package$buildTypeCapped").outputs) {
-                    include("*.apk")
-                    rename(".*\\.apk", "service.apk")
-                }
-                from(
-                    layout.buildDirectory.file(
-                        "intermediates/stripped_native_libs/$variantLowered/strip${variantCapped}DebugSymbols/out/lib",
-                    ),
-                ) {
-                    exclude("**/libbinder.so", "**/libutils.so")
-                    into("lib")
-                }
-
-                abiList.forEach { abi ->
-                    val rustTarget =
-                        when (abi) {
-                            "arm64-v8a" -> "aarch64-linux-android"
-                            "x86_64" -> "x86_64-linux-android"
-                            else -> error("unsupported Rust injector ABI $abi")
-                        }
-                    from(rootProject.layout.projectDirectory.file("rust/target/$rustTarget/release/inject")) {
-                        into("lib/$abi")
-                    }
-                    from(rootProject.layout.projectDirectory.file("rust/target/$rustTarget/release/webui_bridge")) {
-                        into("lib/$abi")
-                    }
-                }
-
-                doLast {
-                    val apk = file("${moduleDir.get().asFile}/service.apk")
-                    if (!apk.exists() || apk.length() == 0L) {
-                        throw GradleException("service.apk is missing or empty!")
-                    }
-
-                    abiList.forEach { abi ->
-                        val injectPath = file("${moduleDir.get().asFile}/lib/$abi/inject")
-                        if (!injectPath.exists()) {
-                            throw GradleException("inject binary for $abi is missing at $injectPath")
-                        }
-                        val webUiBridgePath = file("${moduleDir.get().asFile}/lib/$abi/webui_bridge")
-                        if (!webUiBridgePath.exists()) {
-                            throw GradleException("WebUI bridge binary for $abi is missing at $webUiBridgePath")
-                        }
-                    }
-
-                    val payloadFiles =
-                        fileTree(moduleDir) {
-                            exclude("**/*.sha256")
-                        }.files
-                            .filter(File::isFile)
-                            .sortedBy { it.relativeTo(moduleDir.get().asFile).invariantSeparatorsPath }
-                    payloadFiles.forEach { payload ->
-                        val md = MessageDigest.getInstance("SHA-256")
-                        payload.forEachBlock(4096) { bytes, size ->
-                            md.update(bytes, 0, size)
-                        }
-                        file(payload.path + ".sha256").writeText(
-                            HexFormat.of().formatHex(md.digest()),
-                        )
-                    }
-                }
+androidComponents {
+    onVariants { variant ->
+        variant.sources.jniLibs?.addGeneratedSourceDirectory(
+            buildRust,
+        ) { task ->
+            task.rustTargetDir.map { dir ->
+                dir.dir("generated-jni/${variant.name}")
             }
-
-        val zipTask =
-            tasks.register<Zip>("zip$variantCapped") {
-                group = "module"
-                dependsOn(prepareModuleFilesTask)
-                archiveFileName.set(zipFileName)
-                destinationDirectory.set(layout.projectDirectory.file("release").asFile)
-                from(moduleDir)
-            }
-
-        val pushTask =
-            tasks.register<Exec>("push$variantCapped") {
-                group = "module"
-                dependsOn(zipTask)
-                doFirst {
-                    commandLine("adb", "push", zipTask.get().outputs.files.singleFile.path, "/data/local/tmp")
-                }
-            }
-
-        val installKsuTask =
-            tasks.register<Exec>("installKsu$variantCapped") {
-                group = "module"
-                dependsOn(pushTask)
-                commandLine(
-                    "adb",
-                    "shell",
-                    "su",
-                    "-c",
-                    "/data/adb/ksud module install /data/local/tmp/$zipFileName",
-                )
-            }
-
-        tasks.register<Exec>("installKsuAndReboot$variantCapped") {
-            group = "module"
-            dependsOn(installKsuTask)
-            commandLine("adb", "reboot")
         }
+    }
+}
+
+tasks.named("buildRust") {
+    doLast {
+        val output = rustTargetDir.get().asFile
+        val generated = File(output, "generated-jni")
+        generated.deleteRecursively()
+        abiList.forEach { abi ->
+            val target = rustAndroidTargetByAbi.getValue(abi)
+            val source = File(output, "$target/release/libcleveres_tricky.so")
+            if (!source.isFile) throw GradleException("Rust output missing: ${source.absolutePath}")
+            val destination = File(generated, "release/$abi/libcleveres_tricky.so")
+            destination.parentFile.mkdirs()
+            source.copyTo(destination, overwrite = true)
+        }
+    }
+}
+
+val zipTemplate = layout.buildDirectory.dir("zip-template")
+
+val prepareModuleTemplate by tasks.registering(Copy::class) {
+    dependsOn(":service:assembleRelease")
+    dependsOn(buildRust)
+    from("template")
+    into(zipTemplate)
+    filteringCharset = "UTF-8"
+    filter<FixCrLfFilter>("eol" to FixCrLfFilter.CrLf.newInstance("lf"))
+    filter<ReplaceTokens>(
+        "tokens" to
+            mapOf(
+                "MODULE_ID" to moduleId,
+                "MODULE_NAME" to moduleName,
+                "VERSION_NAME" to verName,
+                "VERSION_CODE" to verCode.toString(),
+                "AUTHOR" to author,
+                "DESCRIPTION" to moduleDescription,
+                "MIN_SDK" to androidMinSdkVersion.toString(),
+                "MAX_SDK" to androidMaxSupportedSdkVersion.toString(),
+            ),
+    )
+    from(project(":service").layout.buildDirectory.file("outputs/apk/release/service-release-unsigned.apk")) {
+        rename { "service.apk" }
+    }
+    from(rustTargetDir.map { it.dir("generated-jni/release") }) {
+        into("lib")
+    }
+}
+
+val zipRelease by tasks.registering(Zip::class) {
+    dependsOn(prepareModuleTemplate)
+    archiveFileName.set("$moduleName-$verName-$commitHash.zip")
+    destinationDirectory.set(rootProject.layout.buildDirectory.dir("outputs"))
+    from(zipTemplate)
+}
+
+val zipDebug by tasks.registering(Zip::class) {
+    dependsOn(prepareModuleTemplate)
+    archiveFileName.set("$moduleName-$verName-$commitHash-debug.zip")
+    destinationDirectory.set(rootProject.layout.buildDirectory.dir("outputs"))
+    from(zipTemplate)
+}
+
+tasks.register("printModuleInfo") {
+    doLast {
+        println("$moduleId $moduleName $verCode $verName $commitHash $androidMinSdkVersion $androidMaxSupportedSdkVersion")
     }
 }
