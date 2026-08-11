@@ -1,0 +1,32 @@
+name: Link policy WebUI
+
+on:
+  push:
+    branches: [ "granular-policy-state-v2" ]
+
+permissions:
+  contents: write
+
+jobs:
+  link:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+          path = Path('module/template/webroot/index.html')
+          text = path.read_text()
+          old = '    <script src="bridge.js?revision=4"></script>\n'
+          new = '    <script src="bridge.js?revision=4"></script>\n    <script src="policy.js?revision=1"></script>\n'
+          if text.count(old) != 1:
+              raise SystemExit('WebUI script anchor mismatch')
+          path.write_text(text.replace(old, new, 1))
+          PY
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add module/template/webroot/index.html
+          git commit -m "feat: expose granular policy webui"
+          git push origin HEAD:granular-policy-state-v2
