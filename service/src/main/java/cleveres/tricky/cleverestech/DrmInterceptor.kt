@@ -14,14 +14,15 @@ object DrmInterceptor : BinderInterceptor() {
     private const val DRM_PROCESS_NAME = "mediadrmserver"
     private const val INJECTION_RETRY_INTERVAL_MS = 15_000L
 
+    private val drmPropertyTransactionCodes = getPropertyCodes().toSet()
     private val createPluginTransactionCodes = createPluginCodes().toSet()
-    private val directGetPropertyTransactionCodes = getPropertyCodes().toSet()
+    private val directGetPropertyTransactionCodes = drmPropertyTransactionCodes
     private val interceptedCodes =
         validTransactCodes(*(createPluginTransactionCodes + directGetPropertyTransactionCodes).toIntArray())
 
     private lateinit var drmService: IBinder
     private val triedCount = java.util.concurrent.atomic.AtomicInteger(0)
-    private val pluginInterceptor = DrmPluginInterceptor()
+    private val pluginInterceptor = DrmPluginInterceptor(drmPropertyTransactionCodes)
     private val registeredPluginBinders =
         Collections.newSetFromMap(ConcurrentHashMap<IBinder, Boolean>())
 
@@ -104,6 +105,7 @@ object DrmInterceptor : BinderInterceptor() {
 
         val pluginBinder = readPluginBinder(reply) ?: return Skip
         val control = binderBackdoor ?: return Skip
+        if (pluginInterceptor.interceptedCodes.isEmpty()) return Skip
         synchronized(registeredPluginBinders) {
             if (registeredPluginBinders.contains(pluginBinder)) return Skip
             if (
@@ -111,7 +113,7 @@ object DrmInterceptor : BinderInterceptor() {
                     control,
                     pluginBinder,
                     pluginInterceptor,
-                    DrmPluginInterceptor.INTERCEPTED_CODES,
+                    pluginInterceptor.interceptedCodes,
                 )
             ) {
                 registeredPluginBinders.add(pluginBinder)
@@ -345,10 +347,10 @@ object DrmInterceptor : BinderInterceptor() {
         Config.signalRuntimeController()
     }
 
-    private class DrmPluginInterceptor : BinderInterceptor() {
-        companion object {
-            val INTERCEPTED_CODES = validTransactCodes(*getPropertyCodes())
-        }
+    private class DrmPluginInterceptor(
+        propertyCodes: Set<Int>,
+    ) : BinderInterceptor() {
+        val interceptedCodes = validTransactCodes(*propertyCodes.toIntArray())
 
         override fun onPreTransact(
             target: IBinder,
@@ -357,7 +359,7 @@ object DrmInterceptor : BinderInterceptor() {
             callingUid: Int,
             callingPid: Int,
             data: Parcel,
-        ): Result = if (code in INTERCEPTED_CODES && Config.needHack(callingUid)) Continue else Skip
+        ): Result = if (code in interceptedCodes && Config.needHack(callingUid)) Continue else Skip
 
         override fun onPostTransact(
             target: IBinder,
@@ -369,7 +371,7 @@ object DrmInterceptor : BinderInterceptor() {
             reply: Parcel?,
             resultCode: Int,
         ): Result {
-            if (reply == null || resultCode != 0 || code !in INTERCEPTED_CODES || !Config.needHack(callingUid)) {
+            if (reply == null || resultCode != 0 || code !in interceptedCodes || !Config.needHack(callingUid)) {
                 return Skip
             }
             return maybeOverrideSecurityLevelReply(reply) ?: Skip
