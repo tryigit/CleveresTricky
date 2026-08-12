@@ -35,6 +35,12 @@ assert.match(policySource, /removeLegacySurfaces\(\)/);
 assert.ok(!indexSource.includes('One-Click Reset (Refresh Environment)'));
 assert.match(indexSource, /Synchronize Runtime/);
 assert.ok(!indexSource.includes('<h3>System Control</h3>'));
-assert.match(indexSource, /policy\.js\?revision=2/);
+assert.match(indexSource, /policy\.js\?revision=3/);
+assert.match(indexSource, /bridge\.js\?revision=6/);
+assert.match(policySource, /request\('\/api\/packages'\)/);
+assert.match(policySource, /bridge\.listPackages\(\)/);
+assert.match(policySource, /function refreshPresentation\(\)/);
+assert.match(policySource, /ct_language_selector/);
+assert.ok(!policySource.includes('ct_community_slot'), 'Policy must not structurally relocate the community card');
 
 require('./bridge-base.test.js');

@@ -63,6 +63,12 @@ function notify(message, type) {
   if (typeof global.notify === 'function') global.notify(message, type || 'normal');
 }
 
+function refreshPresentation() {
+  const selector = document.getElementById('ct_language_selector');
+  if (selector) selector.dispatchEvent(new Event('change',{bubbles:true}));
+  bindCommunityExternally();
+}
+
 function safeClone(value) {
   return JSON.parse(JSON.stringify(value));
 }
@@ -179,8 +185,6 @@ function injectStyles() {
     .ct-profile-item button{flex:0 0 auto;padding:9px 12px}
     .ct-patch-component{border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px}
     .ct-patch-component:last-child{margin-bottom:0}
-    .ct-community-slot #cleveresCommunityCard{margin:0!important;padding:0!important;max-width:none!important}
-    .ct-community-slot #cleveresCommunityCard>.panel{margin-bottom:0!important}.ct-community-slot{margin-bottom:20px}
     .ct-saving button,.ct-saving input,.ct-saving select,.ct-saving textarea{pointer-events:none}
     .ct-keybox-summary{margin-top:8px;color:#999;font-size:.84em;line-height:1.4}
     .ct-impact-note{display:block;color:#8fa3b8;font-size:.78em;line-height:1.4;margin-top:6px}
@@ -377,10 +381,12 @@ async function setLegacyToggle(setting, enabled) {
     await request('/api/toggle',{method:'POST',body});
     await loadLegacyConfig();
     renderFeatureCenter();
+    refreshPresentation();
   } catch (error) {
     notify(error.message || 'Could not update setting','error');
     await loadLegacyConfig();
     renderFeatureCenter();
+    refreshPresentation();
   }
 }
 
@@ -784,22 +790,12 @@ function installAutoIdentityOverride() {
 
 function bindCommunityExternally() {
   const card = document.getElementById('cleveresCommunityCard');
-  const dashboard = document.getElementById('dashboard');
-  if (!card || !dashboard) return false;
-  let slot = document.getElementById('ct_community_slot');
-  if (!slot) {
-    slot = document.createElement('div');
-    slot.id = 'ct_community_slot';
-    slot.className = 'ct-community-slot';
-    dashboard.appendChild(slot);
-  }
-  slot.appendChild(card);
+  if (!card) return false;
   const link = card.querySelector('a');
   if (link) {
     link.href = 'https://t.me/cleverestech';
     link.removeAttribute('target');
     link.rel = 'noopener noreferrer';
-    link.textContent = 'Open Telegram Community';
     if (link.dataset.ctPolicyExternal !== '1') {
       link.dataset.ctPolicyExternal = '1';
       link.addEventListener('click',event => {
@@ -930,7 +926,18 @@ async function loadLegacyConfig() {
 
 async function loadReferenceData() {
   const tasks = [];
-  if (typeof bridge.listPackages === 'function') tasks.push(Promise.resolve(bridge.listPackages()).then(value => { packages = Array.isArray(value) ? value : []; }).catch(()=>{}));
+  tasks.push(request('/api/packages').then(value => {
+    packages = Array.isArray(value) ? value : [];
+    if (!packages.length && typeof bridge.listPackages === 'function') {
+      const fallback = bridge.listPackages();
+      packages = Array.isArray(fallback) ? fallback : [];
+    }
+  }).catch(() => {
+    if (typeof bridge.listPackages === 'function') {
+      const fallback = bridge.listPackages();
+      packages = Array.isArray(fallback) ? fallback : [];
+    } else packages = [];
+  }));
   tasks.push(request('/api/keyboxes').then(value => { keyboxes = Array.isArray(value) ? value : []; }).catch(()=>{}));
   tasks.push(request('/api/config').then(value => { legacyConfig = value || {}; if (Array.isArray(value.templates)) templates = value.templates; }).catch(()=>{}));
   await Promise.all(tasks);
@@ -946,6 +953,7 @@ function renderAll() {
   if (inspect) inspect.onclick = inspectEffective;
   removeLegacySurfaces();
   sanitizeResourceTable();
+  refreshPresentation();
 }
 
 function escapeHtml(value) {
