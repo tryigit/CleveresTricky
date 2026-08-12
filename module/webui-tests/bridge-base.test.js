@@ -5,7 +5,6 @@ const vm = require('vm');
 const bridgeSource = fs.readFileSync('module/template/webroot/bridge.js', 'utf8');
 const indexSource = fs.readFileSync('module/template/webroot/index.html', 'utf8');
 const uxSource = fs.readFileSync('module/template/webroot/ux.js', 'utf8');
-const uxBaseSource = fs.readFileSync('module/template/webroot/ux-base.js', 'utf8');
 
 function encodeBody(value) {
     return Buffer.from(value, 'utf8').toString('base64url');
@@ -186,25 +185,25 @@ async function main() {
     assert.strictEqual(communityLink.rel, 'noopener noreferrer');
     assert.strictEqual(communityLink.textContent, 'Join Telegram Community');
 
-    assert.match(uxSource, /ux-base\.js\?revision=5/);
+    assert.ok(!uxSource.includes('ux-base.js'), 'ux.js must contain the UX implementation directly');
     assert.ok(!uxSource.includes('ux-patch.js'), 'The retired patch layer must not be loaded');
-    assert.match(uxBaseSource, /\['en', 'English'\]/);
-    assert.match(uxBaseSource, /\['tr', 'Türkçe'\]/);
-    assert.match(uxBaseSource, /\['zh-CN', '简体中文'\]/);
-    assert.match(uxBaseSource, /\['ru', 'Русский'\]/);
-    assert.match(uxBaseSource, /\['id', 'Bahasa Indonesia'\]/);
-    assert.match(uxBaseSource, /\['hi', 'हिन्दी'\]/);
-    assert.match(uxBaseSource, /\['ar', 'العربية'\]/);
-    assert.match(uxBaseSource, /document\.documentElement\.dir = locale === 'ar' \? 'rtl' : 'ltr'/);
-    assert.match(uxBaseSource, /html\[dir="rtl"\]/);
-    assert.match(uxBaseSource, /node\.nodeValue = leading \+ tr\(trimmed\) \+ trailing/);
-    assert.match(uxBaseSource, /Identity is currently disabled\. You can enable it from Dashboard\./);
-    assert.match(uxBaseSource, /ct_language_panel/);
-    assert.match(uxBaseSource, /To add a locale:/);
-    assert.match(uxBaseSource, /const featureCenter = document\.getElementById\('ct_dashboard_controls'\)/);
-    assert.match(uxBaseSource, /ct_debug_panel/);
-    assert.match(uxBaseSource, /All major features and runtime paths in one place\./);
-    assert.ok(!/setInterval\s*\(/.test(uxBaseSource), 'UX presentation must not add permanent polling');
+    assert.match(uxSource, /\['en', 'English'\]/);
+    assert.match(uxSource, /\['tr', 'Türkçe'\]/);
+    assert.match(uxSource, /\['zh-CN', '简体中文'\]/);
+    assert.match(uxSource, /\['ru', 'Русский'\]/);
+    assert.match(uxSource, /\['id', 'Bahasa Indonesia'\]/);
+    assert.match(uxSource, /\['hi', 'हिन्दी'\]/);
+    assert.match(uxSource, /\['ar', 'العربية'\]/);
+    assert.match(uxSource, /document\.documentElement\.dir = locale === 'ar' \? 'rtl' : 'ltr'/);
+    assert.match(uxSource, /html\[dir="rtl"\]/);
+    assert.match(uxSource, /node\.nodeValue = leading \+ tr\(trimmed\) \+ trailing/);
+    assert.match(uxSource, /Identity is currently disabled\. You can enable it from Dashboard\./);
+    assert.match(uxSource, /ct_language_panel/);
+    assert.match(uxSource, /To add a locale:/);
+    assert.match(uxSource, /const featureCenter = document\.getElementById\('ct_dashboard_controls'\)/);
+    assert.match(uxSource, /ct_debug_panel/);
+    assert.match(uxSource, /All major features and runtime paths in one place\./);
+    assert.ok(!/setInterval\s*\(/.test(uxSource), 'UX presentation must not add permanent polling');
 
     const normalizeUiMessage = loadMessageNormalizer();
     assert.strictEqual(normalizeUiMessage(envelope('{"error":"keybox rejected"}')), 'keybox rejected');
