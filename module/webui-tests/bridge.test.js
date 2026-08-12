@@ -4,6 +4,7 @@ const vm = require('vm');
 
 const bridgeSource = fs.readFileSync('module/template/webroot/bridge.js', 'utf8');
 const indexSource = fs.readFileSync('module/template/webroot/index.html', 'utf8');
+const uxSource = fs.readFileSync('module/template/webroot/ux.js', 'utf8');
 
 function encodeBody(value) {
     return Buffer.from(value, 'utf8').toString('base64url');
@@ -51,7 +52,7 @@ function createDocument() {
     };
 }
 
-function createBridge(callbackFactory, document = null) {
+function createBridge(callbackFactory, document = null, commandObserver = null) {
     const context = {
         console,
         setTimeout,
@@ -73,7 +74,8 @@ function createBridge(callbackFactory, document = null) {
     if (document) context.document = document;
     context.window = context;
     context.ksu = {
-        exec(_command, _options, callbackName) {
+        exec(command, _options, callbackName) {
+            if (commandObserver) commandObserver(command);
             callbackFactory(context[callbackName]);
         },
         enableEdgeToEdge() {},
@@ -151,6 +153,20 @@ async function main() {
         JSON.parse(resourceBody)
     );
 
+    let communityCommand = '';
+    const communityBridge = createBridge(
+        callback => callback(0, '', ''),
+        null,
+        command => { communityCommand = command; }
+    );
+    await communityBridge.openCommunity();
+    assert.match(communityCommand, /android\.intent\.action\.VIEW/);
+    assert.match(communityCommand, /android\.intent\.category\.BROWSABLE/);
+    assert.match(communityCommand, /https:\/\/t\.me\/cleverestech/);
+    assert.match(communityCommand, /-p com\.android\.chrome/);
+    assert.match(communityCommand, /\|\| \/system\/bin\/am start/);
+    assert.ok(!communityCommand.includes('tg:'), 'Telegram custom schemes must never be used from KernelSU WebUI');
+
     const communityDocument = createDocument();
     createBridge(() => {}, communityDocument);
     const communityCard = communityDocument.getElementById('cleveresCommunityCard');
@@ -164,6 +180,16 @@ async function main() {
     assert.strictEqual(communityLink.target, '_blank');
     assert.strictEqual(communityLink.rel, 'noopener noreferrer');
     assert.strictEqual(communityLink.textContent, 'Join Telegram Community');
+
+    assert.match(uxSource, /\['en', 'English'\]/);
+    assert.match(uxSource, /\['tr', 'Türkçe'\]/);
+    assert.match(uxSource, /\['zh-CN', '简体中文'\]/);
+    assert.match(uxSource, /Identity is currently disabled\. You can enable it from Dashboard\./);
+    assert.match(uxSource, /ct_language_panel/);
+    assert.match(uxSource, /ct_debug_panel/);
+    assert.match(uxSource, /ct_drm_dashboard_panel/);
+    assert.match(uxSource, /Profiles\\s\+v2/);
+    assert.ok(!/setInterval\s*\(/.test(uxSource), 'UX enhancements must not add permanent polling');
 
     const normalizeUiMessage = loadMessageNormalizer();
     assert.strictEqual(normalizeUiMessage(envelope('{"error":"keybox rejected"}')), 'keybox rejected');
