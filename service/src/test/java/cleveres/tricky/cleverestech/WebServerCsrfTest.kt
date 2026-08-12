@@ -17,7 +17,7 @@ class WebServerCsrfTest {
 
             override fun getCookies() = null
 
-            @Deprecated("NanoHTTPD deprecated this, ignore warning")
+            @Deprecated("Deprecated by NanoHTTPD")
             override fun getHeaders() =
                 mapOf(
                     "host" to host,
@@ -29,19 +29,21 @@ class WebServerCsrfTest {
 
             override fun getMethod() = NanoHTTPD.Method.POST
 
+            @Deprecated("Use getParameters")
+
             override fun getParms() = mapOf("token" to server.token)
 
-            @Deprecated("NanoHTTPD deprecated this, ignore warning")
+            @Deprecated("Deprecated by NanoHTTPD")
             override fun getQueryParameterString() = ""
 
             override fun getUri() = "/api/config"
 
             override fun parseBody(files: Map<String, String>?) {}
 
-            @Deprecated("NanoHTTPD deprecated this, ignore warning")
+            @Deprecated("Deprecated by NanoHTTPD")
             override fun getRemoteIpAddress() = "127.0.0.1"
 
-            @Deprecated("NanoHTTPD deprecated this, ignore warning")
+            @Deprecated("Deprecated by NanoHTTPD")
             override fun getRemoteHostName() = "localhost"
 
             override fun getParameters(): Map<String, List<String>> = mapOf("token" to listOf("testtoken"))

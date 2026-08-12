@@ -71,28 +71,30 @@ class WebServerXssTest {
 
                 override fun getCookies() = null
 
-                @Deprecated("NanoHTTPD deprecated this, ignore warning")
+                @Deprecated("Deprecated by NanoHTTPD")
                 override fun getHeaders() = mapOf("content-length" to jsonPayload.length.toString(), "host" to "localhost")
 
                 override fun getInputStream(): InputStream? = null
 
                 override fun getMethod() = NanoHTTPD.Method.POST
 
+                @Deprecated("Use getParameters")
+
                 override fun getParms() = mapOf("token" to webServer.token, "data" to jsonPayload)
 
                 override fun getParameters(): Map<String, List<String>> = emptyMap<String, List<String>>()
 
-                @Deprecated("NanoHTTPD deprecated this, ignore warning")
+                @Deprecated("Deprecated by NanoHTTPD")
                 override fun getQueryParameterString() = ""
 
                 override fun getUri() = "/api/app_config_structured"
 
                 override fun parseBody(files: MutableMap<String, String>?) {}
 
-                @Deprecated("NanoHTTPD deprecated this, ignore warning")
+                @Deprecated("Deprecated by NanoHTTPD")
                 override fun getRemoteIpAddress() = "127.0.0.1"
 
-                @Deprecated("NanoHTTPD deprecated this, ignore warning")
+                @Deprecated("Deprecated by NanoHTTPD")
                 override fun getRemoteHostName() = "localhost"
             }
 
@@ -121,28 +123,30 @@ class WebServerXssTest {
 
                 override fun getCookies() = null
 
-                @Deprecated("NanoHTTPD deprecated this, ignore warning")
+                @Deprecated("Deprecated by NanoHTTPD")
                 override fun getHeaders() = mapOf("content-length" to jsonPayload.length.toString(), "host" to "localhost")
 
                 override fun getInputStream(): InputStream? = null
 
                 override fun getMethod() = NanoHTTPD.Method.POST
 
+                @Deprecated("Use getParameters")
+
                 override fun getParms() = mapOf("token" to webServer.token, "data" to jsonPayload)
 
                 override fun getParameters(): Map<String, List<String>> = emptyMap<String, List<String>>()
 
-                @Deprecated("NanoHTTPD deprecated this, ignore warning")
+                @Deprecated("Deprecated by NanoHTTPD")
                 override fun getQueryParameterString() = ""
 
                 override fun getUri() = "/api/app_config_structured"
 
                 override fun parseBody(files: MutableMap<String, String>?) {}
 
-                @Deprecated("NanoHTTPD deprecated this, ignore warning")
+                @Deprecated("Deprecated by NanoHTTPD")
                 override fun getRemoteIpAddress() = "127.0.0.1"
 
-                @Deprecated("NanoHTTPD deprecated this, ignore warning")
+                @Deprecated("Deprecated by NanoHTTPD")
                 override fun getRemoteHostName() = "localhost"
             }
 
