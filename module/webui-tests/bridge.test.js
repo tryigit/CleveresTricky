@@ -1,18 +1,30 @@
 const assert = require('assert');
 const fs = require('fs');
+const path = require('path');
 const vm = require('vm');
 
-const loaderSource = fs.readFileSync('module/template/webroot/ux.js', 'utf8');
-const policySource = fs.readFileSync('module/template/webroot/policy.js', 'utf8');
-const indexSource = fs.readFileSync('module/template/webroot/index.html', 'utf8');
+const webroot = 'module/template/webroot';
+const uxSource = fs.readFileSync(path.join(webroot, 'ux.js'), 'utf8');
+const policySource = fs.readFileSync(path.join(webroot, 'policy.js'), 'utf8');
+const indexSource = fs.readFileSync(path.join(webroot, 'index.html'), 'utf8');
 
-new vm.Script(loaderSource, { filename: 'ux.js' });
+new vm.Script(uxSource, { filename: 'ux.js' });
 new vm.Script(policySource, { filename: 'policy.js' });
 
-assert.match(loaderSource, /ux-base\.js\?revision=5/);
-assert.ok(!loaderSource.includes('ux-patch.js'), 'The retired patch overlay must not be loaded');
-assert.ok(!/setInterval\s*\(/.test(loaderSource), 'WebUI loader must not add permanent polling');
+const runtimeJs = fs.readdirSync(webroot).filter(name => name.endsWith('.js')).sort();
+const runtimeCss = fs.readdirSync(webroot).filter(name => name.endsWith('.css')).sort();
+assert.deepStrictEqual(runtimeJs, ['bridge.js', 'policy.js', 'ux.js'], 'WebUI runtime JS layout is fixed; extend an existing owner instead of adding another layer');
+assert.deepStrictEqual(runtimeCss, [], 'WebUI must not grow standalone runtime CSS files without an intentional architecture redesign');
+assert.ok(!fs.existsSync(path.join(webroot, 'ux-base.js')), 'ux-base.js was consolidated into ux.js and must not return');
+assert.ok(!uxSource.includes('ux-patch.js'), 'The retired patch overlay must not be loaded');
+assert.ok(!uxSource.includes('ux-base.js'), 'ux.js must be the real UX implementation, not another loader');
+assert.ok(!/setInterval\s*\(/.test(uxSource), 'UX presentation must not add permanent polling');
 assert.ok(!/setInterval\s*\(/.test(policySource), 'Policy UI must not add permanent polling');
+
+assert.match(uxSource, /\['en', 'English'\]/);
+assert.match(uxSource, /\['tr', 'Türkçe'\]/);
+assert.match(uxSource, /ct_language_panel/);
+assert.match(uxSource, /Open Telegram Community/);
 
 assert.match(policySource, /id=\"keyboxStatus\"/);
 assert.match(policySource, /class=\"ct-switch\"/);
@@ -23,14 +35,19 @@ assert.match(policySource, /installPackagePickers/);
 assert.match(policySource, /slice\(0,24\)/);
 assert.match(policySource, /Estimated impact:/);
 assert.match(policySource, /CPU very low per UID decision; RAM low with a bounded UID cache\./);
+assert.match(policySource, /function installTabNavigationOwner\(\)/);
 assert.match(policySource, /event\.stopImmediatePropagation\(\)/);
-assert.match(policySource, /bridge\.openCommunity\(\)/);
+assert.ok(!policySource.includes('bindCommunityExternally'), 'Policy must not own the community link');
+assert.ok(!policySource.includes('watchCommunityBriefly'), 'Policy must not poll/watch for the community card');
+assert.ok(!policySource.includes('ctPolicyExternal'), 'Policy must not attach a second community click handler');
+assert.ok(!policySource.includes('global.switchTab = wrapped'), 'Policy must not monkey-patch the global tab router');
 assert.match(policySource, /cleverestricky-profiles\.json/);
 assert.ok(!/Profiles\s+v2/i.test(policySource), 'Profiles v2 wording must not return');
 assert.ok(!policySource.includes("makeTab('effective','Effective State','profiles')"));
 assert.ok(!policySource.includes("['ct_dashboard_controls','ct_resources_controls']"));
 assert.match(policySource, /statusCell\.replaceChildren\(\)/);
 assert.match(policySource, /removeLegacySurfaces\(\)/);
+assert.match(policySource, /retireLegacyLocalization\(\)/);
 
 assert.ok(!indexSource.includes('One-Click Reset (Refresh Environment)'));
 assert.match(indexSource, /Synchronize Runtime/);
