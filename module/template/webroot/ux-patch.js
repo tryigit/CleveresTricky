@@ -169,8 +169,8 @@
         const style = document.createElement('style');
         style.id = 'ctRuntimeSyncPatchStyle';
         style.textContent = `
-            .island{min-width:min(86vw,280px)!important;max-width:min(92vw,520px)!important;padding:11px 18px!important;opacity:0;transform:translate3d(-50%,-9px,0) scale(.985);transition:opacity 170ms ease,transform 220ms cubic-bezier(.22,.8,.25,1)!important;will-change:transform,opacity;contain:layout paint}
-            .island.show{opacity:1;transform:translate3d(-50%,0,0) scale(1)}
+            .island{width:min(90vw,520px)!important;min-width:min(86vw,280px)!important;max-width:min(92vw,520px)!important;min-height:44px!important;padding:10px 10px 10px 18px!important;opacity:0;transform:translate3d(0,-8px,0) scale(.985);visibility:hidden;pointer-events:none;transition:opacity 160ms ease,transform 200ms cubic-bezier(.22,.8,.25,1),visibility 0s linear 200ms!important;will-change:transform,opacity;contain:paint}
+            .island.active{opacity:1;transform:translate3d(0,0,0) scale(1);visibility:visible;pointer-events:auto;transition-delay:0s!important}
             .ct-picker-wrap{position:relative;flex:1 1 240px;min-width:0}
             .ct-app-suggestions{position:absolute;z-index:1800;top:calc(100% + 6px);left:0;right:0;max-height:min(42dvh,320px);overflow:auto;background:#171719;border:1px solid var(--border);border-radius:12px;box-shadow:0 16px 34px rgba(0,0,0,.42);padding:6px}
             .ct-app-suggestions[hidden]{display:none!important}

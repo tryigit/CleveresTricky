@@ -140,7 +140,7 @@ public final class Utils {
         IdentityHashMap<Certificate, EncodedIssuerChain> cache = ENCODED_ISSUER_CHAINS.get();
         Certificate cacheKey = chain[1];
         EncodedIssuerChain cached = cache.get(cacheKey);
-        if (cached != null && cached.matches(chain)) return cached.encoded.clone();
+        if (cached != null && cached.matches(chain)) return cached.encoded;
 
         FastByteArrayOutputStream output = new FastByteArrayOutputStream(2048);
         int total = 0;
@@ -161,7 +161,7 @@ public final class Utils {
         if (cache.size() >= MAX_THREAD_ISSUER_CACHE_ENTRIES && !cache.containsKey(cacheKey)) {
             cache.clear();
         }
-        cache.put(cacheKey, new EncodedIssuerChain(issuerReferences, encodedChain.clone()));
+        cache.put(cacheKey, new EncodedIssuerChain(issuerReferences, encodedChain));
         return encodedChain;
     }
 

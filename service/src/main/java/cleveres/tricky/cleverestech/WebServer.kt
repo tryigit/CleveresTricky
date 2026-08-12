@@ -1644,6 +1644,12 @@ class WebServer(
                     if (Files.isRegularFile(target.toPath(), LinkOption.NOFOLLOW_LINKS)) {
                         target.setLastModified(System.currentTimeMillis())
                     }
+                    val revoked = crlFetcher()
+                    if (revoked != null) {
+                        Config.updateKeyBoxesSync(revoked)
+                    } else {
+                        Logger.w("Runtime reload kept the active keybox pool because revocation data is unavailable")
+                    }
                     return secureResponse(Response.Status.OK, "text/plain", "Reloaded")
                 }
             } catch (e: Exception) {

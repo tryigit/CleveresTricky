@@ -296,6 +296,7 @@ function buildFeatureCenterMarkup(prefix) {
   const patchOn = Boolean(f && f.securityPatch);
   const globalOn = Boolean(legacyConfig && legacyConfig.global_mode);
   const keyboxOn = Boolean(legacyConfig && legacyConfig.auto_keybox_check);
+  const drmOn = Boolean(legacyConfig && legacyConfig.drm_passthrough);
 
   const identityChildren = `<div class="ct-subcontrols" id="${prefix}_identity_children" ${identityOn ? '' : 'hidden'}>
     ${FEATURE_KEYS.map(([key,title,desc]) => `<div class="row"><label for="${prefix}_${key}" style="flex:1;padding-right:10px"><strong>${escapeHtml(title)}</strong><span class="res-desc">${escapeHtml(desc)}</span></label><input id="${prefix}_${key}" data-policy-feature="${key}" type="checkbox" class="toggle" ${f && f[key] ? 'checked' : ''}></div>`).join('')}
@@ -310,12 +311,7 @@ function buildFeatureCenterMarkup(prefix) {
     ${cardMarkup(`${prefix}_identity`, 'Identity', 'Optional identity substitution. Turn it on first, then choose only the child identity paths you want.', identityOn, identityChildren + helpMarkup('The parent switch enables/disables the optional identity family. Child controls appear only while Identity is enabled. Core Keystore/TEE protection is not this switch.'))}
     ${cardMarkup(`${prefix}_patch`, 'Security Patch', 'Independent attestation patch policy. Default is off; fresh installs auto-enable it only when the ROM patch is more than six months old.', patchOn, patchChildren + helpMarkup('Security Patch is separate from Identity. Automatic mode keeps recent captured patch data and only advances stale values.'))}
     ${cardMarkup(`${prefix}_keybox`, 'Auto Keybox Check', 'Checks configured keyboxes against the module revocation source when you choose to enable it.', keyboxOn, helpMarkup('This is optional network-backed keybox hygiene and can stay off if you prefer manual management.'))}
-    <div class="ct-feature-card">
-      <strong>DRM Identifier Privacy</strong>
-      <p>Profile privacy <b>Isolate</b> replaces only DRM <code>deviceUniqueId</code> with a stable app-scoped pseudonymous ID. Licenses, provisioning and security level stay on the genuine DRM path.</p>
-      ${helpMarkup('Use Profiles → Privacy → Isolate for apps that should not share the genuine DRM device identifier. The pseudonym is stable for the app instead of changing on every request.')}
-      <button type="button" data-open-tab="profiles" style="width:100%;margin-top:10px">Configure app profiles</button>
-    </div>
+    ${cardMarkup(`${prefix}_drm_passthrough`, 'DRM App Passthrough', "Keeps packages from drm_packages.txt on Android's genuine Keystore path. This does not fake a DRM security level.", drmOn, `<div class="ct-subcontrols" id="${prefix}_drm_children" ${drmOn ? '' : 'hidden'}><strong>DRM Identifier Privacy</strong><p>Profile privacy <b>Isolate</b> replaces only DRM <code>deviceUniqueId</code> with a stable app-scoped pseudonymous ID. Licenses, provisioning and security level stay on the genuine DRM path.</p>${helpMarkup('Use Profiles → Privacy → Isolate for apps that should not share the genuine DRM device identifier. The pseudonym is stable for the app instead of changing on every request.')}<button type="button" data-open-tab="profiles" style="width:100%;margin-top:10px">Configure app profiles</button></div>`)}
     <div class="ct-feature-card">
       <strong>Keybox / TEE path</strong>
       <p>Keyboxes are selected per profile or from the stored pool. Files placed directly in <code>/data/adb/cleverestricky</code> are mirrored into the managed keybox directory at service start.</p>
@@ -327,7 +323,7 @@ function buildFeatureCenterMarkup(prefix) {
 
 function renderFeatureCenters() {
   if (!policyState) return;
-  ['ct_dashboard_controls','ct_resources_controls'].forEach((id,index) => {
+  ['ct_dashboard_controls'].forEach((id,index) => {
     const panel = document.getElementById(id);
     if (!panel) return;
     const prefix = index === 0 ? 'ct_dash' : 'ct_res';
@@ -342,9 +338,15 @@ function bindFeatureCenter(panel, prefix) {
   const identityToggle = panel.querySelector(`#${prefix}_identity`);
   const patchToggle = panel.querySelector(`#${prefix}_patch`);
   const autoPatch = panel.querySelector(`#${prefix}_auto_patch`);
+  const drmToggle = panel.querySelector(`#${prefix}_drm_passthrough`);
+  const drmChildren = panel.querySelector(`#${prefix}_drm_children`);
 
   if (globalToggle) globalToggle.onchange = () => setLegacyToggle('global_mode', globalToggle.checked);
   if (keyboxToggle) keyboxToggle.onchange = () => setLegacyToggle('auto_keybox_check', keyboxToggle.checked);
+  if (drmToggle) drmToggle.onchange = () => {
+    if (drmChildren) drmChildren.hidden = !drmToggle.checked;
+    setLegacyToggle('drm_passthrough', drmToggle.checked);
+  };
 
   if (identityToggle) {
     identityToggle.onchange = () => {
@@ -429,6 +431,12 @@ async function setLegacyToggle(setting, enabled) {
 function installFeatureCenters() {
   const dashboard = document.getElementById('dashboard');
   const info = document.getElementById('info');
+  if (dashboard) {
+    [...dashboard.querySelectorAll('.panel')].forEach(panel => {
+      const title = panel.querySelector('h3');
+      if (title && (title.textContent || '').trim() === 'System Control') panel.remove();
+    });
+  }
   if (dashboard && !document.getElementById('ct_dashboard_controls')) {
     const panel = document.createElement('div');
     panel.id = 'ct_dashboard_controls';
@@ -438,13 +446,8 @@ function installFeatureCenters() {
     if (firstPanel && firstPanel.nextSibling) dashboard.insertBefore(panel, firstPanel.nextSibling);
     else dashboard.prepend(panel);
   }
-  if (info && !document.getElementById('ct_resources_controls')) {
-    const panel = document.createElement('div');
-    panel.id = 'ct_resources_controls';
-    panel.className = 'panel';
-    panel.innerHTML = '<h3>Quick Controls</h3><div class="scope-note">The same primary switches from Dashboard are available here in Resources.</div><div class="ct-control-host"></div>';
-    info.prepend(panel);
-  }
+  const staleResourceControls = document.getElementById('ct_resources_controls');
+  if (staleResourceControls) staleResourceControls.remove();
 }
 
 function installIdentityBanner() {
@@ -477,9 +480,17 @@ function installAppsProfileCard() {
 }
 
 function staticPages() {
+  const tabs = document.querySelector('.tabs');
+  const dashboardTab = document.getElementById('tab_dashboard');
+  const keyboxTab = document.getElementById('tab_keys');
+  if (tabs && dashboardTab && keyboxTab && dashboardTab.nextElementSibling !== keyboxTab) {
+    tabs.insertBefore(keyboxTab, dashboardTab.nextSibling);
+  }
+  const staleEffectiveTab = document.getElementById('tab_effective');
+  if (staleEffectiveTab) staleEffectiveTab.remove();
+
   makeTab('patch','Security Patch','spoof');
   makeTab('profiles','Profiles','patch');
-  makeTab('effective','Effective State','profiles');
 
   const patch = makePage('patch','spoof');
   patch.innerHTML = `<div class="panel">
@@ -495,7 +506,7 @@ function staticPages() {
   <div class="panel">
     <h3>Resolve for an app</h3>
     <div class="scope-note">Shows captured, configured and effective values from the runtime resolver.</div>
-    <input id="ct_patch_package" type="search" list="ct_package_list" placeholder="com.example.app" autocomplete="off">
+    <input id="ct_patch_package" type="search" placeholder="com.example.app" autocomplete="off">
     <button id="ct_patch_inspect" type="button" style="width:100%;margin-top:10px">Resolve</button>
     <div id="ct_patch_result" class="scope-note" style="margin-top:12px"></div>
   </div>`;
@@ -515,7 +526,7 @@ function staticPages() {
     </div>
     <div style="margin-top:12px">
       <label for="ct_profile_app_picker">Add installed app</label>
-      <div class="ct-toolbar"><input id="ct_profile_app_picker" type="search" list="ct_package_list" placeholder="com.example.app" autocomplete="off"><button id="ct_profile_add_app" type="button">Add app</button></div>
+      <div class="ct-toolbar"><input id="ct_profile_app_picker" type="search" placeholder="com.example.app" autocomplete="off"><button id="ct_profile_add_app" type="button">Add app</button></div>
       <label for="ct_profile_apps" style="display:block;margin-top:10px">Assignments (one package or wildcard per line)</label>
       <textarea id="ct_profile_apps" rows="4" maxlength="16384" placeholder="com.example.app&#10;com.example.*"></textarea>
       <div id="ct_profile_app_chips" class="ct-chip-wrap"></div>
@@ -532,8 +543,14 @@ function staticPages() {
     <div class="ct-toolbar" style="margin-top:16px"><button id="ct_profile_save" type="button" class="primary">Save profile</button><button id="ct_profile_clone" type="button">Clone</button><button id="ct_profile_delete" type="button" class="danger">Delete</button></div>
   </div>`;
 
-  const effective = makePage('effective','profiles');
-  effective.innerHTML = `<div class="panel"><h3>Effective State</h3><div class="scope-note">Inspect the exact resolver output for an installed application without exposing private key material.</div><input id="ct_effective_package" type="search" list="ct_package_list" placeholder="com.example.app" autocomplete="off"><button id="ct_effective_load" class="primary" type="button" style="width:100%;margin-top:10px">Inspect</button></div><div class="panel"><h3>Resolved Configuration</h3><div id="ct_effective_result" class="scope-note">Select an app.</div></div>`;
+  const appsPage = document.getElementById('apps');
+  let effective = document.getElementById('ct_effective_apps_host');
+  if (appsPage && !effective) {
+    effective = document.createElement('div');
+    effective.id = 'ct_effective_apps_host';
+    appsPage.appendChild(effective);
+  }
+  if (effective) effective.innerHTML = `<div class="panel"><h3>Effective State</h3><div class="scope-note">Inspect the exact resolver output for an installed application without exposing private key material.</div><input id="ct_effective_package" type="search" placeholder="com.example.app" autocomplete="off"><button id="ct_effective_load" class="primary" type="button" style="width:100%;margin-top:10px">Inspect</button></div><div class="panel"><h3>Resolved Configuration</h3><div id="ct_effective_result" class="scope-note">Select an app.</div></div>`;
 
   if (!document.getElementById('ct_package_list')) {
     const list = document.createElement('datalist');

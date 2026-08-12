@@ -311,6 +311,13 @@ public final class CertHack {
         return false;
     }
 
+    private static String attestationIdNameForTag(int tag) {
+        for (int index = 0; index < ATTESTATION_ID_TAGS.length; index++) {
+            if (ATTESTATION_ID_TAGS[index] == tag) return ATTESTATION_ID_NAMES[index];
+        }
+        return null;
+    }
+
     private static List<KeyBox> selectKeyboxPool(List<KeyBox> candidates, String preferredAlgorithm) {
         if (candidates == null || candidates.isEmpty()) return Collections.emptyList();
         if (preferredAlgorithm != null) {
@@ -630,14 +637,10 @@ public final class CertHack {
             byte[] moduleHash = Config.INSTANCE.getModuleHash();
             ASN1TaggedObject originalModuleHash = null;
 
-            Map<Integer, byte[]> configuredIdAttestationTags = new HashMap<>(ATTESTATION_ID_NAMES.length);
-            List<Integer> originalOverriddenIdTags = new ArrayList<>(ATTESTATION_ID_NAMES.length);
-            for (int i = 0; i < ATTESTATION_ID_NAMES.length; i++) {
-                byte[] val = Config.INSTANCE.getAttestationId(ATTESTATION_ID_NAMES[i], uid);
-                if (val != null) {
-                    configuredIdAttestationTags.put(ATTESTATION_ID_TAGS[i], val);
-                }
-            }
+            // Most attestations do not carry device-ID authorization tags. Resolve an
+            // override only when the genuine TEE list actually contains that tag, avoiding nine
+            // policy/privacy lookups and temporary collections on the common timing-sensitive path.
+            Map<Integer, byte[]> presentIdAttestationTags = null;
 
             for (ASN1Encodable asn1Encodable : teeEnforced) {
                 if (!(asn1Encodable instanceof ASN1TaggedObject taggedObject)) {
@@ -657,9 +660,14 @@ public final class CertHack {
                         (tag == 719 && replacesOriginal(patchLevels.getBoot()))) {
                     continue;
                 }
-                if (configuredIdAttestationTags.containsKey(tag)) {
-                    originalOverriddenIdTags.add(tag);
-                    continue;
+                String attestationIdName = attestationIdNameForTag(tag);
+                if (attestationIdName != null) {
+                    byte[] override = Config.INSTANCE.getAttestationId(attestationIdName, uid);
+                    if (override != null) {
+                        if (presentIdAttestationTags == null) presentIdAttestationTags = new HashMap<>(4);
+                        presentIdAttestationTags.put(tag, override);
+                        continue;
+                    }
                 }
                 teeTags.add(taggedObject);
             }
@@ -685,10 +693,10 @@ public final class CertHack {
             addPatchTag(teeTags, softwareTags, 718, patchLevels.getVendor(), vendorWasTee, vendorWasSoftware);
             addPatchTag(teeTags, softwareTags, 719, patchLevels.getBoot(), bootWasTee, bootWasSoftware);
 
-            Map<Integer, byte[]> presentIdAttestationTags =
-                    selectPresentAttestationIdOverrides(configuredIdAttestationTags, originalOverriddenIdTags);
-            for (Map.Entry<Integer, byte[]> entry : presentIdAttestationTags.entrySet()) {
-                teeTags.add(new DERTaggedObject(true, entry.getKey(), new DEROctetString(entry.getValue())));
+            if (presentIdAttestationTags != null) {
+                for (Map.Entry<Integer, byte[]> entry : presentIdAttestationTags.entrySet()) {
+                    teeTags.add(new DERTaggedObject(true, entry.getKey(), new DEROctetString(entry.getValue())));
+                }
             }
 
             if (supportsModuleHash) {

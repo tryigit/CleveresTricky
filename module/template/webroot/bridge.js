@@ -517,7 +517,7 @@
         if (!document || !document.head || !document.createElement || document.getElementById('ct_ux_script')) return;
         const script = document.createElement('script');
         script.id = 'ct_ux_script';
-        script.src = 'ux.js?revision=1';
+        script.src = 'ux.js?revision=3';
         script.defer = true;
         document.head.appendChild(script);
     }
@@ -533,7 +533,7 @@
 
     scheduleCommunityCard();
     global.CleveresBridge = Object.freeze({
-        revision: 5,
+        revision: 6,
         fetch: nativeFetch,
         exportBlob,
         exportResponse,

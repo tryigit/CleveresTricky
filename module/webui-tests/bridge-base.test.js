@@ -210,7 +210,7 @@ async function main() {
     });
     assert.strictEqual(normalizeUiMessage(oversized), 'HTTP 500 Server Error: response body is too large to display');
     assert.ok(indexSource.includes('text.textContent = normalizeUiMessage(msg);'));
-    assert.ok(indexSource.includes('<script src="bridge.js?revision=4"></script>'));
+    assert.ok(indexSource.includes('<script src="bridge.js?revision=5"></script>'));
 
     console.log('Native WebUI bridge compatibility tests passed');
 }

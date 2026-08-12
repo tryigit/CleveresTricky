@@ -14,6 +14,7 @@ import cleveres.tricky.cleverestech.TestKeyboxFixtures;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertSame;
 
 public class UtilsLeafFastPathTest {
     private static X509Certificate fixtureCertificate() throws Exception {
@@ -53,5 +54,6 @@ public class UtilsLeafFastPathTest {
         assertArrayEquals(expectedIssuer, first.certificateChain);
         assertArrayEquals(first.certificate, second.certificate);
         assertArrayEquals(first.certificateChain, second.certificateChain);
+        assertSame(first.certificateChain, second.certificateChain);
     }
 }

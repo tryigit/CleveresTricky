@@ -25,5 +25,5 @@
         (document.head || document.documentElement).appendChild(script);
     };
 
-    load('ux-base.js?revision=1', () => load('ux-patch.js?revision=1'));
+    load('ux-base.js?revision=3', () => load('ux-patch.js?revision=3'));
 })();

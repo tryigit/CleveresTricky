@@ -520,7 +520,12 @@
                 ensureFooterOrder();
             });
         }
-        if (panel.parentElement !== dashboard) dashboard.appendChild(panel);
+        const configPanel = document.getElementById('backupPw')?.closest('.panel');
+        if (configPanel && configPanel.parentElement === dashboard) {
+            if (configPanel.nextElementSibling !== panel) dashboard.insertBefore(panel, configPanel.nextSibling);
+        } else if (panel.parentElement !== dashboard) {
+            dashboard.appendChild(panel);
+        }
         panel.querySelector('select').value = locale;
     }
 
@@ -531,9 +536,7 @@
         const card = document.getElementById('cleveresCommunityCard');
         if (language && language.parentElement !== dashboard) dashboard.appendChild(language);
         if (card) {
-            if (card.parentElement !== dashboard) dashboard.appendChild(card);
-            if (language && language.nextElementSibling !== card) dashboard.insertBefore(language, card);
-            if (card.nextElementSibling) dashboard.appendChild(card);
+            if (card.parentElement !== dashboard || card.nextElementSibling) dashboard.appendChild(card);
             const link = card.querySelector('a');
             if (link) {
                 link.href = 'https://t.me/cleverestech';
@@ -635,29 +638,10 @@
     }
 
     function installDrmPanel() {
-        const dashboard = document.getElementById('dashboard');
-        if (!dashboard || document.getElementById('ct_drm_dashboard_panel')) return;
-        const panel = document.createElement('div');
-        panel.id = 'ct_drm_dashboard_panel';
-        panel.className = 'panel';
-        panel.innerHTML = `<h3>DRM Passthrough</h3><div class="row"><label for="ct_drm_passthrough_toggle" style="flex:1;padding-right:14px"><strong style="color:#fff">DRM Passthrough</strong><span class="res-desc">Keep packages listed in drm_packages.txt on Android's genuine Keystore path. This does not fake a DRM security level.</span></label><input id="ct_drm_passthrough_toggle" class="toggle" type="checkbox"></div>`;
-        const configPanel = [...dashboard.querySelectorAll('.panel')].find(item => /Configuration Management/i.test(item.textContent || ''));
-        if (configPanel) dashboard.insertBefore(panel, configPanel);
-        else dashboard.appendChild(panel);
-        panel.querySelector('input').addEventListener('change', async event => {
-            const checkbox = event.target;
-            checkbox.disabled = true;
-            try {
-                await setSetting('drm_passthrough', checkbox.checked);
-                if (typeof global.notify === 'function') global.notify(tr(checkbox.checked ? 'DRM passthrough enabled' : 'DRM passthrough disabled'));
-            } catch (error) {
-                checkbox.checked = !checkbox.checked;
-                if (typeof global.notify === 'function') global.notify(error.message || tr('Could not update DRM setting'),'error');
-            } finally {
-                checkbox.disabled = false;
-            }
-        });
-        requestConfig().then(syncCompatibilityToggles).catch(()=>{});
+        // DRM controls live exclusively in Feature Center. Remove stale standalone copies
+        // from cached/older WebUI layouts instead of creating another toggle surface.
+        const legacy = document.getElementById('ct_drm_dashboard_panel');
+        if (legacy) legacy.remove();
     }
 
     function installDebugPanel() {
