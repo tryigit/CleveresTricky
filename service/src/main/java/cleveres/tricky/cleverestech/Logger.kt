@@ -108,10 +108,13 @@ object Logger {
     }
 
     @JvmStatic
-    fun d(msg: () -> String) {
-        if (isDebugEnabled()) {
-            impl.d(TAG, msg())
-        }
+    inline fun d(msg: () -> String) {
+        if (isDebugEnabled()) emitDebug(msg())
+    }
+
+    @PublishedApi
+    internal fun emitDebug(msg: String) {
+        impl.d(TAG, msg)
     }
 
     @JvmStatic
