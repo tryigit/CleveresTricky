@@ -27,6 +27,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
+import java.io.File;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.math.BigInteger;
@@ -64,14 +65,12 @@ public class CertHackOrderTest {
         Field field = Config.class.getDeclaredField("isSpoofEnabled");
         field.setAccessible(true);
         field.setBoolean(Config.INSTANCE, enabled);
+        Config.INSTANCE.setRootForTesting(
+                new File(System.getProperty("java.io.tmpdir"), "cleverestricky-cert-hack-order"));
     }
 
-    private void resetConfig() throws Exception {
-        setAttestationId("BRAND", null);
-        setSpoofEnabled(false);
-        Field moduleHash = Config.class.getDeclaredField("moduleHash");
-        moduleHash.setAccessible(true);
-        moduleHash.set(Config.INSTANCE, null);
+    private void resetConfig() {
+        Config.INSTANCE.reset();
     }
 
     private X509Certificate generateCertWithIdentityAndPatchLevels(KeyPair kp) throws Exception {
