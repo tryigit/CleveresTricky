@@ -8,12 +8,12 @@ The Web Interface provides one mobile control surface for core runtime state, id
 
 The packaged WebUI deliberately uses a fixed runtime layout. New features extend an existing owner instead of adding another JavaScript or CSS layer.
 
-- `index.html` owns static markup and base/static CSS.
-- `bridge.js` owns the KernelSU/APatch native bridge, bounded transfer helpers, external intents, and minimal bootstrap.
-- `policy.js` owns policy/state API integration and policy-specific dynamic controls/pages.
-- `ux.js` owns general presentation, localization, guide rendering, community-link behavior, and UX compatibility work.
+1. `index.html` owns static markup and base static CSS.
+2. `bridge.js` owns the KernelSU/APatch native bridge, bounded transfer helpers, external intents, and minimal bootstrap.
+3. `policy.js` owns policy and state API integration plus policy specific dynamic controls and pages.
+4. `ux.js` owns general presentation, localization, guide rendering, community link behavior, and UX compatibility work.
 
-There are no standalone runtime CSS files and no feature-specific runtime JS bundles. `ux-base.js` was retired and consolidated into `ux.js`. Tests remain outside `module/template/webroot`; test, patch, overlay, experiment, or temporary JS/CSS files must not be shipped as runtime assets. The repository-level `AGENTS.md` is the authoritative development contract for this layout.
+There are no standalone runtime CSS files and no feature specific runtime JS bundles. The retired UX compatibility loader was consolidated into `ux.js`. Tests remain outside `module/template/webroot`; test, patch, overlay, experiment, or temporary JS and CSS files must not be shipped as runtime assets. The root `AGENTS.md` file is the authoritative development contract for this layout.
 
 ## Mobile behavior
 
