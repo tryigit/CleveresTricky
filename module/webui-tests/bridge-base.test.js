@@ -40,6 +40,7 @@ function createDocument() {
     body.appendChild(dashboard);
     return {
         readyState: 'complete',
+        documentElement: { dataset: Object.create(null) },
         body,
         createElement,
         getElementById(id) {
@@ -169,6 +170,18 @@ async function main() {
     assert.match(communityCommand, /-p com\.android\.chrome/);
     assert.ok(!communityCommand.includes('tg:'), 'Telegram custom schemes must never be used from KernelSU WebUI');
 
+    let keyboxHubCommand = '';
+    const keyboxHubBridge = createBridge(
+        callback => callback(0, '', ''),
+        null,
+        command => { keyboxHubCommand = command; }
+    );
+    await keyboxHubBridge.openKeyboxHub();
+    assert.match(keyboxHubCommand, /android\.intent\.action\.VIEW/);
+    assert.match(keyboxHubCommand, /android\.intent\.category\.BROWSABLE/);
+    assert.match(keyboxHubCommand, /https:\/\/keybox\.tryigit\.dev\//);
+    assert.match(keyboxHubCommand, /-p com\.android\.chrome/);
+
     const communityDocument = createDocument();
     createBridge(() => {}, communityDocument);
     const communityCard = communityDocument.getElementById('cleveresCommunityCard');
@@ -217,7 +230,7 @@ async function main() {
     assert.strictEqual(normalizeUiMessage(oversized), 'HTTP 500 Server Error: response body is too large to display');
     assert.ok(indexSource.includes('text.textContent = normalizeUiMessage(msg);'));
     assert.ok(indexSource.includes('<script src="bridge.js?revision=7"></script>'));
-    assert.match(bridgeSource, /ux\.js\?revision=5/);
+    assert.match(bridgeSource, /ux\.js\?revision=6/);
     assert.ok(!bridgeSource.includes('ux.js?revision=3'), 'Bridge must not request the retired cached UX loader');
 
     console.log('Native WebUI bridge compatibility tests passed');
