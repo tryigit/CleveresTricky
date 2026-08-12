@@ -119,6 +119,10 @@ jobs:
         if: needs.changes.outputs.gradle == 'true'
         uses: gradle/actions/setup-gradle@v6.3.0
 
+      - name: Setup Android SDK
+        if: needs.changes.outputs.gradle == 'true'
+        uses: android-actions/setup-android@v4
+
       - name: "🐚 Shell Script Linting (Shellcheck)"
         if: needs.changes.outputs.shell == 'true'
         run: |
@@ -128,13 +132,13 @@ jobs:
 
       - name: "🎨 Kotlin Format & Quality (Ktlint)"
         if: needs.changes.outputs.gradle == 'true'
-        run: ./gradlew ktlintCheck
+        run: ./gradlew ktlintCheck --warning-mode=fail --console=plain
 
       - name: "📱 Android Static Analysis (Lint)"
         if: needs.changes.outputs.gradle == 'true'
         id: android_lint
         continue-on-error: true
-        run: ./gradlew :service:lintDebug :stub:lintDebug :encryptor-app:lintDebug --continue
+        run: ./gradlew :service:lintDebug :stub:lintDebug :encryptor-app:lintDebug --warning-mode=fail --console=plain --continue
 
       - name: Show Android Lint failures
         if: steps.android_lint.outcome == 'failure'
@@ -321,9 +325,12 @@ jobs:
         run: |
           set -euo pipefail
           node --check module/template/webroot/bridge.js
+          node --check module/template/webroot/policy.js
           node <<'NODE'
           const fs = require('fs')
           const html = fs.readFileSync('module/template/webroot/index.html', 'utf8')
+          const policyScripts = [...html.matchAll(/<script[^>]*\bsrc=["']policy\.js(?:\?[^"']*)?["'][^>]*>/gi)]
+          if (policyScripts.length !== 1) throw new Error('Expected exactly one policy.js script entrypoint')
           const blocks = [...html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/gi)]
             .filter(match => !/\bsrc\s*=/.test(match[1]))
           if (blocks.length !== 1) throw new Error('Unexpected inline script count')
@@ -332,6 +339,8 @@ jobs:
 
       - name: Native WebUI behavior tests
         if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.webui == 'true' }}
+        env:
+          NODE_OPTIONS: --throw-deprecation
         run: node module/webui-tests/bridge.test.js
 
       - name: Setup Java
@@ -361,7 +370,7 @@ jobs:
       - name: Run Unit Tests
         if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.gradle == 'true' }}
         id: unit_tests
-        run: ./gradlew testDebugUnitTest --console=plain --stacktrace
+        run: ./gradlew testDebugUnitTest --warning-mode=fail --console=plain --stacktrace --no-build-cache --rerun-tasks
 
       - name: Upload failed test reports
         if: ${{ failure() && steps.unit_tests.outcome == 'failure' }}
@@ -376,9 +385,9 @@ jobs:
 
       - name: Build Android Artifacts
         run: |
-          ./gradlew zipRelease
-          ./gradlew zipDebug
-          ./gradlew :encryptor-app:assembleRelease
+          ./gradlew zipRelease --warning-mode=fail --console=plain
+          ./gradlew zipDebug --warning-mode=fail --console=plain
+          ./gradlew :encryptor-app:assembleRelease --warning-mode=fail --console=plain
 
       - name: Verify module archive layout and checksums
         shell: bash
