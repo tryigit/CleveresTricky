@@ -78,13 +78,13 @@ object PolicyMigration {
     ): Outcome {
         val path = stateFile.toPath()
         if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) return Outcome(Status.MISSING)
-        if (
-            Files.isSymbolicLink(path) ||
-            !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) ||
-            stateFile.length() !in 1..MAX_STATE_BYTES
-        ) {
+        if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
             Logger.w("Refusing unsafe persisted policy state during migration: ${stateFile.name}")
             return Outcome(Status.UNSAFE)
+        }
+        if (stateFile.length() !in 1..MAX_STATE_BYTES) {
+            Logger.w("Persisted policy state has an invalid size: ${stateFile.name}")
+            return Outcome(Status.MALFORMED)
         }
 
         val originalText =
@@ -94,7 +94,7 @@ object PolicyMigration {
                     return Outcome(Status.MALFORMED)
                 }
         if (originalText.toByteArray(Charsets.UTF_8).size !in 1..MAX_STATE_BYTES) {
-            return Outcome(Status.UNSAFE, originalText = originalText)
+            return Outcome(Status.MALFORMED)
         }
 
         val json =
