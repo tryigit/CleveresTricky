@@ -21,7 +21,7 @@ jobs:
           java-version: 21
       - uses: gradle/actions/setup-gradle@v6.3.0
       - uses: android-actions/setup-android@v4
-      - run: ./gradlew ktlintCheck :service:lintDebug :stub:lintDebug :encryptor-app:lintDebug testDebugUnitTest --warning-mode=fail --console=plain --stacktrace
+      - run: ./gradlew ktlintCheck :service:lintDebug :stub:lintDebug :encryptor-app:lintDebug testDebugUnitTest --warning-mode=fail --console=plain --stacktrace --no-build-cache --rerun-tasks
       - run: node --check module/template/webroot/bridge.js
       - run: node --check module/template/webroot/policy.js
       - shell: bash
