@@ -24,6 +24,6 @@ jobs:
       - run: |
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add .github/workflows/build.yml .github/workflows/strict-first-party-warnings.yml
+          git add .github/workflows/build.yml
           git commit -m "ci: integrate warning gates into Build"
           git push
