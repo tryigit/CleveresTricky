@@ -13,8 +13,8 @@ import javax.net.ssl.HttpsURLConnection
 
 /**
  * Resolves a current Pixel beta/canary identity from Google's public Android
- * developer and Flash Tool metadata. This is an opt-in Custom ROM helper; it
- * never changes the always-on bootloader/TEE protection policy.
+ * developer and Flash Tool metadata. Production lookups are deadline-bounded
+ * and successful results are cached so repeated taps do not keep the WebUI busy.
  */
 object AutoIdentityManager {
     data class Result(
@@ -59,11 +59,22 @@ object AutoIdentityManager {
         ): String
     }
 
+    private data class CachedResult(
+        val value: Result,
+        val storedAtMs: Long,
+    )
+
     private const val ANDROID_DEVELOPERS = "https://developer.android.com"
     private const val FLASH_TOOL = "https://flash.android.com/"
     private const val FLASH_BUILDS = "https://content-flashstation-pa.googleapis.com/v1/builds"
     private const val PIXEL_BULLETIN = "https://source.android.com/docs/security/bulletin/pixel"
     private const val MAX_DOWNLOAD_BYTES = 3 * 1024 * 1024
+    private const val FETCH_BUDGET_MS = 14_000L
+    private const val CONNECT_TIMEOUT_MS = 2_500
+    private const val READ_TIMEOUT_MS = 3_500
+    private const val CACHE_TTL_MS = 6 * 60 * 60 * 1000L
+    private const val STALE_CACHE_FALLBACK_MS = 24 * 60 * 60 * 1000L
+
     private val allowedHosts =
         setOf(
             "developer.android.com",
@@ -72,7 +83,33 @@ object AutoIdentityManager {
             "source.android.com",
         )
 
-    fun fetchLatest(): Result = fetchLatest(NetworkFetcher)
+    @Volatile
+    private var cachedResult: CachedResult? = null
+
+    /**
+     * Production entry point. It is synchronized to collapse accidental
+     * double-taps into one bounded network lookup.
+     */
+    @Synchronized
+    fun fetchLatest(): Result {
+        val now = System.currentTimeMillis()
+        cachedResult?.takeIf { ageMs(now, it.storedAtMs) <= CACHE_TTL_MS }?.let { return it.value }
+
+        return try {
+            val deadlineNanos = System.nanoTime() + FETCH_BUDGET_MS * 1_000_000L
+            fetchLatest(NetworkFetcher(deadlineNanos)).also { resolved ->
+                cachedResult = CachedResult(resolved, System.currentTimeMillis())
+            }
+        } catch (error: IOException) {
+            val fallback = cachedResult?.takeIf { ageMs(now, it.storedAtMs) <= STALE_CACHE_FALLBACK_MS }
+            fallback?.value ?: throw error
+        }
+    }
+
+    private fun ageMs(
+        now: Long,
+        then: Long,
+    ): Long = if (now >= then) now - then else Long.MAX_VALUE
 
     internal fun fetchLatest(
         fetcher: Fetcher,
@@ -84,6 +121,7 @@ object AutoIdentityManager {
 
         val downloadLinks = extractDownloadLinks(versionHtml)
         if (downloadLinks.isEmpty()) throw IOException("Pixel beta download pages were not found")
+
         val candidatePages =
             downloadLinks.mapNotNull { link ->
                 runCatching {
@@ -124,7 +162,8 @@ object AutoIdentityManager {
             } else {
                 null
             }
-        val securityPatch = explicitPatch ?: bulletinPatch ?: estimateSecurityPatch(canary.optString("id")).also { estimated = true }
+        val securityPatch =
+            explicitPatch ?: bulletinPatch ?: estimateSecurityPatch(canary.optString("id")).also { estimated = true }
 
         return Result(
             model = candidate.model,
@@ -152,7 +191,7 @@ object AutoIdentityManager {
             .map { it.groupValues[1] }
             .filter { it.startsWith('/') || it.startsWith(ANDROID_DEVELOPERS) }
             .distinct()
-            .take(4)
+            .take(2)
             .toList()
 
     internal fun parseDeviceCandidates(html: String): List<DeviceCandidate> {
@@ -285,22 +324,25 @@ object AutoIdentityManager {
             .replace(Regex("""\s+"""), " ")
             .trim()
 
-    private object NetworkFetcher : Fetcher {
+    private class NetworkFetcher(
+        private val deadlineNanos: Long,
+    ) : Fetcher {
         override fun get(
             url: String,
             headers: Map<String, String>,
         ): String {
             var current = URI(url)
             repeat(4) {
+                ensureBudget()
                 validateRemoteUri(current)
                 val connection = current.toURL().openConnection() as HttpsURLConnection
                 try {
-                    connection.connectTimeout = 10_000
-                    connection.readTimeout = 10_000
+                    connection.connectTimeout = boundedTimeout(CONNECT_TIMEOUT_MS)
+                    connection.readTimeout = boundedTimeout(READ_TIMEOUT_MS)
                     connection.instanceFollowRedirects = false
                     connection.requestMethod = "GET"
                     connection.setRequestProperty("Accept-Encoding", "identity")
-                    connection.setRequestProperty("User-Agent", "CleveresTricky-AutoIdentity/1")
+                    connection.setRequestProperty("User-Agent", "CleveresTricky-AutoIdentity/2")
                     headers.forEach { (name, value) -> connection.setRequestProperty(name, value) }
                     val code = connection.responseCode
                     if (code in 300..399) {
@@ -314,6 +356,7 @@ object AutoIdentityManager {
                         val buffer = ByteArray(16 * 1024)
                         var total = 0
                         while (true) {
+                            ensureBudget()
                             val count = input.read(buffer)
                             if (count < 0) break
                             if (count == 0) continue
@@ -328,6 +371,16 @@ object AutoIdentityManager {
                 }
             }
             throw IOException("Too many identity-source redirects")
+        }
+
+        private fun boundedTimeout(maxMs: Int): Int {
+            val remainingMs = (deadlineNanos - System.nanoTime()) / 1_000_000L
+            if (remainingMs <= 0) throw IOException("Auto Identity lookup timed out")
+            return remainingMs.coerceAtMost(maxMs.toLong()).coerceAtLeast(250L).toInt()
+        }
+
+        private fun ensureBudget() {
+            if (System.nanoTime() >= deadlineNanos) throw IOException("Auto Identity lookup timed out")
         }
 
         private fun validateRemoteUri(uri: URI) {
