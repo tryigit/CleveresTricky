@@ -108,9 +108,9 @@ object Logger {
     }
 
     @JvmStatic
-    inline fun d(msg: () -> String) {
+    fun d(msg: () -> String) {
         if (isDebugEnabled()) {
-            d(msg())
+            impl.d(TAG, msg())
         }
     }
 
