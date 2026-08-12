@@ -19,18 +19,7 @@ class ConfigTargetStateTest {
     }
 
     private fun resetConfig() {
-        setPrivateField(Config, "isTeeBrokenMode", false)
-        setPrivateField(Config, "isGlobalMode", false)
-        setPrivateField(Config, "isSpoofEnabled", true)
-        Config.clockSource = { System.currentTimeMillis() }
-
-        invokeMapMethod(getPrivateField(Config, "packageCache"), "clear")
-
-        val targetStateClass = Class.forName("cleveres.tricky.cleverestech.Config\$TargetState")
-        val constructor = targetStateClass.getDeclaredConstructor(PackageTrie::class.java)
-        constructor.isAccessible = true
-        val emptyState = constructor.newInstance(PackageTrie<Boolean>())
-        setPrivateField(Config, "targetState", emptyState)
+        Config.reset()
     }
 
     @Test
