@@ -1,0 +1,208 @@
+name: WebUI Dashboard Cleanup Once
+
+on:
+  push:
+    branches:
+      - fix/webui-dashboard-cleanup-20260813
+    paths:
+      - .github/workflows/webui-dashboard-cleanup-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/webui-dashboard-cleanup-20260813
+          fetch-depth: 0
+
+      - name: Apply WebUI ownership, localization, and switch cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(text, old, new, label):
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected exactly one match, found {count}')
+              return text.replace(old, new, 1)
+
+          root = Path('.')
+          index_path = root / 'module/template/webroot/index.html'
+          bridge_path = root / 'module/template/webroot/bridge.js'
+          policy_path = root / 'module/template/webroot/policy.js'
+          ux_path = root / 'module/template/webroot/ux.js'
+          ux_base_path = root / 'module/template/webroot/ux-base.js'
+          service_test_path = root / 'service/src/test/java/cleveres/tricky/cleverestech/WebServerUXTest.kt'
+          bridge_base_test_path = root / 'module/webui-tests/bridge-base.test.js'
+          bridge_test_path = root / 'module/webui-tests/bridge.test.js'
+
+          index = index_path.read_text()
+          identity_start = '        <div class="panel">\n<h3>Identity Controls</h3>'
+          identity_end = '<div class="scope-note" style="margin:0;">These switches affect identity only. Bootloader/verified-boot property hiding and Keystore/TEE certificate protection are always-on core features.</div>\n        </div>'
+          start = index.find(identity_start)
+          if start < 0:
+              raise SystemExit('Identity Controls panel start not found')
+          end = index.find(identity_end, start)
+          if end < 0:
+              raise SystemExit('Identity Controls panel end not found')
+          end += len(identity_end)
+          index = index[:start] + index[end:]
+          legacy_switch_count = index.count('class="toggle"')
+          if legacy_switch_count < 1:
+              raise SystemExit('Expected at least one remaining legacy toggle before modernization')
+          index = index.replace('class="toggle"', 'class="ct-switch"')
+          index = replace_once(index, '<script src="bridge.js?revision=6"></script>', '<script src="bridge.js?revision=7"></script>', 'bridge cache revision')
+          index = replace_once(index, '<script src="policy.js?revision=3"></script>', '<script src="policy.js?revision=4"></script>', 'policy cache revision')
+          if 'Identity Controls' in index or 'class="toggle"' in index:
+              raise SystemExit('Legacy Identity Controls/toggle markup survived cleanup')
+          index_path.write_text(index)
+
+          bridge = bridge_path.read_text()
+          bridge = replace_once(bridge, '        if (!document || !document.body || document.getElementById(\'cleveresCommunityCard\')) return;\n\n        const card = document.createElement(\'section\');', '        if (!document || !document.body || document.getElementById(\'cleveresCommunityCard\')) return;\n        const dashboard = document.getElementById(\'dashboard\');\n        if (!dashboard) return;\n\n        const card = document.createElement(\'section\');', 'community dashboard ownership')
+          bridge = replace_once(bridge, "        card.style.cssText = 'box-sizing:border-box;max-width:800px;margin:0 auto;padding:0 20px max(28px,env(safe-area-inset-bottom));text-align:center;';", "        card.style.cssText = 'box-sizing:border-box;width:100%;margin:20px 0 24px;padding:0;text-align:center;';", 'community card spacing')
+          bridge = replace_once(bridge, '        document.body.appendChild(card);', '        dashboard.appendChild(card);', 'community append target')
+          bridge = replace_once(bridge, "        script.src = 'ux.js?revision=4';", "        script.src = 'ux.js?revision=5';", 'UX loader cache revision')
+          bridge = replace_once(bridge, '        revision: 6,', '        revision: 7,', 'bridge public revision')
+          bridge_path.write_text(bridge)
+
+          ux = ux_path.read_text()
+          ux = replace_once(ux, "    script.src = 'ux-base.js?revision=4';", "    script.src = 'ux-base.js?revision=5';", 'UX base cache revision')
+          ux_path.write_text(ux)
+
+          policy = policy_path.read_text()
+          policy = replace_once(
+              policy,
+              "      if (/^System Control$/i.test(title)) panel.remove();",
+              "      if (/^(System Control)$/i.test(title)) panel.remove();",
+              'dashboard legacy panel matcher',
+          )
+          policy = replace_once(
+              policy,
+              "  ['spoof_enabled','global_mode','rkp_passthrough','drm_passthrough'].forEach(id => {",
+              "  ['spoof_enabled','spoof_build_identity','random_on_boot','spoof_region_cn','telephony','global_mode','rkp_passthrough','drm_passthrough'].forEach(id => {",
+              'legacy setting cleanup list',
+          )
+          policy = replace_once(
+              policy,
+              "  const stale = document.getElementById('ct_resources_controls');\n  if (stale) stale.remove();\n}",
+              "  const spoof = document.getElementById('spoof');\n  if (spoof) {\n    [...spoof.querySelectorAll('.panel')].forEach(panel => {\n      const title = (panel.querySelector('h3')?.textContent || '').trim();\n      if (/^Identity Controls$/i.test(title)) panel.remove();\n    });\n  }\n  const stale = document.getElementById('ct_resources_controls');\n  if (stale) stale.remove();\n}",
+              'identity panel cleanup',
+          )
+          policy = replace_once(
+              policy,
+              "    panel.innerHTML = '<h3>Feature Center</h3><div class=\"scope-note\">Main controls are here. Parent features reveal only the settings that belong to them.</div><div id=\"keyboxStatus\" class=\"ct-keybox-summary\">Loading keybox state...</div><div class=\"ct-control-host\"></div>';",
+              "    panel.innerHTML = '<h3>Feature Center</h3><div class=\"scope-note\">Main controls are here. Parent features reveal only the settings that belong to them.</div><div class=\"ct-control-host\"></div>';",
+              'dashboard keybox summary removal',
+          )
+          old_else = "  } else if (!document.getElementById('keyboxStatus')) {\n    const status = document.createElement('div');\n    status.id = 'keyboxStatus';\n    status.className = 'ct-keybox-summary';\n    status.textContent = 'Loading keybox state...';\n    document.getElementById('ct_dashboard_controls').querySelector('.ct-control-host')?.before(status);\n  }\n}"
+          new_else = "  }\n  const keysPage = document.getElementById('keys');\n  if (keysPage && !document.getElementById('keyboxStatus')) {\n    const statusPanel = document.createElement('div');\n    statusPanel.id = 'ct_keybox_status_panel';\n    statusPanel.className = 'panel';\n    statusPanel.innerHTML = '<h3>Keyboxes</h3><div id=\"keyboxStatus\" class=\"ct-keybox-summary\" aria-live=\"polite\">Loading keybox state...</div>';\n    keysPage.prepend(statusPanel);\n  }\n}"
+          policy = replace_once(policy, old_else, new_else, 'keybox status relocation')
+          policy_path.write_text(policy)
+
+          ux_base = ux_base_path.read_text()
+          ux_base = replace_once(
+              ux_base,
+              "    const SUPPORTED = [",
+              "    // To add a locale: append [locale, displayName] here, add TRANSLATIONS[locale],\n    // add GUIDE[locale] when a localized guide is available, then run module/webui-tests.\n    const SUPPORTED = [",
+              'locale contributor contract',
+          )
+          ux_base = ux_base.replace('input[type=\\"checkbox\\"].toggle {', 'input[type=\\"checkbox\\"].toggle, input[type=\\"checkbox\\"].ct-switch {')
+          ux_base = ux_base.replace('input[type=\\"checkbox\\"].toggle::after {', 'input[type=\\"checkbox\\"].toggle::after, input[type=\\"checkbox\\"].ct-switch::after {')
+          ux_base = ux_base.replace('input[type=\\"checkbox\\"].toggle:checked { background: var(--accent) !important; border-color: var(--accent) !important; }', 'input[type=\\"checkbox\\"].toggle:checked, input[type=\\"checkbox\\"].ct-switch:checked { background: #16634d !important; border-color: #34d399 !important; }')
+          ux_base = ux_base.replace('input[type=\\"checkbox\\"].toggle:checked::after { transform: translateX(20px) !important; background: #0b0b0c !important; }', 'input[type=\\"checkbox\\"].toggle:checked::after, input[type=\\"checkbox\\"].ct-switch:checked::after { transform: translateX(20px) !important; background: #ecfdf5 !important; }')
+          ux_base = ux_base.replace('input[type=\\"checkbox\\"].toggle:focus-visible {', 'input[type=\\"checkbox\\"].toggle:focus-visible, input[type=\\"checkbox\\"].ct-switch:focus-visible {')
+          ux_base = ux_base.replace('html[dir=\\"rtl\\"] input[type=\\"checkbox\\"].toggle { direction: ltr; }', 'html[dir=\\"rtl\\"] input[type=\\"checkbox\\"].toggle, html[dir=\\"rtl\\"] input[type=\\"checkbox\\"].ct-switch { direction: ltr; }')
+          ux_base = ux_base.replace('.row > input[type=\\"checkbox\\"].toggle { margin-top: 2px !important; }', '.row > input[type=\\"checkbox\\"].toggle, .row > input[type=\\"checkbox\\"].ct-switch { margin-top: 2px !important; }')
+          ux_base = replace_once(ux_base, '#cleveresCommunityCard { box-sizing: border-box; margin: 20px 0 max(18px, env(safe-area-inset-bottom)) !important; width: 100%; }', '#cleveresCommunityCard { box-sizing: border-box; margin: 20px 0 24px !important; width: 100%; }', 'community UX spacing')
+          ux_base = replace_once(ux_base, 'panel.innerHTML = `<h3>Debug Logging</h3><div class=\\"row\\"><label for=\\"ct_debug_logging_toggle\\" style=\\"flex:1;padding-right:14px\\"><strong style=\\"color:#fff\\">Debug Logging</strong><span class=\\"res-desc\\">Enable additional runtime diagnostics without installing a debug build. Turn it off after collecting logs.</span></label><input id=\\"ct_debug_logging_toggle\\" class=\\"toggle\\" type=\\"checkbox\\"></div>`;', 'panel.innerHTML = `<h3>Debug Logging</h3><div class=\\"row\\"><label for=\\"ct_debug_logging_toggle\\" style=\\"flex:1;padding-right:14px\\"><strong style=\\"color:#fff\\">Debug Logging</strong><span class=\\"res-desc\\">Enable additional runtime diagnostics without installing a debug build. Turn it off after collecting logs.</span></label><input id=\\"ct_debug_logging_toggle\\" class=\\"ct-switch\\" type=\\"checkbox\\"></div>`;', 'debug modern switch')
+          old_language_position = "        const configPanel = document.getElementById('backupPw')?.closest('.panel');\n        if (configPanel && configPanel.parentElement === dashboard) {\n            if (configPanel.nextElementSibling !== panel) dashboard.insertBefore(panel, configPanel.nextSibling);\n        } else if (panel.parentElement !== dashboard) {\n            dashboard.appendChild(panel);\n        }"
+          new_language_position = "        const featureCenter = document.getElementById('ct_dashboard_controls');\n        const configPanel = document.getElementById('backupPw')?.closest('.panel');\n        if (featureCenter && featureCenter.parentElement === dashboard) {\n            if (featureCenter.nextElementSibling !== panel) dashboard.insertBefore(panel, featureCenter.nextSibling);\n        } else if (configPanel && configPanel.parentElement === dashboard) {\n            if (configPanel.nextElementSibling !== panel) dashboard.insertBefore(panel, configPanel.nextSibling);\n        } else if (panel.parentElement !== dashboard) {\n            dashboard.appendChild(panel);\n        }"
+          ux_base = replace_once(ux_base, old_language_position, new_language_position, 'language panel visibility')
+          ux_base_path.write_text(ux_base)
+
+          service_test = service_test_path.read_text()
+          service_test = replace_once(service_test, '        val legacySettings =', '        val retiredIdentitySettings =', 'service test setting group')
+          service_test = replace_once(service_test, '        val monitoredSettings = legacySettings + featureCenterSettings', '        val monitoredSettings = retiredIdentitySettings + featureCenterSettings', 'service test monitored settings')
+          service_test = replace_once(service_test, '        assertTrue(html.contains("<script src=\\"bridge.js?revision=6\\"></script>"))', '        assertTrue(html.contains("<script src=\\"bridge.js?revision=7\\"></script>"))', 'service bridge revision')
+          service_test = replace_once(service_test, '        assertTrue(html.contains("<script src=\\"policy.js?revision=3\\"></script>"))', '        assertTrue(html.contains("<script src=\\"policy.js?revision=4\\"></script>"))', 'service policy revision')
+          old_legacy_assertions = '''        legacySettings.forEach { setting ->
+            assertTrue("Missing synchronized legacy control for $setting", html.contains("data-setting=\\"$setting\\""))
+            assertTrue("Missing source-aware toggle for $setting", html.contains("toggle('$setting', this)"))
+        }
+'''
+          new_legacy_assertions = '''        retiredIdentitySettings.forEach { setting ->
+            assertFalse("Retired Identity toggle must not be rendered for $setting", html.contains("data-setting=\\"$setting\\""))
+            assertFalse("Retired source-aware toggle must not be rendered for $setting", html.contains("toggle('$setting', this)"))
+        }
+        assertFalse("Legacy toggle class must not be rendered", html.contains("class=\\"toggle\\""))
+        assertTrue("Remote Server automatic refresh must use the modern switch", html.contains("class=\\"ct-switch\\" id=\\"srvAutoRefresh\\""))
+'''
+          service_test = replace_once(service_test, old_legacy_assertions, new_legacy_assertions, 'service legacy assertions')
+          service_test_path.write_text(service_test)
+
+          bridge_base = bridge_base_test_path.read_text()
+          bridge_base = replace_once(bridge_base, "    const body = createElement('body');\n    return {", "    const body = createElement('body');\n    const dashboard = createElement('div');\n    dashboard.id = 'dashboard';\n    body.appendChild(dashboard);\n    return {", 'bridge test dashboard fixture')
+          bridge_base = replace_once(bridge_base, "    assert.strictEqual(communityDocument.body.children.at(-1), communityCard, 'Community card must stay at the bottom');", "    const communityDashboard = communityDocument.getElementById('dashboard');\n    assert.strictEqual(communityDashboard.children.at(-1), communityCard, 'Community card must stay at the bottom of Dashboard');\n    assert.ok(!communityDocument.body.children.includes(communityCard), 'Community card must never be a global body-level widget');", 'community ownership assertion')
+          bridge_base = replace_once(bridge_base, 'assert.match(uxSource, /ux-base\\.js\\?revision=4/);', 'assert.match(uxSource, /ux-base\\.js\\?revision=5/);', 'bridge test UX revision')
+          bridge_base = replace_once(bridge_base, 'assert.ok(indexSource.includes(\'<script src="bridge.js?revision=6"></script>\'));', 'assert.ok(indexSource.includes(\'<script src="bridge.js?revision=7"></script>\'));', 'bridge test index revision')
+          bridge_base = replace_once(bridge_base, 'assert.match(bridgeSource, /ux\\.js\\?revision=4/);', 'assert.match(bridgeSource, /ux\\.js\\?revision=5/);', 'bridge test loader revision')
+          bridge_base = replace_once(bridge_base, "    assert.match(uxBaseSource, /ct_language_panel/);", "    assert.match(uxBaseSource, /ct_language_panel/);\n    assert.match(uxBaseSource, /To add a locale:/);\n    assert.match(uxBaseSource, /ct_dashboard_controls/);", 'language contributor assertions')
+          bridge_base_test_path.write_text(bridge_base)
+
+          bridge_test = bridge_test_path.read_text()
+          bridge_test = replace_once(bridge_test, 'assert.match(loaderSource, /ux-base\\.js\\?revision=4/);', 'assert.match(loaderSource, /ux-base\\.js\\?revision=5/);', 'loader test revision')
+          bridge_test = replace_once(bridge_test, 'assert.match(indexSource, /policy\\.js\\?revision=3/);', 'assert.match(indexSource, /policy\\.js\\?revision=4/);', 'policy test revision')
+          bridge_test = replace_once(bridge_test, 'assert.match(indexSource, /bridge\\.js\\?revision=6/);', 'assert.match(indexSource, /bridge\\.js\\?revision=7/);', 'bridge test revision')
+          bridge_test = replace_once(bridge_test, "assert.ok(!policySource.includes('ct_community_slot'), 'Policy must not structurally relocate the community card');", "assert.ok(!policySource.includes('ct_community_slot'), 'Policy must not create a duplicate community slot');\nassert.ok(!indexSource.includes('<h3>Identity Controls</h3>'), 'Retired Identity Controls panel must stay removed');\nassert.ok(!indexSource.includes('class=\\\"toggle\\\"'), 'Legacy toggle class must stay removed from static WebUI markup');\nassert.match(indexSource, /class=\\\"ct-switch\\\" id=\\\"srvAutoRefresh\\\"/);\nassert.match(policySource, /ct_keybox_status_panel/);", 'WebUI regression assertions')
+          bridge_test_path.write_text(bridge_test)
+
+          locales_doc = root / 'module/template/webroot/LOCALES.md'
+          locales_doc.write_text('''# WebUI locales\n\nCleveresTricky WebUI translations are local-only and live in `ux-base.js`; switching language never requires network access.\n\n## Add a language\n\n1. Add `[locale, displayName]` to `SUPPORTED` in `ux-base.js`.\n2. Add a `TRANSLATIONS[locale]` catalog for visible UI strings. English remains the fallback for missing strings.\n3. Add `GUIDE[locale]` when a localized guide is available; otherwise the English guide is used.\n4. Keep RTL locales covered by the `html[dir="rtl"]` rules and extend the direction rule if another RTL locale is added.\n5. Run `node --check module/template/webroot/ux-base.js` and `node module/webui-tests/bridge.test.js` before opening a PR.\n\nThe language selector is rendered on Dashboard immediately after Feature Center, and the chosen locale is persisted in `localStorage` under `cleverestricky.language.v1`.\n''')
+
+          # Final source-level invariants before tests.
+          assert 'document.body.appendChild(card);' not in bridge
+          assert 'dashboard.appendChild(card);' in bridge
+          assert '<h3>Identity Controls</h3>' not in index
+          assert 'class="toggle"' not in index
+          assert 'class="ct-switch" id="srvAutoRefresh"' in index
+          assert 'ct_keybox_status_panel' in policy
+          assert '<div id="keyboxStatus" class="ct-keybox-summary">Loading keybox state...</div><div class="ct-control-host">' not in policy
+          assert 'ct_language_selector' in ux_base
+          assert 'const featureCenter = document.getElementById(\'ct_dashboard_controls\');' in ux_base
+          PY
+
+      - name: Verify WebUI syntax and contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check module/template/webroot/bridge.js
+          node --check module/template/webroot/ux.js
+          node --check module/template/webroot/ux-base.js
+          node --check module/template/webroot/policy.js
+          node module/webui-tests/bridge.test.js
+
+      - name: Commit verified WebUI cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add module/template/webroot/index.html \
+                  module/template/webroot/bridge.js \
+                  module/template/webroot/policy.js \
+                  module/template/webroot/ux.js \
+                  module/template/webroot/ux-base.js \
+                  module/template/webroot/LOCALES.md \
+                  module/webui-tests/bridge-base.test.js \
+                  module/webui-tests/bridge.test.js \
+                  service/src/test/java/cleveres/tricky/cleverestech/WebServerUXTest.kt
+          git diff --cached --check
+          git diff --cached --name-only
+          git commit -m "Fix WebUI dashboard ownership and localization regressions"
+          git push origin HEAD:fix/webui-dashboard-cleanup-20260813
