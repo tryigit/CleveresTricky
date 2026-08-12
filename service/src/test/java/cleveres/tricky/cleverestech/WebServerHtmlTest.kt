@@ -100,9 +100,9 @@ class WebServerHtmlTest {
         assertTrue("Missing Generate Random Button", html.contains("generateRandomIdentity"))
         assertTrue("Missing Auto Identity Button", html.contains("Auto Identity (Pixel Beta)"))
         assertTrue("Missing Custom ROM Auto Identity note", html.contains("Recommended only if you use a Custom ROM"))
-        assertTrue("Missing Telephony Toggle", html.contains("id=\"telephony\""))
-        assertTrue("Missing identity Spoof Engine Toggle", html.contains("id=\"spoof_enabled\""))
-        assertTrue("Missing build identity Toggle", html.contains("id=\"spoof_build_identity\""))
+        assertFalse("Retired Telephony toggle must not be rendered", html.contains("id=\"telephony\""))
+        assertFalse("Retired identity Spoof Engine toggle must not be rendered", html.contains("id=\"spoof_enabled\""))
+        assertFalse("Retired build identity toggle must not be rendered", html.contains("id=\"spoof_build_identity\""))
 
         // Verify Apps Logic
         assertTrue("Missing App Package Input", html.contains("id=\"appPkg\""))
