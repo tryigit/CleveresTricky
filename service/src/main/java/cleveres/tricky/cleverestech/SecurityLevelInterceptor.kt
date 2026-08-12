@@ -7,6 +7,7 @@ import android.system.keystore2.KeyMetadata
 import cleveres.tricky.cleverestech.binder.BinderInterceptor
 import cleveres.tricky.cleverestech.keystore.CertHack
 import cleveres.tricky.cleverestech.keystore.Utils
+import java.security.cert.Certificate
 
 /**
  * Rewrites only the certificate chain returned by a successful, genuine
@@ -76,13 +77,19 @@ class SecurityLevelInterceptor : BinderInterceptor() {
                 replacement.recycle()
                 return Skip
             }
-            val originalChain = Utils.getCertificateChain(metadata)
-            if (originalChain == null) {
+
+            // A successful attestation rewrite discards Android's genuine issuer chain and
+            // replaces it with the selected keybox chain. Parsing every genuine issuer first
+            // therefore adds work only to attested generateKey calls. Keep the hot path leaf-only
+            // until CertHack confirms that a replacement can actually be produced.
+            val originalLeaf = Utils.getLeafCertificate(metadata)
+            if (originalLeaf == null) {
                 replacement.recycle()
                 return Skip
             }
-            val rewritten = CertHack.hackCertificateChain(originalChain, callingUid)
-            if (rewritten === originalChain) {
+            val originalLeafOnly = arrayOf<Certificate>(originalLeaf)
+            val rewritten = CertHack.hackCertificateChain(originalLeafOnly, callingUid)
+            if (rewritten === originalLeafOnly) {
                 replacement.recycle()
                 return Skip
             }
