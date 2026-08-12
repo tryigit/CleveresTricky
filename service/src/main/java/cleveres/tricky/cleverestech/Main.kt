@@ -69,9 +69,14 @@ fun main(args: Array<String>) {
             return@runBlocking
         }
 
+        runCatching { KeyboxDirectoryRefreshWatcher.start(Config.keyboxDirectory) }
+            .onFailure { Logger.e("Failed to install conflated keybox watcher; keeping legacy observer", it) }
+
         try {
             WebUiBridge(WebServer(0, configDir), configDir).start()
         } catch (e: Exception) {
+            KeyboxDirectoryRefreshWatcher.stop()
+            CertificatePolicyWatcher.stop()
             Logger.e("Failed to start native WebUI bridge", e)
             Logger.e("Main: Exiting so the module supervisor can restore native WebUI service")
             return@runBlocking
@@ -105,6 +110,7 @@ fun main(args: Array<String>) {
         var previousDrmEngineState: Boolean? = null
         var telephonyStopPending = false
         var drmStopPending = false
+        var runtimeRetryDelayMs = RUNTIME_RETRY_INITIAL_MS
         while (true) {
             val identityEngineEnabled = Config.isSpoofEnabled
             if (previousIdentityEngineState != identityEngineEnabled) {
@@ -197,17 +203,20 @@ fun main(args: Array<String>) {
             if (!telSuccess) Logger.d("Telephony interceptor not ready yet")
             if (!drmSuccess) Logger.d("DRM privacy interceptor not ready yet")
 
+            val runtimeHealthy =
+                ksSuccess && telSuccess && drmSuccess && !telephonyStopPending && !drmStopPending
+            val controllerWaitMs = if (runtimeHealthy) 30_000L else runtimeRetryDelayMs
             try {
-                Config.awaitRuntimeController(
-                    if (ksSuccess && telSuccess && drmSuccess && !telephonyStopPending && !drmStopPending) 30_000 else 1_000,
-                )
+                Config.awaitRuntimeController(controllerWaitMs)
             } catch (_: InterruptedException) {
                 Thread.currentThread().interrupt()
+                KeyboxDirectoryRefreshWatcher.stop()
                 CertificatePolicyWatcher.stop()
                 DrmInterceptor.stopDrmInterceptor()
                 Logger.i("Main: Runtime controller interrupted, shutting down")
                 return@runBlocking
             }
+            runtimeRetryDelayMs = nextRuntimeRetryDelayMs(runtimeRetryDelayMs, runtimeHealthy)
         }
     }
 }
