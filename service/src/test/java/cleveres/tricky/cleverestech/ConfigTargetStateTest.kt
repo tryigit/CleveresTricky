@@ -24,8 +24,6 @@ class ConfigTargetStateTest {
 
     @Test
     fun testNeedHack_caching() {
-        var now = System.currentTimeMillis()
-        Config.clockSource = { now }
         val hackTrie = PackageTrie<Boolean>()
         hackTrie.add("com.hack.me", true)
 
@@ -34,6 +32,13 @@ class ConfigTargetStateTest {
 
         val uid = 10_001
         mockPackage(uid, arrayOf("com.hack.me"))
+
+        // Freeze the test clock only after the package-cache entry is created.
+        // setPackagesForTesting timestamps entries with the real clock, so freezing
+        // it first can make a freshly inserted entry appear a few milliseconds in
+        // the future and trigger the protected-empty-UID path nondeterministically.
+        var now = System.currentTimeMillis()
+        Config.clockSource = { now }
 
         assertTrue("needHack should return true for com.hack.me", Config.needHack(uid))
 
