@@ -120,7 +120,6 @@ class WebServerUXTest {
                 "random_on_boot",
                 "spoof_region_cn",
                 "telephony",
-                "rkp_passthrough",
             )
         val featureCenterSettings = listOf("global_mode", "auto_keybox_check", "drm_passthrough")
         val monitoredSettings = legacySettings + featureCenterSettings
@@ -141,6 +140,7 @@ class WebServerUXTest {
         assertFalse(html.contains("id=\"bootPropsMode\""))
         assertFalse(html.contains("data-setting=\"tee_broken_mode\""))
         assertFalse(html.contains("data-setting=\"hide_sensitive_props\""))
+        assertFalse(html.contains("data-setting=\"rkp_passthrough\""))
         assertTrue(html.contains(".tabs { position: fixed; top: auto; bottom: 0;"))
         assertTrue(html.contains("<option value=\"templates.json\">templates.json</option>"))
 
