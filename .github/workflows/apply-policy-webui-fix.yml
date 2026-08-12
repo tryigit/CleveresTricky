@@ -1,0 +1,27 @@
+name: Apply policy WebUI fix
+
+on:
+  push:
+    branches:
+      - granular-policy-state-v2
+    paths:
+      - .github/workflows/apply-policy-webui-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: granular-policy-state-v2
+      - run: python .tmp/apply_policy_webui_fix.py
+      - run: rm .tmp/apply_policy_webui_fix.py
+      - run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add service/src/main/java/cleveres/tricky/cleverestech/PolicyState.kt module/template/webroot/policy.js .tmp/apply_policy_webui_fix.py
+          git commit -m "fix: finalize policy validation and feature help"
+          git push origin HEAD:granular-policy-state-v2
