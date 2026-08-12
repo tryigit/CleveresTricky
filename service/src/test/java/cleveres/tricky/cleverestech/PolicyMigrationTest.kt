@@ -135,6 +135,29 @@ class PolicyMigrationTest {
     }
 
     @Test
+    fun emptyConfiguredStateIsRecoveredFromLastGood() {
+        val stateFile = File(tempDir, "policy_state_v2.json")
+        val lastGoodFile = File(tempDir, "policy_state_v2.last_good.json")
+        stateFile.writeText("")
+        lastGoodFile.writeText(validState().toString())
+
+        assertTrue(PolicyMigration.sanitize(tempDir))
+        assertEquals("Travel", JSONObject(stateFile.readText()).getString("activeProfile"))
+    }
+
+    @Test
+    fun oversizedConfiguredStateIsRecoveredWithoutReadingItIntoMemory() {
+        val stateFile = File(tempDir, "policy_state_v2.json")
+        val lastGoodFile = File(tempDir, "policy_state_v2.last_good.json")
+        stateFile.writeBytes(ByteArray(512 * 1024 + 1) { 'x'.code.toByte() })
+        lastGoodFile.writeText(validState().toString())
+
+        assertTrue(PolicyMigration.sanitize(tempDir))
+        assertEquals("Travel", JSONObject(stateFile.readText()).getString("activeProfile"))
+        assertFalse(File(tempDir, "policy_state_v2.invalid.json").exists())
+    }
+
+    @Test
     fun validConfiguredStateRepairsMalformedLastGoodCopy() {
         val stateFile = File(tempDir, "policy_state_v2.json")
         val lastGoodFile = File(tempDir, "policy_state_v2.last_good.json")
