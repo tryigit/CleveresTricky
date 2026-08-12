@@ -9,11 +9,11 @@ The runtime WebUI file layout is fixed. AI agents and human contributors must ex
 
 Allowed runtime files under `module/template/webroot`:
 
-- `index.html` — static HTML, base/static CSS, and the legacy inline controller that has not yet been extracted. Do not create additional HTML entry points or standalone CSS files.
-- `bridge.js` — native KernelSU/APatch bridge, host commands, file transfer, external intents, and minimal WebUI bootstrap only. Do not add policy rendering, localization catalogs, or page-specific UI state here.
-- `policy.js` — policy/state API integration and policy-owned dynamic controls/pages only. Do not wrap or replace global navigation functions and do not own general UX/community-link behavior.
-- `ux.js` — the single general UX/localization/presentation owner. Locales, guide presentation, community-link behavior, compatibility presentation, and general UX enhancements belong here.
-- `LOCALES.md` — localization documentation only; it is not a runtime asset.
+- `index.html`: static HTML, base/static CSS, and the legacy inline controller that has not yet been extracted. Do not create additional HTML entry points or standalone CSS files.
+- `bridge.js`: native KernelSU/APatch bridge, host commands, file transfer, external intents, and minimal WebUI bootstrap only. Do not add policy rendering, localization catalogs, or page-specific UI state here.
+- `policy.js`: policy/state API integration and policy-owned dynamic controls/pages only. Do not wrap or replace global navigation functions and do not own general UX/community-link behavior.
+- `ux.js`: the single general UX/localization/presentation owner. Locales, guide presentation, community-link behavior, compatibility presentation, and general UX enhancements belong here.
+- `LOCALES.md`: localization documentation only; it is not a runtime asset.
 
 Do not add files such as `*-patch.js`, `*-fix.js`, `*-test.js`, `*-overlay.js`, `*-ux.js`, temporary CSS files, experiment bundles, or feature-specific runtime JS/CSS files. Tests must stay outside `module/template/webroot` and must never become runtime assets.
 
