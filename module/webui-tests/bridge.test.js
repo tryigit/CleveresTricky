@@ -184,11 +184,19 @@ async function main() {
     assert.match(uxSource, /\['en', 'English'\]/);
     assert.match(uxSource, /\['tr', 'Türkçe'\]/);
     assert.match(uxSource, /\['zh-CN', '简体中文'\]/);
+    assert.match(uxSource, /\['ru', 'Русский'\]/);
+    assert.match(uxSource, /\['id', 'Bahasa Indonesia'\]/);
+    assert.match(uxSource, /\['hi', 'हिन्दी'\]/);
+    assert.match(uxSource, /\['ar', 'العربية'\]/);
+    assert.match(uxSource, /document\.documentElement\.dir = locale === 'ar' \? 'rtl' : 'ltr'/);
+    assert.match(uxSource, /html\[dir="rtl"\]/);
+    assert.match(uxSource, /node\.nodeValue = leading \+ tr\(trimmed\) \+ trailing/);
     assert.match(uxSource, /Identity is currently disabled\. You can enable it from Dashboard\./);
     assert.match(uxSource, /ct_language_panel/);
     assert.match(uxSource, /ct_debug_panel/);
     assert.match(uxSource, /ct_drm_dashboard_panel/);
     assert.match(uxSource, /Profiles\\s\+v2/);
+    assert.match(uxSource, /All major features and runtime paths in one place\./);
     assert.ok(!/setInterval\s*\(/.test(uxSource), 'UX enhancements must not add permanent polling');
 
     const normalizeUiMessage = loadMessageNormalizer();
