@@ -11,7 +11,10 @@
         ['zh-CN', '简体中文'],
         ['es', 'Español'],
         ['de', 'Deutsch'],
-        ['ru', 'Русский']
+        ['ru', 'Русский'],
+        ['id', 'Bahasa Indonesia'],
+        ['hi', 'हिन्दी'],
+        ['ar', 'العربية']
     ];
 
     const TRANSLATIONS = {
@@ -33,7 +36,14 @@
             'Identity is currently disabled. You can enable it from Dashboard.': 'Kimlik şu anda devre dışı. Gösterge Paneli üzerinden etkinleştirebilirsiniz.',
             'Open Telegram Community': 'Telegram Topluluğunu Aç', 'Join Telegram Community': 'Telegram Topluluğuna Katıl',
             'Save profile': 'Profili kaydet', 'Clone': 'Klonla', 'Delete': 'Sil', 'Profile saved': 'Profil kaydedildi',
-            'System / preinstalled packages are included in this search.': 'Sistem / ön yüklü paketler de bu aramaya dahildir.'
+            'System / preinstalled packages are included in this search.': 'Sistem / ön yüklü paketler de bu aramaya dahildir.',
+            'Built-in translations are local and require no network connection. English is the default unless you choose another language here.': 'Yerleşik çeviriler tamamen yereldir ve ağ bağlantısı gerektirmez. Buradan başka bir dil seçmediğiniz sürece varsayılan dil İngilizcedir.',
+            "Keep packages listed in drm_packages.txt on Android's genuine Keystore path. This does not fake a DRM security level.": 'drm_packages.txt içindeki paketleri Android gerçek Keystore yolunda tutar. DRM güvenlik seviyesini taklit etmez.',
+            'Enable additional runtime diagnostics without installing a debug build. Turn it off after collecting logs.': 'Debug build kurmadan ek çalışma zamanı tanılamalarını açar. Logları topladıktan sonra kapatın.',
+            'DRM passthrough enabled': 'DRM geçiş modu etkin', 'DRM passthrough disabled': 'DRM geçiş modu devre dışı',
+            'Debug logging enabled': 'Hata ayıklama günlükleri etkin', 'Debug logging disabled': 'Hata ayıklama günlükleri devre dışı',
+            'Could not update DRM setting': 'DRM ayarı güncellenemedi', 'Could not update debug logging': 'Hata ayıklama günlüğü ayarı güncellenemedi',
+            'All major features and runtime paths in one place.': 'Tüm temel özellikler ve çalışma yolları tek yerde.'
         },
         'zh-CN': {
             'Dashboard': '仪表盘', 'Identity': '身份', 'Apps': '应用', 'Keyboxes': '密钥盒', 'Info & Resources': '信息与资源',
@@ -51,7 +61,14 @@
             'Identity is currently disabled. You can enable it from Dashboard.': '身份功能当前已关闭。可在仪表盘中启用。',
             'Open Telegram Community': '打开 Telegram 社区', 'Join Telegram Community': '加入 Telegram 社区',
             'Save profile': '保存配置', 'Clone': '克隆', 'Delete': '删除',
-            'System / preinstalled packages are included in this search.': '此搜索也包含系统 / 预装应用。'
+            'System / preinstalled packages are included in this search.': '此搜索也包含系统 / 预装应用。',
+            'Built-in translations are local and require no network connection. English is the default unless you choose another language here.': '内置翻译完全在本地运行，不需要网络。除非在这里选择其他语言，否则默认使用英语。',
+            "Keep packages listed in drm_packages.txt on Android's genuine Keystore path. This does not fake a DRM security level.": '让 drm_packages.txt 中的包继续使用 Android 真实 Keystore 路径，不会伪造 DRM 安全级别。',
+            'Enable additional runtime diagnostics without installing a debug build. Turn it off after collecting logs.': '无需安装调试版本即可启用额外运行时诊断。收集日志后请关闭。',
+            'DRM passthrough enabled': 'DRM 直通已启用', 'DRM passthrough disabled': 'DRM 直通已关闭',
+            'Debug logging enabled': '调试日志已启用', 'Debug logging disabled': '调试日志已关闭',
+            'Could not update DRM setting': '无法更新 DRM 设置', 'Could not update debug logging': '无法更新调试日志设置',
+            'All major features and runtime paths in one place.': '所有主要功能和运行路径集中说明。'
         },
         es: {
             'Dashboard': 'Panel', 'Identity': 'Identidad', 'Apps': 'Apps', 'Keyboxes': 'Keyboxes', 'Info & Resources': 'Info y recursos',
@@ -72,7 +89,14 @@
             'Identity is currently disabled. You can enable it from Dashboard.': 'La identidad está desactivada. Puedes activarla desde el Panel.',
             'Open Telegram Community': 'Abrir comunidad de Telegram', 'Join Telegram Community': 'Unirse a la comunidad de Telegram',
             'Save profile': 'Guardar perfil', 'Clone': 'Clonar', 'Delete': 'Eliminar',
-            'System / preinstalled packages are included in this search.': 'La búsqueda incluye paquetes del sistema y preinstalados.'
+            'System / preinstalled packages are included in this search.': 'La búsqueda incluye paquetes del sistema y preinstalados.',
+            'Built-in translations are local and require no network connection. English is the default unless you choose another language here.': 'Las traducciones integradas son locales y no requieren conexión. El inglés es el idioma predeterminado hasta que elijas otro aquí.',
+            "Keep packages listed in drm_packages.txt on Android's genuine Keystore path. This does not fake a DRM security level.": 'Mantiene los paquetes de drm_packages.txt en la ruta Keystore real de Android. No falsifica el nivel de seguridad DRM.',
+            'Enable additional runtime diagnostics without installing a debug build. Turn it off after collecting logs.': 'Activa diagnósticos adicionales sin instalar una compilación debug. Desactívalo después de recoger los registros.',
+            'DRM passthrough enabled': 'Paso directo DRM activado', 'DRM passthrough disabled': 'Paso directo DRM desactivado',
+            'Debug logging enabled': 'Registro de depuración activado', 'Debug logging disabled': 'Registro de depuración desactivado',
+            'Could not update DRM setting': 'No se pudo actualizar DRM', 'Could not update debug logging': 'No se pudo actualizar el registro de depuración',
+            'All major features and runtime paths in one place.': 'Todas las funciones principales y rutas de ejecución en un solo lugar.'
         },
         de: {
             'Dashboard': 'Übersicht', 'Identity': 'Identität', 'Apps': 'Apps', 'Keyboxes': 'Keyboxen', 'Info & Resources': 'Info & Ressourcen',
@@ -92,7 +116,14 @@
             'Identity is currently disabled. You can enable it from Dashboard.': 'Identität ist derzeit deaktiviert. Sie kann in der Übersicht aktiviert werden.',
             'Open Telegram Community': 'Telegram-Community öffnen', 'Join Telegram Community': 'Telegram-Community beitreten',
             'Save profile': 'Profil speichern', 'Clone': 'Klonen', 'Delete': 'Löschen',
-            'System / preinstalled packages are included in this search.': 'System- und vorinstallierte Pakete sind in dieser Suche enthalten.'
+            'System / preinstalled packages are included in this search.': 'System- und vorinstallierte Pakete sind in dieser Suche enthalten.',
+            'Built-in translations are local and require no network connection. English is the default unless you choose another language here.': 'Die integrierten Übersetzungen funktionieren lokal und benötigen kein Netzwerk. Englisch bleibt Standard, bis hier eine andere Sprache gewählt wird.',
+            "Keep packages listed in drm_packages.txt on Android's genuine Keystore path. This does not fake a DRM security level.": 'Pakete aus drm_packages.txt bleiben auf dem echten Android-Keystore-Pfad. Es wird keine DRM-Sicherheitsstufe vorgetäuscht.',
+            'Enable additional runtime diagnostics without installing a debug build. Turn it off after collecting logs.': 'Aktiviert zusätzliche Laufzeitdiagnose ohne Debug-Build. Nach dem Sammeln der Logs wieder ausschalten.',
+            'DRM passthrough enabled': 'DRM-Durchleitung aktiviert', 'DRM passthrough disabled': 'DRM-Durchleitung deaktiviert',
+            'Debug logging enabled': 'Debug-Protokollierung aktiviert', 'Debug logging disabled': 'Debug-Protokollierung deaktiviert',
+            'Could not update DRM setting': 'DRM-Einstellung konnte nicht aktualisiert werden', 'Could not update debug logging': 'Debug-Protokollierung konnte nicht aktualisiert werden',
+            'All major features and runtime paths in one place.': 'Alle wichtigen Funktionen und Laufzeitpfade an einem Ort.'
         },
         ru: {
             'Dashboard': 'Панель', 'Identity': 'Идентичность', 'Apps': 'Приложения', 'Keyboxes': 'Keybox', 'Info & Resources': 'Инфо и ресурсы',
@@ -111,7 +142,95 @@
             'Identity is currently disabled. You can enable it from Dashboard.': 'Идентичность отключена. Её можно включить на Панели.',
             'Open Telegram Community': 'Открыть Telegram-сообщество', 'Join Telegram Community': 'Вступить в Telegram-сообщество',
             'Save profile': 'Сохранить профиль', 'Clone': 'Клонировать', 'Delete': 'Удалить',
-            'System / preinstalled packages are included in this search.': 'Поиск включает системные и предустановленные пакеты.'
+            'System / preinstalled packages are included in this search.': 'Поиск включает системные и предустановленные пакеты.',
+            'Built-in translations are local and require no network connection. English is the default unless you choose another language here.': 'Встроенные переводы работают локально и не требуют сети. Английский используется по умолчанию, пока здесь не выбран другой язык.',
+            "Keep packages listed in drm_packages.txt on Android's genuine Keystore path. This does not fake a DRM security level.": 'Пакеты из drm_packages.txt остаются на настоящем пути Android Keystore. Уровень безопасности DRM не подделывается.',
+            'Enable additional runtime diagnostics without installing a debug build. Turn it off after collecting logs.': 'Включает дополнительную диагностику без debug-сборки. После сбора логов отключите её.',
+            'DRM passthrough enabled': 'DRM passthrough включён', 'DRM passthrough disabled': 'DRM passthrough выключен',
+            'Debug logging enabled': 'Отладочное логирование включено', 'Debug logging disabled': 'Отладочное логирование выключено',
+            'Could not update DRM setting': 'Не удалось обновить настройку DRM', 'Could not update debug logging': 'Не удалось обновить отладочное логирование',
+            'All major features and runtime paths in one place.': 'Все основные функции и пути выполнения в одном месте.'
+        },
+        id: {
+            'Dashboard': 'Dasbor', 'Identity': 'Identitas', 'Apps': 'Aplikasi', 'Keyboxes': 'Keybox', 'Info & Resources': 'Info & Sumber Daya',
+            'Guide': 'Panduan', 'Logs': 'Log', 'Editor': 'Editor', 'Donate': 'Donasi', 'Profiles': 'Profil',
+            'Security Patch': 'Patch Keamanan', 'Core Protection': 'Perlindungan Inti', 'Global Mode': 'Mode Global',
+            'Auto Keybox Check': 'Pemeriksaan Keybox Otomatis', 'DRM Passthrough': 'DRM Passthrough',
+            'Configuration Management': 'Manajemen Konfigurasi', 'Reload Config': 'Muat Ulang Konfigurasi',
+            'Identity Manager': 'Pengelola Identitas', 'No attestation template': 'Tidak ada templat attestasi',
+            'Randomize All Identifiers': 'Acak Semua Identitas', 'Auto Identity (Pixel Beta)': 'Identitas Otomatis (Pixel Beta)',
+            'Apply Identity': 'Terapkan Identitas', 'Application Privacy Shield': 'Perlindungan Privasi Aplikasi', 'New Rule': 'Aturan Baru',
+            'Package Name': 'Nama Paket', 'Attestation Identity Profile': 'Profil Identitas Attestasi', 'Custom Keybox': 'Keybox Kustom',
+            'Privacy Policy': 'Kebijakan Privasi', 'Add Rule': 'Tambah Aturan', 'Active Rules': 'Aturan Aktif',
+            'Runtime Health': 'Kesehatan Runtime', 'Resource Monitor': 'Monitor Sumber Daya', 'Module Logs': 'Log Modul',
+            'Refresh Logs': 'Segarkan Log', 'Download Logs': 'Unduh Log', 'Copy Logs': 'Salin Log',
+            'Language': 'Bahasa', 'Debug Logging': 'Log Debug', 'Effective State': 'Status Efektif',
+            'Resolved Configuration': 'Konfigurasi Terselesaikan', 'Inspect': 'Periksa', 'Select an app.': 'Pilih aplikasi.',
+            'Identity is currently disabled. You can enable it from Dashboard.': 'Identitas saat ini dinonaktifkan. Anda dapat mengaktifkannya dari Dasbor.',
+            'Open Telegram Community': 'Buka Komunitas Telegram', 'Join Telegram Community': 'Gabung Komunitas Telegram',
+            'Save profile': 'Simpan profil', 'Clone': 'Klon', 'Delete': 'Hapus', 'Profile saved': 'Profil disimpan',
+            'System / preinstalled packages are included in this search.': 'Paket sistem / prainstal juga disertakan dalam pencarian ini.',
+            'Built-in translations are local and require no network connection. English is the default unless you choose another language here.': 'Terjemahan bawaan tersedia secara lokal dan tidak memerlukan jaringan. Bahasa Inggris adalah default sampai Anda memilih bahasa lain di sini.',
+            "Keep packages listed in drm_packages.txt on Android's genuine Keystore path. This does not fake a DRM security level.": 'Mempertahankan paket di drm_packages.txt pada jalur Keystore Android asli. Ini tidak memalsukan tingkat keamanan DRM.',
+            'Enable additional runtime diagnostics without installing a debug build. Turn it off after collecting logs.': 'Aktifkan diagnostik runtime tambahan tanpa memasang build debug. Matikan setelah log selesai dikumpulkan.',
+            'DRM passthrough enabled': 'DRM passthrough aktif', 'DRM passthrough disabled': 'DRM passthrough nonaktif',
+            'Debug logging enabled': 'Log debug aktif', 'Debug logging disabled': 'Log debug nonaktif',
+            'Could not update DRM setting': 'Tidak dapat memperbarui pengaturan DRM', 'Could not update debug logging': 'Tidak dapat memperbarui log debug',
+            'All major features and runtime paths in one place.': 'Semua fitur utama dan jalur runtime dijelaskan di satu tempat.'
+        },
+        hi: {
+            'Dashboard': 'डैशबोर्ड', 'Identity': 'पहचान', 'Apps': 'ऐप्स', 'Keyboxes': 'कीबॉक्स', 'Info & Resources': 'जानकारी और संसाधन',
+            'Guide': 'मार्गदर्शिका', 'Logs': 'लॉग', 'Editor': 'संपादक', 'Donate': 'दान', 'Profiles': 'प्रोफाइल',
+            'Security Patch': 'सुरक्षा पैच', 'Core Protection': 'मुख्य सुरक्षा', 'Global Mode': 'ग्लोबल मोड',
+            'Auto Keybox Check': 'स्वचालित कीबॉक्स जांच', 'DRM Passthrough': 'DRM पासथ्रू',
+            'Configuration Management': 'कॉन्फ़िगरेशन प्रबंधन', 'Reload Config': 'कॉन्फ़िगरेशन पुनः लोड करें',
+            'Identity Manager': 'पहचान प्रबंधक', 'No attestation template': 'कोई अटेस्टेशन टेम्पलेट नहीं',
+            'Randomize All Identifiers': 'सभी पहचानकर्ता रैंडम करें', 'Auto Identity (Pixel Beta)': 'ऑटो पहचान (Pixel Beta)',
+            'Apply Identity': 'पहचान लागू करें', 'Application Privacy Shield': 'ऐप गोपनीयता सुरक्षा', 'New Rule': 'नया नियम',
+            'Package Name': 'पैकेज नाम', 'Attestation Identity Profile': 'अटेस्टेशन पहचान प्रोफाइल', 'Custom Keybox': 'कस्टम कीबॉक्स',
+            'Privacy Policy': 'गोपनीयता नीति', 'Add Rule': 'नियम जोड़ें', 'Active Rules': 'सक्रिय नियम',
+            'Runtime Health': 'रनटाइम स्थिति', 'Resource Monitor': 'संसाधन मॉनिटर', 'Module Logs': 'मॉड्यूल लॉग',
+            'Refresh Logs': 'लॉग रीफ्रेश करें', 'Download Logs': 'लॉग डाउनलोड करें', 'Copy Logs': 'लॉग कॉपी करें',
+            'Language': 'भाषा', 'Debug Logging': 'डीबग लॉगिंग', 'Effective State': 'प्रभावी स्थिति',
+            'Resolved Configuration': 'निर्धारित कॉन्फ़िगरेशन', 'Inspect': 'जांचें', 'Select an app.': 'एक ऐप चुनें।',
+            'Identity is currently disabled. You can enable it from Dashboard.': 'पहचान अभी बंद है। आप इसे डैशबोर्ड से चालू कर सकते हैं।',
+            'Open Telegram Community': 'Telegram समुदाय खोलें', 'Join Telegram Community': 'Telegram समुदाय से जुड़ें',
+            'Save profile': 'प्रोफाइल सहेजें', 'Clone': 'क्लोन', 'Delete': 'हटाएं', 'Profile saved': 'प्रोफाइल सहेजा गया',
+            'System / preinstalled packages are included in this search.': 'इस खोज में सिस्टम / पहले से इंस्टॉल पैकेज भी शामिल हैं।',
+            'Built-in translations are local and require no network connection. English is the default unless you choose another language here.': 'अंतर्निहित अनुवाद स्थानीय हैं और नेटवर्क की आवश्यकता नहीं है। जब तक आप यहां दूसरी भाषा नहीं चुनते, अंग्रेज़ी डिफ़ॉल्ट रहती है।',
+            "Keep packages listed in drm_packages.txt on Android's genuine Keystore path. This does not fake a DRM security level.": 'drm_packages.txt में सूचीबद्ध पैकेजों को Android के वास्तविक Keystore पथ पर रखता है। यह DRM सुरक्षा स्तर को नकली नहीं बनाता।',
+            'Enable additional runtime diagnostics without installing a debug build. Turn it off after collecting logs.': 'डीबग बिल्ड इंस्टॉल किए बिना अतिरिक्त रनटाइम डायग्नोस्टिक्स चालू करें। लॉग लेने के बाद इसे बंद कर दें।',
+            'DRM passthrough enabled': 'DRM पासथ्रू चालू है', 'DRM passthrough disabled': 'DRM पासथ्रू बंद है',
+            'Debug logging enabled': 'डीबग लॉगिंग चालू है', 'Debug logging disabled': 'डीबग लॉगिंग बंद है',
+            'Could not update DRM setting': 'DRM सेटिंग अपडेट नहीं हो सकी', 'Could not update debug logging': 'डीबग लॉगिंग अपडेट नहीं हो सकी',
+            'All major features and runtime paths in one place.': 'सभी मुख्य फीचर और रनटाइम पथ एक ही जगह समझाए गए हैं।'
+        },
+        ar: {
+            'Dashboard': 'لوحة التحكم', 'Identity': 'الهوية', 'Apps': 'التطبيقات', 'Keyboxes': 'صناديق المفاتيح', 'Info & Resources': 'المعلومات والموارد',
+            'Guide': 'الدليل', 'Logs': 'السجلات', 'Editor': 'المحرر', 'Donate': 'تبرع', 'Profiles': 'الملفات الشخصية',
+            'Security Patch': 'تصحيح الأمان', 'Core Protection': 'الحماية الأساسية', 'Global Mode': 'الوضع العام',
+            'Auto Keybox Check': 'فحص صندوق المفاتيح تلقائيا', 'DRM Passthrough': 'تمرير DRM',
+            'Configuration Management': 'إدارة الإعدادات', 'Reload Config': 'إعادة تحميل الإعدادات',
+            'Identity Manager': 'مدير الهوية', 'No attestation template': 'لا يوجد قالب تصديق',
+            'Randomize All Identifiers': 'عشوائية جميع المعرفات', 'Auto Identity (Pixel Beta)': 'الهوية التلقائية (Pixel Beta)',
+            'Apply Identity': 'تطبيق الهوية', 'Application Privacy Shield': 'حماية خصوصية التطبيقات', 'New Rule': 'قاعدة جديدة',
+            'Package Name': 'اسم الحزمة', 'Attestation Identity Profile': 'ملف هوية التصديق', 'Custom Keybox': 'صندوق مفاتيح مخصص',
+            'Privacy Policy': 'سياسة الخصوصية', 'Add Rule': 'إضافة قاعدة', 'Active Rules': 'القواعد النشطة',
+            'Runtime Health': 'حالة التشغيل', 'Resource Monitor': 'مراقب الموارد', 'Module Logs': 'سجلات الوحدة',
+            'Refresh Logs': 'تحديث السجلات', 'Download Logs': 'تنزيل السجلات', 'Copy Logs': 'نسخ السجلات',
+            'Language': 'اللغة', 'Debug Logging': 'سجل التصحيح', 'Effective State': 'الحالة الفعلية',
+            'Resolved Configuration': 'الإعدادات المحسوبة', 'Inspect': 'فحص', 'Select an app.': 'اختر تطبيقا.',
+            'Identity is currently disabled. You can enable it from Dashboard.': 'الهوية معطلة حاليا. يمكنك تفعيلها من لوحة التحكم.',
+            'Open Telegram Community': 'فتح مجتمع Telegram', 'Join Telegram Community': 'الانضمام إلى مجتمع Telegram',
+            'Save profile': 'حفظ الملف الشخصي', 'Clone': 'نسخ', 'Delete': 'حذف', 'Profile saved': 'تم حفظ الملف الشخصي',
+            'System / preinstalled packages are included in this search.': 'تتضمن هذه عملية البحث أيضا حزم النظام والحزم المثبتة مسبقا.',
+            'Built-in translations are local and require no network connection. English is the default unless you choose another language here.': 'الترجمات المدمجة محلية ولا تحتاج إلى اتصال بالشبكة. تبقى الإنجليزية هي الافتراضية ما لم تختر لغة أخرى هنا.',
+            "Keep packages listed in drm_packages.txt on Android's genuine Keystore path. This does not fake a DRM security level.": 'يبقي الحزم الموجودة في drm_packages.txt على مسار Keystore الحقيقي في Android. لا يقوم بتزييف مستوى أمان DRM.',
+            'Enable additional runtime diagnostics without installing a debug build. Turn it off after collecting logs.': 'يفعل تشخيصات تشغيل إضافية دون تثبيت إصدار debug. أوقفه بعد جمع السجلات.',
+            'DRM passthrough enabled': 'تم تفعيل تمرير DRM', 'DRM passthrough disabled': 'تم تعطيل تمرير DRM',
+            'Debug logging enabled': 'تم تفعيل سجل التصحيح', 'Debug logging disabled': 'تم تعطيل سجل التصحيح',
+            'Could not update DRM setting': 'تعذر تحديث إعداد DRM', 'Could not update debug logging': 'تعذر تحديث سجل التصحيح',
+            'All major features and runtime paths in one place.': 'شرح جميع الميزات الأساسية ومسارات التشغيل في مكان واحد.'
         }
     };
 
@@ -133,16 +252,16 @@
         tr: [
             ['Gösterge Paneli ve temel koruma', 'Gösterge Paneli; Global Mod, DRM uyumluluğu, Kimlik, Güvenlik Yaması ve keybox sağlığı için tek doğruluk kaynağıdır. Temel Keystore/TEE ve verified-boot uyumluluğu isteğe bağlı Kimlik kontrollerinden bağımsızdır.'],
             ['Kimlik ve Otomatik Kimlik', 'Kimlik yalnızca yapılandırılmış uygulamalara görünen build, attestation ve telefon alanlarını değiştirir. Otomatik Kimlik önce süre sınırlandırılmış Google Pixel verisini dener; kaynak yoksa yerel doğrulanmış Pixel şablonuna döner.'],
-            ['KeyMint ve TEE', 'KeyMint özel anahtar işlemlerini gerçek platform güvenlik seviyesinde tutar. CleveresTricky yalnızca uygun uygulama UID’lerine dönen attestation sertifika zincirini yeniden yazar; donanımsal root-of-trust fiziksel olarak değişmez.'],
+            ['KeyMint ve TEE', 'KeyMint özel anahtar işlemlerini gerçek platform güvenlik seviyesinde tutar. CleveresTricky yalnızca uygun uygulama UIDlerine dönen attestation sertifika zincirini yeniden yazar; donanımsal root-of-trust fiziksel olarak değişmez.'],
             ['Keyboxlar', 'Yalnızca yetkili XML veya CBOX materyali kullanın. Keyboxlar etkinleşmeden önce doğrulanır, yönetilen dizine eşlenir, iptal bilgisine göre kontrol edilir ve gerektiğinde profile göre seçilir.'],
             ['Profiller', 'Profiller uygulama atamalarını, kimlik şablonunu, keyboxı, gizlilik davranışını ve özellik geçersiz kılmalarını bir arada tutar. Tam paket kuralları wildcard kurallarından önceliklidir.'],
             ['Uygulamalar ve Etkin Durum', 'Paket kurallarını Uygulamalar bölümünden yönetin. Etkin Durum aynı sayfada çözülmüş profil, keybox, KeyMint ve yama politikasını gösterir.'],
             ['Güvenlik Yaması', 'Güvenlik Yaması Kimlikten bağımsızdır. Device-default yakalanan değerleri korur, otomatik mod takvime göre çözer, manuel mod açık bir tarih kabul eder.'],
             ['DRM', 'DRM Geçiş Modu yapılandırılmış oynatma/DRM paketlerini gerçek Keystore yolunda bırakır. Uygulama bazlı kimlik izolasyonu yalnızca desteklenen gizlilik kimliklerini etkiler; DRM güvenlik seviyesini taklit etmez.'],
-            ['RKP', 'RKP artık kullanıcıya açık bir anahtar değildir. Remote provisioning altyapı UID’leri daima korunur ve üretilen/saklanan anahtar sertifika yolları tutarlı kalır.'],
+            ['RKP', 'RKP artık kullanıcıya açık bir anahtar değildir. Remote provisioning altyapı UIDleri daima korunur ve üretilen/saklanan anahtar sertifika yolları tutarlı kalır.'],
             ['Çalışma durumu ve yükseltmeler', 'Çalışma Durumu canlı interceptor ve doğrulanmış keybox durumunu gösterir. Yükseltme geçişi eski profil referanslarını onarır, kullanımdan kalkmış anahtarları temizler ve tam sıfırlama yerine kurtarılabilir ayarları korur.'],
             ['Günlükler ve debug modu', 'Normal sürümde ekstra debug logları kapalıdır. Sorun incelerken Logs bölümünden geçici olarak açın, sorunu tekrar üretin, logları alın ve sonra kapatın.'],
-            ['Performans', 'Global Mod sınırlı önbellekler kullanır ve kalıcı WebUI polling yapmaz. Sertifika yeniden-yazım cache’i küçük tutulur; timing hassas işler tekrarlanan okumaların dışına alınır.']
+            ['Performans', 'Global Mod sınırlı önbellekler kullanır ve kalıcı WebUI polling yapmaz. Sertifika yeniden-yazım cachei küçük tutulur; timing hassas işler tekrarlanan okumaların dışına alınır.']
         ],
         'zh-CN': [
             ['仪表盘与核心保护', '仪表盘统一管理全局模式、DRM 兼容、身份、安全补丁与密钥盒状态。核心 Keystore/TEE 与 verified-boot 兼容逻辑独立于可选身份功能。'],
@@ -199,6 +318,48 @@
             ['Состояние и обновления', 'Runtime Health показывает реальное состояние. Миграция исправляет устаревшие ссылки и удаляет старые переключатели без полного сброса настроек.'],
             ['Логи и debug', 'Дополнительные debug-логи в обычном релизе выключены. Включайте их временно в Logs только для диагностики.'],
             ['Производительность', 'Global Mode использует ограниченные кеши и не запускает постоянный WebUI polling. Кеш переписанных сертификатов намеренно небольшой.']
+        ],
+        id: [
+            ['Dasbor dan perlindungan inti', 'Dasbor menjadi sumber utama untuk Mode Global, kompatibilitas DRM, Identitas, Patch Keamanan, dan kesehatan keybox. Keystore/TEE inti tetap independen dari kontrol Identitas opsional.'],
+            ['Identitas dan Identitas Otomatis', 'Identitas hanya mengubah field build, attestasi, dan telepon yang terlihat oleh aplikasi yang dikonfigurasi. Auto Identity mencoba metadata Pixel dengan batas waktu lalu memakai templat Pixel lokal terverifikasi jika sumber jarak jauh gagal.'],
+            ['KeyMint dan TEE', 'Operasi kunci privat tetap berjalan pada tingkat keamanan platform yang asli. CleveresTricky hanya menulis ulang rantai sertifikat attestasi yang dikembalikan untuk UID aplikasi yang memenuhi syarat.'],
+            ['Keybox', 'Gunakan hanya XML atau CBOX yang berwenang. Keybox diverifikasi sebelum aktif, disalin ke direktori terkelola, diperiksa terhadap informasi pencabutan, dan dapat dipilih per profil.'],
+            ['Profil', 'Profil menggabungkan penugasan aplikasi, templat identitas, keybox, perilaku privasi, dan override fitur. Aturan nama paket yang tepat lebih diprioritaskan daripada wildcard.'],
+            ['Aplikasi dan Status Efektif', 'Kelola aturan paket dari Aplikasi. Status Efektif di halaman yang sama menunjukkan profil, keybox, KeyMint, dan kebijakan patch yang benar-benar digunakan.'],
+            ['Patch Keamanan', 'Patch Keamanan terpisah dari Identitas. Device Default mempertahankan nilai yang ditangkap, mode otomatis memakai kebijakan kalender, dan mode manual menerima tanggal tertentu.'],
+            ['DRM', 'DRM Passthrough menjaga paket media/DRM yang dipilih pada jalur Keystore asli. Isolasi identifier per aplikasi tidak memalsukan tingkat keamanan DRM.'],
+            ['RKP', 'RKP tidak lagi menjadi sakelar pengguna. UID infrastruktur remote provisioning selalu dilindungi dan jalur sertifikat tetap konsisten.'],
+            ['Kesehatan runtime dan upgrade', 'Runtime Health menampilkan keadaan interceptor dan keybox terverifikasi secara langsung. Migrasi upgrade memperbaiki referensi lama dan mempertahankan salinan yang dapat dipulihkan.'],
+            ['Log dan mode debug', 'Rilis normal mematikan log debug tambahan. Aktifkan sementara dari Log saat mendiagnosis, kumpulkan log, lalu matikan kembali.'],
+            ['Performa', 'Mode Global memakai cache terbatas dan tidak melakukan polling WebUI permanen. Cache penulisan ulang sertifikat sengaja dibuat kecil untuk mengontrol RAM.']
+        ],
+        hi: [
+            ['डैशबोर्ड और मुख्य सुरक्षा', 'डैशबोर्ड ग्लोबल मोड, DRM संगतता, पहचान, सुरक्षा पैच और कीबॉक्स स्वास्थ्य के लिए मुख्य नियंत्रण स्थान है। मुख्य Keystore/TEE वैकल्पिक पहचान नियंत्रणों से स्वतंत्र रहता है।'],
+            ['पहचान और ऑटो पहचान', 'पहचान केवल कॉन्फ़िगर किए गए ऐप्स को दिखने वाले build, अटेस्टेशन और टेलीफोनी फील्ड बदलती है। Auto Identity सीमित समय वाले Pixel मेटाडेटा को आजमाता है और विफल होने पर सत्यापित स्थानीय Pixel टेम्पलेट का उपयोग करता है।'],
+            ['KeyMint और TEE', 'निजी कुंजी के ऑपरेशन वास्तविक प्लेटफॉर्म सुरक्षा स्तर पर ही रहते हैं। CleveresTricky केवल योग्य ऐप UID को लौटाई गई अटेस्टेशन सर्टिफिकेट चेन को फिर से लिखता है।'],
+            ['कीबॉक्स', 'केवल अधिकृत XML या CBOX सामग्री का उपयोग करें। सक्रिय करने से पहले कीबॉक्स सत्यापित होते हैं, प्रबंधित डायरेक्टरी में रखे जाते हैं और रिवोकेशन जानकारी से जांचे जाते हैं।'],
+            ['प्रोफाइल', 'प्रोफाइल ऐप असाइनमेंट, पहचान टेम्पलेट, कीबॉक्स, गोपनीयता व्यवहार और फीचर ओवरराइड को एक साथ रखते हैं। सटीक पैकेज नियम wildcard से पहले लागू होते हैं।'],
+            ['ऐप्स और प्रभावी स्थिति', 'ऐप्स में पैकेज नियम जोड़ें या हटाएं। प्रभावी स्थिति उसी पेज पर वास्तविक प्रोफाइल, कीबॉक्स, KeyMint और पैच नीति दिखाती है।'],
+            ['सुरक्षा पैच', 'सुरक्षा पैच पहचान से स्वतंत्र है। Device Default कैप्चर किए गए मान रखता है, Automatic कैलेंडर नीति से तय करता है और Manual निश्चित तारीख स्वीकार करता है।'],
+            ['DRM', 'DRM Passthrough चुने हुए मीडिया/DRM पैकेजों को वास्तविक Keystore पथ पर रखता है। प्रति-ऐप पहचान अलगाव DRM सुरक्षा स्तर को नकली नहीं बनाता।'],
+            ['RKP', 'RKP अब उपयोगकर्ता स्विच नहीं है। remote provisioning इंफ्रास्ट्रक्चर UID हमेशा सुरक्षित रहते हैं और सर्टिफिकेट पथ संगत रहते हैं।'],
+            ['रनटाइम स्थिति और अपग्रेड', 'Runtime Health लाइव interceptor और सत्यापित कीबॉक्स स्थिति दिखाता है। अपग्रेड माइग्रेशन पुराने संदर्भ ठीक करता है और पूर्ण रीसेट के बजाय पुनर्प्राप्ति योग्य कॉपी रखता है।'],
+            ['लॉग और डीबग मोड', 'सामान्य रिलीज में अतिरिक्त डीबग लॉग बंद रहते हैं। जांच के समय Logs से थोड़ी देर के लिए चालू करें, समस्या दोहराएं, लॉग लें और फिर बंद करें।'],
+            ['प्रदर्शन', 'Global Mode सीमित cache का उपयोग करता है और स्थायी WebUI polling नहीं करता। RAM नियंत्रित रखने के लिए certificate rewrite cache छोटा रखा जाता है।']
+        ],
+        ar: [
+            ['لوحة التحكم والحماية الأساسية', 'لوحة التحكم هي المصدر الرئيسي لإعدادات الوضع العام وDRM والهوية وتصحيح الأمان وحالة صناديق المفاتيح. تبقى وظائف Keystore وTEE الأساسية مستقلة عن خيارات الهوية الإضافية.'],
+            ['الهوية والهوية التلقائية', 'تغير الهوية فقط حقول build والتصديق والهاتف المرئية للتطبيقات التي تم إعدادها. تحاول الهوية التلقائية بيانات Pixel بمهلة محدودة ثم تستخدم قالب Pixel محليا موثقا إذا تعذر المصدر البعيد.'],
+            ['KeyMint وTEE', 'تبقى عمليات المفتاح الخاص على مستوى الأمان الحقيقي للمنصة. يعيد CleveresTricky كتابة سلسلة شهادات التصديق التي تعاد إلى معرفات UID المؤهلة فقط.'],
+            ['صناديق المفاتيح', 'استخدم فقط مواد XML أو CBOX المصرح بها. يتم التحقق منها قبل التفعيل ونسخها إلى الدليل المدار وفحصها مقابل معلومات الإبطال ويمكن اختيارها حسب الملف الشخصي.'],
+            ['الملفات الشخصية', 'يجمع الملف الشخصي تعيينات التطبيقات وقالب الهوية وصندوق المفاتيح وسلوك الخصوصية وتجاوزات الميزات. قواعد اسم الحزمة الدقيقة لها أولوية على wildcard.'],
+            ['التطبيقات والحالة الفعلية', 'أدر قواعد الحزم من صفحة التطبيقات. تعرض الحالة الفعلية في الصفحة نفسها الملف الشخصي وصندوق المفاتيح وKeyMint وسياسة التصحيح المستخدمة فعليا.'],
+            ['تصحيح الأمان', 'تصحيح الأمان مستقل عن الهوية. يحافظ Device Default على القيم الملتقطة ويعتمد Automatic سياسة التقويم ويقبل Manual تاريخا صريحا.'],
+            ['DRM', 'يبقي DRM Passthrough حزم الوسائط وDRM المحددة على مسار Keystore الحقيقي. لا يؤدي عزل المعرفات لكل تطبيق إلى تزييف مستوى أمان DRM.'],
+            ['RKP', 'لم يعد RKP مفتاحا للمستخدم. تظل معرفات UID الخاصة ببنية remote provisioning محمية دائما وتبقى مسارات الشهادات متناسقة.'],
+            ['حالة التشغيل والترقيات', 'يعرض Runtime Health حالة interceptor وصندوق المفاتيح الموثق مباشرة. تصلح عملية الترقية المراجع القديمة وتحافظ على نسخة قابلة للاسترداد بدلا من طلب إعادة ضبط كاملة.'],
+            ['السجلات ووضع التصحيح', 'تبقي الإصدارات العادية سجلات التصحيح الإضافية متوقفة. فعلها مؤقتا من السجلات أثناء التشخيص ثم أوقفها بعد جمع السجلات.'],
+            ['الأداء', 'يستخدم الوضع العام ذاكرات cache محدودة ولا ينفذ polling دائما للواجهة. يتم إبقاء cache إعادة كتابة الشهادات صغيرة للتحكم في استهلاك RAM.']
         ]
     };
 
@@ -268,6 +429,9 @@
             #ct_full_guide h4 { margin: 0 0 6px; color: var(--accent); font-size: 1em; }
             #ct_full_guide p { margin: 0; color: #aaa; line-height: 1.55; }
             .ct-compat-note { color:#999; font-size:.82em; line-height:1.45; margin-top:8px; }
+            html[dir="rtl"] body { direction: rtl; }
+            html[dir="rtl"] input, html[dir="rtl"] select, html[dir="rtl"] textarea, html[dir="rtl"] pre, html[dir="rtl"] code, html[dir="rtl"] .mono { direction: ltr; text-align: left; }
+            html[dir="rtl"] input[type="checkbox"].toggle { direction: ltr; }
             @media (max-width: 520px) {
                 .row { gap: 12px; align-items: flex-start; }
                 .row > input[type="checkbox"].toggle { margin-top: 2px !important; }
@@ -303,11 +467,9 @@
         const original = originalText.get(node) || '';
         const trimmed = original.trim();
         if (!trimmed) return;
-        const translated = tr(trimmed);
-        if (translated === trimmed && locale !== 'en') return;
         const leading = original.match(/^\s*/)[0];
         const trailing = original.match(/\s*$/)[0];
-        node.nodeValue = leading + translated + trailing;
+        node.nodeValue = leading + tr(trimmed) + trailing;
     }
 
     function translateElement(element) {
@@ -335,6 +497,7 @@
 
     function applyTranslations() {
         document.documentElement.lang = locale;
+        document.documentElement.dir = locale === 'ar' ? 'rtl' : 'ltr';
         canonicalizePolicyText();
         translateElement(document.body);
         renderGuide();
@@ -415,7 +578,7 @@
         const note = document.createElement('div');
         note.id = 'ct_package_search_note';
         note.className = 'scope-note';
-        note.textContent = tr('System / preinstalled packages are included in this search.');
+        note.textContent = 'System / preinstalled packages are included in this search.';
         const wrapper = input.closest('.search-container');
         if (wrapper && wrapper.parentElement) wrapper.parentElement.insertBefore(note, wrapper.nextSibling);
     }
@@ -486,10 +649,10 @@
             checkbox.disabled = true;
             try {
                 await setSetting('drm_passthrough', checkbox.checked);
-                if (typeof global.notify === 'function') global.notify(checkbox.checked ? 'DRM passthrough enabled' : 'DRM passthrough disabled');
+                if (typeof global.notify === 'function') global.notify(tr(checkbox.checked ? 'DRM passthrough enabled' : 'DRM passthrough disabled'));
             } catch (error) {
                 checkbox.checked = !checkbox.checked;
-                if (typeof global.notify === 'function') global.notify(error.message || 'Could not update DRM setting','error');
+                if (typeof global.notify === 'function') global.notify(error.message || tr('Could not update DRM setting'),'error');
             } finally {
                 checkbox.disabled = false;
             }
@@ -511,10 +674,10 @@
             checkbox.disabled = true;
             try {
                 await bridge.setDebugLogging(checkbox.checked);
-                if (typeof global.notify === 'function') global.notify(checkbox.checked ? 'Debug logging enabled' : 'Debug logging disabled');
+                if (typeof global.notify === 'function') global.notify(tr(checkbox.checked ? 'Debug logging enabled' : 'Debug logging disabled'));
             } catch (error) {
                 checkbox.checked = !checkbox.checked;
-                if (typeof global.notify === 'function') global.notify(error.message || 'Could not update debug logging','error');
+                if (typeof global.notify === 'function') global.notify(error.message || tr('Could not update debug logging'),'error');
             } finally {
                 checkbox.disabled = false;
             }
@@ -527,7 +690,7 @@
         if (guide.dataset.ctGuideLocale === locale && guide.querySelector('#ct_full_guide')) return;
         const sections = GUIDE[locale] || GUIDE.en;
         guide.dataset.ctGuideLocale = locale;
-        guide.innerHTML = `<div class="panel" id="ct_full_guide"><h3>${escapeHtml(tr('Guide'))}</h3><div class="scope-note">${escapeHtml(locale === 'tr' ? 'Tüm temel özellikler ve çalışma yolları tek yerde.' : locale === 'zh-CN' ? '所有主要功能和运行路径集中说明。' : locale === 'es' ? 'Todas las funciones principales y rutas de ejecución en un solo lugar.' : locale === 'de' ? 'Alle wichtigen Funktionen und Laufzeitpfade an einem Ort.' : locale === 'ru' ? 'Все основные функции и пути выполнения в одном месте.' : 'All major features and runtime paths in one place.')}</div>${sections.map(([title,body]) => `<section class="ct-guide-section"><h4>${escapeHtml(title)}</h4><p>${escapeHtml(body)}</p></section>`).join('')}</div>`;
+        guide.innerHTML = `<div class="panel" id="ct_full_guide"><h3>${escapeHtml(tr('Guide'))}</h3><div class="scope-note">${escapeHtml(tr('All major features and runtime paths in one place.'))}</div>${sections.map(([title,body]) => `<section class="ct-guide-section"><h4>${escapeHtml(title)}</h4><p>${escapeHtml(body)}</p></section>`).join('')}</div>`;
     }
 
     function wrapLegacyToggle() {
