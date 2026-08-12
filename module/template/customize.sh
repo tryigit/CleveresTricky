@@ -87,9 +87,11 @@ if [ -d "$MODPATH/webroot" ]; then
 fi
 extract "$ZIPFILE" 'webroot/index.html' "$MODPATH"
 extract "$ZIPFILE" 'webroot/bridge.js'  "$MODPATH"
+extract "$ZIPFILE" 'webroot/policy.js'  "$MODPATH"
 if [ -L "$MODPATH/webroot" ] || [ ! -d "$MODPATH/webroot" ] || \
   [ -L "$MODPATH/webroot/index.html" ] || [ ! -f "$MODPATH/webroot/index.html" ] || \
-  [ -L "$MODPATH/webroot/bridge.js" ] || [ ! -f "$MODPATH/webroot/bridge.js" ]; then
+  [ -L "$MODPATH/webroot/bridge.js" ] || [ ! -f "$MODPATH/webroot/bridge.js" ] || \
+  [ -L "$MODPATH/webroot/policy.js" ] || [ ! -f "$MODPATH/webroot/policy.js" ]; then
   abort "! Native WebUI files are unsafe"
 fi
 rm -f "$MODPATH/action.sh" "$MODPATH/action.sh.sha256" || abort "! Could not remove legacy WebUI launcher"
