@@ -511,7 +511,7 @@ function staticPages() {
     <h3>Profile Editor</h3>
     <div class="ct-choice-grid">
       <div><label for="ct_profile_name">Name</label><input id="ct_profile_name" type="text" maxlength="64"></div>
-      <div><label for="ct_profile_privacy">DRM / privacy mode</label><select id="ct_profile_privacy"><option value="inherit">Inherit</option><option value="isolate">Isolate — app-scoped pseudonymous DRM ID</option><option value="redact">Redact</option></select></div>
+      <div><label for="ct_profile_privacy">DRM / privacy mode</label><select id="ct_profile_privacy"><option value="inherit">Inherit</option><option value="isolate">Isolate - app-scoped pseudonymous DRM ID</option><option value="redact">Redact</option></select></div>
     </div>
     <div style="margin-top:12px">
       <label for="ct_profile_app_picker">Add installed app</label>
@@ -613,7 +613,7 @@ async function inspectPatch() {
     const patch = data.securityPatch || {};
     result.innerHTML = PATCH_COMPONENTS.map(([key,title]) => {
       const item = patch[key] || {};
-      return `<div class="ct-patch-component"><strong>${escapeHtml(title)}</strong><div class="ct-inline-note">Captured: ${escapeHtml(String(item.captured ?? '—'))}<br>Configured: ${escapeHtml(String(item.configured ?? '—'))}<br>Effective: ${escapeHtml(String(item.effective ?? '—'))}</div></div>`;
+      return `<div class="ct-patch-component"><strong>${escapeHtml(title)}</strong><div class="ct-inline-note">Captured: ${escapeHtml(String(item.captured ?? '-'))}<br>Configured: ${escapeHtml(String(item.configured ?? '-'))}<br>Effective: ${escapeHtml(String(item.effective ?? '-'))}</div></div>`;
     }).join('');
   } catch (error) {
     result.textContent = error.message || 'Could not resolve patch state';
@@ -860,7 +860,7 @@ async function inspectEffective() {
       ['KeyMint',data.keyMint],
       ['Reboot required',data.rebootRequired]
     ];
-    host.innerHTML = rows.map(([key,value]) => `<div class="row"><span>${escapeHtml(key)}</span><span class="tag">${escapeHtml(String(value ?? '—'))}</span></div>`).join('');
+    host.innerHTML = rows.map(([key,value]) => `<div class="row"><span>${escapeHtml(key)}</span><span class="tag">${escapeHtml(String(value ?? '-'))}</span></div>`).join('');
   } catch (error) {
     host.textContent = error.message || 'Could not inspect effective state';
   }
