@@ -18,6 +18,10 @@ Every path must match the configuration allowlist or one direct keybox child. Du
 
 Sensitive staged byte arrays are cleared after the operation. Successful restore reloads configuration and reports that a reboot may be needed for early identity or property changes.
 
+## Policy state
+
+Backups include the validated version two policy state, including optional feature controls, independent System, Vendor, and Boot patch policies, and named profile configuration. Profile keybox entries remain references to validated keybox files rather than embedded private key material. Restore validates the policy state before publishing it and reloads one complete snapshot.
+
 ## Recovery guidance
 
 Keep the password separate from the archive. Test an export before removing the original installation. If restore fails, review Logs and correct the archive or password rather than repeatedly changing unrelated settings.

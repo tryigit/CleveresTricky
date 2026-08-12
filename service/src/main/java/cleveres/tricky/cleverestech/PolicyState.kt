@@ -649,7 +649,7 @@ object PolicyState {
 
     fun hasTelephonyProfileWork(): Boolean {
         val current = snapshot
-        if (current.features.telephonyIdentity) return true
+        if (resolvedFeatures(emptyArray()).telephonyIdentity) return true
         return current.profiles.values.any { profile ->
             hasRuntimeScope(profile, current) &&
                 (profile.featureOverrides[Feature.TELEPHONY_IDENTITY] == true ||
