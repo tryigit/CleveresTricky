@@ -66,7 +66,6 @@ function notify(message, type) {
 function refreshPresentation() {
   const selector = document.getElementById('ct_language_selector');
   if (selector) selector.dispatchEvent(new Event('change',{bubbles:true}));
-  bindCommunityExternally();
 }
 
 function safeClone(value) {
@@ -202,6 +201,30 @@ function injectStyles() {
   document.head.appendChild(style);
 }
 
+function navigateTabs(event) {
+  if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
+  const tabs = document.querySelector('.tabs');
+  const current = event.target && event.target.closest ? event.target.closest('.tab') : null;
+  if (!tabs || !current || !tabs.contains(current)) return;
+  const items = [...tabs.querySelectorAll('.tab')].filter(tab => !tab.hidden && tab.getAttribute('aria-hidden') !== 'true');
+  const index = items.indexOf(current);
+  if (index < 0 || items.length < 2) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  const delta = event.key === 'ArrowRight' ? 1 : -1;
+  const next = items[(index + delta + items.length) % items.length];
+  const id = next.id.replace(/^tab_/, '');
+  if (typeof global.switchTab === 'function') global.switchTab(id);
+  next.focus();
+}
+
+function installTabNavigationOwner() {
+  const tabs = document.querySelector('.tabs');
+  if (!tabs || tabs.dataset.ctPolicyKeyboardNav === '1') return;
+  tabs.dataset.ctPolicyKeyboardNav = '1';
+  tabs.addEventListener('keydown', navigateTabs, true);
+}
+
 function makeTab(id, title, afterId) {
   if (document.getElementById(`tab_${id}`)) return;
   const tabs = document.querySelector('.tabs');
@@ -216,7 +239,6 @@ function makeTab(id, title, afterId) {
   tab.setAttribute('aria-controls',id);
   tab.textContent = title;
   tab.onclick = () => global.switchTab && global.switchTab(id);
-  tab.onkeydown = event => global.handleTabNavigation && global.handleTabNavigation(event,id);
   if (after && after.nextSibling) tabs.insertBefore(tab, after.nextSibling);
   else tabs.appendChild(tab);
 }
@@ -266,6 +288,13 @@ function removeLegacySurfaces() {
   }
   const stale = document.getElementById('ct_resources_controls');
   if (stale) stale.remove();
+}
+
+function retireLegacyLocalization() {
+  global.setTimeout(() => {
+    if (typeof global.loadLanguage === 'function') global.loadLanguage = async function () {};
+    if (typeof global.applyTranslations === 'function') global.applyTranslations = function () {};
+  }, 0);
 }
 
 function markIdentityActionGroups() {
@@ -376,7 +405,7 @@ function bindFeatureCenter(panel, prefix) {
       if (enabled) next.securityPatch[key] = {mode:'automatic'};
       else if (current.mode === 'automatic') next.securityPatch[key] = {mode:'device_default'};
     }), enabled ? 'Auto Security Patch enabled' : 'Auto Security Patch disabled');
-  };
+  }
   panel.querySelectorAll('[data-open-tab]').forEach(button => { button.onclick = () => global.switchTab && global.switchTab(button.dataset.openTab); });
 }
 
@@ -797,33 +826,6 @@ function installAutoIdentityOverride() {
   });
 }
 
-function bindCommunityExternally() {
-  const card = document.getElementById('cleveresCommunityCard');
-  if (!card) return false;
-  const link = card.querySelector('a');
-  if (link) {
-    link.href = 'https://t.me/cleverestech';
-    link.removeAttribute('target');
-    link.rel = 'noopener noreferrer';
-    if (link.dataset.ctPolicyExternal !== '1') {
-      link.dataset.ctPolicyExternal = '1';
-      link.addEventListener('click',event => {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        bridge.openCommunity().catch(error => notify(error.message || 'Could not open Chrome','error'));
-      },true);
-    }
-  }
-  return true;
-}
-
-function watchCommunityBriefly() {
-  if (bindCommunityExternally()) return;
-  const observer = new MutationObserver(() => { if (bindCommunityExternally()) observer.disconnect(); });
-  observer.observe(document.body,{childList:true,subtree:true});
-  global.setTimeout(() => observer.disconnect(),10000);
-}
-
 function resourceFeatureName(row) {
   const cell = row && row.cells && row.cells[0];
   if (!cell) return '';
@@ -972,12 +974,13 @@ function escapeHtml(value) {
 async function initialize() {
   injectStyles();
   staticPages();
+  installTabNavigationOwner();
+  retireLegacyLocalization();
   installFeatureCenter();
   installAppsProfileCard();
   removeLegacySurfaces();
   markIdentityActionGroups();
   installAutoIdentityOverride();
-  watchCommunityBriefly();
 
   try { policyState = await request('/api/policy_state'); }
   catch (error) { notify(`Policy controls unavailable: ${error.message}`,'error'); return; }
@@ -986,23 +989,6 @@ async function initialize() {
   sanitizeErrors();
   installResourceOwner();
   installPackagePickers();
-  bindCommunityExternally();
-
-  const originalSwitchTab = global.switchTab;
-  if (typeof originalSwitchTab === 'function' && !originalSwitchTab.ctPolicyOwned) {
-    const wrapped = function(name) {
-      const result = originalSwitchTab.apply(this,arguments);
-      queueMicrotask(() => {
-        removeLegacySurfaces();
-        if (name === 'info') sanitizeResourceTable();
-        if (name === 'spoof') { installIdentityBanner(); markIdentityActionGroups(); installAutoIdentityOverride(); }
-        if (name === 'dashboard') bindCommunityExternally();
-      });
-      return result;
-    };
-    wrapped.ctPolicyOwned = true;
-    global.switchTab = wrapped;
-  }
 }
 
 onReady(initialize);
