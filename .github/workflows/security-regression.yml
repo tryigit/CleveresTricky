@@ -1,0 +1,109 @@
+name: Security Regression
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  security-regression:
+    name: "🔐 Dependency Security & Unit Tests"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6.3.0
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Validate Bouncy Castle coordinates
+        shell: bash
+        run: |
+          set -euo pipefail
+          for artifact in bcpkix-jdk18on bcprov-jdk18on bcutil-jdk18on; do
+            version=$(sed -n "s/^${artifact} = \"\([^\"]*\)\"/\1/p" gradle/libs.versions.toml | head -n1)
+            if [[ -z "$version" ]]; then
+              echo "::error::Missing version for org.bouncycastle:${artifact}"
+              exit 1
+            fi
+            url="https://repo.maven.apache.org/maven2/org/bouncycastle/${artifact}/${version}/${artifact}-${version}.pom"
+            echo "Checking org.bouncycastle:${artifact}:${version}"
+            curl --fail --silent --show-error --location --retry 3 --retry-all-errors --output /dev/null "$url"
+          done
+
+      - name: Enforce resolved Bouncy Castle security baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          check_bc() {
+            artifact="$1"
+            minimum="$2"
+            output=$(./gradlew :service:dependencyInsight --dependency "org.bouncycastle:${artifact}" --configuration debugRuntimeClasspath --console=plain)
+            resolved=$(printf '%s\n' "$output" | sed -nE "s/^org\.bouncycastle:${artifact}:([^[:space:]]+).*/\1/p" | head -n1)
+            if [[ -z "$resolved" ]]; then
+              echo "::error::Could not resolve org.bouncycastle:${artifact}"
+              exit 1
+            fi
+            lowest=$(printf '%s\n%s\n' "$minimum" "$resolved" | sort -V | head -n1)
+            if [[ "$lowest" != "$minimum" ]]; then
+              echo "::error::org.bouncycastle:${artifact} resolved to $resolved below security baseline $minimum"
+              exit 1
+            fi
+            echo "org.bouncycastle:${artifact} resolved to $resolved (minimum $minimum)"
+          }
+          check_bc bcprov-jdk18on 1.84
+          check_bc bcpkix-jdk18on 1.84
+          check_bc bcutil-jdk18on 1.84
+
+      - name: Validate WebUI syntax and behavior
+        shell: bash
+        env:
+          NODE_OPTIONS: --throw-deprecation
+        run: |
+          set -euo pipefail
+          node --check module/template/webroot/bridge.js
+          node --check module/template/webroot/policy.js
+          node --check module/template/webroot/ux.js
+          node module/webui-tests/bridge.test.js
+
+      - name: Run service and stub unit tests
+        run: ./gradlew :service:testDebugUnitTest :stub:testDebugUnitTest --warning-mode=fail --console=plain --stacktrace --no-build-cache
+
+  dependency-submission:
+    name: "📦 Submit Gradle Dependency Graph"
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
+    needs: security-regression
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Submit resolved Gradle dependency graph
+        uses: gradle/actions/dependency-submission@v6
+        with:
+          dependency-graph: generate-and-submit
