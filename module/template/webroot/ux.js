@@ -365,6 +365,60 @@
         ]
     };
 
+    const OWNED_COPY = {
+        en: {
+            backupPassword: 'Backup Password',
+            backupHint: 'Required, at least 12 characters.',
+            backupPlaceholder: 'Enter a strong backup password',
+            show: 'Show', hide: 'Hide',
+            exportSettings: 'Export Encrypted Settings', importSettings: 'Import Encrypted Settings', synchronizeRuntime: 'Synchronize Runtime',
+            keyboxHubCopy: 'Get an API key for the recommended remote server here.', getApiKey: 'Get API Key'
+        },
+        tr: {
+            backupPassword: 'Yedekleme Parolası',
+            backupHint: 'Zorunlu, en az 12 karakter.',
+            backupPlaceholder: 'Güçlü bir yedekleme parolası girin',
+            show: 'Göster', hide: 'Gizle',
+            exportSettings: 'Şifreli Ayarları Dışa Aktar', importSettings: 'Şifreli Ayarları İçe Aktar', synchronizeRuntime: 'Çalışma Zamanını Eşitle',
+            keyboxHubCopy: "Önerilen remote server için API key'i bu adresten alabilirsiniz.", getApiKey: 'API Key Al'
+        },
+        'zh-CN': {
+            backupPassword: '备份密码', backupHint: '必填，至少 12 个字符。', backupPlaceholder: '输入一个高强度备份密码', show: '显示', hide: '隐藏',
+            exportSettings: '导出加密设置', importSettings: '导入加密设置', synchronizeRuntime: '同步运行时',
+            keyboxHubCopy: '可在此获取推荐远程服务器所需的 API 密钥。', getApiKey: '获取 API 密钥'
+        },
+        es: {
+            backupPassword: 'Contraseña de respaldo', backupHint: 'Obligatoria, mínimo 12 caracteres.', backupPlaceholder: 'Introduce una contraseña de respaldo segura', show: 'Mostrar', hide: 'Ocultar',
+            exportSettings: 'Exportar ajustes cifrados', importSettings: 'Importar ajustes cifrados', synchronizeRuntime: 'Sincronizar runtime',
+            keyboxHubCopy: 'Obtén aquí una clave API para el servidor remoto recomendado.', getApiKey: 'Obtener clave API'
+        },
+        de: {
+            backupPassword: 'Backup-Passwort', backupHint: 'Erforderlich, mindestens 12 Zeichen.', backupPlaceholder: 'Ein sicheres Backup-Passwort eingeben', show: 'Anzeigen', hide: 'Ausblenden',
+            exportSettings: 'Verschlüsselte Einstellungen exportieren', importSettings: 'Verschlüsselte Einstellungen importieren', synchronizeRuntime: 'Laufzeit synchronisieren',
+            keyboxHubCopy: 'Hier erhältst du einen API-Schlüssel für den empfohlenen Remote-Server.', getApiKey: 'API-Schlüssel abrufen'
+        },
+        ru: {
+            backupPassword: 'Пароль резервной копии', backupHint: 'Обязательно, не менее 12 символов.', backupPlaceholder: 'Введите надежный пароль резервной копии', show: 'Показать', hide: 'Скрыть',
+            exportSettings: 'Экспортировать зашифрованные настройки', importSettings: 'Импортировать зашифрованные настройки', synchronizeRuntime: 'Синхронизировать среду',
+            keyboxHubCopy: 'Здесь можно получить API-ключ для рекомендуемого удаленного сервера.', getApiKey: 'Получить API-ключ'
+        },
+        id: {
+            backupPassword: 'Kata Sandi Cadangan', backupHint: 'Wajib, minimal 12 karakter.', backupPlaceholder: 'Masukkan kata sandi cadangan yang kuat', show: 'Tampilkan', hide: 'Sembunyikan',
+            exportSettings: 'Ekspor Pengaturan Terenkripsi', importSettings: 'Impor Pengaturan Terenkripsi', synchronizeRuntime: 'Sinkronkan Runtime',
+            keyboxHubCopy: 'Dapatkan API key untuk remote server yang direkomendasikan di sini.', getApiKey: 'Dapatkan API Key'
+        },
+        hi: {
+            backupPassword: 'बैकअप पासवर्ड', backupHint: 'आवश्यक, कम से कम 12 अक्षर।', backupPlaceholder: 'एक मजबूत बैकअप पासवर्ड दर्ज करें', show: 'दिखाएं', hide: 'छिपाएं',
+            exportSettings: 'एन्क्रिप्टेड सेटिंग्स निर्यात करें', importSettings: 'एन्क्रिप्टेड सेटिंग्स आयात करें', synchronizeRuntime: 'रनटाइम सिंक करें',
+            keyboxHubCopy: 'अनुशंसित रिमोट सर्वर के लिए API key यहां प्राप्त करें।', getApiKey: 'API Key प्राप्त करें'
+        },
+        ar: {
+            backupPassword: 'كلمة مرور النسخة الاحتياطية', backupHint: 'مطلوبة، 12 حرفا على الأقل.', backupPlaceholder: 'أدخل كلمة مرور قوية للنسخة الاحتياطية', show: 'إظهار', hide: 'إخفاء',
+            exportSettings: 'تصدير الإعدادات المشفرة', importSettings: 'استيراد الإعدادات المشفرة', synchronizeRuntime: 'مزامنة وقت التشغيل',
+            keyboxHubCopy: 'احصل هنا على مفتاح API للخادم البعيد الموصى به.', getApiKey: 'الحصول على مفتاح API'
+        }
+    };
+
     let locale = readLocale();
     const originalText = new WeakMap();
     const originalAttrs = new WeakMap();
@@ -388,8 +442,13 @@
         return (TRANSLATIONS[locale] && TRANSLATIONS[locale][value]) || value;
     }
 
+    function ownedCopy(key) {
+        const catalog = OWNED_COPY[locale] || OWNED_COPY.en;
+        return catalog[key] || OWNED_COPY.en[key] || key;
+    }
+
     function escapeHtml(value) {
-        return String(value == null ? '' : value).replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+        return String(value == null ? '' : value).replace(/[&<>\"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[char]));
     }
 
     function injectStyles() {
@@ -431,6 +490,16 @@
             #ct_full_guide h4 { margin: 0 0 6px; color: var(--accent); font-size: 1em; }
             #ct_full_guide p { margin: 0; color: #aaa; line-height: 1.55; }
             .ct-compat-note { color:#999; font-size:.82em; line-height:1.45; margin-top:8px; }
+            #ct_config_management .ct-config-password-label { display:block; margin-bottom:8px; }
+            #ct_config_management .ct-config-field-note { margin:7px 2px 0; color:#888; font-size:.8em; line-height:1.4; }
+            #ct_config_management .ct-config-actions { gap:10px; margin-top:14px; }
+            #ct_config_management .ct-config-actions > button { width:100%; margin:0 !important; }
+            #ct_config_management .ct-config-actions #runtimeSyncBtn { grid-column:1 / -1; }
+            #ct_keyboxhub_hint { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:12px; margin-top:12px; padding:10px 12px; border:1px solid var(--ct-soft-border); border-radius:8px; background:rgba(255,255,255,.025); }
+            #ct_keyboxhub_hint strong { display:block; color:var(--fg); font-size:.86em; font-weight:600; margin-bottom:2px; }
+            #ct_keyboxhub_hint p { margin:0; color:#888; font-size:.78em; line-height:1.4; }
+            #ct_keyboxhub_hint .ct-keyboxhub-action { display:inline-flex; align-items:center; justify-content:center; min-height:36px; padding:7px 11px; border:1px solid var(--border); border-radius:6px; color:var(--fg); text-decoration:none; font-size:.78em; font-weight:500; white-space:nowrap; background:rgba(255,255,255,.035); }
+            #ct_keyboxhub_hint .ct-keyboxhub-action:hover { background:rgba(255,255,255,.07); }
             html[dir="rtl"] body { direction: rtl; }
             html[dir="rtl"] input, html[dir="rtl"] select, html[dir="rtl"] textarea, html[dir="rtl"] pre, html[dir="rtl"] code, html[dir="rtl"] .mono { direction: ltr; text-align: left; }
             html[dir="rtl"] input[type="checkbox"].toggle { direction: ltr; }
@@ -438,6 +507,12 @@
                 .row { gap: 12px; align-items: flex-start; }
                 .row > input[type="checkbox"].toggle { margin-top: 2px !important; }
                 #ct_language_panel .row, #ct_debug_panel .row, #ct_drm_dashboard_panel .row { align-items:center; }
+                #ct_config_management .ct-config-actions { grid-template-columns:1fr; }
+                #ct_config_management .ct-config-actions #runtimeSyncBtn { grid-column:auto; }
+            }
+            @media (max-width: 390px) {
+                #ct_keyboxhub_hint { grid-template-columns:1fr; }
+                #ct_keyboxhub_hint .ct-keyboxhub-action { justify-self:start; }
             }
         `;
         document.head.appendChild(style);
@@ -497,6 +572,30 @@
         });
     }
 
+    function localizeOwnedSurfaces() {
+        const config = document.getElementById('ct_config_management');
+        if (config) {
+            const input = document.getElementById('backupPw');
+            const label = config.querySelector('label[for="backupPw"]');
+            const note = document.getElementById('ct_backup_password_note');
+            const exportButton = config.querySelector('button[onclick*="backupConfig"]');
+            const importButton = config.querySelector('button[onclick*="restoreInput"]');
+            const syncButton = document.getElementById('runtimeSyncBtn');
+            if (label) label.textContent = ownedCopy('backupPassword');
+            if (note) note.textContent = ownedCopy('backupHint');
+            if (input) input.placeholder = ownedCopy('backupPlaceholder');
+            if (exportButton && !exportButton.disabled) exportButton.textContent = ownedCopy('exportSettings');
+            if (importButton && !importButton.disabled) importButton.textContent = ownedCopy('importSettings');
+            if (syncButton && !syncButton.disabled) syncButton.textContent = ownedCopy('synchronizeRuntime');
+            const toggle = input && input.closest('.pwd-wrapper') ? input.closest('.pwd-wrapper').querySelector('.pwd-toggle') : null;
+            if (toggle) toggle.textContent = ownedCopy(input.type === 'text' ? 'hide' : 'show');
+        }
+        const hubCopy = document.getElementById('ct_keyboxhub_copy');
+        const hubAction = document.getElementById('ct_keyboxhub_action');
+        if (hubCopy) hubCopy.textContent = ownedCopy('keyboxHubCopy');
+        if (hubAction) hubAction.textContent = ownedCopy('getApiKey');
+    }
+
     function applyTranslations() {
         document.documentElement.lang = locale;
         document.documentElement.dir = locale === 'ar' ? 'rtl' : 'ltr';
@@ -505,6 +604,7 @@
         renderGuide();
         const selector = document.getElementById('ct_language_selector');
         if (selector) selector.value = locale;
+        localizeOwnedSurfaces();
     }
 
     function installLanguagePanel() {
@@ -532,6 +632,66 @@
             dashboard.appendChild(panel);
         }
         panel.querySelector('select').value = locale;
+    }
+
+    function installConfigurationManagement() {
+        const input = document.getElementById('backupPw');
+        if (!input) return;
+        const panel = input.closest('.panel');
+        if (!panel) return;
+        panel.id = 'ct_config_management';
+        const label = panel.querySelector('label[for="backupPw"]');
+        if (label) {
+            label.classList.add('ct-config-password-label');
+            if (!label.dataset.ctConfigCanonical) {
+                label.dataset.ctConfigCanonical = '1';
+                label.textContent = 'Backup Password';
+            }
+        }
+        const passwordWrapper = input.closest('.pwd-wrapper');
+        if (passwordWrapper && !document.getElementById('ct_backup_password_note')) {
+            const note = document.createElement('div');
+            note.id = 'ct_backup_password_note';
+            note.className = 'ct-config-field-note';
+            note.textContent = 'Required, at least 12 characters.';
+            passwordWrapper.insertAdjacentElement('afterend', note);
+        }
+        const actions = panel.querySelector('.grid-2');
+        const syncButton = document.getElementById('runtimeSyncBtn');
+        if (actions) {
+            actions.classList.add('ct-config-actions');
+            if (syncButton && syncButton.parentElement !== actions) {
+                const oldWrapper = syncButton.parentElement;
+                actions.appendChild(syncButton);
+                if (oldWrapper && oldWrapper !== panel && oldWrapper.children.length === 0) oldWrapper.remove();
+            }
+        }
+    }
+
+    function installKeyboxHubHint() {
+        const serverList = document.getElementById('serverList');
+        if (!serverList) return;
+        const panel = serverList.closest('.panel');
+        if (!panel) return;
+        let hint = document.getElementById('ct_keyboxhub_hint');
+        if (!hint) {
+            hint = document.createElement('div');
+            hint.id = 'ct_keyboxhub_hint';
+            hint.innerHTML = '<div><strong>KeyboxHub</strong><p id="ct_keyboxhub_copy">Get an API key for the recommended remote server here.</p></div><a id="ct_keyboxhub_action" class="ct-keyboxhub-action" href="https://keybox.tryigit.dev/" target="_blank" rel="noopener noreferrer">Get API Key</a>';
+            const addButton = Array.from(panel.querySelectorAll('button')).find(button => /addServerForm/.test(button.getAttribute('onclick') || ''));
+            if (addButton) addButton.insertAdjacentElement('afterend', hint);
+            else panel.appendChild(hint);
+        }
+    }
+
+    function installOwnedSurfaceInteractions() {
+        if (document.documentElement.dataset.ctOwnedSurfaceInteractions) return;
+        document.documentElement.dataset.ctOwnedSurfaceInteractions = '1';
+        document.addEventListener('click', event => {
+            const target = event.target && event.target.closest ? event.target.closest('#ct_config_management .pwd-toggle') : null;
+            if (!target) return;
+            queueMicrotask(localizeOwnedSurfaces);
+        });
     }
 
     function ensureFooterOrder() {
@@ -717,6 +877,8 @@
     function applyEnhancements() {
         canonicalizePolicyText();
         installLanguagePanel();
+        installConfigurationManagement();
+        installKeyboxHubHint();
         moveEffectiveStateIntoApps();
         installPackageSearchNote();
         installDrmPanel();
@@ -728,6 +890,7 @@
 
     function start() {
         injectStyles();
+        installOwnedSurfaceInteractions();
         applyEnhancements();
         wrapLegacyToggle();
         wrapTabSwitch();
