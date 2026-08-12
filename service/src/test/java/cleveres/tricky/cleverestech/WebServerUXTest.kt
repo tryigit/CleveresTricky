@@ -113,18 +113,18 @@ class WebServerUXTest {
     @Test
     fun testMobileAndSettingContracts() {
         val html = fetchHtml()
-        val settings =
+        val policy = fetchPath("/policy.js?revision=2")
+        val legacySettings =
             listOf(
                 "spoof_enabled",
                 "spoof_build_identity",
-                "global_mode",
-                "auto_keybox_check",
                 "random_on_boot",
                 "spoof_region_cn",
                 "telephony",
                 "rkp_passthrough",
-                "drm_passthrough",
             )
+        val featureCenterSettings = listOf("global_mode", "auto_keybox_check", "drm_passthrough")
+        val monitoredSettings = legacySettings + featureCenterSettings
 
         assertTrue(html.contains("viewport-fit=cover"))
         assertTrue(html.contains("env(safe-area-inset-bottom)"))
@@ -134,6 +134,7 @@ class WebServerUXTest {
         assertTrue(html.contains("async function fetchAuth"))
         assertTrue(html.contains("window.CleveresBridge.fetch(url, options)"))
         assertTrue(html.contains("<script src=\"bridge.js?revision=5\"></script>"))
+        assertTrue(html.contains("<script src=\"policy.js?revision=2\"></script>"))
         assertTrue(html.contains("function downloadBlob"))
         assertTrue(html.contains("if (files && files[0]) loadFileContent(files[0]);"))
         assertFalse(html.contains("kbFilePicker').files = files"))
@@ -144,9 +145,18 @@ class WebServerUXTest {
         assertTrue(html.contains(".tabs { position: fixed; top: auto; bottom: 0;"))
         assertTrue(html.contains("<option value=\"templates.json\">templates.json</option>"))
 
-        settings.forEach { setting ->
-            assertTrue("Missing synchronized control for $setting", html.contains("data-setting=\"$setting\""))
+        legacySettings.forEach { setting ->
+            assertTrue("Missing synchronized legacy control for $setting", html.contains("data-setting=\"$setting\""))
             assertTrue("Missing source-aware toggle for $setting", html.contains("toggle('$setting', this)"))
+        }
+        featureCenterSettings.forEach { setting ->
+            assertFalse("Duplicate legacy Feature Center control for $setting", html.contains("data-setting=\"$setting\""))
+            assertTrue("Missing Feature Center setter for $setting", policy.contains("setLegacyToggle('$setting'"))
+        }
+        assertTrue(policy.contains("ct_dash_drm_passthrough"))
+        assertTrue(policy.contains("ct_dashboard_controls"))
+        assertFalse(policy.contains("ct_resources_controls'))"))
+        monitoredSettings.forEach { setting ->
             assertTrue("Missing resource monitor entry for $setting", html.contains("{ id: '$setting'"))
         }
         assertTrue(html.contains("WEB_UI_SETTINGS.includes(f.id)"))
@@ -198,8 +208,10 @@ class WebServerUXTest {
         assertEquals(expectedRoutes, clientRoutes)
     }
 
-    private fun fetchHtml(): String {
-        val url = URL("http://localhost:${server.listeningPort}/?token=${server.token}")
+    private fun fetchHtml(): String = fetchPath("/?token=${server.token}")
+
+    private fun fetchPath(path: String): String {
+        val url = URL("http://localhost:${server.listeningPort}$path")
         val conn = url.openConnection() as HttpURLConnection
         return conn.inputStream.bufferedReader().readText()
     }
