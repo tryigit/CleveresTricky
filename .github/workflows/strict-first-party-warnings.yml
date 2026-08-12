@@ -30,6 +30,8 @@ jobs:
           node <<'NODE'
           const fs = require('fs')
           const html = fs.readFileSync('module/template/webroot/index.html', 'utf8')
+          const policyScripts = [...html.matchAll(/<script[^>]*\bsrc=["']policy\.js(?:\?[^"']*)?["'][^>]*>/gi)]
+          if (policyScripts.length !== 1) throw new Error('Expected exactly one policy.js script entrypoint')
           const blocks = [...html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/gi)]
             .filter(match => !/\bsrc\s*=/.test(match[1]))
           if (blocks.length !== 1) throw new Error('Unexpected inline script count')
