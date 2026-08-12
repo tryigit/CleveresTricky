@@ -56,7 +56,7 @@ class PolicyMigrationTest {
 
     private fun validState(
         keybox: String? = null,
-        activeProfile: String? = "Daily",
+        activeProfile: String? = "Travel",
         includeRetiredRkp: Boolean = false,
     ): JSONObject {
         val features =
@@ -70,7 +70,7 @@ class PolicyMigrationTest {
         val securityPatch = JSONObject().put("automaticThresholdMonths", 6)
         val profile =
             JSONObject()
-                .put("name", "Daily")
+                .put("name", "Travel")
                 .put("applications", JSONArray())
                 .put("template", JSONObject.NULL)
                 .put("keybox", keybox ?: JSONObject.NULL)
@@ -90,7 +90,7 @@ class PolicyMigrationTest {
     @Test
     fun staleKeyboxAndRetiredRkpFieldsAreRepairedWithoutResettingProfiles() {
         val stateFile = File(tempDir, "policy_state_v2.json")
-        stateFile.writeText(validState(keybox = "missing.xml", activeProfile = "daily", includeRetiredRkp = true).toString())
+        stateFile.writeText(validState(keybox = "missing.xml", activeProfile = "travel", includeRetiredRkp = true).toString())
 
         assertTrue(PolicyMigration.sanitize(tempDir))
 
@@ -98,7 +98,7 @@ class PolicyMigrationTest {
         val profile = repaired.getJSONArray("profiles").getJSONObject(0)
         assertTrue(profile.isNull("keybox"))
         assertFalse(profile.has("rkpPassthrough"))
-        assertEquals("daily", repaired.getString("activeProfile"))
+        assertEquals("travel", repaired.getString("activeProfile"))
         assertTrue(File(tempDir, "policy_state_v2.last_good.json").isFile)
     }
 
@@ -130,7 +130,7 @@ class PolicyMigrationTest {
 
         val recovered = JSONObject(stateFile.readText())
         assertEquals(2, recovered.getInt("version"))
-        assertEquals("Daily", recovered.getString("activeProfile"))
+        assertEquals("Travel", recovered.getString("activeProfile"))
         assertEquals(malformed, File(tempDir, "policy_state_v2.invalid.json").readText())
     }
 
