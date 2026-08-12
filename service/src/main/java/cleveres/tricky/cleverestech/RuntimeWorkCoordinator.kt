@@ -77,10 +77,9 @@ internal object KeyboxDirectoryRefreshWatcher {
     fun start(directory: File) {
         if (observer != null) return
 
-        // Config.initialize() starts the original observer after its initial synchronous scan.
-        // Stop it before installing the conflated replacement so both cannot react to one event.
-        Config.KeyboxDirObserver.stopWatching()
-        observer =
+        // Config.initialize() already started the legacy observer. Start the replacement first so
+        // a failure leaves the original observer intact, then retire the old one after hand-off.
+        val replacement =
             object : FileObserver(directory, CLOSE_WRITE or DELETE or MOVED_FROM or MOVED_TO) {
                 override fun onEvent(
                     event: Int,
@@ -89,7 +88,10 @@ internal object KeyboxDirectoryRefreshWatcher {
                     Logger.i("Keybox directory event: $path")
                     scheduler.submit()
                 }
-            }.also(FileObserver::startWatching)
+            }
+        replacement.startWatching()
+        Config.KeyboxDirObserver.stopWatching()
+        observer = replacement
     }
 
     @Synchronized
