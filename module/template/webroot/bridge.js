@@ -13,6 +13,7 @@
     const maxEnvelopeChars = 1024 * 1024;
     const responseFields = new Set(['version', 'status', 'statusText', 'mimeType', 'size', 'body', 'downloadId']);
     const communityUrl = 'https://t.me/cleverestech';
+    const keyboxHubUrl = 'https://keybox.tryigit.dev/';
     const debugFlag = '/data/adb/cleverestricky/debug_logging';
     let callbackCounter = 0;
 
@@ -203,15 +204,23 @@
         });
     }
 
-    async function openCommunity() {
-        const command = `/system/bin/am start --user current -W -a android.intent.action.VIEW -c android.intent.category.BROWSABLE -d '${communityUrl}' -p com.android.chrome >/dev/null 2>&1 || /system/bin/am start --user current -W -a android.intent.action.VIEW -c android.intent.category.BROWSABLE -d '${communityUrl}' >/dev/null 2>&1`;
+    async function openExternalUrl(url) {
+        if (url !== communityUrl && url !== keyboxHubUrl) throw new Error('Unsupported external URL');
+        const command = `/system/bin/am start --user current -W -a android.intent.action.VIEW -c android.intent.category.BROWSABLE -d '${url}' -p com.android.chrome >/dev/null 2>&1 || /system/bin/am start --user current -W -a android.intent.action.VIEW -c android.intent.category.BROWSABLE -d '${url}' >/dev/null 2>&1`;
         await execHostCommand(command, 12000);
         return true;
     }
 
-    async function getDebugLogging() {
-        const output = await execHostCommand(`[ -f '${debugFlag}' ] && [ ! -L '${debugFlag}' ] && printf on || printf off`, 5000);
-        return output === 'on';
+    async function openCommunity() {
+        return openExternalUrl(communityUrl);
+    }
+
+    async function openKeyboxHub() {
+        return openExternalUrl(keyboxHubUrl);
+    }
+
+    function getDebugLogging() {
+        return execHostCommand(`[ -f '${debugFlag}' ] && [ ! -L '${debugFlag}' ] && printf on || printf off`, 5000).then(output => output === 'on');
     }
 
     async function setDebugLogging(enabled) {
@@ -514,12 +523,25 @@
         }
     }
 
+    function routeExternalLinks() {
+        const document = global.document;
+        if (!document || document.documentElement.dataset.ctExternalLinkRouting) return;
+        document.documentElement.dataset.ctExternalLinkRouting = '1';
+        document.addEventListener('click', event => {
+            const link = event.target && event.target.closest ? event.target.closest('a[href]') : null;
+            if (!link || link.href !== keyboxHubUrl) return;
+            event.preventDefault();
+            event.stopPropagation();
+            openKeyboxHub().catch(() => {});
+        }, true);
+    }
+
     function loadUxEnhancements() {
         const document = global.document;
         if (!document || !document.head || !document.createElement || document.getElementById('ct_ux_script')) return;
         const script = document.createElement('script');
         script.id = 'ct_ux_script';
-        script.src = 'ux.js?revision=5';
+        script.src = 'ux.js?revision=6';
         script.defer = true;
         document.head.appendChild(script);
     }
@@ -534,13 +556,15 @@
     }
 
     scheduleCommunityCard();
+    routeExternalLinks();
     global.CleveresBridge = Object.freeze({
-        revision: 7,
+        revision: 8,
         fetch: nativeFetch,
         exportBlob,
         exportResponse,
         listPackages,
         openCommunity,
+        openKeyboxHub,
         getDebugLogging,
         setDebugLogging
     });
