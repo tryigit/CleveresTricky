@@ -234,7 +234,7 @@ object PolicyState {
     private const val MAX_UID_RESOLUTIONS = 1024
     private const val CAPTURE_TTL_MS = 15 * 60 * 1000L
     private val profileNamePattern = Regex("[A-Za-z0-9][A-Za-z0-9 _.-]{0,63}")
-    private val packagePattern = Regex("(?:[A-Za-z_][A-Za-z0-9_]*|\*)(?:\.(?:[A-Za-z_][A-Za-z0-9_]*|\*))*")
+    private val packagePattern = Regex("""(?:[A-Za-z_][A-Za-z0-9_]*|[*])(?:[.](?:[A-Za-z_][A-Za-z0-9_]*|[*]))*""")
     private val keyboxPattern = Regex("[A-Za-z0-9_.-]{5,128}")
     private val builtInProfiles = setOf("maximum", "daily", "default", "minimal")
     private val isoDate = DateTimeFormatter.ISO_LOCAL_DATE
@@ -664,18 +664,41 @@ object PolicyState {
         }
     }
 
-    fun profileAppConfig(uid: Int): Config.AppSpoofConfig? {
-        val profile = resolveUid(uid).selection.profile ?: return null
-        if (profile.template == null && profile.keybox == null && profile.privacy == Config.AppPrivacyMode.INHERIT) return null
-        return Config.AppSpoofConfig(profile.template, profile.keybox, profile.privacy)
+    private fun mergeAppConfig(
+        profile: Profile?,
+        legacy: Config.AppSpoofConfig?,
+    ): Config.AppSpoofConfig? {
+        if (profile == null) return legacy
+        val privacy =
+            profile.privacy.takeUnless { it == Config.AppPrivacyMode.INHERIT }
+                ?: legacy?.privacyMode
+                ?: Config.AppPrivacyMode.INHERIT
+        val merged =
+            Config.AppSpoofConfig(
+                profile.template ?: legacy?.template,
+                profile.keybox ?: legacy?.keyboxFilename,
+                privacy,
+            )
+        return merged.takeUnless {
+            it.template == null &&
+                it.keyboxFilename == null &&
+                it.privacyMode == Config.AppPrivacyMode.INHERIT
+        }
     }
 
-    fun profilePrivacyMode(uid: Int): Config.AppPrivacyMode? = resolveUid(uid).selection.profile?.privacy
+    fun resolveAppConfig(
+        uid: Int,
+        legacy: Config.AppSpoofConfig?,
+    ): Config.AppSpoofConfig? = mergeAppConfig(resolveUid(uid).selection.profile, legacy)
+
+    fun profilePrivacyMode(uid: Int): Config.AppPrivacyMode? =
+        resolveUid(uid).selection.profile?.privacy?.takeUnless { it == Config.AppPrivacyMode.INHERIT }
 
     fun rkpPassthrough(uid: Int): Boolean =
         resolveUid(uid).selection.profile?.rkpPassthrough ?: Config.isRkpPassthroughEnabled
 
-    fun profileDrmPassthrough(uid: Int): Boolean? = resolveUid(uid).selection.profile?.drmPassthrough
+    fun drmPassthrough(uid: Int): Boolean =
+        resolveUid(uid).selection.profile?.drmPassthrough ?: Config.isDrmPassthroughEnabled
 
     fun resolveAttestationPatchLevels(
         uid: Int,
@@ -837,10 +860,9 @@ object PolicyState {
         val vendorPolicy = profile?.vendorPatch ?: patch.vendor
         val bootPolicy = profile?.bootPatch ?: patch.boot
         val legacyRule = readLegacyAppRule(packageName)
-        val appConfig =
-            profile?.let {
-                Config.AppSpoofConfig(it.template, it.keybox, it.privacy)
-            } ?: legacyRule
+        val appConfig = mergeAppConfig(profile, legacyRule)
+        val rkpPassthrough = profile?.rkpPassthrough ?: Config.isRkpPassthroughEnabled
+        val drmPassthrough = profile?.drmPassthrough ?: Config.isDrmPassthroughEnabled
         val patchJson = JSONObject()
             .put("system", componentStateJson("system", systemPolicy, false, captured?.system, features.securityPatch, current.explicit))
             .put("vendor", componentStateJson("vendor", vendorPolicy, true, captured?.vendor, features.securityPatch, current.explicit))
@@ -862,8 +884,8 @@ object PolicyState {
             .put("identityRefresh", features.identityRefresh)
             .put("securityPatchOverride", features.securityPatch)
             .put("securityPatch", patchJson)
-            .put("rkp", if (profile?.rkpPassthrough ?: Config.isRkpPassthroughEnabled) "genuine_passthrough" else "certificate_compatibility")
-            .put("drm", if (profile?.drmPassthrough == true) "genuine_passthrough" else if (profile?.drmPassthrough == false) "configured_path" else "inherit")
+            .put("rkp", if (rkpPassthrough) "genuine_passthrough" else "certificate_compatibility")
+            .put("drm", if (drmPassthrough) "genuine_passthrough" else "configured_path")
             .put("keyMint", "genuine_platform_keymint_strongbox")
             .put("keystoreCore", if (KeystoreInterceptor.isRunning()) "active" else "waiting")
             .put("providerCoexistence", providerMode)

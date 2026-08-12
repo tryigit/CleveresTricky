@@ -199,14 +199,13 @@ object Config {
     fun getModuleHash(): ByteArray? = moduleHash ?: moduleHashFromVars
 
     fun getAppConfig(uid: Int): AppSpoofConfig? {
-        PolicyState.profileAppConfig(uid)?.let { return it }
         val state = appConfigState
         if (state.configs.isEmpty()) {
             cacheValue(state.cache, uid, null)
-            return null
+            return PolicyState.resolveAppConfig(uid, null)
         }
         val pkgs = getPackages(uid)
-        getCachedValue(state.cache, uid)?.let { return it.value }
+        getCachedValue(state.cache, uid)?.let { return PolicyState.resolveAppConfig(uid, it.value) }
         var result: AppSpoofConfig? = null
         val len = pkgs.size
         for (i in 0 until len) {
@@ -217,7 +216,7 @@ object Config {
             }
         }
         cacheValue(state.cache, uid, result)
-        return result
+        return PolicyState.resolveAppConfig(uid, result)
     }
 
     fun getAppPrivacyMode(uid: Int): AppPrivacyMode {

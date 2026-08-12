@@ -432,6 +432,30 @@ class PolicyStateTest {
     }
 
     @Test
+    fun `profile inherit keeps legacy app configuration fields`() {
+        val appConfig = File(root, "app_config")
+        appConfig.writeText("com.example.app null legacy.xml isolate")
+        Config.updateAppConfigs(appConfig).getOrThrow()
+        val profile =
+            JSONObject()
+                .put("name", "Overlay")
+                .put("applications", JSONArray().put("com.example.app"))
+                .put("privacy", "inherit")
+                .put("features", JSONObject().put("buildIdentity", false))
+                .put("securityPatch", JSONObject())
+        install(profiles = JSONArray().put(profile))
+        cachePackages(10_015, arrayOf("com.example.app"))
+
+        val runtime = Config.getAppConfig(10_015)
+        val effective = PolicyState.effectiveStateJson("com.example.app")
+
+        assertEquals("legacy.xml", runtime?.keyboxFilename)
+        assertEquals(Config.AppPrivacyMode.ISOLATE, Config.getAppPrivacyMode(10_015))
+        assertEquals("legacy.xml", effective.getString("keyboxReference"))
+        assertEquals("isolate", effective.getString("privacy"))
+    }
+
+    @Test
     fun `invalid transaction does not replace active snapshot`() {
         install(features = featureJson(build = true, patch = false))
         val before = PolicyState.stateJson().getJSONObject("features").getBoolean("buildIdentity")
