@@ -7,16 +7,20 @@ import android.system.keystore2.KeyMetadata
 import cleveres.tricky.cleverestech.binder.BinderInterceptor
 import cleveres.tricky.cleverestech.keystore.CertHack
 import cleveres.tricky.cleverestech.keystore.Utils
-import java.util.concurrent.locks.LockSupport
 
 /**
  * Rewrites only the certificate chain returned by a successful, genuine
  * KeyMint key generation. The private key and every later cryptographic
  * operation remain owned by the platform security level.
+ *
+ * Targeted generateKey and getKeyEntry calls deliberately use the same
+ * certificate-compatibility path. The retired RKP passthrough switch must not
+ * split those two paths, otherwise the same alias can expose two different
+ * attestation leaves. No synthetic timing delay is added here; certificate
+ * caching in CertHack handles repeated reads without parking Keystore threads.
  */
 class SecurityLevelInterceptor : BinderInterceptor() {
     companion object {
-        private const val GENERATE_KEY_EQUALIZATION_NANOS = 2_000_000L
         private val generateKeyTransaction =
             getTransactCode(IKeystoreSecurityLevel.Stub::class.java, "generateKey")
 
@@ -33,14 +37,9 @@ class SecurityLevelInterceptor : BinderInterceptor() {
     ): Result {
         return if (
             code == generateKeyTransaction &&
-            !PolicyState.rkpPassthrough(callingUid) &&
             CertHack.canHack() &&
             Config.needHack(callingUid)
         ) {
-            // Keep attested and non-attested generateKey calls on the same small timing base.
-            // Certificate rewriting happens only for attested replies; without this common delay
-            // repeated samples expose that branch even though both operations otherwise succeed.
-            LockSupport.parkNanos(GENERATE_KEY_EQUALIZATION_NANOS)
             Continue
         } else {
             Skip
@@ -59,7 +58,6 @@ class SecurityLevelInterceptor : BinderInterceptor() {
     ): Result {
         if (
             code != generateKeyTransaction ||
-            PolicyState.rkpPassthrough(callingUid) ||
             reply == null ||
             resultCode != 0 ||
             !CertHack.canHack() ||
