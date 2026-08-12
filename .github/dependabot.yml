@@ -10,7 +10,12 @@ updates:
     allow:
       - dependency-type: "direct"
     groups:
+      bouncycastle-security:
+        applies-to: security-updates
+        patterns:
+          - "org.bouncycastle:*"
       bouncycastle:
+        applies-to: version-updates
         patterns:
           - "org.bouncycastle:*"
         update-types:
