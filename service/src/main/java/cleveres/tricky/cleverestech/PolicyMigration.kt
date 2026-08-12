@@ -44,7 +44,7 @@ object PolicyMigration {
 
     fun sanitize(configRoot: File): Boolean {
         val lastGoodFile = File(configRoot, LAST_GOOD_FILE)
-        var lastGood = sanitizeFile(configRoot, lastGoodFile)
+        val lastGood = sanitizeFile(configRoot, lastGoodFile)
         var changed = lastGood.changed
 
         val stateFile = File(configRoot, STATE_FILE)
@@ -65,7 +65,6 @@ object PolicyMigration {
         ) {
             if (safeWriteState(lastGoodFile, main.text)) {
                 Logger.i("Refreshed last-known-good policy state during upgrade recovery")
-                lastGood = Outcome(Status.REPAIRED, main.text)
                 changed = true
             }
         }
