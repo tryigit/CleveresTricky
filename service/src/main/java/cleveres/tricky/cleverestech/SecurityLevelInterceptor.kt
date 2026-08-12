@@ -56,12 +56,14 @@ class SecurityLevelInterceptor : BinderInterceptor() {
         reply: Parcel?,
         resultCode: Int,
     ): Result {
+        // The native hook only sends POST_TRANSACT after PRE_TRANSACT returned Continue.
+        // Target scope was therefore already resolved above; do not repeat Config.needHack()
+        // on the latency-sensitive generateKey reply path.
         if (
             code != generateKeyTransaction ||
             reply == null ||
             resultCode != 0 ||
-            !CertHack.canHack() ||
-            !Config.needHack(callingUid)
+            !CertHack.canHack()
         ) {
             return Skip
         }
