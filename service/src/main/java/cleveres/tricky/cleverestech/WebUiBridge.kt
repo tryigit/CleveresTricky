@@ -158,7 +158,7 @@ class WebUiBridge(
                     ?.let { File(stagingDir, "$it.upload") }
             val parsed = parseRequest(request)
             uploadFile = parsed.uploadFile
-            val response = PolicyApi.serve(parsed.session) ?: server.serveBridge(parsed.session)
+            val response = server.serveBridge(parsed.session)
             writeResponse(requestId, responseFile, response)
         } catch (error: IllegalArgumentException) {
             writeErrorResponse(responseFile, NanoHTTPD.Response.Status.BAD_REQUEST, "Invalid native WebUI request")

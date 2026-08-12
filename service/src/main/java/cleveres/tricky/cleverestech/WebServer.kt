@@ -905,6 +905,21 @@ class WebServer(
             }
         }
 
+        if (uri == "/api/policy_state" || uri == "/api/effective_state" || uri == "/api/profile_v2") {
+            if (method == Method.POST) {
+                val files = HashMap<String, String>()
+                try {
+                    session.parseBody(files)
+                } catch (error: Exception) {
+                    return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Failed to parse body")
+                }
+            }
+            PolicyApi.serve(session)?.let { response ->
+                addSecurityHeaders(response)
+                return response
+            }
+        }
+
         if (uri == "/api/config" && method == Method.GET) {
             val json = JSONObject()
             WEB_UI_SETTINGS.forEach { setting -> json.put(setting, fileExists(setting)) }

@@ -3,7 +3,7 @@ package cleveres.tricky.cleverestech
 import fi.iki.elonen.NanoHTTPD
 import org.json.JSONObject
 
-object PolicyApi {
+internal object PolicyApi {
     fun serve(session: NanoHTTPD.IHTTPSession): NanoHTTPD.Response? {
         val uri = session.uri
         val method = session.method
@@ -47,13 +47,8 @@ object PolicyApi {
         session.parameters[name]?.singleOrNull()?.takeIf { it.length <= 1024 * 1024 }
 
     private fun json(status: NanoHTTPD.Response.Status, value: JSONObject): NanoHTTPD.Response =
-        NanoHTTPD.newFixedLengthResponse(status, "application/json", value.toString()).also(::secure)
+        NanoHTTPD.newFixedLengthResponse(status, "application/json", value.toString())
 
     private fun text(status: NanoHTTPD.Response.Status, value: String): NanoHTTPD.Response =
-        NanoHTTPD.newFixedLengthResponse(status, NanoHTTPD.MIME_PLAINTEXT, value).also(::secure)
-
-    private fun secure(response: NanoHTTPD.Response) {
-        response.addHeader("X-Content-Type-Options", "nosniff")
-        response.addHeader("Cache-Control", "no-store")
-    }
+        NanoHTTPD.newFixedLengthResponse(status, NanoHTTPD.MIME_PLAINTEXT, value)
 }
