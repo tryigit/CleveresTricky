@@ -55,7 +55,7 @@ bootstrap_default_policy() {
       now_day=${now_day#0}; [ -n "$now_day" ] || now_day=0
 
       case "$patch_year:$patch_month:$patch_day:$now_year:$now_month:$now_day" in
-        *[!0-9:]*|'') ;;
+        *[!0-9:]*) ;;
         *)
           patch_serial=$((patch_year * 12 + patch_month))
           now_serial=$((now_year * 12 + now_month))
@@ -105,7 +105,9 @@ mirror_root_keyboxes() {
   chcon u:object_r:system_file:s0 "$keybox_dir" 2>/dev/null
 
   for source in "$CONFIG_DIR"/*.xml "$CONFIG_DIR"/*.cbox; do
-    [ -f "$source" ] && [ ! -L "$source" ] || continue
+    if [ ! -f "$source" ] || [ -L "$source" ]; then
+      continue
+    fi
     base=${source##*/}
     # keybox.xml is the legacy primary source and is already loaded directly.
     [ "$base" != "keybox.xml" ] || continue
