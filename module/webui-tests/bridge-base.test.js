@@ -36,6 +36,9 @@ function createElement(tagName) {
 
 function createDocument() {
     const body = createElement('body');
+    const dashboard = createElement('div');
+    dashboard.id = 'dashboard';
+    body.appendChild(dashboard);
     return {
         readyState: 'complete',
         body,
@@ -171,7 +174,9 @@ async function main() {
     createBridge(() => {}, communityDocument);
     const communityCard = communityDocument.getElementById('cleveresCommunityCard');
     assert.ok(communityCard, 'Telegram community card was not appended');
-    assert.strictEqual(communityDocument.body.children.at(-1), communityCard, 'Community card must stay at the bottom');
+    const communityDashboard = communityDocument.getElementById('dashboard');
+    assert.strictEqual(communityDashboard.children.at(-1), communityCard, 'Community card must stay at the bottom of Dashboard');
+    assert.ok(!communityDocument.body.children.includes(communityCard), 'Community card must never be a global body-level widget');
     const communityPanel = communityCard.children[0];
     const communityCopy = communityPanel.children[1];
     const communityLink = communityPanel.children[2];
@@ -181,7 +186,7 @@ async function main() {
     assert.strictEqual(communityLink.rel, 'noopener noreferrer');
     assert.strictEqual(communityLink.textContent, 'Join Telegram Community');
 
-    assert.match(uxSource, /ux-base\.js\?revision=4/);
+    assert.match(uxSource, /ux-base\.js\?revision=5/);
     assert.ok(!uxSource.includes('ux-patch.js'), 'The retired patch layer must not be loaded');
     assert.match(uxBaseSource, /\['en', 'English'\]/);
     assert.match(uxBaseSource, /\['tr', 'Türkçe'\]/);
@@ -195,6 +200,8 @@ async function main() {
     assert.match(uxBaseSource, /node\.nodeValue = leading \+ tr\(trimmed\) \+ trailing/);
     assert.match(uxBaseSource, /Identity is currently disabled\. You can enable it from Dashboard\./);
     assert.match(uxBaseSource, /ct_language_panel/);
+    assert.match(uxBaseSource, /To add a locale:/);
+    assert.match(uxBaseSource, /const featureCenter = document\.getElementById\('ct_dashboard_controls'\)/);
     assert.match(uxBaseSource, /ct_debug_panel/);
     assert.match(uxBaseSource, /All major features and runtime paths in one place\./);
     assert.ok(!/setInterval\s*\(/.test(uxBaseSource), 'UX presentation must not add permanent polling');
@@ -210,8 +217,8 @@ async function main() {
     });
     assert.strictEqual(normalizeUiMessage(oversized), 'HTTP 500 Server Error: response body is too large to display');
     assert.ok(indexSource.includes('text.textContent = normalizeUiMessage(msg);'));
-    assert.ok(indexSource.includes('<script src="bridge.js?revision=6"></script>'));
-    assert.match(bridgeSource, /ux\.js\?revision=4/);
+    assert.ok(indexSource.includes('<script src="bridge.js?revision=7"></script>'));
+    assert.match(bridgeSource, /ux\.js\?revision=5/);
     assert.ok(!bridgeSource.includes('ux.js?revision=3'), 'Bridge must not request the retired cached UX loader');
 
     console.log('Native WebUI bridge compatibility tests passed');

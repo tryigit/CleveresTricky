@@ -113,7 +113,7 @@ class WebServerUXTest {
     @Test
     fun testMobileAndSettingContracts() {
         val html = fetchHtml()
-        val legacySettings =
+        val retiredIdentitySettings =
             listOf(
                 "spoof_enabled",
                 "spoof_build_identity",
@@ -122,7 +122,7 @@ class WebServerUXTest {
                 "telephony",
             )
         val featureCenterSettings = listOf("global_mode", "auto_keybox_check", "drm_passthrough")
-        val monitoredSettings = legacySettings + featureCenterSettings
+        val monitoredSettings = retiredIdentitySettings + featureCenterSettings
 
         assertTrue(html.contains("viewport-fit=cover"))
         assertTrue(html.contains("env(safe-area-inset-bottom)"))
@@ -131,8 +131,8 @@ class WebServerUXTest {
         assertTrue(html.contains("height: min(500px, 60dvh) !important"))
         assertTrue(html.contains("async function fetchAuth"))
         assertTrue(html.contains("window.CleveresBridge.fetch(url, options)"))
-        assertTrue(html.contains("<script src=\"bridge.js?revision=6\"></script>"))
-        assertTrue(html.contains("<script src=\"policy.js?revision=3\"></script>"))
+        assertTrue(html.contains("<script src=\"bridge.js?revision=7\"></script>"))
+        assertTrue(html.contains("<script src=\"policy.js?revision=4\"></script>"))
         assertTrue(html.contains("function downloadBlob"))
         assertTrue(html.contains("if (files && files[0]) loadFileContent(files[0]);"))
         assertFalse(html.contains("kbFilePicker').files = files"))
@@ -144,10 +144,13 @@ class WebServerUXTest {
         assertTrue(html.contains(".tabs { position: fixed; top: auto; bottom: 0;"))
         assertTrue(html.contains("<option value=\"templates.json\">templates.json</option>"))
 
-        legacySettings.forEach { setting ->
-            assertTrue("Missing synchronized legacy control for $setting", html.contains("data-setting=\"$setting\""))
-            assertTrue("Missing source-aware toggle for $setting", html.contains("toggle('$setting', this)"))
+        retiredIdentitySettings.forEach { setting ->
+            assertFalse("Retired Identity toggle must not be rendered for $setting", html.contains("data-setting=\"$setting\""))
+            assertFalse("Retired source-aware toggle must not be rendered for $setting", html.contains("toggle('$setting', this)"))
         }
+        assertFalse("Retired Identity Controls panel must not be rendered", html.contains("<h3>Identity Controls</h3>"))
+        assertFalse("Legacy toggle class must not be rendered", html.contains("class=\"toggle\""))
+        assertTrue("Remote Server automatic refresh must use the modern switch", html.contains("class=\"ct-switch\" id=\"srvAutoRefresh\""))
         featureCenterSettings.forEach { setting ->
             assertFalse("Duplicate legacy Feature Center control for $setting", html.contains("data-setting=\"$setting\""))
         }

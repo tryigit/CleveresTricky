@@ -9,7 +9,7 @@ const indexSource = fs.readFileSync('module/template/webroot/index.html', 'utf8'
 new vm.Script(loaderSource, { filename: 'ux.js' });
 new vm.Script(policySource, { filename: 'policy.js' });
 
-assert.match(loaderSource, /ux-base\.js\?revision=4/);
+assert.match(loaderSource, /ux-base\.js\?revision=5/);
 assert.ok(!loaderSource.includes('ux-patch.js'), 'The retired patch overlay must not be loaded');
 assert.ok(!/setInterval\s*\(/.test(loaderSource), 'WebUI loader must not add permanent polling');
 assert.ok(!/setInterval\s*\(/.test(policySource), 'Policy UI must not add permanent polling');
@@ -35,12 +35,16 @@ assert.match(policySource, /removeLegacySurfaces\(\)/);
 assert.ok(!indexSource.includes('One-Click Reset (Refresh Environment)'));
 assert.match(indexSource, /Synchronize Runtime/);
 assert.ok(!indexSource.includes('<h3>System Control</h3>'));
-assert.match(indexSource, /policy\.js\?revision=3/);
-assert.match(indexSource, /bridge\.js\?revision=6/);
+assert.match(indexSource, /policy\.js\?revision=4/);
+assert.match(indexSource, /bridge\.js\?revision=7/);
 assert.match(policySource, /request\('\/api\/packages'\)/);
 assert.match(policySource, /bridge\.listPackages\(\)/);
 assert.match(policySource, /function refreshPresentation\(\)/);
 assert.match(policySource, /ct_language_selector/);
-assert.ok(!policySource.includes('ct_community_slot'), 'Policy must not structurally relocate the community card');
+assert.ok(!policySource.includes('ct_community_slot'), 'Policy must not create a duplicate community slot');
+assert.ok(!indexSource.includes('<h3>Identity Controls</h3>'), 'Retired Identity Controls panel must stay removed');
+assert.ok(!indexSource.includes('class=\"toggle\"'), 'Legacy toggle class must stay removed from static WebUI markup');
+assert.match(indexSource, /class=\"ct-switch\" id=\"srvAutoRefresh\"/);
+assert.match(policySource, /ct_keybox_status_panel/);
 
 require('./bridge-base.test.js');

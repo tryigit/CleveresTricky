@@ -261,15 +261,7 @@ input[type="text"], input[type="tel"], input[type="password"], input[type="searc
 <div><label for="inputSerial">Serial</label><input type="text" id="inputSerial" placeholder="Device serial" maxlength="64" style="font-family:monospace;" enterkeyhint="done" autocapitalize="characters" oninput="validateRealtime(this, 'serial')" aria-describedby="identityScope" spellcheck="false" autocomplete="off" autocorrect="off"></div>
 <div class="identity-actions" style="flex-wrap:wrap;"><button type="button" onclick="runWithState(this, 'Generating...', generateRandomIdentity)">Randomize All</button><button type="button" onclick="const btn = this; requireConfirm(btn, () => clearSpoofingInputs(), 'Confirm Clear')" style="background:transparent; border:1px solid var(--danger); color:var(--danger); min-height:44px; padding:0 20px;">Clear All</button><button onclick="runWithState(this, 'Saving...', applySpoofing)" class="danger">Apply Identity</button></div>
         </div>
-        <div class="panel">
-<h3>Identity Controls</h3>
-<div class="row"><label for="spoof_enabled"><strong style="color:#fff;">Identity Spoof Engine</strong><span class="res-desc">Enables only identity overrides. Core bootloader/TEE protection remains active when this is off.</span></label><input type="checkbox" class="toggle" id="spoof_enabled" data-setting="spoof_enabled" onchange="toggle('spoof_enabled', this)"></div>
-<div class="row"><label for="spoof_build_identity">Build Identity at Boot</label><input type="checkbox" class="toggle" id="spoof_build_identity" data-setting="spoof_build_identity" onchange="toggle('spoof_build_identity', this)"></div>
-<div class="row"><label for="random_on_boot">Refresh Identity on Boot</label><input type="checkbox" class="toggle" id="random_on_boot" data-setting="random_on_boot" onchange="toggle('random_on_boot', this)"></div>
-<div class="row"><label for="telephony">Telephony Identifier Interception</label><input type="checkbox" class="toggle" id="telephony" data-setting="telephony" onchange="toggle('telephony', this)"></div>
-<div class="row"><label for="spoof_region_cn">Spoof Region (CN)</label><input type="checkbox" class="toggle" id="spoof_region_cn" data-setting="spoof_region_cn" onchange="toggle('spoof_region_cn', this)"></div>
-<div class="scope-note" style="margin:0;">These switches affect identity only. Bootloader/verified-boot property hiding and Keystore/TEE certificate protection are always-on core features.</div>
-        </div>
+
     </div>
 
     <div id="apps" class="content" role="tabpanel" aria-labelledby="tab_apps">
@@ -325,7 +317,7 @@ input[type="text"], input[type="tel"], input[type="password"], input[type="searc
         <div><label for="srvPriority">Priority</label><input type="number" id="srvPriority" value="0" min="-1000000" max="1000000" inputmode="numeric"></div>
         <div><label for="srvRefreshHours">Refresh interval (hours)</label><input type="number" id="srvRefreshHours" value="24" min="1" max="720" inputmode="numeric"></div>
     </div>
-    <div class="row" style="margin-top:8px;"><label for="srvAutoRefresh">Automatic refresh</label><input type="checkbox" class="toggle" id="srvAutoRefresh" checked></div>
+    <div class="row" style="margin-top:8px;"><label for="srvAutoRefresh">Automatic refresh</label><input type="checkbox" class="ct-switch" id="srvAutoRefresh" checked></div>
     <div class="pwd-wrapper"><input type="password" id="srvContentPassword" placeholder="CBOX content password (optional)" maxlength="1024" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"><button type="button" class="pwd-toggle" onclick="togglePassword(this)">Show</button></div>
     <textarea id="srvContentPublicKey" placeholder="CBOX signature public key (optional)" maxlength="16384" style="height:90px; margin-bottom:5px;" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
     <div style="display: flex; gap: 10px; margin-top: 10px;">
@@ -481,8 +473,8 @@ input[type="text"], input[type="tel"], input[type="password"], input[type="searc
         </div>
     </div>
 
-    <script src="bridge.js?revision=6"></script>
-    <script src="policy.js?revision=3"></script>
+    <script src="bridge.js?revision=7"></script>
+    <script src="policy.js?revision=4"></script>
     <script>
         window.addEventListener('unhandledrejection', function(event) {
 if (event.reason && event.reason.message && event.reason.message.includes('fetch')) {
@@ -2104,7 +2096,7 @@ features.forEach(f => {
 
     if (isToggleable) {
         const isChecked = data[f.id] ? 'checked' : '';
-        statusHtml = '<input type="checkbox" class="toggle" id="res_toggle_' + f.id + '" data-setting="' + f.id + '" aria-label="Toggle ' + escapeHtml(f.name) + '" ' + isChecked + ' onchange="toggle(\'' + f.id + '\', this)">';
+        statusHtml = '<input type="checkbox" class="ct-switch" id="res_toggle_' + f.id + '" data-setting="' + f.id + '" aria-label="Toggle ' + escapeHtml(f.name) + '" ' + isChecked + ' onchange="toggle(\'' + f.id + '\', this)">';
     } else {
         statusHtml = '<span style="color:#888;">Info Only</span>';
     }

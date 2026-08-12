@@ -5,6 +5,8 @@
     if (!bridge || typeof document === 'undefined') return;
 
     const STORAGE_KEY = 'cleverestricky.language.v1';
+    // To add a locale: append [locale, displayName] here, add TRANSLATIONS[locale],
+    // add GUIDE[locale] when a localized guide is available, then run module/webui-tests.
     const SUPPORTED = [
         ['en', 'English'],
         ['tr', 'Türkçe'],
@@ -422,7 +424,7 @@
             #ct_debug_panel .row, #ct_drm_dashboard_panel .row { margin-bottom: 0; }
             #ct_effective_apps_host > .panel { margin-top: 0; }
             #ct_effective_apps_host { margin-top: 20px; }
-            #cleveresCommunityCard { box-sizing: border-box; margin: 20px 0 max(18px, env(safe-area-inset-bottom)) !important; width: 100%; }
+            #cleveresCommunityCard { box-sizing: border-box; margin: 20px 0 24px !important; width: 100%; }
             #dashboard { padding-bottom: max(116px, calc(84px + env(safe-area-inset-bottom))) !important; }
             #ct_full_guide .ct-guide-section { padding: 14px 0; border-bottom: 1px solid var(--ct-soft-border); }
             #ct_full_guide .ct-guide-section:last-child { border-bottom: 0; padding-bottom: 0; }
@@ -520,8 +522,11 @@
                 ensureFooterOrder();
             });
         }
+        const featureCenter = document.getElementById('ct_dashboard_controls');
         const configPanel = document.getElementById('backupPw')?.closest('.panel');
-        if (configPanel && configPanel.parentElement === dashboard) {
+        if (featureCenter && featureCenter.parentElement === dashboard) {
+            if (featureCenter.nextElementSibling !== panel) dashboard.insertBefore(panel, featureCenter.nextSibling);
+        } else if (configPanel && configPanel.parentElement === dashboard) {
             if (configPanel.nextElementSibling !== panel) dashboard.insertBefore(panel, configPanel.nextSibling);
         } else if (panel.parentElement !== dashboard) {
             dashboard.appendChild(panel);
@@ -650,7 +655,7 @@
         const panel = document.createElement('div');
         panel.id = 'ct_debug_panel';
         panel.className = 'panel';
-        panel.innerHTML = `<h3>Debug Logging</h3><div class="row"><label for="ct_debug_logging_toggle" style="flex:1;padding-right:14px"><strong style="color:#fff">Debug Logging</strong><span class="res-desc">Enable additional runtime diagnostics without installing a debug build. Turn it off after collecting logs.</span></label><input id="ct_debug_logging_toggle" class="toggle" type="checkbox"></div>`;
+        panel.innerHTML = `<h3>Debug Logging</h3><div class="row"><label for="ct_debug_logging_toggle" style="flex:1;padding-right:14px"><strong style="color:#fff">Debug Logging</strong><span class="res-desc">Enable additional runtime diagnostics without installing a debug build. Turn it off after collecting logs.</span></label><input id="ct_debug_logging_toggle" class="ct-switch" type="checkbox"></div>`;
         log.insertBefore(panel, log.firstChild);
         const checkbox = panel.querySelector('input');
         bridge.getDebugLogging().then(enabled => { checkbox.checked = Boolean(enabled); }).catch(()=>{});

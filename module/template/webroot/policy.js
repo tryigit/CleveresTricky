@@ -249,7 +249,7 @@ function removeLegacySurfaces() {
       if (/^System Control$/i.test(title)) panel.remove();
     });
   }
-  ['spoof_enabled','global_mode','rkp_passthrough','drm_passthrough'].forEach(id => {
+  ['spoof_enabled','spoof_build_identity','random_on_boot','spoof_region_cn','telephony','global_mode','rkp_passthrough','drm_passthrough'].forEach(id => {
     const node = document.getElementById(id);
     if (!node) return;
     const panel = node.closest('.panel');
@@ -257,6 +257,13 @@ function removeLegacySurfaces() {
     if (panel && /System Control|DRM Passthrough/i.test(panel.textContent || '')) panel.remove();
     else if (row) row.remove();
   });
+  const spoof = document.getElementById('spoof');
+  if (spoof) {
+    [...spoof.querySelectorAll('.panel')].forEach(panel => {
+      const title = (panel.querySelector('h3')?.textContent || '').trim();
+      if (/^Identity Controls$/i.test(title)) panel.remove();
+    });
+  }
   const stale = document.getElementById('ct_resources_controls');
   if (stale) stale.remove();
 }
@@ -398,16 +405,18 @@ function installFeatureCenter() {
     const panel = document.createElement('div');
     panel.id = 'ct_dashboard_controls';
     panel.className = 'panel';
-    panel.innerHTML = '<h3>Feature Center</h3><div class="scope-note">Main controls are here. Parent features reveal only the settings that belong to them.</div><div id="keyboxStatus" class="ct-keybox-summary">Loading keybox state...</div><div class="ct-control-host"></div>';
+    panel.innerHTML = '<h3>Feature Center</h3><div class="scope-note">Main controls are here. Parent features reveal only the settings that belong to them.</div><div class="ct-control-host"></div>';
     const corePanel = [...dashboard.querySelectorAll('.panel')].find(item => /^Core Protection$/i.test((item.querySelector('h3')?.textContent || '').trim()));
     if (corePanel && corePanel.nextSibling) dashboard.insertBefore(panel,corePanel.nextSibling);
     else dashboard.prepend(panel);
-  } else if (!document.getElementById('keyboxStatus')) {
-    const status = document.createElement('div');
-    status.id = 'keyboxStatus';
-    status.className = 'ct-keybox-summary';
-    status.textContent = 'Loading keybox state...';
-    document.getElementById('ct_dashboard_controls').querySelector('.ct-control-host')?.before(status);
+  }
+  const keysPage = document.getElementById('keys');
+  if (keysPage && !document.getElementById('keyboxStatus')) {
+    const statusPanel = document.createElement('div');
+    statusPanel.id = 'ct_keybox_status_panel';
+    statusPanel.className = 'panel';
+    statusPanel.innerHTML = '<h3>Keybox Status</h3><div id="keyboxStatus" class="ct-keybox-summary" aria-live="polite">Loading keybox state...</div>';
+    keysPage.prepend(statusPanel);
   }
 }
 

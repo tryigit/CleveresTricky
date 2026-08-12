@@ -471,11 +471,13 @@
     function installCommunityCard() {
         const document = global.document;
         if (!document || !document.body || document.getElementById('cleveresCommunityCard')) return;
+        const dashboard = document.getElementById('dashboard');
+        if (!dashboard) return;
 
         const card = document.createElement('section');
         card.id = 'cleveresCommunityCard';
         card.setAttribute('aria-label', 'CleveresTech Telegram community');
-        card.style.cssText = 'box-sizing:border-box;max-width:800px;margin:0 auto;padding:0 20px max(28px,env(safe-area-inset-bottom));text-align:center;';
+        card.style.cssText = 'box-sizing:border-box;width:100%;margin:20px 0 24px;padding:0;text-align:center;';
 
         const panel = document.createElement('div');
         panel.style.cssText = 'background:#161616;border:1px solid #333;border-radius:12px;padding:20px;box-shadow:0 4px 6px rgba(0,0,0,0.1);';
@@ -499,7 +501,7 @@
         panel.appendChild(copy);
         panel.appendChild(link);
         card.appendChild(panel);
-        document.body.appendChild(card);
+        dashboard.appendChild(card);
     }
 
     function scheduleCommunityCard() {
@@ -517,7 +519,7 @@
         if (!document || !document.head || !document.createElement || document.getElementById('ct_ux_script')) return;
         const script = document.createElement('script');
         script.id = 'ct_ux_script';
-        script.src = 'ux.js?revision=4';
+        script.src = 'ux.js?revision=5';
         script.defer = true;
         document.head.appendChild(script);
     }
@@ -533,7 +535,7 @@
 
     scheduleCommunityCard();
     global.CleveresBridge = Object.freeze({
-        revision: 6,
+        revision: 7,
         fetch: nativeFetch,
         exportBlob,
         exportResponse,

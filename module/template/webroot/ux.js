@@ -8,7 +8,7 @@
     // here so older bridge builds can continue requesting ux.js without reintroducing
     // the retired overlay layer.
     const script = document.createElement('script');
-    script.src = 'ux-base.js?revision=4';
+    script.src = 'ux-base.js?revision=5';
     script.async = false;
     (document.head || document.documentElement).appendChild(script);
 })();
