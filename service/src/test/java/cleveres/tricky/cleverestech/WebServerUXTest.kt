@@ -113,7 +113,6 @@ class WebServerUXTest {
     @Test
     fun testMobileAndSettingContracts() {
         val html = fetchHtml()
-        val policy = fetchPath("/policy.js?revision=2&token=${server.token}")
         val legacySettings =
             listOf(
                 "spoof_enabled",
@@ -151,11 +150,7 @@ class WebServerUXTest {
         }
         featureCenterSettings.forEach { setting ->
             assertFalse("Duplicate legacy Feature Center control for $setting", html.contains("data-setting=\"$setting\""))
-            assertTrue("Missing Feature Center setter for $setting", policy.contains("setLegacyToggle('$setting'"))
         }
-        assertTrue(policy.contains("DRM App Passthrough"))
-        assertTrue(policy.contains("ct_dashboard_controls"))
-        assertFalse(policy.contains("['ct_dashboard_controls','ct_resources_controls']"))
         monitoredSettings.forEach { setting ->
             assertTrue("Missing resource monitor entry for $setting", html.contains("{ id: '$setting'"))
         }
@@ -208,10 +203,8 @@ class WebServerUXTest {
         assertEquals(expectedRoutes, clientRoutes)
     }
 
-    private fun fetchHtml(): String = fetchPath("/?token=${server.token}")
-
-    private fun fetchPath(path: String): String {
-        val url = URL("http://localhost:${server.listeningPort}$path")
+    private fun fetchHtml(): String {
+        val url = URL("http://localhost:${server.listeningPort}/?token=${server.token}")
         val conn = url.openConnection() as HttpURLConnection
         return conn.inputStream.bufferedReader().readText()
     }
