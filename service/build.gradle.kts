@@ -115,6 +115,7 @@ dependencies {
     implementation(libs.annotation)
     implementation(libs.bcpkix.jdk18on)
     implementation(libs.bcprov.jdk18on)
+    implementation(libs.bcutil.jdk18on)
     implementation(libs.coroutines.android)
     testImplementation(libs.junit)
     testImplementation(project(":stub"))
