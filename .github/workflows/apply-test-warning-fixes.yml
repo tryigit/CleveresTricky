@@ -1,0 +1,27 @@
+name: Apply test warning fixes
+
+on:
+  push:
+    branches:
+      - granular-policy-state-v2
+    paths:
+      - .github/workflows/apply-test-warning-fixes.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: granular-policy-state-v2
+      - run: python .tmp/fix_test_warnings.py
+      - run: rm .tmp/fix_test_warnings.py
+      - run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add service/src/test/java/cleveres/tricky/cleverestech .tmp/fix_test_warnings.py
+          git commit -m "test: remove first party warning sources"
+          git push origin HEAD:granular-policy-state-v2
