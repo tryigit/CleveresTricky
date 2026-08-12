@@ -341,7 +341,10 @@ object PolicyState {
     }
 
     fun validateStateJson(text: String, validateReferences: Boolean): Result<Unit> =
-        runCatching { parseStateJson(text, validateReferences = validateReferences) }.map { Unit }
+        runCatching { parseStateJson(text, validateReferences = validateReferences) }.fold(
+            onSuccess = { Result.success(Unit) },
+            onFailure = { Result.failure(it) },
+        )
 
     private fun parseFeatureSet(value: JSONObject): FeatureSet {
         requireOnlyKeys(value, Feature.entries.mapTo(linkedSetOf()) { it.jsonName })

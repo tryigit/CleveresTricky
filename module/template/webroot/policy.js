@@ -18,7 +18,9 @@
         ['automatic', 'Automatic'],
         ['no', 'Omit']
     ];
+    const securityPatchDescription = 'Controls system, vendor and boot patch authorization resolution independently. Disabled preserves captured genuine patch authorizations.';
     const profileFeatureKeys = featureKeys.map(item => item[0]).concat(['securityPatch']);
+    let infoCardSequence = 0;
     let policyState = null;
     let packages = [];
     let selectedProfile = null;
@@ -119,6 +121,8 @@
             list.id = 'policy_package_list';
             document.body.appendChild(list);
         }
+        const securityPatchToggle = document.getElementById('policy_securityPatch');
+        securityPatchToggle.parentNode.insertBefore(makeFeatureInfo('Security Patch Override', securityPatchDescription), securityPatchToggle);
         const oldControls = document.getElementById('spoof_enabled');
         if (oldControls) oldControls.closest('.panel').style.display = 'none';
         const identity = document.getElementById('spoof');
@@ -133,6 +137,68 @@
         runtimePanel.id = 'policy_runtime_panel';
         runtimePanel.innerHTML = '<h3>Runtime Components</h3><div id="policy_runtime_state"></div>';
         dashboard.appendChild(runtimePanel);
+    }
+
+    function closeFeatureInfoCards(except) {
+        document.querySelectorAll('.policy-info-card').forEach(card => {
+            if (card === except) return;
+            card.hidden = true;
+            const button = card.parentElement.querySelector('.policy-info-button');
+            if (button) button.setAttribute('aria-expanded', 'false');
+        });
+    }
+
+    function makeFeatureInfo(title, description) {
+        const wrap = document.createElement('span');
+        wrap.style.position = 'relative';
+        wrap.style.flex = '0 0 auto';
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'policy-info-button';
+        button.textContent = 'i';
+        button.setAttribute('aria-label', `${title} information`);
+        button.setAttribute('aria-expanded', 'false');
+        button.style.width = '30px';
+        button.style.height = '30px';
+        button.style.padding = '0';
+        button.style.borderRadius = '50%';
+        button.style.fontWeight = '700';
+        const card = document.createElement('span');
+        card.className = 'policy-info-card';
+        card.id = `policy_info_${++infoCardSequence}`;
+        card.hidden = true;
+        card.setAttribute('role', 'note');
+        card.style.position = 'absolute';
+        card.style.right = '0';
+        card.style.top = '36px';
+        card.style.width = 'min(300px, calc(100vw - 48px))';
+        card.style.padding = '12px';
+        card.style.border = '1px solid rgba(255,255,255,.16)';
+        card.style.borderRadius = '10px';
+        card.style.background = '#1d1f24';
+        card.style.boxShadow = '0 8px 28px rgba(0,0,0,.35)';
+        card.style.zIndex = '40';
+        const heading = document.createElement('strong');
+        heading.style.display = 'block';
+        heading.style.marginBottom = '6px';
+        heading.textContent = title;
+        const body = document.createElement('span');
+        body.className = 'res-desc';
+        body.style.display = 'block';
+        body.textContent = description;
+        card.append(heading, body);
+        button.setAttribute('aria-controls', card.id);
+        button.onclick = event => {
+            event.preventDefault();
+            event.stopPropagation();
+            const opening = card.hidden;
+            closeFeatureInfoCards(card);
+            card.hidden = !opening;
+            button.setAttribute('aria-expanded', String(opening));
+        };
+        card.onclick = event => event.stopPropagation();
+        wrap.append(button, card);
+        return wrap;
     }
 
     function renderFeatureControls() {
@@ -155,7 +221,7 @@
             input.className = 'toggle';
             input.id = `policy_feature_${key}`;
             input.checked = Boolean(policyState.features[key]);
-            row.append(label, input);
+            row.append(label, makeFeatureInfo(title, description), input);
             container.appendChild(row);
         });
     }
@@ -289,9 +355,11 @@
         profileFeatureKeys.forEach(key => {
             const row = document.createElement('div');
             row.className = 'row';
+            const metadata = key === 'securityPatch' ? ['securityPatch', 'Security Patch Override', securityPatchDescription] : featureKeys.find(item => item[0] === key);
             const label = document.createElement('label');
-            label.textContent = key.replace(/([A-Z])/g, ' $1');
-            row.append(label, profileFeatureSelect(key, profile && profile.features ? profile.features[key] : undefined));
+            label.textContent = metadata[1];
+            const info = makeFeatureInfo(metadata[1], `${metadata[2]} Inherit follows the base policy.`);
+            row.append(label, info, profileFeatureSelect(key, profile && profile.features ? profile.features[key] : undefined));
             features.appendChild(row);
         });
         const patches = document.getElementById('policy_profile_patches');
@@ -556,6 +624,10 @@
         document.getElementById('policy_profile_delete').onclick = guard(deleteProfile);
         document.getElementById('policy_profile_export').onclick = guard(exportProfiles);
         document.getElementById('policy_profile_import').onclick = () => document.getElementById('policy_profile_import_file').click();
+        document.addEventListener('click', () => closeFeatureInfoCards(null));
+        document.addEventListener('keydown', event => {
+            if (event.key === 'Escape') closeFeatureInfoCards(null);
+        });
         document.getElementById('policy_profile_import_file').onchange = guard(async () => {
             const input = document.getElementById('policy_profile_import_file');
             const file = input.files && input.files[0];
