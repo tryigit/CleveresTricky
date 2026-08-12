@@ -1,0 +1,51 @@
+name: WebUI Followup Copy Once
+
+on:
+  push:
+    branches:
+      - fix/webui-stable-followup-20260812
+
+permissions:
+  contents: write
+
+jobs:
+  copy:
+    if: ${{ !contains(github.event.head_commit.message, '[webui-followup-done]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: fix/webui-stable-followup-20260812
+          fetch-depth: 0
+
+      - name: Copy validated WebUI followup files
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin fix/webui-stable-ownership-cache-chain-20260812
+          git checkout origin/fix/webui-stable-ownership-cache-chain-20260812 -- \
+            module/template/webroot/bridge.js \
+            module/template/webroot/index.html \
+            module/template/webroot/policy.js \
+            module/webui-tests/bridge-base.test.js \
+            module/webui-tests/bridge.test.js
+          rm .github/workflows/webui-followup-copy-once.yml
+
+      - name: Validate WebUI
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check module/template/webroot/bridge.js
+          node --check module/template/webroot/policy.js
+          node --check module/template/webroot/ux.js
+          node module/webui-tests/bridge.test.js
+
+      - name: Commit followup
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add module/template/webroot/bridge.js module/template/webroot/index.html module/template/webroot/policy.js module/webui-tests/bridge-base.test.js module/webui-tests/bridge.test.js .github/workflows/webui-followup-copy-once.yml
+          git commit -m "Make WebUI ownership and cache invalidation deterministic [webui-followup-done]"
+          git push origin HEAD:fix/webui-stable-followup-20260812
