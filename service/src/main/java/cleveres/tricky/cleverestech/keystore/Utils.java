@@ -79,13 +79,22 @@ public final class Utils {
         }
     }
 
+    /**
+     * Parses only the leaf certificate from KeyMetadata. The attestation rewrite path replaces
+     * the issuer chain with the selected keybox chain, so decoding the genuine issuer chain first
+     * is unnecessary work on the latency-sensitive generateKey reply path.
+     */
+    public static X509Certificate getLeafCertificate(KeyMetadata metadata) {
+        return metadata == null ? null : toCertificate(metadata.certificate);
+    }
+
     public static Certificate[] getCertificateChain(KeyEntryResponse response) {
         return response == null ? null : getCertificateChain(response.metadata);
     }
 
     public static Certificate[] getCertificateChain(KeyMetadata metadata) {
         if (metadata == null) return null;
-        X509Certificate leaf = toCertificate(metadata.certificate);
+        X509Certificate leaf = getLeafCertificate(metadata);
         if (leaf == null) return null;
 
         List<X509Certificate> issuers =
