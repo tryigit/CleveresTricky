@@ -18,6 +18,21 @@ jobs:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
 
+      - name: Preserve legacy backup marker
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('service/src/main/java/cleveres/tricky/cleverestech/WebServer.kt')
+          text = p.read_text(encoding='utf-8')
+          marker = 'private val BACKUP_CONFIG_FILES ='
+          head, tail = text.split(marker, 1)
+          old = '                "telephony",\n                "rkp_passthrough",\n                "drm_passthrough",\n'
+          new = '                "telephony",\n                // Retained only for legacy backup compatibility.\n                "rkp_passthrough",\n                "drm_passthrough",\n'
+          if tail.count(old) != 1:
+              raise SystemExit(f'expected one legacy backup marker block, found {tail.count(old)}')
+          p.write_text(head + marker + tail.replace(old, new, 1), encoding='utf-8')
+          PY
+
       - name: Apply cleanup
         run: python .github/scripts/apply_rkp_retirement.py
 
