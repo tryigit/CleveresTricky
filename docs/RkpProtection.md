@@ -16,7 +16,7 @@ System Android user identifiers are excluded before package policy. Unknown pack
 
 RKP infrastructure callers always remain untouched. For targeted application UIDs, successful `generateKey` replies and later `getKeyEntry` certificate reads deliberately use the same certificate-compatibility path. Keeping those paths unified prevents one alias from exposing two different attestation leaf certificates.
 
-The old `rkp_passthrough` switch is retired. Older configurations and backups may still contain the marker for legacy compatibility, but it no longer gates generated-key handling and is not exposed as a runtime toggle.
+The old `rkp_passthrough` switch is retired. Older configurations and backups may still contain the marker for legacy backup compatibility, but it no longer gates generated-key handling and is not exposed as a runtime toggle.
 
 ## Profiles
 
