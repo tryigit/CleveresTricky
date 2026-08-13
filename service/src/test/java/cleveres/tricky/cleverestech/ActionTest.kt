@@ -291,13 +291,13 @@ class ActionTest {
                 "random_on_boot",
                 "spoof_region_cn",
                 "telephony",
-                "rkp_passthrough",
                 "drm_passthrough",
             )
         val removedSettings =
             listOf(
                 "tee_broken_mode",
                 "hide_sensitive_props",
+                "rkp_passthrough",
                 "rkp_bypass",
                 "spoof_props",
             )
@@ -360,11 +360,13 @@ class ActionTest {
 
             waitUntil("profile $profile to apply without removed flags") {
                 !File(configDir, "apply_profile").exists() &&
+                    !File(configDir, "rkp_passthrough").exists() &&
                     !File(configDir, "rkp_bypass").exists() &&
                     !File(configDir, "spoof_props").exists()
             }
 
             val config = getConfig()
+            assertFalse(config.has("rkp_passthrough"))
             assertFalse(config.has("rkp_bypass"))
             assertFalse(config.has("spoof_props"))
         }
