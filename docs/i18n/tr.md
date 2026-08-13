@@ -23,9 +23,11 @@ Global Mode, `target.txt` girdisi olmadan uygun application UID'lerini hedefler;
 <a id="attestation"></a>
 ## Attestation
 
-Attestation katmanı seçili uygulamalara kontrollü sertifika zinciri uyumluluğu sağlarken gerçek Android key creation ve private-key işlemlerini KeyMint/StrongBox üzerinde bırakır. Mevcut sertifika yanıtları, algoritma uygunsa doğrulanmış replacement chain alabilir; RKP generated provisioning key yanıtları tamamen gerçek Android yolunda kalabilir.
+Attestation katmanı, seçili uygulamalara kontrollü sertifika zinciri uyumluluğu sağlarken gerçek Android anahtar oluşturma ve sonraki kriptografik işlemleri korur.
 
-Aktivasyondan önce private key/certificate eşleşmesi, algoritma, chain yapısı, tarih, ambiguity ve revocation kontrol edilir. Geçersiz veya karışık havuz kısmen kabul edilmez. Sertifika değiştirme fiziksel hardware root of trust oluşturmaz, bootloader kilitlemez, firmware veya verified boot'u onarmaz ve remote verdict garanti etmez.
+RKP altyapı çağıranları her zaman Android'in gerçek provisioning yolunda kalır. Hedeflenen uygulama UID'lerinde başarılı `generateKey` yanıtları ile sonraki `getKeyEntry` sertifika okumaları aynı sertifika uyumluluk yolunu kullanır; böylece aynı alias iki farklı attestation leaf göstermez.
+
+Private key işlemi istenen güvenlik seviyesinde Android KeyMint veya StrongBox tarafından yapılmaya devam eder. Etkinleştirmeden önce key/certificate eşleşmesi, algoritma, chain yapısı, geçerlilik, ambiguity ve revocation doğrulanır. Sertifika değiştirme fiziksel hardware root of trust oluşturmaz, bootloader'ı kilitlemez veya remote verdict garanti etmez.
 
 <a id="automatic-keybox-check"></a>
 ## Automatic Keybox Check
@@ -135,9 +137,11 @@ Rust Binder parser fixed caller-owned array kullanır; descriptor cache 64 fixed
 <a id="profiles"></a>
 ## Profiles
 
-Profiles, optional settings grubunu tek validated transaction ile uygular. Daily Compatibility ve Default daha conservative targeted setup sunar; Maximum Compatibility Global Mode ile daha geniş optional identity özelliklerini test için açar; Minimal optional identity ve scheduled keybox work'ü kapatırken core Keystore/TEE/boot protection'ı korur.
+Profiller optional ayar gruplarını tek validated işlemle uygular; core boot, Keystore ve RKP altyapı koruması bunlardan bağımsız olarak aktif kalır.
 
-Version two user-defined profile, app assignment, template ref, validated keybox ref, privacy mode, independent System/Vendor/Boot patch policy, optional feature override ve uyumlu RKP/DRM choice saklayabilir. Private key content profile içine kopyalanmaz. Activation tam validation sonrası immutable snapshot yayınlar ve önceki valid state last-known-good olarak korunur.
+Daily Compatibility targeted scope ve keybox monitoring kullanır; Default muhafazakâr optional identity düzenidir; Maximum Compatibility Global Mode, build identity, identity refresh ve telephony yollarını açıp DRM passthrough'u kapatır; Minimal optional identity ve scheduled keybox kontrollerini kapatır. Bu profillerin hiçbiri RKP altyapı korumasını değiştirmez.
+
+Eski yapılandırmalar retired `rkp_passthrough` işaretini taşıyabilir; runtime generated-key davranışı artık bu değere bağlı değildir. Version two profilleri app assignment, template, doğrulanmış keybox, privacy, patch ve optional identity/DRM seçimlerini saklayabilir; legacy RKP alanı yalnız migration uyumluluğu için korunabilir ve WebUI'da canlı seçenek değildir.
 
 <a id="provider-coexistence"></a>
 ## Provider Coexistence
@@ -163,9 +167,13 @@ Signed content zorunlu yapılabilir. Signature, XML/CBOX formatı, size, keybox,
 <a id="rkp-protection"></a>
 ## RKP Protection
 
-RKP Protection Android provisioning infrastructure ve generated key response'larını genuine platform path üzerinde tutar. `com.android.rkpdapp`, `com.google.android.rkpdapp` ve legacy remote provisioner paketleri substitution scope dışında tutulur; system UID ve unknown package resolution da fail closed davranır.
+Remote Key Provisioning koruması Android provisioning altyapısını gerçek platform yolunda tutar. Android/Google RKP ve eski Remote Provisioner paketleri substitution scope dışında kalır; sistem UID'leri ve çözülemeyen package durumları da fail closed davranır.
 
-RKP Passthrough açıkken generated provisioning key response KeyMint'ten caller'a değişmeden gider; mevcut key certificate handling hedefli uygulamalar için ayrı devam edebilir. CleveresTricky RKP server simüle etmez veya provisioning credential üretmez.
+RKP altyapı caller'ları hiçbir zaman değiştirilmez. Hedeflenen uygulama UID'lerinde `generateKey` ve sonraki `getKeyEntry` sertifika yanıtları aynı compatibility yolunu kullanır; bu, tek alias'ın iki farklı attestation leaf göstermesini önler.
+
+Eski `rkp_passthrough` switch'i retired durumdadır. Eski config/backup içinde işaret bulunabilir ancak generated-key davranışını artık yönetmez ve WebUI runtime toggle olarak sunmaz. Built-in profiller RKP davranışını değiştirmez; RKP altyapı koruması her zaman aktiftir.
+
+CleveresTricky bir RKP sunucusu simüle etmez, provisioning credential üretmez veya hardware provisioning root'u değiştirmez.
 
 <a id="security-model"></a>
 ## Security Model

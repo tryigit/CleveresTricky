@@ -214,8 +214,8 @@ input[type="text"], input[type="tel"], input[type="password"], input[type="searc
     <div id="status_global" style="font-weight: bold; color: var(--danger); margin-top: 5px; background: rgba(239, 68, 68, 0.1); padding: 5px; border-radius: 4px;">INACTIVE</div>
 </div>
 <div style="flex: 1; min-width: 120px; padding: 15px; border-radius: 8px; background: #1a1a1a; border: 1px solid var(--border); text-align: center;">
-    <div style="font-size: 0.8em; color: #888; text-transform: uppercase;">RKP Bypass</div>
-    <div id="status_rkp" style="font-weight: bold; color: var(--danger); margin-top: 5px; background: rgba(239, 68, 68, 0.1); padding: 5px; border-radius: 4px;">INACTIVE</div>
+    <div style="font-size: 0.8em; color: #888; text-transform: uppercase;">RKP Protection</div>
+    <div id="status_rkp" style="font-weight: bold; color: var(--success); margin-top: 5px; background: rgba(74, 222, 128, 0.1); padding: 5px; border-radius: 4px;">ALWAYS ON</div>
 </div>
 <div style="flex: 1; min-width: 120px; padding: 15px; border-radius: 8px; background: #1a1a1a; border: 1px solid var(--border); text-align: center;">
     <div style="font-size: 0.8em; color: #888; text-transform: uppercase;">DRM Fix</div>
@@ -1190,7 +1190,7 @@ try {
 }
         }
 
-        const WEB_UI_SETTINGS = ['spoof_enabled', 'spoof_build_identity', 'global_mode', 'auto_keybox_check', 'random_on_boot', 'spoof_region_cn', 'telephony', 'rkp_passthrough', 'drm_passthrough'];
+        const WEB_UI_SETTINGS = ['spoof_enabled', 'spoof_build_identity', 'global_mode', 'auto_keybox_check', 'random_on_boot', 'spoof_region_cn', 'telephony', 'drm_passthrough'];
 
         function updateEngineStatus(enabled) {
 const status = document.getElementById('status_engine');
@@ -1202,14 +1202,6 @@ status.style.background = enabled ? 'rgba(74, 222, 128, 0.1)' : 'rgba(255, 255, 
 
         function updateGlobalStatus(enabled) {
 const status = document.getElementById('status_global');
-if (!status) return;
-status.innerText = enabled ? 'ACTIVE' : 'INACTIVE';
-status.style.color = enabled ? 'var(--success)' : 'var(--danger)';
-status.style.background = enabled ? 'rgba(74, 222, 128, 0.1)' : 'rgba(239, 68, 68, 0.1)';
-        }
-
-        function updateRkpStatus(enabled) {
-const status = document.getElementById('status_rkp');
 if (!status) return;
 status.innerText = enabled ? 'ACTIVE' : 'INACTIVE';
 status.style.color = enabled ? 'var(--success)' : 'var(--danger)';
@@ -1232,7 +1224,6 @@ document.querySelectorAll('[data-setting="' + setting + '"]').forEach(control =>
 });
 if (setting === 'spoof_enabled') updateEngineStatus(Boolean(enabled));
 if (setting === 'global_mode') updateGlobalStatus(Boolean(enabled));
-if (setting === 'rkp_passthrough') updateRkpStatus(Boolean(enabled));
 if (setting === 'drm_passthrough') updateDrmStatus(Boolean(enabled));
         }
 
@@ -1775,10 +1766,10 @@ try {
         }
 
         function determineActiveProfile(data) {
-const isMaximum = data.spoof_enabled && data.spoof_build_identity && data.global_mode && !data.tee_broken_mode && data.random_on_boot && data.hide_sensitive_props && data.auto_keybox_check && data.telephony && !data.spoof_region_cn && !data.rkp_passthrough && !data.drm_passthrough;
-const isDaily = data.spoof_enabled && !data.spoof_build_identity && !data.global_mode && !data.tee_broken_mode && !data.random_on_boot && data.hide_sensitive_props && data.auto_keybox_check && !data.telephony && !data.spoof_region_cn && data.rkp_passthrough && data.drm_passthrough;
-const isMinimal = !data.spoof_enabled && !data.spoof_build_identity && !data.global_mode && data.tee_broken_mode && !data.random_on_boot && !data.hide_sensitive_props && !data.auto_keybox_check && !data.telephony && !data.spoof_region_cn && data.rkp_passthrough && data.drm_passthrough;
-const isDefault = data.spoof_enabled && !data.spoof_build_identity && !data.global_mode && !data.tee_broken_mode && !data.random_on_boot && !data.hide_sensitive_props && data.auto_keybox_check && !data.telephony && !data.spoof_region_cn && data.rkp_passthrough && data.drm_passthrough;
+const isMaximum = data.spoof_enabled && data.spoof_build_identity && data.global_mode && !data.tee_broken_mode && data.random_on_boot && data.hide_sensitive_props && data.auto_keybox_check && data.telephony && !data.spoof_region_cn && !data.drm_passthrough;
+const isDaily = data.spoof_enabled && !data.spoof_build_identity && !data.global_mode && !data.tee_broken_mode && !data.random_on_boot && data.hide_sensitive_props && data.auto_keybox_check && !data.telephony && !data.spoof_region_cn && data.drm_passthrough;
+const isMinimal = !data.spoof_enabled && !data.spoof_build_identity && !data.global_mode && data.tee_broken_mode && !data.random_on_boot && !data.hide_sensitive_props && !data.auto_keybox_check && !data.telephony && !data.spoof_region_cn && data.drm_passthrough;
+const isDefault = data.spoof_enabled && !data.spoof_build_identity && !data.global_mode && !data.tee_broken_mode && !data.random_on_boot && !data.hide_sensitive_props && data.auto_keybox_check && !data.telephony && !data.spoof_region_cn && data.drm_passthrough;
 
 const select = document.getElementById('profileSelect');
 if (!select) return;
@@ -2081,7 +2072,7 @@ const features = [
     { id: 'auto_keybox_check', name: 'Automatic Keybox Check', activity: data.auto_keybox_check ? 'Scheduled background check' : 'Worker stopped', scope: 'Authorized key material', desc: 'Core keybox maintenance; independent from Identity Engine.' },
     { id: 'random_on_boot', name: 'Identity Refresh on Boot', activity: 'Boot only', scope: 'Persisted identity fields', desc: 'Refreshes configured attestation and app-visible telephony identifiers.' },
     { id: 'telephony', name: 'Telephony Interception', activity: 'Matching Binder calls only', scope: 'Permission-approved app APIs', desc: 'Overrides configured dual-SIM values without changing modem or carrier identity.' },
-    { id: 'rkp_passthrough', name: 'RKP Passthrough', activity: 'Generated-key fast path', scope: 'KeyMint generated-key replies', desc: 'RKP infrastructure UIDs are always protected; this also preserves generated-key responses.' },
+    { id: 'rkp_protection', name: 'RKP Protection', status: 'Always on', activity: 'Protected infrastructure + unified key path', scope: 'RKP callers and targeted KeyMint replies', desc: 'RKP infrastructure UIDs always stay on Android. Targeted generateKey and getKeyEntry responses share one certificate-compatibility path to avoid split attestation leaves.' },
     { id: 'drm_passthrough', name: 'DRM App Passthrough', activity: 'Bounded UID lookup', scope: 'drm_packages.txt rules', desc: 'Leaves configured playback and DRM packages on the original keystore path.' },
     { id: 'spoof_build_identity', name: 'Template Build Identity', activity: 'Boot only', scope: 'Fingerprint and Build fields', desc: 'Persists the selected template before Zygote; requires reboot.' },
     { id: 'spoof_region_cn', name: 'Region Property View', activity: 'Boot only', scope: 'Bounded userspace region properties', desc: 'Applies the optional CN region view before Zygote; requires reboot.' },
@@ -2098,7 +2089,9 @@ features.forEach(f => {
         const isChecked = data[f.id] ? 'checked' : '';
         statusHtml = '<input type="checkbox" class="ct-switch" id="res_toggle_' + f.id + '" data-setting="' + f.id + '" aria-label="Toggle ' + escapeHtml(f.name) + '" ' + isChecked + ' onchange="toggle(\'' + f.id + '\', this)">';
     } else {
-        statusHtml = '<span style="color:#888;">Info Only</span>';
+        const infoStatus = f.status || 'Info Only';
+        const infoColor = f.status === 'Always on' ? 'var(--success)' : '#888';
+        statusHtml = '<span style="color:' + infoColor + ';">' + escapeHtml(infoStatus) + '</span>';
     }
 
     tr.innerHTML =

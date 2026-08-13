@@ -25,9 +25,11 @@ Global Mode لا يحتاج target entry لكنه يستبعد system identity �
 <a id="attestation"></a>
 ## Attestation
 
-يوفر certificate-chain compatibility مضبوطا مع إبقاء key creation وprivate-key operations الحقيقية داخل Android KeyMint/StrongBox. يمكن لردود certificates القائمة استخدام verified replacement chain بينما تبقى RKP provisioning keys على genuine path بالكامل.
+توفر طبقة attestation توافقاً مضبوطاً لسلاسل الشهادات للتطبيقات المحددة مع إبقاء إنشاء المفاتيح الحقيقي في Android والعمليات التشفيرية اللاحقة كما هي.
 
-قبل التفعيل يتم فحص key/certificate match وalgorithm وchain وdates وambiguity وrevocation. Broken mixed pool يرفض بالكامل. لا تنشئ الميزة hardware root of trust ولا تصلح firmware/verified boot ولا تعيد قفل bootloader ولا تضمن remote verdict.
+تبقى نداءات بنية RKP دائماً على مسار provisioning الحقيقي في Android. وبالنسبة إلى UID التطبيقات المستهدفة، تستخدم ردود `generateKey` الناجحة وقراءات الشهادة اللاحقة عبر `getKeyEntry` مسار توافق واحداً كي لا يعرض alias واحد شهادتي attestation leaf مختلفتين.
+
+تظل عملية المفتاح الخاص من تنفيذ Android KeyMint أو StrongBox. وقبل تفعيل المادة يتم التحقق من تطابق المفتاح والشهادة والخوارزمية والسلسلة والصلاحية والالتباس وحالة revocation. استبدال الشهادة لا ينشئ hardware root of trust ولا يقفل bootloader فعلياً ولا يضمن remote verdict.
 
 <a id="automatic-keybox-check"></a>
 ## Automatic Keybox Check
@@ -137,9 +139,11 @@ Binder parser يستخدم fixed arrays وdescriptor cache من 64 slot. Control
 <a id="profiles"></a>
 ## Profiles
 
-تطبق optional settings في validated transaction واحدة. Daily/Default محافظان، Maximum يوسع scope للاختبار، Minimal يوقف معظم optional identity/scheduled keybox مع إبقاء core Keystore/TEE/boot.
+تطبق Profiles مجموعة من الإعدادات الاختيارية في معاملة واحدة متحقق منها؛ وتظل حماية boot وKeystore وبنية RKP الأساسية فعالة بشكل مستقل.
 
-Profile v2 يخزن assignments وtemplate/keybox refs وprivacy وindependent patches وfeature overrides وRKP/DRM دون private key. لا تنشر snapshot إلا بعد full validation مع حفظ last-known-good.
+يستخدم Daily Compatibility نطاقاً مستهدفاً ومراقبة keybox؛ وDefault إعداد محافظ؛ ويشغل Maximum Compatibility ‏Global Mode وbuild identity وidentity refresh وtelephony مع تعطيل DRM passthrough؛ بينما يعطل Minimal الهوية الاختيارية وفحوص keybox المجدولة. لا يغير أي preset حماية بنية RKP.
+
+قد تبقى علامة `rkp_passthrough` المتقاعدة في الإعدادات القديمة، لكن سلوك generated-key لم يعد يعتمد عليها. تستطيع Profiles version two حفظ تعيينات التطبيقات وtemplate وkeybox متحقق منه وprivacy وpatch وخيارات identity/DRM؛ أما حقل RKP القديم فيبقى فقط لتوافق الترحيل وليس خياراً حياً في WebUI.
 
 <a id="provider-coexistence"></a>
 ## Provider Coexistence
@@ -165,9 +169,13 @@ Automatic Build Identity يكتشف fingerprint/property providers أخرى مث
 <a id="rkp-protection"></a>
 ## RKP Protection
 
-يبقي Android provisioning وgenerated-key response على genuine path. `rkpdapp` وlegacy remote provisioner وsystem UID محمية، وunknown package fail closed.
+تحافظ حماية Remote Key Provisioning على بنية provisioning في Android ضمن المسار الحقيقي للمنصة. تبقى حزم RKP الخاصة بـ Android/Google وحزم Remote Provisioner القديمة خارج نطاق الاستبدال، كما تفشل UID النظام وحالات تعذر حل الحزمة بوضع fail closed.
 
-RKP Passthrough يبقي generated provisioning key دون تغيير من KeyMint إلى caller. الموديول لا يحاكي RKP server ولا يصنع credentials.
+لا يتم تعديل نداءات بنية RKP أبداً. وبالنسبة إلى UID التطبيقات المستهدفة، تستخدم ردود `generateKey` وقراءات `getKeyEntry` اللاحقة مسار توافق شهادات موحداً لمنع alias واحد من إظهار attestation leaf مختلفتين.
+
+تم تقاعد المفتاح القديم `rkp_passthrough`. يمكن أن تبقى العلامة في config أو backup قديم، لكنها لا تتحكم بعد الآن في generated-key ولا تظهر كـ runtime toggle في WebUI. لا تغير Profiles المدمجة سلوك RKP؛ فحماية البنية فعالة دائماً.
+
+لا يحاكي CleveresTricky خادم RKP ولا ينشئ provisioning credentials ولا يغير hardware provisioning root.
 
 <a id="security-model"></a>
 ## Security Model

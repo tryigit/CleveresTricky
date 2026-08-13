@@ -26,7 +26,7 @@ const IMPACTS = {
   'Automatic Keybox Check': 'Estimated impact: CPU/network low during scheduled verification; RAM low and temporary.',
   'Identity Refresh on Boot': 'Estimated impact: CPU low at boot only; RAM negligible after initialization.',
   'Telephony Interception': 'Estimated impact: CPU low per matching Binder call; RAM low.',
-  'RKP Passthrough': 'Estimated impact: CPU negligible on protected infrastructure paths; RAM negligible.',
+  'RKP Protection': 'Estimated impact: CPU negligible on protected infrastructure paths; RAM negligible.',
   'DRM App Passthrough': 'Estimated impact: CPU low per matching package lookup; RAM low and bounded.',
   'Template Build Identity': 'Estimated impact: CPU low at boot only; RAM negligible after properties are prepared.',
   'Region Property View': 'Estimated impact: CPU low at boot only; RAM negligible.',

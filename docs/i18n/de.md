@@ -23,9 +23,11 @@ Global Mode benötigt keinen Target-Eintrag, schließt Systemidentitäten und ge
 <a id="attestation"></a>
 ## Attestation
 
-Bietet kontrollierte Zertifikatskettenkompatibilität, während echte Key-Erzeugung und Private-Key-Operationen bei Android KeyMint/StrongBox bleiben. Bestehende Zertifikatantworten können eine verifizierte Ersatzkette erhalten, RKP Provisioning Keys können vollständig genuine bleiben.
+Die Attestation-Schicht bietet ausgewählten Apps kontrollierte Zertifikatsketten-Kompatibilität, während echte Android-Schlüsselerzeugung und spätere kryptografische Operationen erhalten bleiben.
 
-Vor Aktivierung werden Key/Certificate-Match, Algorithmus, Chain, Gültigkeit, Ambiguität und Revocation geprüft. Ein fehlerhafter gemischter Pool wird vollständig verworfen. Die Funktion erzeugt keinen Hardware Root of Trust und garantiert keinen Remote-Verdict.
+RKP-Infrastruktur-Caller bleiben immer auf Androids echtem Provisioning-Pfad. Für ausgewählte App-UIDs verwenden erfolgreiche `generateKey`-Antworten und spätere `getKeyEntry`-Zertifikatlesungen denselben Kompatibilitätspfad, damit ein Alias nicht unterschiedliche Attestation-Leaf-Zertifikate zeigt.
+
+Private-Key-Operationen werden weiterhin von Android KeyMint oder StrongBox ausgeführt. Vor Aktivierung werden Schlüssel/Zertifikat-Zuordnung, Algorithmus, Chain, Gültigkeit, Mehrdeutigkeit und Revocation geprüft. Zertifikatsersetzung erzeugt keinen Hardware-Root-of-Trust, sperrt keinen Bootloader physisch und garantiert kein Remote-Verdict.
 
 <a id="automatic-keybox-check"></a>
 ## Automatic Keybox Check
@@ -135,9 +137,11 @@ Binder Parser nutzt fixe Arrays und einen 64-Slot Descriptor Cache. Controller u
 <a id="profiles"></a>
 ## Profiles
 
-Wendet optionale Einstellungen als eine validierte Transaktion an. Daily Compatibility/Default sind konservativ, Maximum Compatibility erweitert Testumfang, Minimal deaktiviert optionale Identität und geplante Keybox-Arbeit, lässt aber Core Keystore/TEE/Boot aktiv.
+Profiles wenden optionale Einstellungen in einer validierten Transaktion an; Core-Boot-, Keystore- und RKP-Infrastrukturschutz bleiben unabhängig aktiv.
 
-Policy-v2-Profile speichern App Assignments, Template/Keybox References, Privacy, unabhängige Patches, Feature Overrides und RKP/DRM, aber keine Private Keys. Aktivierung erfolgt erst nach vollständiger Validierung und behält Last-known-good.
+Daily Compatibility nutzt gezielten Scope und Keybox-Monitoring; Default ist konservativ; Maximum Compatibility aktiviert Global Mode, Build Identity, Identity Refresh und Telephony und deaktiviert DRM Passthrough; Minimal deaktiviert optionale Identity- und geplante Keybox-Arbeit. Keines dieser Presets ändert den RKP-Infrastrukturschutz.
+
+Alte Konfigurationen können den stillgelegten Marker `rkp_passthrough` enthalten, aber Generated-Key-Verhalten hängt nicht mehr davon ab. Version-two-Profile können App-Zuordnung, Template, validierte Keybox, Privacy, Patch und optionale Identity/DRM-Wahlen speichern; das alte RKP-Feld bleibt nur für Migration kompatibel und ist keine Live-WebUI-Option.
 
 <a id="provider-coexistence"></a>
 ## Provider Coexistence
@@ -163,9 +167,13 @@ Signaturen können verlangt werden. Vor Signature-, XML/CBOX-, Size-, Keybox-, C
 <a id="rkp-protection"></a>
 ## RKP Protection
 
-Hält Android Provisioning und Generated-Key-Responses auf echtem Plattformpfad. `rkpdapp`, Legacy Remote Provisioner und System UID sind geschützt; unbekannte Paketauflösung fail closed.
+Remote-Key-Provisioning-Schutz hält Androids Provisioning-Infrastruktur auf dem echten Plattformpfad. Android/Google-RKP- und alte Remote-Provisioner-Pakete liegen immer außerhalb der Zertifikatsersetzung; System-UIDs und unbekannte Paketauflösung verhalten sich fail closed.
 
-RKP Passthrough lässt Generated Provisioning Keys unverändert von KeyMint zum Caller. CleveresTricky simuliert keinen RKP-Server und erzeugt keine Provisioning Credentials.
+RKP-Infrastruktur-Caller werden nie verändert. Für Ziel-App-UIDs verwenden `generateKey` und spätere `getKeyEntry`-Zertifikatantworten einen einheitlichen Kompatibilitätspfad, damit ein Alias nicht zwei verschiedene Attestation-Leafs zeigt.
+
+Der alte Schalter `rkp_passthrough` ist stillgelegt. Der Marker darf in alten Konfigurationen oder Backups verbleiben, steuert aber Generated-Key-Verhalten nicht mehr und wird nicht als WebUI-Runtime-Toggle angeboten. Eingebaute Profiles ändern RKP nicht; der Infrastrukturschutz ist immer aktiv.
+
+CleveresTricky simuliert keinen RKP-Server, erzeugt keine Provisioning-Credentials und ändert keinen Hardware-Provisioning-Root.
 
 <a id="security-model"></a>
 ## Security Model

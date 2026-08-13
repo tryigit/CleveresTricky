@@ -1937,7 +1937,6 @@ class WebServer(
                 "random_on_boot",
                 "spoof_region_cn",
                 "telephony",
-                "rkp_passthrough",
                 "drm_passthrough",
             )
         private val EDITABLE_CONFIG_FILES =
@@ -1971,6 +1970,7 @@ class WebServer(
                 "hide_sensitive_props",
                 "spoof_region_cn",
                 "telephony",
+                // Retained only for legacy backup compatibility.
                 "rkp_passthrough",
                 "drm_passthrough",
                 "drm_packages.txt",

@@ -23,9 +23,11 @@ Global Mode tidak memerlukan target entry namun tetap mengecualikan system ident
 <a id="attestation"></a>
 ## Attestation
 
-Memberikan compatibility certificate chain terkontrol sementara key creation dan private-key operation asli tetap dilakukan Android KeyMint/StrongBox. Certificate response yang ada dapat menerima verified replacement chain dan RKP provisioning key dapat tetap sepenuhnya genuine.
+Lapisan attestation memberikan kompatibilitas rantai sertifikat terkontrol untuk aplikasi terpilih sambil mempertahankan pembuatan kunci Android asli dan operasi kriptografi berikutnya.
 
-Sebelum aktivasi diperiksa key/certificate match, algorithm, chain, dates, ambiguity dan revocation. Pool campuran invalid ditolak penuh. Fitur ini tidak membuat hardware root of trust, memperbaiki firmware/verified boot, relock bootloader atau menjamin remote verdict.
+Caller infrastruktur RKP selalu tetap di jalur provisioning Android asli. Untuk UID aplikasi target, respons `generateKey` yang berhasil dan pembacaan sertifikat `getKeyEntry` berikutnya memakai satu jalur kompatibilitas agar satu alias tidak menampilkan attestation leaf yang berbeda.
+
+Operasi private key tetap dilakukan Android KeyMint atau StrongBox. Sebelum material aktif, kecocokan key/certificate, algoritma, chain, masa berlaku, ambiguity, dan revocation diperiksa. Substitusi sertifikat tidak menciptakan hardware root of trust, mengunci bootloader secara fisik, atau menjamin remote verdict.
 
 <a id="automatic-keybox-check"></a>
 ## Automatic Keybox Check
@@ -135,9 +137,11 @@ Binder parser memakai fixed arrays dan descriptor cache 64 slot. Controller/cach
 <a id="profiles"></a>
 ## Profiles
 
-Menerapkan optional settings dalam satu validated transaction. Daily/Default konservatif, Maximum memperluas scope untuk testing, Minimal mematikan banyak optional identity/scheduled keybox sambil mempertahankan core Keystore/TEE/boot.
+Profiles menerapkan kelompok pengaturan opsional dalam satu transaksi tervalidasi; perlindungan inti boot, Keystore, dan infrastruktur RKP tetap aktif secara independen.
 
-Profile v2 menyimpan assignments, template/keybox references, privacy, independent patches, feature overrides dan RKP/DRM tanpa private key. Snapshot hanya terbit setelah full validation dan last-known-good dipertahankan.
+Daily Compatibility memakai targeted scope dan keybox monitoring; Default adalah konfigurasi konservatif; Maximum Compatibility mengaktifkan Global Mode, build identity, identity refresh, dan telephony lalu mematikan DRM passthrough; Minimal mematikan identity opsional dan pemeriksaan keybox terjadwal. Tidak satu pun preset mengubah perlindungan infrastruktur RKP.
+
+Konfigurasi lama dapat tetap memiliki marker `rkp_passthrough` yang sudah retired, tetapi perilaku generated-key tidak lagi bergantung padanya. Profile version two dapat menyimpan assignment aplikasi, template, keybox tervalidasi, privacy, patch, serta pilihan identity/DRM; field RKP lama hanya dipertahankan untuk kompatibilitas migrasi dan bukan opsi WebUI aktif.
 
 <a id="provider-coexistence"></a>
 ## Provider Coexistence
@@ -163,9 +167,13 @@ Signature dapat diwajibkan. Sebelum signature, XML/CBOX, size, keybox, certifica
 <a id="rkp-protection"></a>
 ## RKP Protection
 
-Menjaga Android provisioning dan generated-key response di genuine path. `rkpdapp`, legacy remote provisioner dan system UID protected; unknown package fail closed.
+Perlindungan Remote Key Provisioning menjaga infrastruktur provisioning Android pada jalur platform asli. Paket RKP Android/Google dan Remote Provisioner legacy selalu di luar scope substitusi; UID sistem dan resolusi package yang tidak diketahui juga fail closed.
 
-RKP Passthrough mempertahankan generated provisioning key dari KeyMint ke caller. CleveresTricky tidak mensimulasikan RKP server atau membuat credential.
+Caller infrastruktur RKP tidak pernah dimodifikasi. Untuk UID aplikasi target, `generateKey` dan respons sertifikat `getKeyEntry` berikutnya memakai jalur kompatibilitas terpadu sehingga satu alias tidak menghasilkan dua attestation leaf berbeda.
+
+Switch lama `rkp_passthrough` sudah retired. Marker dapat tetap ada di config atau backup lama, tetapi tidak lagi mengontrol generated-key dan tidak diekspos sebagai runtime toggle WebUI. Built-in Profiles tidak mengubah perilaku RKP; perlindungan infrastrukturnya selalu aktif.
+
+CleveresTricky tidak mensimulasikan server RKP, membuat provisioning credential, atau mengubah hardware provisioning root.
 
 <a id="security-model"></a>
 ## Security Model

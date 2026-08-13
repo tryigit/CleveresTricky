@@ -10,7 +10,7 @@ The attestation layer provides controlled certificate chain compatibility for se
 
 The service observes relevant keystore Binder transactions and resolves the real calling Android user identifier. Policy checks then decide whether the caller is targeted, protected, or assigned an application specific configuration.
 
-Existing key certificate responses can receive a verified replacement chain when an active keybox matches the required algorithm. Generated provisioning key responses can remain entirely on the genuine path through RKP protection.
+RKP infrastructure callers always remain on Android's genuine provisioning path. For targeted application UIDs, successful `generateKey` replies and later `getKeyEntry` certificate reads use one certificate-compatibility path so the same alias cannot expose different attestation leaves.
 
 The underlying private key operation is still performed by Android KeyMint or StrongBox when the device and application request that security level. The module does not replace signing, encryption, or key agreement with a software implementation.
 

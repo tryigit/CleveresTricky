@@ -23,9 +23,11 @@ Global Mode 不要求 `target.txt` 条目，但 system identity 和受保护基�
 <a id="attestation"></a>
 ## Attestation
 
-Attestation 为选定应用提供受控的证书链兼容，同时真实 Android key creation 和后续私钥运算继续由 KeyMint 或 StrongBox 完成。算法匹配时，已有 key 的 certificate response 可以获得经过验证的 replacement chain；RKP generated provisioning key 可以完整走原生路径。
+认证层为选定应用提供受控的证书链兼容，同时保留 Android 真实的密钥创建和后续密码学操作。
 
-激活前会检查 private key 与 certificate 对应关系、算法、chain、有效期、歧义和 revocation。包含坏条目的 pool 会整体拒绝。证书替换不能制造 hardware root of trust、修复 firmware 或 verified boot、重新锁定 bootloader，也不能保证远程服务 verdict。
+RKP 基础设施调用者始终保持在 Android 原生的配置路径上。对于被选中的应用 UID，成功的 `generateKey` 响应与后续 `getKeyEntry` 证书读取使用同一条证书兼容路径，避免同一 alias 暴露不同的认证叶证书。
+
+私钥操作仍由 Android KeyMint 或 StrongBox 在请求的安全级别中完成。材料启用前会验证密钥/证书匹配、算法、链结构、有效期、歧义和吊销状态。证书替换不能创建硬件信任根、重新锁定 bootloader 或保证远端判定。
 
 <a id="automatic-keybox-check"></a>
 ## Automatic Keybox Check
@@ -135,9 +137,11 @@ Rust Binder parser 使用固定数组，descriptor cache 为 64 个固定槽。D
 <a id="profiles"></a>
 ## Profiles
 
-Profiles 在一个 validated transaction 中应用一组可选设置。Daily Compatibility/Default 偏保守 targeted setup；Maximum Compatibility 用于更广测试；Minimal 关闭大多数 optional identity 和 scheduled keybox work，但不关闭核心 Keystore/TEE/boot protection。
+Profiles 以一次经过验证的事务应用一组可选设置；核心 boot、Keystore 与 RKP 基础设施保护始终独立保持启用。
 
-Version two 自定义 profile 可保存 app assignment、template/keybox reference、privacy、System/Vendor/Boot patch policies、optional feature override 与 RKP/DRM choice，但不复制 private key 内容。激活只在完整 validation 后发布 immutable snapshot，并保留 last-known-good state。
+Daily Compatibility 使用定向范围和 keybox 监控；Default 是保守的可选身份配置；Maximum Compatibility 启用 Global Mode、build identity、identity refresh 与 telephony，并关闭 DRM passthrough；Minimal 关闭可选身份和计划 keybox 检查。这些预设都不会改变 RKP 基础设施保护。
+
+旧配置可能仍包含已退役的 `rkp_passthrough` 标记，但运行时的 generated-key 行为不再依赖它。Version two profile 可保存应用分配、template、已验证 keybox、privacy、patch 以及可选 identity/DRM 设置；旧 RKP 字段仅用于迁移兼容，不再作为 WebUI 的实时选项。
 
 <a id="provider-coexistence"></a>
 ## Provider Coexistence
@@ -163,9 +167,13 @@ Remote Sources 只从明确配置的 HTTPS endpoint 获取授权 keybox material
 <a id="rkp-protection"></a>
 ## RKP Protection
 
-RKP Protection 保持 Android provisioning infrastructure 与 generated key response 走真实平台路径。`rkpdapp` 和 legacy remote provisioner 包，以及 system UID 始终排除在 substitution scope 外；未知 package resolution fail closed。
+Remote Key Provisioning 保护会让 Android provisioning 基础设施保持在真实平台路径上。Android/Google RKP 与旧 Remote Provisioner 包始终排除在证书替换范围之外；系统 UID 与无法解析包名的情况也会 fail closed。
 
-RKP Passthrough 开启时 generated provisioning key 从 KeyMint 到 caller 不被修改。CleveresTricky 不模拟 RKP server，也不制造 provisioning credential。
+RKP 基础设施调用者从不被修改。对于目标应用 UID，`generateKey` 与后续 `getKeyEntry` 证书响应使用统一的兼容路径，从而避免同一 alias 出现两个不同的 attestation leaf。
+
+旧的 `rkp_passthrough` 开关已经退役。旧配置或备份中可以继续存在该标记，但它不再控制 generated-key 行为，也不会作为 WebUI runtime toggle 暴露。内置 Profiles 不再改变 RKP 行为，RKP 基础设施保护始终开启。
+
+CleveresTricky 不模拟 RKP 服务器、不生成 provisioning credential，也不改变硬件 provisioning root。
 
 <a id="security-model"></a>
 ## Security Model

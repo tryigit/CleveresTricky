@@ -23,9 +23,11 @@ Global Mode не требует записи target, но исключает sys
 <a id="attestation"></a>
 ## Attestation
 
-Дает контролируемую замену certificate chain при сохранении реальной генерации и private-key операций в Android KeyMint/StrongBox. Existing certificate responses могут получить verified chain, а RKP provisioning keys могут полностью оставаться genuine.
+Слой attestation обеспечивает управляемую совместимость цепочек сертификатов для выбранных приложений, сохраняя настоящую генерацию ключей Android и последующие криптографические операции.
 
-До активации проверяются key/certificate match, algorithm, chain, dates, ambiguity и revocation. Смешанный invalid pool отклоняется целиком. Функция не создает hardware root of trust, не ремонтирует firmware/verified boot и не гарантирует remote verdict.
+Вызовы инфраструктуры RKP всегда остаются на штатном пути provisioning Android. Для целевых UID приложений успешные ответы `generateKey` и последующее чтение сертификатов через `getKeyEntry` используют единый путь совместимости, чтобы один alias не показывал разные attestation leaf-сертификаты.
+
+Операции с закрытым ключом по-прежнему выполняются Android KeyMint или StrongBox. Перед активацией проверяются соответствие ключа и сертификата, алгоритм, цепочка, срок действия, неоднозначность и revocation. Подмена сертификата не создаёт аппаратный root of trust, не блокирует bootloader физически и не гарантирует удалённый verdict.
 
 <a id="automatic-keybox-check"></a>
 ## Automatic Keybox Check
@@ -135,9 +137,11 @@ Binder parser использует fixed arrays и 64-slot descriptor cache. Con
 <a id="profiles"></a>
 ## Profiles
 
-Применяет optional settings единым validated transaction. Daily/Default консервативны, Maximum расширяет testing scope, Minimal отключает большую часть optional identity и scheduled keybox work, сохраняя core Keystore/TEE/boot.
+Профили применяют наборы необязательных настроек одной проверенной транзакцией; базовая защита boot, Keystore и инфраструктуры RKP остаётся активной независимо.
 
-Profile v2 хранит app assignments, template/keybox references, privacy, independent patches, feature overrides и RKP/DRM без private-key content. Snapshot публикуется только после полной validation, last-known-good сохраняется.
+Daily Compatibility использует targeted scope и мониторинг keybox; Default — консервативный режим; Maximum Compatibility включает Global Mode, build identity, identity refresh и telephony и выключает DRM passthrough; Minimal отключает необязательную identity-логику и плановые проверки keybox. Ни один preset не меняет защиту инфраструктуры RKP.
+
+Старые конфигурации могут содержать выведенный из эксплуатации маркер `rkp_passthrough`, но generated-key поведение больше от него не зависит. Профили version two могут хранить назначения приложений, template, проверенный keybox, privacy, patch и параметры identity/DRM; старое поле RKP сохраняется только для миграционной совместимости и не является активной настройкой WebUI.
 
 <a id="provider-coexistence"></a>
 ## Provider Coexistence
@@ -163,9 +167,13 @@ Automatic Build Identity обнаруживает другие fingerprint/prope
 <a id="rkp-protection"></a>
 ## RKP Protection
 
-Сохраняет Android provisioning и generated-key responses на genuine path. `rkpdapp`, legacy remote provisioner и system UID защищены, unknown package fail closed.
+Защита Remote Key Provisioning оставляет инфраструктуру provisioning Android на штатном платформенном пути. Пакеты RKP Android/Google и legacy Remote Provisioner всегда исключены из области подмены; системные UID и неизвестное разрешение пакета работают fail closed.
 
-RKP Passthrough оставляет generated provisioning key неизменным от KeyMint до caller. Модуль не симулирует RKP server и не создает credentials.
+Вызовы инфраструктуры RKP никогда не изменяются. Для целевых UID приложений `generateKey` и последующие ответы `getKeyEntry` используют единый путь совместимости сертификатов, что не позволяет одному alias показывать два разных attestation leaf.
+
+Старый переключатель `rkp_passthrough` выведен из эксплуатации. Маркер может оставаться в старых конфигурациях и backup, но больше не управляет generated-key и не показывается как runtime toggle WebUI. Встроенные Profiles не меняют RKP: защита инфраструктуры всегда включена.
+
+CleveresTricky не эмулирует RKP-сервер, не создаёт provisioning credentials и не меняет аппаратный provisioning root.
 
 <a id="security-model"></a>
 ## Security Model

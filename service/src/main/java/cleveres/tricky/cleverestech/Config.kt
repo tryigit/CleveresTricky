@@ -157,9 +157,9 @@ object Config {
     var isTelephonyEnabled = false
 
     /**
-     * Keeps generated-key responses on Android's original KeyMint/RKP path.
-     * Existing-key certificate substitution remains available through
-     * [KeystoreInterceptor] for explicitly selected UIDs.
+     * Legacy compatibility marker retained for older backups and configurations.
+     * RKP infrastructure protection is always active and generated-key handling
+     * no longer branches on this value.
      */
     @Volatile
     var isRkpPassthroughEnabled = false
@@ -617,7 +617,7 @@ object Config {
 
     private fun updateRkpPassthrough(f: File?) {
         isRkpPassthroughEnabled = isRegularFlagFile(f)
-        Logger.i("RKP passthrough is ${if (isRkpPassthroughEnabled) "enabled" else "disabled"}")
+        Logger.i("Legacy RKP passthrough marker is ${if (isRkpPassthroughEnabled) "present" else "absent"}; RKP protection is always active")
     }
 
     private fun updateDrmPassthrough(f: File?) {
@@ -1894,7 +1894,6 @@ object Config {
                     TEE_BROKEN_MODE_FILE,
                     BootLogic.FILE_HIDE_PROPS,
                     BootLogic.FILE_SPOOF_CN,
-                    RKP_PASSTHROUGH_FILE,
                     DRM_PASSTHROUGH_FILE,
                 )
                 SecureFile.touch(File(root, RANDOM_ON_BOOT_FILE), 384)
@@ -1915,7 +1914,6 @@ object Config {
                 )
                 SecureFile.touch(File(root, SPOOF_BUILD_VARS_FILE), 384)
                 SecureFile.touch(File(root, AUTO_KEYBOX_CHECK_FILE), 384)
-                SecureFile.touch(File(root, RKP_PASSTHROUGH_FILE), 384)
                 SecureFile.touch(File(root, DRM_PASSTHROUGH_FILE), 384)
             }
             "minimal" -> {
@@ -1930,7 +1928,6 @@ object Config {
                     AUTO_KEYBOX_CHECK_FILE,
                     TELEPHONY_FILE,
                 )
-                SecureFile.touch(File(root, RKP_PASSTHROUGH_FILE), 384)
                 SecureFile.touch(File(root, DRM_PASSTHROUGH_FILE), 384)
             }
             "default" -> {
@@ -1945,7 +1942,6 @@ object Config {
                     TELEPHONY_FILE,
                 )
                 SecureFile.touch(File(root, AUTO_KEYBOX_CHECK_FILE), 384)
-                SecureFile.touch(File(root, RKP_PASSTHROUGH_FILE), 384)
                 SecureFile.touch(File(root, DRM_PASSTHROUGH_FILE), 384)
             }
         }

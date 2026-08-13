@@ -23,9 +23,11 @@ Global Mode target entry के बिना eligible UID चुनता है
 <a id="attestation"></a>
 ## Attestation
 
-Selected apps के लिए controlled certificate-chain compatibility देता है जबकि actual key creation/private-key operation Android KeyMint/StrongBox पर रहती है। Existing certificate response verified replacement chain ले सकती है, RKP provisioning keys genuine path पर रह सकती हैं।
+Attestation layer चुने हुए apps के लिए नियंत्रित certificate-chain compatibility देता है, जबकि Android की वास्तविक key creation और बाद की cryptographic operations बनी रहती हैं।
 
-Activation से पहले key/certificate match, algorithm, chain, date, ambiguity, revocation जांची जाती है। Broken mixed pool पूरा reject होता है। यह hardware root of trust नहीं बनाता, firmware/verified boot repair या bootloader relock नहीं करता, remote verdict guarantee नहीं करता।
+RKP infrastructure callers हमेशा Android के genuine provisioning path पर रहते हैं। Target app UID के लिए सफल `generateKey` replies और बाद की `getKeyEntry` certificate reads एक ही compatibility path का उपयोग करती हैं, ताकि एक alias अलग-अलग attestation leaf न दिखाए।
+
+Private-key operation Android KeyMint या StrongBox ही करता है। Material active होने से पहले key/certificate match, algorithm, chain, validity, ambiguity और revocation जाँचे जाते हैं। Certificate substitution hardware root of trust नहीं बनाता, bootloader को physically lock नहीं करता और remote verdict की guarantee नहीं देता।
 
 <a id="automatic-keybox-check"></a>
 ## Automatic Keybox Check
@@ -135,9 +137,11 @@ Binder parser fixed arrays और 64-slot descriptor cache उपयोग क�
 <a id="profiles"></a>
 ## Profiles
 
-Optional settings को एक validated transaction में apply करता है। Daily/Default conservative, Maximum testing scope बढ़ाता है, Minimal optional identity/scheduled keybox work घटाता है पर core Keystore/TEE/boot बनाए रखता है।
+Profiles optional settings के समूह को एक validated transaction में लागू करते हैं; core boot, Keystore और RKP infrastructure protection स्वतंत्र रूप से active रहती है।
 
-Profile v2 assignments, template/keybox refs, privacy, independent patches, feature overrides, RKP/DRM रखता है पर private key नहीं। Full validation के बाद snapshot publish होता है और last-known-good रखा जाता है।
+Daily Compatibility targeted scope और keybox monitoring उपयोग करता है; Default conservative setup है; Maximum Compatibility Global Mode, build identity, identity refresh और telephony चालू करके DRM passthrough बंद करता है; Minimal optional identity और scheduled keybox checks बंद करता है। इनमें से कोई preset RKP infrastructure protection नहीं बदलता।
+
+पुरानी configuration में retired `rkp_passthrough` marker रह सकता है, लेकिन generated-key behavior अब उस पर निर्भर नहीं है। Version two profiles app assignment, template, validated keybox, privacy, patch और optional identity/DRM choices रख सकते हैं; legacy RKP field केवल migration compatibility के लिए है और live WebUI option नहीं है।
 
 <a id="provider-coexistence"></a>
 ## Provider Coexistence
@@ -163,9 +167,13 @@ Signature optional-required हो सकती है। Signature, XML/CBOX, s
 <a id="rkp-protection"></a>
 ## RKP Protection
 
-Android provisioning और generated-key response को genuine path पर रखता है। `rkpdapp`, legacy remote provisioner और system UID protected हैं; unknown package fail closed।
+Remote Key Provisioning protection Android provisioning infrastructure को genuine platform path पर रखती है। Android/Google RKP और legacy Remote Provisioner packages substitution scope से बाहर रहते हैं; system UID और unknown package resolution fail closed रहते हैं।
 
-RKP Passthrough generated provisioning key को KeyMint से caller तक unchanged रखता है। Module RKP server simulate या credentials manufacture नहीं करता।
+RKP infrastructure callers कभी modify नहीं किए जाते। Target app UID के लिए `generateKey` और बाद के `getKeyEntry` certificate responses unified compatibility path का उपयोग करते हैं, जिससे एक alias दो अलग attestation leaf नहीं दिखाता।
+
+पुराना `rkp_passthrough` switch retired है। Marker पुराने config/backup में रह सकता है, लेकिन अब generated-key behavior को control नहीं करता और WebUI runtime toggle के रूप में expose नहीं होता। Built-in Profiles RKP behavior नहीं बदलते; infrastructure protection हमेशा active है।
+
+CleveresTricky RKP server simulate नहीं करता, provisioning credentials नहीं बनाता और hardware provisioning root नहीं बदलता।
 
 <a id="security-model"></a>
 ## Security Model
