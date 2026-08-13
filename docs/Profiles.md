@@ -24,7 +24,7 @@ This profile changes the most optional behavior and should be used for focused t
 
 Minimal disables optional identity, build identity, telephony, and scheduled keybox checks while preserving the genuine DRM passthrough path. It does not disable the core Keystore interceptor, certificate compatibility, TEE handling, boot property protection, or RKP infrastructure protection.
 
-Older configurations can still contain the legacy certificate safe mode flag and the retired `rkp_passthrough` marker. Core targeting and generated-key handling no longer depend on either RKP marker state.
+Older configurations can still contain the legacy certificate safe mode flag and the retired `rkp_passthrough` marker. Core targeting no longer depends on certificate safe mode, and generated-key handling no longer depends on the retired RKP marker.
 
 ## Applying a profile
 
