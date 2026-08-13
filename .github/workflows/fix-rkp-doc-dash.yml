@@ -1,0 +1,47 @@
+name: Normalize RKP localized punctuation
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  normalize:
+    if: github.head_ref == 'fix/retire-rkp-passthrough-ui'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Replace unsupported long dash
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('docs/i18n/ru.md')
+          text = p.read_text(encoding='utf-8')
+          old = 'Default — консервативный режим;'
+          new = 'Default: консервативный режим;'
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one long-dash phrase, found {text.count(old)}')
+          p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+      - name: Verify punctuation policy
+        run: |
+          if grep -RInE --exclude-dir=.git --exclude-dir=build --exclude-dir=target '—|–' .; then
+            echo 'Unsupported long dash remains'
+            exit 1
+          fi
+
+      - name: Commit punctuation fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/fix-rkp-doc-dash.yml
+          git add docs/i18n/ru.md
+          git commit -m "docs: normalize Russian RKP profile punctuation"
+          git push origin HEAD:${{ github.head_ref }}
