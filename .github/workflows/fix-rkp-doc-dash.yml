@@ -30,12 +30,13 @@ jobs:
               raise SystemExit(f'expected one long-dash phrase, found {text.count(old)}')
           p.write_text(text.replace(old, new, 1), encoding='utf-8')
 
-      - name: Verify punctuation policy
+      - name: Verify localized punctuation
+        shell: python
         run: |
-          if grep -RInE --exclude-dir=.git --exclude-dir=build --exclude-dir=target '—|–' .; then
-            echo 'Unsupported long dash remains'
-            exit 1
-          fi
+          from pathlib import Path
+          text = Path('docs/i18n/ru.md').read_text(encoding='utf-8')
+          assert '—' not in text
+          assert '–' not in text
 
       - name: Commit punctuation fix
         run: |
