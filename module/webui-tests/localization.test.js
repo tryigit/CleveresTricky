@@ -6,7 +6,7 @@ const uxSource = fs.readFileSync('module/template/webroot/ux.js', 'utf8');
 const catalogMarker = '    let locale = readLocale();';
 const instrumentedSource = uxSource.replace(
     catalogMarker,
-    '    global.__CleveresCatalogs = TRANSLATIONS;\n' + catalogMarker
+    '    global.__CleveresCatalogs = TRANSLATIONS;\n    global.__CleveresOwnedCopy = OWNED_COPY;\n' + catalogMarker
 );
 assert.notStrictEqual(instrumentedSource, uxSource, 'localization catalog instrumentation marker is missing');
 
@@ -28,7 +28,7 @@ function loadI18n(locale) {
     context.window = context;
     vm.createContext(context);
     vm.runInContext(instrumentedSource, context, { filename: 'ux.js' });
-    return { i18n: context.CleveresI18n, catalogs: context.__CleveresCatalogs };
+    return { i18n: context.CleveresI18n, catalogs: context.__CleveresCatalogs, ownedCopy: context.__CleveresOwnedCopy };
 }
 
 const sharedCoreCopy = [
@@ -99,6 +99,18 @@ for (const locale of localizedLocales) {
     }
     assert.strictEqual(i18n.translate('com.example.app'), 'com.example.app');
 }
+
+const restoreKeys = ['restoreDefaults', 'restoreDefaultsHint', 'restoreDefaultsConfirm', 'restoringDefaults', 'restoreDefaultsDone', 'restoreDefaultsFailed'];
+for (const locale of ['en', ...localizedLocales]) {
+    const { ownedCopy } = loadI18n(locale);
+    for (const key of restoreKeys) {
+        const value = ownedCopy && ownedCopy[locale] && ownedCopy[locale][key];
+        assert.ok(typeof value === 'string' && value.trim() !== '', `${locale} is missing restore-defaults copy: ${key}`);
+    }
+}
+assert.match(uxSource, /ct_restore_defaults/);
+assert.match(uxSource, /body\.set\('profile', 'default'\)/);
+assert.match(uxSource, /bridge\.fetch\('\/api\/apply_profile'/);
 
 const turkish = loadI18n('tr').i18n;
 assert.match(turkish.translate(runtimeGlobal), /4 doğrulanmış keybox/);
