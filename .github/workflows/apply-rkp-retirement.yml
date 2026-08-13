@@ -1,0 +1,34 @@
+name: Apply RKP retirement cleanup
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  apply-cleanup:
+    if: github.head_ref == 'fix/retire-rkp-passthrough-ui'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Apply cleanup
+        run: python .github/scripts/apply_rkp_retirement.py
+
+      - name: Run WebUI regression tests
+        run: node --test module/webui-tests/*.test.js
+
+      - name: Commit cleanup
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/apply-rkp-retirement.yml .github/scripts/apply_rkp_retirement.py
+          git add module/template/webroot/index.html module/template/webroot/policy.js module/webui-tests/rkp-retirement.test.js service/src/main/java/cleveres/tricky/cleverestech/Config.kt service/src/main/java/cleveres/tricky/cleverestech/WebServer.kt docs
+          git commit -m "Fix retired RKP passthrough presentation"
+          git push origin HEAD:${{ github.head_ref }}
