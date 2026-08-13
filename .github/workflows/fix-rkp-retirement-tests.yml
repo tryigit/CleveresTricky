@@ -38,8 +38,8 @@ jobs:
               raise SystemExit(f'expected one removed settings block, found {text.count(old)}')
           text = text.replace(old, new, 1)
 
-          old = '''                    !File(configDir, "apply_profile").exists() &&\n                    !File(configDir, "rkp_bypass").exists() &&\n                    !File(configDir, "spoof_props").exists()\n'''
-          new = '''                    !File(configDir, "apply_profile").exists() &&\n                    !File(configDir, "rkp_passthrough").exists() &&\n                    !File(configDir, "rkp_bypass").exists() &&\n                    !File(configDir, "spoof_props").exists()\n'''
+          old = '''                !File(configDir, "apply_profile").exists() &&\n                    !File(configDir, "rkp_bypass").exists() &&\n                    !File(configDir, "spoof_props").exists()\n'''
+          new = '''                !File(configDir, "apply_profile").exists() &&\n                    !File(configDir, "rkp_passthrough").exists() &&\n                    !File(configDir, "rkp_bypass").exists() &&\n                    !File(configDir, "spoof_props").exists()\n'''
           if text.count(old) != 1:
               raise SystemExit(f'expected one profile wait block, found {text.count(old)}')
           text = text.replace(old, new, 1)
