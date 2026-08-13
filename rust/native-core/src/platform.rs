@@ -184,6 +184,40 @@ fn write_descriptor_path(descriptor: i32, output: &mut [u8]) -> Option<usize> {
     Some(path_length)
 }
 
+fn lookup_binder_fd_cache(
+    cache: &[BinderFdCacheEntry; BINDER_FD_CACHE_ENTRIES],
+    descriptor: i32,
+    identity: DescriptorIdentity,
+) -> Option<bool> {
+    cache
+        .iter()
+        .find(|entry| {
+            entry.descriptor == descriptor
+                && entry.device == identity.device
+                && entry.inode == identity.inode
+        })
+        .map(|entry| entry.is_binder)
+}
+
+fn remember_binder_fd_cache(
+    cache: &mut [BinderFdCacheEntry; BINDER_FD_CACHE_ENTRIES],
+    descriptor: i32,
+    identity: DescriptorIdentity,
+    is_binder: bool,
+) {
+    let replacement = cache
+        .iter()
+        .position(|entry| entry.descriptor == descriptor)
+        .or_else(|| cache.iter().position(|entry| entry.descriptor < 0))
+        .unwrap_or(descriptor as usize % BINDER_FD_CACHE_ENTRIES);
+    cache[replacement] = BinderFdCacheEntry {
+        descriptor,
+        device: identity.device,
+        inode: identity.inode,
+        is_binder,
+    };
+}
+
 fn take_fast_binder_fd_hit(descriptor: i32, exchange_token: usize) -> bool {
     BINDER_FD_FAST_CACHE.with(|cache| {
         let mut entries = cache.get();
@@ -251,17 +285,12 @@ pub fn is_binder_fd_after_successful_ioctl(descriptor: i32, exchange_token: usiz
     if identity.file_type != CHARACTER_DEVICE {
         return false;
     }
-    let slot = descriptor as usize % BINDER_FD_CACHE_ENTRIES;
     if let Ok(cache) = BINDER_FD_CACHE.read() {
-        let entry = cache[slot];
-        if entry.descriptor == descriptor
-            && entry.device == identity.device
-            && entry.inode == identity.inode
-        {
-            if entry.is_binder {
+        if let Some(is_binder) = lookup_binder_fd_cache(&cache, descriptor, identity) {
+            if is_binder {
                 remember_fast_binder_fd(descriptor, exchange_token);
             }
-            return entry.is_binder;
+            return is_binder;
         }
     }
 
@@ -285,12 +314,7 @@ pub fn is_binder_fd_after_successful_ioctl(descriptor: i32, exchange_token: usiz
     }
     let is_binder = is_binder_device_path(&target[..target_length as usize]);
     if let Ok(mut cache) = BINDER_FD_CACHE.write() {
-        cache[slot] = BinderFdCacheEntry {
-            descriptor,
-            device: identity.device,
-            inode: identity.inode,
-            is_binder,
-        };
+        remember_binder_fd_cache(&mut cache, descriptor, identity, is_binder);
     }
     if is_binder {
         remember_fast_binder_fd(descriptor, exchange_token);
@@ -457,6 +481,50 @@ mod tests {
         assert_eq!(&output[..length], b"/proc/self/fd/2147483647");
         assert_eq!(output[length], 0);
         assert!(write_descriptor_path(-1, &mut output).is_none());
+    }
+
+    #[test]
+    fn binder_fd_cache_keeps_colliding_descriptors_resident() {
+        let mut cache = [BinderFdCacheEntry::EMPTY; BINDER_FD_CACHE_ENTRIES];
+        let first = DescriptorIdentity {
+            device: 1,
+            inode: 100,
+            file_type: CHARACTER_DEVICE,
+        };
+        let second = DescriptorIdentity {
+            device: 2,
+            inode: 200,
+            file_type: CHARACTER_DEVICE,
+        };
+        let first_descriptor = 3;
+        let second_descriptor = first_descriptor + BINDER_FD_CACHE_ENTRIES as i32;
+
+        remember_binder_fd_cache(&mut cache, first_descriptor, first, true);
+        remember_binder_fd_cache(&mut cache, second_descriptor, second, true);
+
+        assert_eq!(lookup_binder_fd_cache(&cache, first_descriptor, first), Some(true));
+        assert_eq!(lookup_binder_fd_cache(&cache, second_descriptor, second), Some(true));
+    }
+
+    #[test]
+    fn binder_fd_cache_replaces_reused_descriptor_identity() {
+        let mut cache = [BinderFdCacheEntry::EMPTY; BINDER_FD_CACHE_ENTRIES];
+        let old_identity = DescriptorIdentity {
+            device: 1,
+            inode: 100,
+            file_type: CHARACTER_DEVICE,
+        };
+        let new_identity = DescriptorIdentity {
+            device: 1,
+            inode: 101,
+            file_type: CHARACTER_DEVICE,
+        };
+
+        remember_binder_fd_cache(&mut cache, 9, old_identity, true);
+        remember_binder_fd_cache(&mut cache, 9, new_identity, false);
+
+        assert_eq!(lookup_binder_fd_cache(&cache, 9, old_identity), None);
+        assert_eq!(lookup_binder_fd_cache(&cache, 9, new_identity), Some(false));
     }
 
     #[test]
