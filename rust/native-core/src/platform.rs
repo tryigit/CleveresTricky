@@ -502,8 +502,14 @@ mod tests {
         remember_binder_fd_cache(&mut cache, first_descriptor, first, true);
         remember_binder_fd_cache(&mut cache, second_descriptor, second, true);
 
-        assert_eq!(lookup_binder_fd_cache(&cache, first_descriptor, first), Some(true));
-        assert_eq!(lookup_binder_fd_cache(&cache, second_descriptor, second), Some(true));
+        assert_eq!(
+            lookup_binder_fd_cache(&cache, first_descriptor, first),
+            Some(true)
+        );
+        assert_eq!(
+            lookup_binder_fd_cache(&cache, second_descriptor, second),
+            Some(true)
+        );
     }
 
     #[test]
