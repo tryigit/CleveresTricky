@@ -274,7 +274,7 @@ object PolicyState {
             return
         }
         try {
-            val parsed = parseStateFile(main, "configured")
+            val parsed = adaptRecommendedDefault(parseStateFile(main, "configured"))
             publish(parsed, persistPrevious = false)
         } catch (error: Throwable) {
             val lastGood = File(root, LAST_GOOD_FILE)
@@ -1129,13 +1129,43 @@ object PolicyState {
         )
     }
 
+    private fun recommendedSecurityPatchEnabled(thresholdMonths: Long = 6): Boolean {
+        val now = currentDateSource()
+        val available = listOf("system", "vendor", "boot").mapNotNull(::readPropertyDate)
+        return available.any { it.isBefore(now.minusMonths(thresholdMonths)) }
+    }
+
+    private fun isRecommendedDefaultShape(value: Snapshot): Boolean {
+        val features = value.features
+        val patch = value.patch
+        return value.profiles.isEmpty() && value.activeProfile == null &&
+            !features.buildIdentity && !features.attestationIdentity && !features.telephonyIdentity &&
+            !features.regionIdentity && !features.identityRefresh &&
+            patch.thresholdMonths == 6L &&
+            patch.system.mode == PatchMode.AUTOMATIC &&
+            patch.vendor.mode == PatchMode.AUTOMATIC &&
+            patch.boot.mode == PatchMode.AUTOMATIC
+    }
+
+    private fun adaptRecommendedDefault(value: Snapshot): Snapshot {
+        if (!isRecommendedDefaultShape(value)) return value
+        val enabled = recommendedSecurityPatchEnabled(value.patch.thresholdMonths)
+        if (value.features.securityPatch == enabled) return value
+        return value.copy(
+            features = value.features.copy(securityPatch = enabled),
+            generation = generationCounter.incrementAndGet(),
+            recovery = "default_adapted",
+        )
+    }
+
     @Synchronized
     fun applyRecommendedDefaults() {
         val automatic = PatchPolicy(PatchMode.AUTOMATIC)
+        val enabled = recommendedSecurityPatchEnabled(6)
         persistAndPublish(
             Snapshot(
                 explicit = true,
-                features = FeatureSet(false, false, false, false, false, true),
+                features = FeatureSet(false, false, false, false, false, enabled),
                 patch = PatchSet(6, automatic, automatic, automatic),
                 profiles = emptyMap(),
                 activeProfile = null,

@@ -120,23 +120,40 @@ public final class CertHack {
         final Map<String, List<KeyBox>> keyboxes;
         final Map<String, List<KeyBox>> keyboxFiles;
         final Map<KeyBox, PreparedKeyBox> preparedKeyboxes;
+        final byte[] bootKey;
+        final byte[] bootHash;
         final Map<CacheKey, Certificate[]> certificateCache;
 
         State(Map<String, List<KeyBox>> keyboxes, Map<String, List<KeyBox>> keyboxFiles) {
-            this.keyboxes = immutableLists(keyboxes);
-            this.keyboxFiles = immutableLists(keyboxFiles);
             IdentityHashMap<KeyBox, PreparedKeyBox> prepared = new IdentityHashMap<>();
-            for (List<KeyBox> list : this.keyboxes.values()) {
-                for (KeyBox keybox : list) {
+            Map<String, List<KeyBox>> readyByAlgorithm = new HashMap<>();
+            Map<String, List<KeyBox>> readyByFile = new HashMap<>();
+            for (Map.Entry<String, List<KeyBox>> entry : keyboxes.entrySet()) {
+                for (KeyBox keybox : entry.getValue()) {
                     if (prepared.containsKey(keybox)) continue;
                     try {
                         prepared.put(keybox, new PreparedKeyBox(keybox));
+                        readyByAlgorithm.computeIfAbsent(entry.getKey(), ignored -> new ArrayList<>()).add(keybox);
+                        readyByFile.computeIfAbsent(keybox.filename, ignored -> new ArrayList<>()).add(keybox);
                     } catch (Exception error) {
-                        Logger.e("Could not prepare keybox metadata", error);
+                        Logger.e("Ignoring an unprepared keybox", error);
                     }
                 }
             }
+            this.keyboxes = immutableLists(readyByAlgorithm);
+            this.keyboxFiles = immutableLists(readyByFile);
             this.preparedKeyboxes = Collections.unmodifiableMap(prepared);
+            if (prepared.isEmpty()) {
+                this.bootKey = null;
+                this.bootHash = null;
+            } else {
+                byte[] resolvedBootKey = usableBootDigest(UtilKt.getBootKey());
+                byte[] resolvedBootHash = usableBootDigest(UtilKt.getBootHash());
+                if (resolvedBootKey == null) resolvedBootKey = usableBootDigest(UtilKt.getPersistentBootKey());
+                if (resolvedBootHash == null) resolvedBootHash = usableBootDigest(UtilKt.getPersistentBootHash());
+                this.bootKey = resolvedBootKey == null ? null : resolvedBootKey.clone();
+                this.bootHash = resolvedBootHash == null ? null : resolvedBootHash.clone();
+            }
             this.certificateCache = Collections.synchronizedMap(
                     new LinkedHashMap<CacheKey, Certificate[]>(32, 0.75f, true) {
                         @Override
@@ -162,7 +179,8 @@ public final class CertHack {
     }
 
     public static boolean canHack() {
-        return !state.keyboxes.isEmpty();
+        State currentState = state;
+        return !currentState.keyboxes.isEmpty() && currentState.bootKey != null && currentState.bootHash != null;
     }
 
     public static int getKeyboxCount() {
@@ -760,8 +778,8 @@ public final class CertHack {
             );
             ContentSigner signer = signerBuilder(prepared.signatureAlgorithm).build(k.keyPair.getPrivate());
 
-            byte[] verifiedBootKey = usableBootDigest(UtilKt.getBootKey());
-            byte[] verifiedBootHash = usableBootDigest(UtilKt.getBootHash());
+            byte[] verifiedBootKey = currentState.bootKey == null ? null : currentState.bootKey.clone();
+            byte[] verifiedBootHash = currentState.bootHash == null ? null : currentState.bootHash.clone();
             if (verifiedBootKey == null || verifiedBootHash == null) {
                 try {
                     if (rootOfTrust == null || !(rootOfTrust instanceof ASN1Sequence r)) {
@@ -790,14 +808,7 @@ public final class CertHack {
                 return caList;
             }
 
-            ASN1Encodable[] rootOfTrustEnc = {
-                    new DEROctetString(verifiedBootKey),
-                    ASN1Boolean.TRUE,
-                    new ASN1Enumerated(0),
-                    new DEROctetString(verifiedBootHash)
-            };
-
-            ASN1Sequence hackedRootOfTrust = new DERSequence(rootOfTrustEnc);
+            ASN1Sequence hackedRootOfTrust = buildLockedRootOfTrust(verifiedBootKey, verifiedBootHash);
             ASN1TaggedObject rootOfTrustTagObj = new DERTaggedObject(704, hackedRootOfTrust);
             teeTags.add(rootOfTrustTagObj);
             teeTags.sort(TAG_COMPARATOR);
@@ -837,6 +848,18 @@ public final class CertHack {
             Logger.e("Exception in hackCertificateChain", t);
         }
         return caList;
+    }
+
+    static ASN1Sequence buildLockedRootOfTrust(byte[] verifiedBootKey, byte[] verifiedBootHash) {
+        Objects.requireNonNull(verifiedBootKey, "verifiedBootKey");
+        Objects.requireNonNull(verifiedBootHash, "verifiedBootHash");
+        ASN1Encodable[] rootOfTrustEnc = {
+                new DEROctetString(verifiedBootKey),
+                ASN1Boolean.TRUE,
+                new ASN1Enumerated(0),
+                new DEROctetString(verifiedBootHash)
+        };
+        return new DERSequence(rootOfTrustEnc);
     }
 
     private static byte[] usableBootDigest(byte[] value) {

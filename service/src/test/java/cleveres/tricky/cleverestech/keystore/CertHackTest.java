@@ -1,5 +1,9 @@
 package cleveres.tricky.cleverestech.keystore;
 
+import org.bouncycastle.asn1.ASN1Boolean;
+import org.bouncycastle.asn1.ASN1Enumerated;
+import org.bouncycastle.asn1.ASN1OctetString;
+import org.bouncycastle.asn1.ASN1Sequence;
 import org.junit.After;
 import org.junit.Test;
 
@@ -82,6 +86,19 @@ public class CertHackTest {
         assertEquals(1, selected.size());
         assertTrue(selected.containsKey(714));
         assertArrayEquals(imei, selected.get(714));
+    }
+
+    @Test
+    public void testLockedRootOfTrustIsStable() {
+        byte[] key = new byte[32];
+        byte[] hash = new byte[32];
+        key[0] = 1;
+        hash[0] = 2;
+        ASN1Sequence root = CertHack.buildLockedRootOfTrust(key, hash);
+        assertArrayEquals(key, ASN1OctetString.getInstance(root.getObjectAt(0)).getOctets());
+        assertTrue(ASN1Boolean.getInstance(root.getObjectAt(1)).isTrue());
+        assertEquals(0, ASN1Enumerated.getInstance(root.getObjectAt(2)).getValue().intValue());
+        assertArrayEquals(hash, ASN1OctetString.getInstance(root.getObjectAt(3)).getOctets());
     }
 
     @Test

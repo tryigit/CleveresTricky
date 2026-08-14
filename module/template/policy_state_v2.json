@@ -6,7 +6,7 @@
     "telephonyIdentity": false,
     "regionIdentity": false,
     "identityRefresh": false,
-    "securityPatch": true
+    "securityPatch": false
   },
   "securityPatch": {
     "automaticThresholdMonths": 6,

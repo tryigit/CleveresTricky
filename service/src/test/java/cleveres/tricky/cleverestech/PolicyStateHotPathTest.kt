@@ -9,10 +9,20 @@ import org.junit.Test
 
 class PolicyStateHotPathTest {
     @Test
-    fun recommendedDefaultsStayAligned() {
-        val root = Files.createTempDirectory("ct-defaults").toFile()
+    fun currentDeviceKeepsAutomaticSecurityPatchDisabledByDefault() {
+        val root = Files.createTempDirectory("ct-defaults-current").toFile()
+        val oldProperties = systemPropertiesGet
         try {
             PolicyState.setRootForTesting(root)
+            systemPropertiesGet = { key, default ->
+                when (key) {
+                    "ro.build.version.security_patch",
+                    "ro.vendor.build.security_patch",
+                    "ro.bootimage.build.version.security_patch" -> "2026-08-05"
+                    else -> default
+                }
+            }
+            PolicyState.currentDateSource = { LocalDate.of(2026, 8, 14) }
             PolicyState.applyRecommendedDefaults()
             val state = PolicyState.stateJson()
             val features = state.getJSONObject("features")
@@ -21,13 +31,38 @@ class PolicyStateHotPathTest {
             assertFalse(features.getBoolean("telephonyIdentity"))
             assertFalse(features.getBoolean("regionIdentity"))
             assertFalse(features.getBoolean("identityRefresh"))
-            assertTrue(features.getBoolean("securityPatch"))
+            assertFalse(features.getBoolean("securityPatch"))
             val patch = state.getJSONObject("securityPatch")
             assertEquals(6L, patch.getLong("automaticThresholdMonths"))
             listOf("system", "vendor", "boot").forEach { component ->
                 assertEquals("automatic", patch.getJSONObject(component).getString("mode"))
             }
         } finally {
+            systemPropertiesGet = oldProperties
+            PolicyState.resetForTesting()
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun staleDeviceEnablesAutomaticSecurityPatchByDefault() {
+        val root = Files.createTempDirectory("ct-defaults-stale").toFile()
+        val oldProperties = systemPropertiesGet
+        try {
+            PolicyState.setRootForTesting(root)
+            systemPropertiesGet = { key, default ->
+                when (key) {
+                    "ro.build.version.security_patch" -> "2025-01-05"
+                    "ro.vendor.build.security_patch",
+                    "ro.bootimage.build.version.security_patch" -> "2026-08-05"
+                    else -> default
+                }
+            }
+            PolicyState.currentDateSource = { LocalDate.of(2026, 8, 14) }
+            PolicyState.applyRecommendedDefaults()
+            assertTrue(PolicyState.stateJson().getJSONObject("features").getBoolean("securityPatch"))
+        } finally {
+            systemPropertiesGet = oldProperties
             PolicyState.resetForTesting()
             root.deleteRecursively()
         }

@@ -15,7 +15,7 @@ assert.deepStrictEqual(policy.features, {
   telephonyIdentity: false,
   regionIdentity: false,
   identityRefresh: false,
-  securityPatch: true
+  securityPatch: false
 });
 assert.strictEqual(policy.securityPatch.automaticThresholdMonths, 6);
 for (const component of ['system', 'vendor', 'boot']) {
