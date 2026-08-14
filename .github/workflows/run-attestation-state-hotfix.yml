@@ -16,6 +16,7 @@ jobs:
           distribution: temurin
           java-version: 21
       - run: python3 .github/scripts/apply_attestation_state_hotfix.py
+      - run: python3 .github/scripts/fix_default_test.py
       - run: ./gradlew :service:testDebugUnitTest --no-daemon
       - run: |
           for test in module/webui-tests/*.test.js; do node "$test"; done
