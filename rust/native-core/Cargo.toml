@@ -1,3 +1,4 @@
+# Additional GPLv3 section 7(b) attribution term for tryigit-owned material: see ../../NOTICE.
 [package]
 name = "cleverestricky-native-core"
 version = "0.2.0"
