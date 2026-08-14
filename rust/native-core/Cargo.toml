@@ -3,7 +3,7 @@ name = "cleverestricky-native-core"
 version = "0.2.0"
 edition = "2021"
 description = "Memory safe native parsing and validation for CleveresTricky"
-license = "GPL-3.0"
+license = "GPL-3.0-only"
 
 [lib]
 name = "cleverestricky_native_core"
