@@ -1,3 +1,4 @@
+# Additional GPLv3 section 7(b) attribution term for tryigit-owned material: see ../../NOTICE.
 [package]
 name = "cleverestricky-webui-bridge"
 version = "0.1.0"
