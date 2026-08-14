@@ -3,7 +3,7 @@ name = "cleverestricky-injector-core"
 version = "0.1.0"
 edition = "2021"
 description = "Rust orchestration for the CleveresTricky Android injector"
-license = "GPL-3.0"
+license = "GPL-3.0-only"
 
 [lib]
 name = "cleverestricky_injector_core"
