@@ -1,0 +1,32 @@
+CleveresTricky Attribution Notice
+
+Copyright (c) 2024-2026 tryigit. All rights in original material are reserved
+except for the permissions granted under the applicable license.
+
+The repository contains upstream and third-party material. The following
+additional term applies only to material for which tryigit is a copyright
+holder, and only to the extent permitted by section 7(b) of the GNU General
+Public License version 3:
+
+When conveying that material, modified or unmodified, you must preserve this
+NOTICE and the following reasonable author attribution in the copyright or
+legal notices accompanying the source distribution:
+
+    CleveresTricky — original work and modifications by tryigit
+    https://github.com/tryigit/CleveresTricky
+
+If the conveyed work already provides an About, Credits, or Legal Notices view,
+the same attribution must also be included in that view. This requirement does
+not require advertising, endorsement, or placement in ordinary runtime UI where
+no legal-notices mechanism exists.
+
+This additional term does not apply to material for which tryigit is not a
+copyright holder, and it does not replace, remove, or narrow any license or
+notice applicable to upstream or third-party material.
+
+Commercial use is not prohibited for material governed by GPL-3.0-only. The
+GPL permits commercial use and does not permit a distributor to add a general
+non-commercial-use restriction to GPL-covered upstream material. A separate
+non-commercial license can therefore apply only to material that can legally be
+licensed that way by all relevant copyright holders and that is not required to
+remain under incompatible upstream terms.
