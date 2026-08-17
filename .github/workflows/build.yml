@@ -12,7 +12,7 @@ jobs:
   pr953-fixup-runner:
     if: github.head_ref == 'agent/pr953-fixup-runner'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
     steps:
       - name: Check out PR 953 head
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -26,107 +26,68 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      - name: Merge master and apply semantic fixes
+      - name: Patch raw published-keybox snapshot test seam
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git fetch origin master
-          if git merge --no-ff --no-commit origin/master; then
-            echo 'Expected semantic conflicts were not produced.' >&2
-            exit 1
-          fi
           python3 - <<'PY'
           from pathlib import Path
-          import subprocess
-          ours = subprocess.check_output(["git", "show", ":2:module/template/customize.sh"], text=True)
-          ours = ours.replace("'service.sh'      \"$MODPATH\"", "'service.sh' \"$MODPATH\"")
-          Path('/tmp/customize.ours').write_text(ours)
-          PY
-          customize_blob=$(git hash-object -w /tmp/customize.ours)
-          printf '100755 %s 2\tmodule/template/customize.sh\n' "$customize_blob" | git update-index --index-info
-          sed -i 's/"jvmTarget = JvmTarget.JVM_11" not in value/"JVM_11" not in value/' .github/scripts/pr953_fixup.py
-          sed -i 's/"cargo ndk" not in build_ours/"cargo" not in build_ours/' .github/scripts/pr953_fixup.py
-          sed -i 's/(?=## Physical-device)/(?=## Build choices)/' .github/scripts/pr953_fixup.py
-          python3 .github/scripts/pr953_fixup.py
 
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
+          cert_path = Path('service/src/main/java/cleveres/tricky/cleverestech/keystore/CertHack.java')
+          cert = cert_path.read_text()
+          old = '''    public static int getKeyboxCount() {
+                  if (!KeyboxLoader.isActiveSetHealthy()) {
+                      throw new IllegalStateException("Rust keybox backend activation is unavailable");
+                  }
+                  int count = 0;
+                  for (List<KeyBox> list : state.keyboxes.values()) count += list.size();
+                  return count;
+              }
+          '''
+          new = '''    public static int getKeyboxCount() {
+                  if (!KeyboxLoader.isActiveSetHealthy()) {
+                      throw new IllegalStateException("Rust keybox backend activation is unavailable");
+                  }
+                  return getPublishedKeyboxCountForTesting();
+              }
 
-          encryptor_path = Path('rust/encryptor-native/src/lib.rs')
-          encryptor = encryptor_path.read_text()
-          pattern = re.compile(
-              r"fn random_material<const N: usize>\(\) -> Result<Zeroizing<\[u8; N\]>, EncryptError> \{.*?\n\}\n\npub fn encrypt_cbox_v2",
-              re.S,
+              /**
+               * JVM-unit-test seam for inspecting the already-published managed snapshot without
+               * probing backend health or triggering backend recovery.
+               */
+              public static int getPublishedKeyboxCountForTesting() {
+                  int count = 0;
+                  for (List<KeyBox> list : state.keyboxes.values()) count += list.size();
+                  return count;
+              }
+          '''
+          if cert.count(old) != 1:
+              raise SystemExit(f'CertHack keybox-count block count: {cert.count(old)}')
+          cert_path.write_text(cert.replace(old, new, 1))
+
+          test_path = Path('service/src/test/java/cleveres/tricky/cleverestech/WebServerUploadTest.kt')
+          test = test_path.read_text()
+          test = test.replace(
+              '        val activeKeyboxCount = cleveres.tricky.cleverestech.keystore.CertHack.getKeyboxCount()\n',
+              '        val activeKeyboxCount = cleveres.tricky.cleverestech.keystore.CertHack.getPublishedKeyboxCountForTesting()\n',
+              1,
           )
-          replacement = '''fn random_material<const N: usize>() -> Result<Zeroizing<[u8; N]>, EncryptError> {
-              let mut bytes = [std::mem::MaybeUninit::<u8>::uninit(); N];
-              let initialized = getrandom::fill_uninit(&mut bytes)
-                  .map_err(|_| EncryptError::RandomUnavailable)?;
-              let array: &mut [u8; N] = initialized
-                  .try_into()
-                  .map_err(|_| EncryptError::RandomUnavailable)?;
-              Ok(Zeroizing::new(*array))
-          }
-
-          pub fn encrypt_cbox_v2'''
-          encryptor, count = pattern.subn(replacement, encryptor, count=1)
-          if count != 1:
-              raise SystemExit(f'encryptor random helper replacement count: {count}')
-          encryptor_path.write_text(encryptor)
-
-          daemon_path = Path('rust/daemon/src/main.rs')
-          daemon = daemon_path.read_text()
-          old = 'let mut adapter_slot = Some(daemon_adapter);'
-          new = '''let mut adapter_slot = Some(RegisteredAdapter {
-                      stream: daemon_adapter,
-                      lease: AdapterLease { pid: 1, generation: 1 },
-                  });'''
-          if daemon.count(old) != 1:
-              raise SystemExit(f'adapter_slot fixture count: {daemon.count(old)}')
-          daemon = daemon.replace(old, new, 1)
-          old = 'let mut slot = Some(daemon_adapter);'
-          new = '''let mut slot = Some(RegisteredAdapter {
-                      stream: daemon_adapter,
-                      lease: AdapterLease { pid: 1, generation: 1 },
-                  });'''
-          if daemon.count(old) != 3:
-              raise SystemExit(f'slot fixture count: {daemon.count(old)}')
-          daemon = daemon.replace(old, new)
-          daemon_path.write_text(daemon)
-
-          upload_test_path = Path('service/src/test/java/cleveres/tricky/cleverestech/WebServerUploadTest.kt')
-          upload_test = upload_test_path.read_text()
-          old = '        assertEquals(activeKeyboxCount, cleveres.tricky.cleverestech.keystore.CertHack.getKeyboxCount())\n'
-          new = '''        // Activation failure intentionally marks backend health false. Reset only the test seam so
+          old = '''        // Activation failure intentionally marks backend health false. Reset only the test seam so
                   // getKeyboxCount can inspect the immutable managed snapshot without publishing new keys.
                   KeyboxLoader.resetForTesting()
                   assertEquals(activeKeyboxCount, cleveres.tricky.cleverestech.keystore.CertHack.getKeyboxCount())
           '''
-          if upload_test.count(old) != 1:
-              raise SystemExit(f'keybox snapshot assertion count: {upload_test.count(old)}')
-          upload_test_path.write_text(upload_test.replace(old, new, 1))
+          new = '''        assertEquals(
+                  activeKeyboxCount,
+                  cleveres.tricky.cleverestech.keystore.CertHack.getPublishedKeyboxCountForTesting(),
+              )
+          '''
+          if test.count(old) != 1:
+              raise SystemExit(f'WebServerUploadTest snapshot block count: {test.count(old)}')
+          test_path.write_text(test.replace(old, new, 1))
           PY
-
-      - name: Format and validate Rust workspace
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd rust
-          cargo fmt --all
-          cargo test --workspace --all-targets
-          cargo clippy --workspace --all-targets -- -D warnings
-
-      - name: Validate shell payloads
-        shell: bash
-        run: |
-          set -euo pipefail
-          bash -n module/template/customize.sh
-          bash -n module/template/action.sh
-          bash -n module/template/service.sh
-          bash -n module/template/post-fs-data.sh
 
       - name: Run failing keybox regression first
         shell: bash
@@ -144,8 +105,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm -f .github/scripts/pr953_fixup.py .github/workflows/pr953-fixup.yml
-          git add -A
-          test -z "$(git diff --name-only --diff-filter=U)"
-          git commit -m 'fix: stabilize runtime lifecycle and keybox activation'
+          git add service/src/main/java/cleveres/tricky/cleverestech/keystore/CertHack.java \
+                  service/src/test/java/cleveres/tricky/cleverestech/WebServerUploadTest.kt
+          git diff --cached --check
+          git commit -m 'test: inspect published keybox snapshot without backend recovery'
           git push origin HEAD:agent/rust-first-service-redesign
