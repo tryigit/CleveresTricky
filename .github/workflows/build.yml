@@ -15,10 +15,16 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Check out PR 953 head
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: agent/rust-first-service-redesign
           fetch-depth: 0
+
+      - name: Setup Java
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: 21
 
       - name: Merge master and apply semantic fixes
         shell: bash
