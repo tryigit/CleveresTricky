@@ -45,6 +45,53 @@ jobs:
           sed -i 's/(?=## Physical-device)/(?=## Build choices)/' .github/scripts/pr953_fixup.py
           python3 .github/scripts/pr953_fixup.py
 
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          encryptor_path = Path('rust/encryptor-native/src/lib.rs')
+          encryptor = encryptor_path.read_text()
+          pattern = re.compile(
+              r"fn random_material<const N: usize>\(\) -> Result<Zeroizing<\[u8; N\]>, EncryptError> \{.*?\n\}\n\npub fn encrypt_cbox_v2",
+              re.S,
+          )
+          replacement = '''fn random_material<const N: usize>() -> Result<Zeroizing<[u8; N]>, EncryptError> {
+              let mut bytes = [std::mem::MaybeUninit::<u8>::uninit(); N];
+              let initialized = getrandom::fill_uninit(&mut bytes)
+                  .map_err(|_| EncryptError::RandomUnavailable)?;
+              let array: &mut [u8; N] = initialized
+                  .try_into()
+                  .map_err(|_| EncryptError::RandomUnavailable)?;
+              Ok(Zeroizing::new(*array))
+          }
+
+          pub fn encrypt_cbox_v2'''
+          encryptor, count = pattern.subn(replacement, encryptor, count=1)
+          if count != 1:
+              raise SystemExit(f'encryptor random helper replacement count: {count}')
+          encryptor_path.write_text(encryptor)
+
+          daemon_path = Path('rust/daemon/src/main.rs')
+          daemon = daemon_path.read_text()
+          old = 'let mut adapter_slot = Some(daemon_adapter);'
+          new = '''let mut adapter_slot = Some(RegisteredAdapter {
+                      stream: daemon_adapter,
+                      lease: AdapterLease { pid: 1, generation: 1 },
+                  });'''
+          if daemon.count(old) != 1:
+              raise SystemExit(f'adapter_slot fixture count: {daemon.count(old)}')
+          daemon = daemon.replace(old, new, 1)
+          old = 'let mut slot = Some(daemon_adapter);'
+          new = '''let mut slot = Some(RegisteredAdapter {
+                      stream: daemon_adapter,
+                      lease: AdapterLease { pid: 1, generation: 1 },
+                  });'''
+          if daemon.count(old) != 3:
+              raise SystemExit(f'slot fixture count: {daemon.count(old)}')
+          daemon = daemon.replace(old, new)
+          daemon_path.write_text(daemon)
+          PY
+
       - name: Format and validate Rust workspace
         shell: bash
         run: |
