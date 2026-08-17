@@ -96,6 +96,18 @@ jobs:
               raise SystemExit(f'slot fixture count: {daemon.count(old)}')
           daemon = daemon.replace(old, new)
           daemon_path.write_text(daemon)
+
+          upload_test_path = Path('service/src/test/java/cleveres/tricky/cleverestech/WebServerUploadTest.kt')
+          upload_test = upload_test_path.read_text()
+          old = '        assertEquals(activeKeyboxCount, cleveres.tricky.cleverestech.keystore.CertHack.getKeyboxCount())\n'
+          new = '''        // Activation failure intentionally marks backend health false. Reset only the test seam so
+                  // getKeyboxCount can inspect the immutable managed snapshot without publishing new keys.
+                  KeyboxLoader.resetForTesting()
+                  assertEquals(activeKeyboxCount, cleveres.tricky.cleverestech.keystore.CertHack.getKeyboxCount())
+          '''
+          if upload_test.count(old) != 1:
+              raise SystemExit(f'keybox snapshot assertion count: {upload_test.count(old)}')
+          upload_test_path.write_text(upload_test.replace(old, new, 1))
           PY
 
       - name: Format and validate Rust workspace
@@ -116,6 +128,12 @@ jobs:
           bash -n module/template/service.sh
           bash -n module/template/post-fs-data.sh
 
+      - name: Run failing keybox regression first
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./gradlew :service:testDebugUnitTest --tests 'cleveres.tricky.cleverestech.WebServerUploadTest.testValidUploadDoesNotReportSuccessWhenBackendActivationFails' --warning-mode=fail --console=plain --no-build-cache
+
       - name: Run service unit tests
         shell: bash
         run: |
@@ -126,6 +144,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          rm -f .github/scripts/pr953_fixup.py .github/workflows/pr953-fixup.yml
           git add -A
           test -z "$(git diff --name-only --diff-filter=U)"
           git commit -m 'fix: stabilize runtime lifecycle and keybox activation'
