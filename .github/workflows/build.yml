@@ -31,6 +31,7 @@ jobs:
             echo 'Expected semantic conflicts were not produced.' >&2
             exit 1
           fi
+          sed -i 's/"jvmTarget = JvmTarget.JVM_11" not in value/"JVM_11" not in value/' .github/scripts/pr953_fixup.py
           python3 .github/scripts/pr953_fixup.py
 
       - name: Format and validate Rust workspace
