@@ -32,6 +32,7 @@ jobs:
             exit 1
           fi
           sed -i 's/"jvmTarget = JvmTarget.JVM_11" not in value/"JVM_11" not in value/' .github/scripts/pr953_fixup.py
+          sed -i 's/"cargo ndk" not in build_ours/"cargo" not in build_ours/' .github/scripts/pr953_fixup.py
           python3 .github/scripts/pr953_fixup.py
 
       - name: Format and validate Rust workspace
