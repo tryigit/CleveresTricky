@@ -1,5 +1,6 @@
 name: Build
 
+# Isolated same-repository runner for PR #953; this branch is never merged.
 on:
   pull_request:
     branches: [ "master" ]
