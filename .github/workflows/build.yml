@@ -31,6 +31,15 @@ jobs:
             echo 'Expected semantic conflicts were not produced.' >&2
             exit 1
           fi
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          ours = subprocess.check_output(["git", "show", ":2:module/template/customize.sh"], text=True)
+          ours = ours.replace("'service.sh'      \"$MODPATH\"", "'service.sh' \"$MODPATH\"")
+          Path('/tmp/customize.ours').write_text(ours)
+          PY
+          customize_blob=$(git hash-object -w /tmp/customize.ours)
+          printf '100755 %s 2\tmodule/template/customize.sh\n' "$customize_blob" | git update-index --index-info
           sed -i 's/"jvmTarget = JvmTarget.JVM_11" not in value/"JVM_11" not in value/' .github/scripts/pr953_fixup.py
           sed -i 's/"cargo ndk" not in build_ours/"cargo" not in build_ours/' .github/scripts/pr953_fixup.py
           python3 .github/scripts/pr953_fixup.py
