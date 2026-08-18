@@ -18,7 +18,6 @@ import cleveres.tricky.cleverestech.util.FastByteArrayOutputStream;
 
 public final class Utils {
     private static final String TAG = "Utils";
-    private static final String ANDROID_ATTESTATION_EXTENSION_OID = "1.3.6.1.4.1.11129.2.1.17";
     private static final int MAX_CERTIFICATE_BYTES = 64 * 1024;
     private static final int MAX_CHAIN_BYTES = 512 * 1024;
     private static final int MAX_CERTIFICATES = 16;
@@ -74,25 +73,6 @@ public final class Utils {
         } catch (CertificateException | ClassCastException error) {
             Log.w(TAG, "Could not parse an X.509 certificate");
             return null;
-        }
-    }
-
-    /**
-     * Returns whether the already-parsed leaf carries Android's attestation extension.
-     *
-     * This check intentionally stays in-process. A normal AndroidKeyStore asymmetric key also
-     * carries a self-signed X.509 certificate, but forwarding that certificate to the Rust
-     * attestation parser creates a measurable UDS/parser cost on the non-attested generateKey path.
-     * The platform X509Certificate implementation has already parsed the certificate, so checking
-     * the fixed extension OID is bounded and avoids any backend IPC for that common negative case.
-     */
-    public static boolean hasAndroidAttestationExtension(Certificate certificate) {
-        if (!(certificate instanceof X509Certificate x509Certificate)) return false;
-        try {
-            return x509Certificate.getExtensionValue(ANDROID_ATTESTATION_EXTENSION_OID) != null;
-        } catch (RuntimeException error) {
-            Log.w(TAG, "Could not inspect Android attestation extension");
-            return false;
         }
     }
 
