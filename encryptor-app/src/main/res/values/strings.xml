@@ -38,9 +38,6 @@
     <string name="confirm_password">Confirm password</string>
     <string name="encrypt_save">Encrypt &amp; save all</string>
     <string name="crypto_summary">Rust AES-256-GCM · PBKDF2-HMAC-SHA256 · Android Keystore signature</string>
-    <string name="replace_keybox_title">Replace existing keybox?</string>
-    <string name="replace_keybox_message">%1$s already exists. Replacing it permanently overwrites the encrypted file.</string>
-    <string name="replace">Replace</string>
     <string name="security_title">Local-first, hardened encryption</string>
     <string name="security_body">XML files inside the ZIP never leave this app. Each CBOX is signed and encrypted locally; atomic private-vault writes run in the bounded Rust layer.</string>
     <string name="language">Language</string>
