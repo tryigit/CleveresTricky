@@ -32,7 +32,7 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
 
-      - name: Isolate WebServer keybox test state
+      - name: Apply deterministic regression fixes
         shell: bash
         run: |
           set -euo pipefail
@@ -70,11 +70,22 @@ jobs:
           path.write_text(text.replace(old, new, 1))
           PY
 
-      - name: Run failing keybox regression first
+          mkdir -p encryptor-app/src/main/res/values-b+id
+          cp encryptor-app/src/main/res/values-in/strings.xml encryptor-app/src/main/res/values-b+id/strings.xml
+          rm encryptor-app/src/main/res/values-in/strings.xml
+          rmdir encryptor-app/src/main/res/values-in
+
+      - name: Run keybox regression first
         shell: bash
         run: |
           set -euo pipefail
           ./gradlew :service:testDebugUnitTest --tests 'cleveres.tricky.cleverestech.WebServerUploadTest.testValidUploadDoesNotReportSuccessWhenBackendActivationFails' --warning-mode=fail --console=plain --stacktrace --no-build-cache
+
+      - name: Run locale parity regression first
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./gradlew :encryptor-app:testDebugUnitTest --tests 'cleveres.tricky.encryptor.LocalizationParityTest' --warning-mode=fail --console=plain --stacktrace --no-build-cache
 
       - name: Run exact Security Regression JVM suite
         shell: bash
@@ -86,7 +97,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git add service/src/test/java/cleveres/tricky/cleverestech/WebServerUploadTest.kt
+          git add -A service/src/test/java/cleveres/tricky/cleverestech/WebServerUploadTest.kt \
+              encryptor-app/src/main/res/values-in \
+              'encryptor-app/src/main/res/values-b+id'
           git diff --cached --check
-          git commit -m 'test: isolate WebServer keybox activation state'
+          git commit -m 'test: isolate keybox state and restore locale parity'
           git push origin HEAD:agent/rust-first-service-redesign
