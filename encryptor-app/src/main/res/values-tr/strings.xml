@@ -38,9 +38,6 @@
     <string name="confirm_password">Parolayı doğrula</string>
     <string name="encrypt_save">Tümünü şifrele ve kaydet</string>
     <string name="crypto_summary">Rust AES-256-GCM · PBKDF2-HMAC-SHA256 · Android Keystore imzası</string>
-    <string name="replace_keybox_title">Mevcut keybox değiştirilsin mi?</string>
-    <string name="replace_keybox_message">%1$s zaten var. Değiştirmek şifreli dosyanın üzerine kalıcı olarak yazar.</string>
-    <string name="replace">Değiştir</string>
     <string name="security_title">Yerel öncelikli, sertleştirilmiş şifreleme</string>
     <string name="security_body">ZIP içindeki XML dosyaları uygulamadan çıkmaz. Her CBOX yerel olarak imzalanıp şifrelenir; atomik özel kasa yazımları sınırlı Rust katmanında çalışır.</string>
     <string name="language">Dil</string>
