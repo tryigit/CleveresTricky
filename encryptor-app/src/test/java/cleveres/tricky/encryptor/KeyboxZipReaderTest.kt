@@ -75,6 +75,19 @@ class KeyboxZipReaderTest {
     }
 
     @Test
+    fun `rejects oversized unrelated entry expansion before later keyboxes`() {
+        val archive =
+            zipOf(
+                "padding.bin" to ByteArray(1024 * 1024 + 1),
+                "keybox.xml" to "<k/>".toByteArray(),
+            )
+
+        assertThrows(IOException::class.java) {
+            KeyboxZipReader.read(ByteArrayInputStream(archive)) { true }
+        }
+    }
+
+    @Test
     fun `rejects archives without XML keyboxes`() {
         val archive = zipOf("readme.txt" to "hello".toByteArray())
 
