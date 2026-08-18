@@ -75,27 +75,14 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
-import java.io.InputStream
 
 private const val LOG_TAG = "CleveresEncryptor"
-private const val MAX_XML_BYTES = 10 * 1024 * 1024
 
 private data class VaultItem(
     val file: File,
     val size: Long,
-)
-
-private data class SelectedKeybox(
-    val bytes: ByteArray,
-    val displayName: String,
-)
-
-private data class SaveOutcome(
-    val exists: Boolean = false,
-    val result: MobileCrypto.EncryptResult? = null,
 )
 
 class SecureMainActivity : ComponentActivity() {
@@ -322,16 +309,15 @@ private fun CreateScreen(
     var author by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirmation by remember { mutableStateOf("") }
-    var xml by remember { mutableStateOf<ByteArray?>(null) }
-    var xmlName by remember { mutableStateOf<String?>(null) }
+    var keyboxes by remember { mutableStateOf<List<SelectedKeybox>>(emptyList()) }
+    var zipName by remember { mutableStateOf<String?>(null) }
     var publicKey by remember { mutableStateOf<String?>(null) }
     var showPassword by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
-    var overwriteFilename by remember { mutableStateOf<String?>(null) }
 
     DisposableEffect(Unit) {
         onDispose {
-            xml?.fill(0)
+            keyboxes.forEach { it.bytes.fill(0) }
             password = ""
             confirmation = ""
         }
@@ -356,18 +342,11 @@ private fun CreateScreen(
                 val selected =
                     withContext(Dispatchers.IO) {
                         try {
-                            val bytes =
-                                context.contentResolver.openInputStream(uri)?.use(::readKeyboxBytes)
-                                    ?: throw IOException("input unavailable")
-                            if (!NativeCrypto.validateKeyboxXml(bytes)) {
-                                bytes.fill(0)
-                                null
-                            } else {
-                                SelectedKeybox(
-                                    bytes = bytes,
-                                    displayName = displayName(context, uri) ?: "keybox.xml",
-                                )
-                            }
+                            val entries =
+                                context.contentResolver.openInputStream(uri)?.use { input ->
+                                    KeyboxZipReader.read(input, NativeCrypto::validateKeyboxXml)
+                                } ?: throw IOException("input unavailable")
+                            Pair(entries, displayName(context, uri) ?: "keyboxes.zip")
                         } catch (_: Exception) {
                             null
                         }
@@ -375,9 +354,9 @@ private fun CreateScreen(
                 if (selected == null) {
                     snackbar.showSnackbar(xmlFailed)
                 } else {
-                    xml?.fill(0)
-                    xml = selected.bytes
-                    xmlName = selected.displayName
+                    keyboxes.forEach { it.bytes.fill(0) }
+                    keyboxes = selected.first
+                    zipName = selected.second
                 }
             }
         }
@@ -385,11 +364,17 @@ private fun CreateScreen(
     val authorValid = author.isNotBlank() && author.length <= 1024
     val passwordValid = password.length in 12..1024
     val confirmationValid = confirmation == password && confirmation.isNotEmpty()
-    val canSave = authorValid && passwordValid && confirmationValid && xml != null && publicKey != null && !saving
+    val canSave =
+        authorValid &&
+            passwordValid &&
+            confirmationValid &&
+            keyboxes.isNotEmpty() &&
+            publicKey != null &&
+            !saving
 
-    fun save(replace: Boolean) {
-        val selectedXml = xml ?: return
-        val filename = VaultStore.filenameFor(author)
+    fun save() {
+        val selectedKeyboxes = keyboxes
+        if (selectedKeyboxes.isEmpty()) return
         saving = true
         val selectedAuthor = author
         val selectedPassword = password
@@ -397,33 +382,32 @@ private fun CreateScreen(
             val outcome =
                 withContext(Dispatchers.IO) {
                     try {
-                        if (!replace && VaultStore.exists(context, filename)) {
-                            SaveOutcome(exists = true)
-                        } else {
-                            SaveOutcome(
-                                result =
-                                    MobileCrypto.encryptAndSave(
-                                        noBackupDirectory = context.noBackupFilesDir.absolutePath,
-                                        filename = filename,
-                                        author = selectedAuthor,
-                                        xmlUtf8 = selectedXml,
-                                        password = selectedPassword,
-                                    ),
+                        val filenames =
+                            VaultStore.allocateBatchFilenames(
+                                context = context,
+                                author = selectedAuthor,
+                                sourceNames = selectedKeyboxes.map { it.displayName },
                             )
-                        }
+                        val items =
+                            selectedKeyboxes.zip(filenames) { keybox, filename ->
+                                MobileCrypto.BatchItem(filename = filename, xmlUtf8 = keybox.bytes)
+                            }
+                        MobileCrypto.encryptAndSaveBatch(
+                            noBackupDirectory = context.noBackupFilesDir.absolutePath,
+                            author = selectedAuthor,
+                            items = items,
+                            password = selectedPassword,
+                        )
                     } catch (_: Exception) {
-                        SaveOutcome(result = MobileCrypto.EncryptResult.NATIVE_FAILURE)
+                        MobileCrypto.EncryptResult.NATIVE_FAILURE
                     }
                 }
             saving = false
-            if (outcome.exists) {
-                overwriteFilename = filename
-                return@launch
-            }
-            when (outcome.result) {
+            when (outcome) {
                 MobileCrypto.EncryptResult.SUCCESS -> {
-                    selectedXml.fill(0)
-                    xml = null
+                    selectedKeyboxes.forEach { it.bytes.fill(0) }
+                    keyboxes = emptyList()
+                    zipName = null
                     password = ""
                     confirmation = ""
                     snackbar.showSnackbar(encryptSuccess)
@@ -431,10 +415,8 @@ private fun CreateScreen(
                 }
                 MobileCrypto.EncryptResult.INVALID_INPUT -> snackbar.showSnackbar(xmlFailed)
                 MobileCrypto.EncryptResult.SIGNING_FAILURE -> snackbar.showSnackbar(signingUnavailable)
-                MobileCrypto.EncryptResult.NATIVE_FAILURE,
-                null,
-                -> {
-                    Log.w(LOG_TAG, "Native keybox encryption failed")
+                MobileCrypto.EncryptResult.NATIVE_FAILURE -> {
+                    Log.w(LOG_TAG, "Native batch keybox encryption failed")
                     snackbar.showSnackbar(encryptFailed)
                 }
             }
@@ -507,11 +489,29 @@ private fun CreateScreen(
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     OutlinedButton(
-                        onClick = { picker.launch(arrayOf("text/xml", "application/xml", "text/plain")) },
+                        onClick = {
+                            picker.launch(
+                                arrayOf(
+                                    "application/zip",
+                                    "application/x-zip-compressed",
+                                    "application/octet-stream",
+                                ),
+                            )
+                        },
                         enabled = !saving,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Text(xmlName ?: stringResource(R.string.choose_xml))
+                        Text(zipName ?: stringResource(R.string.choose_xml))
+                    }
+                    if (keyboxes.isNotEmpty()) {
+                        Text(
+                            stringResource(
+                                R.string.vault_summary,
+                                keyboxes.size,
+                                formatBytes(keyboxes.sumOf { it.bytes.size.toLong() }),
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
                     }
                     Text(stringResource(R.string.xml_limit), style = MaterialTheme.typography.bodySmall)
                 }
@@ -553,7 +553,7 @@ private fun CreateScreen(
             }
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Button(onClick = { save(false) }, enabled = canSave, modifier = Modifier.fillMaxWidth()) {
+                    Button(onClick = ::save, enabled = canSave, modifier = Modifier.fillMaxWidth()) {
                         if (saving) {
                             CircularProgressIndicator(modifier = Modifier.height(20.dp))
                         } else {
@@ -564,25 +564,6 @@ private fun CreateScreen(
                 }
             }
         }
-    }
-
-    overwriteFilename?.let { filename ->
-        AlertDialog(
-            onDismissRequest = { overwriteFilename = null },
-            title = { Text(stringResource(R.string.replace_keybox_title)) },
-            text = { Text(stringResource(R.string.replace_keybox_message, filename)) },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        overwriteFilename = null
-                        save(true)
-                    },
-                ) { Text(stringResource(R.string.replace)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { overwriteFilename = null }) { Text(stringResource(R.string.cancel)) }
-            },
-        )
     }
 }
 
@@ -597,26 +578,6 @@ private fun displayName(
         }
     }
     return null
-}
-
-private fun readKeyboxBytes(input: InputStream): ByteArray {
-    val output = ByteArrayOutputStream(minOf(MAX_XML_BYTES, 64 * 1024))
-    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-    var total = 0
-    try {
-        while (true) {
-            val count = input.read(buffer)
-            if (count < 0) break
-            if (count == 0) continue
-            if (count > MAX_XML_BYTES - total) throw IOException("XML exceeds size limit")
-            output.write(buffer, 0, count)
-            total += count
-        }
-        if (total == 0) throw IOException("XML is empty")
-        return output.toByteArray()
-    } finally {
-        buffer.fill(0)
-    }
 }
 
 private fun formatBytes(bytes: Long): String =
