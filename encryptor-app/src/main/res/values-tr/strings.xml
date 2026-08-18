@@ -5,7 +5,7 @@
     <string name="export_failed">Dışa aktarma başarısız</string>
     <string name="keybox_deleted">Keybox silindi</string>
     <string name="delete_failed">Keybox silinemedi</string>
-    <string name="create_encrypted_keybox">Şifreli keybox oluştur</string>
+    <string name="create_encrypted_keybox">Şifreli CBOX oluştur</string>
     <string name="vault_title">Cleveres Kasası</string>
     <string name="vault_subtitle">Şifreli keybox dosyaları yalnızca cihazda tutulur.</string>
     <string name="delete_keybox_title">Keybox silinsin mi?</string>
@@ -14,13 +14,13 @@
     <string name="cancel">İptal</string>
     <string name="vault_summary">%1$d · %2$s</string>
     <string name="empty_vault_title">Kasanız boş</string>
-    <string name="empty_vault_body">Keybox XML dosyaları içeren bir ZIP seçin, tek parolayla koruyun ve şifreli sonuçları yerel olarak saklayın.</string>
-    <string name="create_keybox">Keybox oluştur</string>
+    <string name="empty_vault_body">Tek bir keybox XML dosyası veya keybox XML dosyaları içeren bir ZIP seçin, tek parolayla koruyun ve şifreli CBOX sonuçlarını yerel olarak saklayın.</string>
+    <string name="create_keybox">CBOX oluştur</string>
     <string name="export_file">%1$s dosyasını dışa aktar</string>
     <string name="delete_file">%1$s dosyasını sil</string>
     <string name="encryption_failed">Şifreleme başarısız</string>
     <string name="encrypted_success">Şifreli keybox dosyaları kaydedildi</string>
-    <string name="xml_use_failed">Seçilen ZIP kullanılamadı</string>
+    <string name="xml_use_failed">Seçilen XML veya ZIP kullanılamadı</string>
     <string name="author_required">Yazar veya kredi bağlantısı gerekli</string>
     <string name="password_minimum">En az 12 karakter kullanın</string>
     <string name="passwords_mismatch">Parolalar eşleşmiyor</string>
@@ -30,16 +30,16 @@
     <string name="signing_key_unavailable">İmzalama anahtarı kullanılamıyor</string>
     <string name="public_key_copied">Açık anahtar kopyalandı</string>
     <string name="copy_public_key">Açık anahtarı kopyala</string>
-    <string name="choose_xml">ZIP dosyası seç</string>
-    <string name="xml_limit">ZIP · en fazla 64 XML · dosya başına 10 MiB · toplam 48 MiB</string>
+    <string name="choose_xml">XML veya ZIP seç</string>
+    <string name="xml_limit">Tek XML · en fazla 10 MiB veya ZIP · en fazla 64 XML · dosya başına 10 MiB · toplam 48 MiB</string>
     <string name="password">Parola</string>
     <string name="hide_password">Parolayı gizle</string>
     <string name="show_password">Parolayı göster</string>
     <string name="confirm_password">Parolayı doğrula</string>
-    <string name="encrypt_save">Tümünü şifrele ve kaydet</string>
+    <string name="encrypt_save">Şifrele ve kaydet</string>
     <string name="crypto_summary">Rust AES-256-GCM · PBKDF2-HMAC-SHA256 · Android Keystore imzası</string>
     <string name="security_title">Yerel öncelikli, sertleştirilmiş şifreleme</string>
-    <string name="security_body">ZIP içindeki XML dosyaları uygulamadan çıkmaz. Her CBOX yerel olarak imzalanıp şifrelenir; atomik özel kasa yazımları sınırlı Rust katmanında çalışır.</string>
+    <string name="security_body">Seçilen keybox XML dosyaları uygulamadan çıkmaz. Her CBOX yerel olarak imzalanıp şifrelenir; atomik özel kasa yazımları sınırlı Rust katmanında çalışır.</string>
     <string name="language">Dil</string>
     <string name="system_default">Sistem varsayılanı</string>
 </resources>
