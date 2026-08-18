@@ -61,25 +61,26 @@ internal object KeyboxZipReader {
                     }
 
                     val bytes = readBytes(zip)
-                    if (bytes.isEmpty()) {
-                        bytes.fill(0)
-                        throw IOException("XML file is empty")
-                    }
-                    if (bytes.size > MAX_TOTAL_XML_BYTES - totalXmlBytes) {
-                        bytes.fill(0)
-                        throw IOException("ZIP XML content exceeds the total size limit")
-                    }
-                    if (!validateXml(bytes)) {
-                        bytes.fill(0)
-                        throw IOException("ZIP contains an invalid keybox XML")
-                    }
+                    var retained = false
+                    try {
+                        if (bytes.isEmpty()) throw IOException("XML file is empty")
+                        if (bytes.size > MAX_TOTAL_XML_BYTES - totalXmlBytes) {
+                            throw IOException("ZIP XML content exceeds the total size limit")
+                        }
+                        if (!validateXml(bytes)) {
+                            throw IOException("ZIP contains an invalid keybox XML")
+                        }
 
-                    totalXmlBytes += bytes.size
-                    selected +=
-                        SelectedKeybox(
-                            bytes = bytes,
-                            displayName = safeDisplayName(entry.name),
-                        )
+                        totalXmlBytes += bytes.size
+                        selected +=
+                            SelectedKeybox(
+                                bytes = bytes,
+                                displayName = safeDisplayName(entry.name),
+                            )
+                        retained = true
+                    } finally {
+                        if (!retained) bytes.fill(0)
+                    }
                     zip.closeEntry()
                 }
             }
