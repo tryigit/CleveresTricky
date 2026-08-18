@@ -78,15 +78,13 @@ class SecurityLevelInterceptor : BinderInterceptor() {
                 return Skip
             }
 
-            // Parse only the leaf first. A normal asymmetric key without an Android attestation
-            // challenge still has a self-signed X.509 leaf, but it must never cross the Rust
-            // certificate backend boundary. 2.5.8 rejected that case locally; preserving the same
-            // zero-backend fast path avoids a measurable non-attested-only UDS/parser cost.
+            // Keep attested and ordinary asymmetric generateKey replies on the same bounded
+            // certificate-inspection preflight. Rust inspection decides whether the Android
+            // attestation extension is present. A JVM-only negative fast path makes ordinary
+            // calls measurably cheaper than attested calls and reintroduces a timing distinguisher.
+            // This restores the known-good 2.5.8 path without synthetic sleeps or threshold tuning.
             val originalLeaf = Utils.getLeafCertificate(metadata)
-            if (
-                originalLeaf == null ||
-                !Utils.hasAndroidAttestationExtension(originalLeaf)
-            ) {
+            if (originalLeaf == null) {
                 replacement.recycle()
                 return Skip
             }
