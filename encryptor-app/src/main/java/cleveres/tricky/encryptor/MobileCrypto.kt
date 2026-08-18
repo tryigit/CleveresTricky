@@ -83,6 +83,7 @@ internal object MobileCrypto {
             items.size > KeyboxZipReader.MAX_KEYBOX_FILES ||
             password.length !in MIN_PASSWORD_UTF16_UNITS..MAX_PASSWORD_UTF16_UNITS ||
             items.any { it.xmlUtf8.isEmpty() || it.xmlUtf8.size > MAX_XML_BYTES } ||
+            items.sumOf { it.xmlUtf8.size.toLong() } > KeyboxZipReader.MAX_TOTAL_XML_BYTES ||
             items.map { it.filename }.toSet().size != items.size
         ) {
             return EncryptResult.INVALID_INPUT
