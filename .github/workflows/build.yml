@@ -26,7 +26,13 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      - name: Patch raw published-keybox snapshot test seam
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
+
+      - name: Isolate WebServer keybox test state
         shell: bash
         run: |
           set -euo pipefail
@@ -35,78 +41,52 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
-          cert_path = Path('service/src/main/java/cleveres/tricky/cleverestech/keystore/CertHack.java')
-          cert = cert_path.read_text()
-          old = '''    public static int getKeyboxCount() {
-                  if (!KeyboxLoader.isActiveSetHealthy()) {
-                      throw new IllegalStateException("Rust keybox backend activation is unavailable");
-                  }
-                  int count = 0;
-                  for (List<KeyBox> list : state.keyboxes.values()) count += list.size();
-                  return count;
-              }
-          '''
-          new = '''    public static int getKeyboxCount() {
-                  if (!KeyboxLoader.isActiveSetHealthy()) {
-                      throw new IllegalStateException("Rust keybox backend activation is unavailable");
-                  }
-                  return getPublishedKeyboxCountForTesting();
-              }
+          path = Path('service/src/test/java/cleveres/tricky/cleverestech/WebServerUploadTest.kt')
+          text = path.read_text()
 
-              /**
-               * JVM-unit-test seam for inspecting the already-published managed snapshot without
-               * probing backend health or triggering backend recovery.
-               */
-              public static int getPublishedKeyboxCountForTesting() {
-                  int count = 0;
-                  for (List<KeyBox> list : state.keyboxes.values()) count += list.size();
-                  return count;
-              }
+          old = '''        configDir = tempFolder.newFolder("config")
+                  ManagedKeyboxParserOracle.install()
           '''
-          if cert.count(old) != 1:
-              raise SystemExit(f'CertHack keybox-count block count: {cert.count(old)}')
-          cert_path.write_text(cert.replace(old, new, 1))
-
-          test_path = Path('service/src/test/java/cleveres/tricky/cleverestech/WebServerUploadTest.kt')
-          test = test_path.read_text()
-          test = test.replace(
-              '        val activeKeyboxCount = cleveres.tricky.cleverestech.keystore.CertHack.getKeyboxCount()\n',
-              '        val activeKeyboxCount = cleveres.tricky.cleverestech.keystore.CertHack.getPublishedKeyboxCountForTesting()\n',
-              1,
-          )
-          old = '''        // Activation failure intentionally marks backend health false. Reset only the test seam so
-                  // getKeyboxCount can inspect the immutable managed snapshot without publishing new keys.
+          new = '''        configDir = tempFolder.newFolder("config")
                   KeyboxLoader.resetForTesting()
-                  assertEquals(activeKeyboxCount, cleveres.tricky.cleverestech.keystore.CertHack.getKeyboxCount())
+                  cleveres.tricky.cleverestech.keystore.CertHack.setKeyboxes(emptyList())
+                  ManagedKeyboxParserOracle.install()
           '''
-          new = '''        assertEquals(
-                  activeKeyboxCount,
-                  cleveres.tricky.cleverestech.keystore.CertHack.getPublishedKeyboxCountForTesting(),
-              )
+          if text.count(old) != 1:
+              raise SystemExit(f'setUp isolation block count: {text.count(old)}')
+          text = text.replace(old, new, 1)
+
+          old = '''        KeyboxLoader.activeSetOverride = null
+                  BackendRecovery.recoveryOverride = null
+                  ManagedKeyboxParserOracle.reset()
           '''
-          if test.count(old) != 1:
-              raise SystemExit(f'WebServerUploadTest snapshot block count: {test.count(old)}')
-          test_path.write_text(test.replace(old, new, 1))
+          new = '''        KeyboxLoader.resetForTesting()
+                  BackendRecovery.recoveryOverride = null
+                  cleveres.tricky.cleverestech.keystore.CertHack.setKeyboxes(emptyList())
+                  ManagedKeyboxParserOracle.reset()
+          '''
+          if text.count(old) != 1:
+              raise SystemExit(f'tearDown isolation block count: {text.count(old)}')
+          path.write_text(text.replace(old, new, 1))
           PY
 
       - name: Run failing keybox regression first
         shell: bash
         run: |
           set -euo pipefail
-          ./gradlew :service:testDebugUnitTest --tests 'cleveres.tricky.cleverestech.WebServerUploadTest.testValidUploadDoesNotReportSuccessWhenBackendActivationFails' --warning-mode=fail --console=plain --no-build-cache
+          ./gradlew :service:testDebugUnitTest --tests 'cleveres.tricky.cleverestech.WebServerUploadTest.testValidUploadDoesNotReportSuccessWhenBackendActivationFails' --warning-mode=fail --console=plain --stacktrace --no-build-cache
 
-      - name: Run service unit tests
+      - name: Run exact Security Regression JVM suite
         shell: bash
         run: |
           set -euo pipefail
-          ./gradlew :service:testDebugUnitTest --warning-mode=fail --console=plain --no-build-cache
+          ./gradlew :service:testDebugUnitTest :stub:testDebugUnitTest :encryptor-app:testDebugUnitTest --warning-mode=fail --console=plain --stacktrace --no-build-cache
 
       - name: Commit and push PR 953
         shell: bash
         run: |
           set -euo pipefail
-          git add service/src/main/java/cleveres/tricky/cleverestech/keystore/CertHack.java \
-                  service/src/test/java/cleveres/tricky/cleverestech/WebServerUploadTest.kt
+          git add service/src/test/java/cleveres/tricky/cleverestech/WebServerUploadTest.kt
           git diff --cached --check
-          git commit -m 'test: inspect published keybox snapshot without backend recovery'
+          git commit -m 'test: isolate WebServer keybox activation state'
           git push origin HEAD:agent/rust-first-service-redesign
