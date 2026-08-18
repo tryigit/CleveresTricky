@@ -12,7 +12,7 @@ jobs:
   pr953-fixup-runner:
     if: github.head_ref == 'agent/pr953-fixup-runner'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     steps:
       - name: Check out PR 953 head
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -32,68 +32,51 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
 
-      - name: Apply deterministic regression fixes
+      - name: Align Indonesian resource qualifier with Android
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
           python3 - <<'PY'
           from pathlib import Path
 
-          path = Path('service/src/test/java/cleveres/tricky/cleverestech/WebServerUploadTest.kt')
-          text = path.read_text()
-
-          old = '''        configDir = tempFolder.newFolder("config")
-                  ManagedKeyboxParserOracle.install()
-          '''
-          new = '''        configDir = tempFolder.newFolder("config")
-                  KeyboxLoader.resetForTesting()
-                  cleveres.tricky.cleverestech.keystore.CertHack.setKeyboxes(emptyList())
-                  ManagedKeyboxParserOracle.install()
-          '''
+          test_path = Path('encryptor-app/src/test/java/cleveres/tricky/encryptor/LocalizationParityTest.kt')
+          text = test_path.read_text()
+          old = '                "values-b+id" to "id",\n'
+          new = '                "values-in" to "id",\n'
           if text.count(old) != 1:
-              raise SystemExit(f'setUp isolation block count: {text.count(old)}')
-          text = text.replace(old, new, 1)
+              raise SystemExit(f'Indonesian resource mapping count: {text.count(old)}')
+          test_path.write_text(text.replace(old, new, 1))
 
-          old = '''        KeyboxLoader.activeSetOverride = null
-                  BackendRecovery.recoveryOverride = null
-                  ManagedKeyboxParserOracle.reset()
-          '''
-          new = '''        KeyboxLoader.resetForTesting()
-                  BackendRecovery.recoveryOverride = null
-                  cleveres.tricky.cleverestech.keystore.CertHack.setKeyboxes(emptyList())
-                  ManagedKeyboxParserOracle.reset()
-          '''
-          if text.count(old) != 1:
-              raise SystemExit(f'tearDown isolation block count: {text.count(old)}')
-          path.write_text(text.replace(old, new, 1))
-
-          locales_path = Path('encryptor-app/src/main/res/xml/locales_config.xml')
-          locales = locales_path.read_text()
-          old_locale = '<locale android:name="in" />'
-          new_locale = '<locale android:name="id" />'
-          if locales.count(old_locale) != 1:
-              raise SystemExit(f'legacy Indonesian locale tag count: {locales.count(old_locale)}')
-          locales_path.write_text(locales.replace(old_locale, new_locale, 1))
+          locale_config = Path('encryptor-app/src/main/res/xml/locales_config.xml').read_text()
+          if '<locale android:name="id" />' not in locale_config:
+              raise SystemExit('Expected modern Indonesian locale tag id in locales_config.xml')
           PY
 
-          mkdir -p encryptor-app/src/main/res/values-b+id
-          cp encryptor-app/src/main/res/values-in/strings.xml encryptor-app/src/main/res/values-b+id/strings.xml
-          rm encryptor-app/src/main/res/values-in/strings.xml
-          rmdir encryptor-app/src/main/res/values-in
-
-      - name: Run keybox regression first
-        shell: bash
-        run: |
-          set -euo pipefail
-          ./gradlew :service:testDebugUnitTest --tests 'cleveres.tricky.cleverestech.WebServerUploadTest.testValidUploadDoesNotReportSuccessWhenBackendActivationFails' --warning-mode=fail --console=plain --stacktrace --no-build-cache
+          mkdir -p encryptor-app/src/main/res/values-in
+          cp 'encryptor-app/src/main/res/values-b+id/strings.xml' encryptor-app/src/main/res/values-in/strings.xml
+          rm 'encryptor-app/src/main/res/values-b+id/strings.xml'
+          rmdir 'encryptor-app/src/main/res/values-b+id'
 
       - name: Run locale parity regression first
         shell: bash
         run: |
           set -euo pipefail
           ./gradlew :encryptor-app:testDebugUnitTest --tests 'cleveres.tricky.encryptor.LocalizationParityTest' --warning-mode=fail --console=plain --stacktrace --no-build-cache
+
+      - name: Run Kotlin format gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./gradlew ktlintCheck --warning-mode=fail --console=plain --no-build-cache
+
+      - name: Run exact Android lint gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./gradlew :service:lintDebug :stub:lintDebug :encryptor-app:lintDebug --warning-mode=fail --console=plain --continue --no-build-cache
 
       - name: Run exact Security Regression JVM suite
         shell: bash
@@ -105,10 +88,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git add -A service/src/test/java/cleveres/tricky/cleverestech/WebServerUploadTest.kt \
+          git add -A \
+              encryptor-app/src/test/java/cleveres/tricky/encryptor/LocalizationParityTest.kt \
               encryptor-app/src/main/res/values-in \
-              'encryptor-app/src/main/res/values-b+id' \
-              encryptor-app/src/main/res/xml/locales_config.xml
+              'encryptor-app/src/main/res/values-b+id'
           git diff --cached --check
-          git commit -m 'test: isolate keybox state and restore locale parity'
+          git commit -m 'fix: align Indonesian resources with Android locale handling'
           git push origin HEAD:agent/rust-first-service-redesign
