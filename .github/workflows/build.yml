@@ -32,7 +32,7 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
 
-      - name: Align Indonesian resource qualifier with Android
+      - name: Align Indonesian locale identity with Android
         shell: bash
         run: |
           set -euo pipefail
@@ -45,14 +45,18 @@ jobs:
           test_path = Path('encryptor-app/src/test/java/cleveres/tricky/encryptor/LocalizationParityTest.kt')
           text = test_path.read_text()
           old = '                "values-b+id" to "id",\n'
-          new = '                "values-in" to "id",\n'
+          new = '                "values-in" to "in",\n'
           if text.count(old) != 1:
               raise SystemExit(f'Indonesian resource mapping count: {text.count(old)}')
           test_path.write_text(text.replace(old, new, 1))
 
-          locale_config = Path('encryptor-app/src/main/res/xml/locales_config.xml').read_text()
-          if '<locale android:name="id" />' not in locale_config:
-              raise SystemExit('Expected modern Indonesian locale tag id in locales_config.xml')
+          locales_path = Path('encryptor-app/src/main/res/xml/locales_config.xml')
+          locales = locales_path.read_text()
+          old_locale = '<locale android:name="id" />'
+          new_locale = '<locale android:name="in" />'
+          if locales.count(old_locale) != 1:
+              raise SystemExit(f'Indonesian locale-config id count: {locales.count(old_locale)}')
+          locales_path.write_text(locales.replace(old_locale, new_locale, 1))
           PY
 
           mkdir -p encryptor-app/src/main/res/values-in
@@ -90,8 +94,9 @@ jobs:
           set -euo pipefail
           git add -A \
               encryptor-app/src/test/java/cleveres/tricky/encryptor/LocalizationParityTest.kt \
+              encryptor-app/src/main/res/xml/locales_config.xml \
               encryptor-app/src/main/res/values-in \
               'encryptor-app/src/main/res/values-b+id'
           git diff --cached --check
-          git commit -m 'fix: align Indonesian resources with Android locale handling'
+          git commit -m 'fix: align Indonesian locale with Android resource handling'
           git push origin HEAD:agent/rust-first-service-redesign
