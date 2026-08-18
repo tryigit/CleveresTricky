@@ -23,6 +23,11 @@ internal object MobileCrypto {
     private const val MIN_PASSWORD_UTF16_UNITS = 12
     private const val MAX_PASSWORD_UTF16_UNITS = 1024
 
+    internal data class BatchItem(
+        val filename: String,
+        val xmlUtf8: ByteArray,
+    )
+
     internal enum class EncryptResult {
         SUCCESS,
         INVALID_INPUT,
@@ -57,13 +62,28 @@ internal object MobileCrypto {
         author: String,
         xmlUtf8: ByteArray,
         password: String,
+    ): EncryptResult =
+        encryptAndSaveBatch(
+            noBackupDirectory = noBackupDirectory,
+            author = author,
+            items = listOf(BatchItem(filename, xmlUtf8)),
+            password = password,
+        )
+
+    fun encryptAndSaveBatch(
+        noBackupDirectory: String,
+        author: String,
+        items: List<BatchItem>,
+        password: String,
     ): EncryptResult {
         if (
             author.isBlank() ||
             author.length > MAX_AUTHOR_UTF16_UNITS ||
-            xmlUtf8.isEmpty() ||
-            xmlUtf8.size > MAX_XML_BYTES ||
-            password.length !in MIN_PASSWORD_UTF16_UNITS..MAX_PASSWORD_UTF16_UNITS
+            items.isEmpty() ||
+            items.size > KeyboxZipReader.MAX_KEYBOX_FILES ||
+            password.length !in MIN_PASSWORD_UTF16_UNITS..MAX_PASSWORD_UTF16_UNITS ||
+            items.any { it.xmlUtf8.isEmpty() || it.xmlUtf8.size > MAX_XML_BYTES } ||
+            items.map { it.filename }.toSet().size != items.size
         ) {
             return EncryptResult.INVALID_INPUT
         }
@@ -74,48 +94,72 @@ internal object MobileCrypto {
             return EncryptResult.INVALID_INPUT
         }
         val passwordUtf16 = password.toCharArray()
-        var signatureBytes: ByteArray? = null
-        var signatureBase64: ByteArray? = null
+        val committed = ArrayList<String>(items.size)
         try {
             ensureSigningKey()
             val keyStore = KeyStore.getInstance(KEYSTORE_PROVIDER).apply { load(null) }
             val entry =
                 keyStore.getEntry(KEY_ALIAS, null) as? KeyStore.PrivateKeyEntry
                     ?: return EncryptResult.SIGNING_FAILURE
-
             val signer = Signature.getInstance(SIGNATURE_ALGORITHM)
-            signer.initSign(entry.privateKey)
-            CboxSignatureV2.update(authorUtf8, xmlUtf8, signer::update)
-            signatureBytes = signer.sign()
-            signatureBase64 = Base64.encode(signatureBytes, Base64.NO_WRAP)
 
-            return if (
-                NativeCrypto.encryptAndSave(
-                    noBackupDirectory,
-                    filename,
-                    authorUtf8,
-                    xmlUtf8,
-                    signatureBase64,
-                    passwordUtf16,
-                )
-            ) {
-                EncryptResult.SUCCESS
-            } else {
-                EncryptResult.NATIVE_FAILURE
+            for (item in items) {
+                var signatureBytes: ByteArray? = null
+                var signatureBase64: ByteArray? = null
+                try {
+                    signer.initSign(entry.privateKey)
+                    CboxSignatureV2.update(authorUtf8, item.xmlUtf8, signer::update)
+                    signatureBytes = signer.sign()
+                    signatureBase64 = Base64.encode(signatureBytes, Base64.NO_WRAP)
+
+                    if (
+                        !NativeCrypto.encryptAndSave(
+                            noBackupDirectory,
+                            item.filename,
+                            authorUtf8,
+                            item.xmlUtf8,
+                            signatureBase64,
+                            passwordUtf16,
+                        )
+                    ) {
+                        rollbackBatch(noBackupDirectory, committed)
+                        return EncryptResult.NATIVE_FAILURE
+                    }
+                    committed += item.filename
+                } finally {
+                    signatureBytes?.fill(0)
+                    signatureBase64?.fill(0)
+                }
             }
+            return EncryptResult.SUCCESS
         } catch (_: ProviderException) {
+            rollbackBatch(noBackupDirectory, committed)
             return EncryptResult.SIGNING_FAILURE
         } catch (_: GeneralSecurityException) {
+            rollbackBatch(noBackupDirectory, committed)
             return EncryptResult.SIGNING_FAILURE
         } catch (_: IOException) {
+            rollbackBatch(noBackupDirectory, committed)
             return EncryptResult.SIGNING_FAILURE
         } catch (_: IllegalStateException) {
+            rollbackBatch(noBackupDirectory, committed)
             return EncryptResult.NATIVE_FAILURE
         } finally {
             authorUtf8.fill(0)
             passwordUtf16.fill('\u0000')
-            signatureBytes?.fill(0)
-            signatureBase64?.fill(0)
+        }
+    }
+
+    private fun rollbackBatch(
+        noBackupDirectory: String,
+        committed: List<String>,
+    ) {
+        for (filename in committed.asReversed()) {
+            try {
+                NativeCrypto.deleteEncrypted(noBackupDirectory, filename)
+            } catch (_: Exception) {
+                // Best-effort rollback. Filenames are allocated as new entries, never overwrites.
+            }
         }
     }
 
