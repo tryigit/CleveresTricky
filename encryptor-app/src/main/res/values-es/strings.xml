@@ -5,7 +5,7 @@
     <string name="export_failed">Error al exportar</string>
     <string name="keybox_deleted">Keybox eliminado</string>
     <string name="delete_failed">No se pudo eliminar el keybox</string>
-    <string name="create_encrypted_keybox">Crear keybox cifrado</string>
+    <string name="create_encrypted_keybox">Crear CBOX cifrado</string>
     <string name="vault_title">Bóveda Cleveres</string>
     <string name="vault_subtitle">Keyboxes cifrados, guardados solo en el dispositivo.</string>
     <string name="delete_keybox_title">¿Eliminar keybox?</string>
@@ -14,13 +14,13 @@
     <string name="cancel">Cancelar</string>
     <string name="vault_summary">%1$d · %2$s</string>
     <string name="empty_vault_title">La bóveda está vacía</string>
-    <string name="empty_vault_body">Elige un ZIP con archivos XML de keybox, protégelos con una contraseña y guarda localmente los resultados cifrados.</string>
-    <string name="create_keybox">Crear keybox</string>
+    <string name="empty_vault_body">Elige un único XML de keybox o un ZIP con archivos XML de keybox, protégelos con una contraseña y guarda localmente los resultados CBOX cifrados.</string>
+    <string name="create_keybox">Crear CBOX</string>
     <string name="export_file">Exportar %1$s</string>
     <string name="delete_file">Eliminar %1$s</string>
     <string name="encryption_failed">Error de cifrado</string>
     <string name="encrypted_success">Keyboxes cifrados guardados</string>
-    <string name="xml_use_failed">No se pudo usar el ZIP seleccionado</string>
+    <string name="xml_use_failed">No se pudo usar el XML o ZIP seleccionado</string>
     <string name="author_required">Se requiere autor o enlace de crédito</string>
     <string name="password_minimum">Usa al menos 12 caracteres</string>
     <string name="passwords_mismatch">Las contraseñas no coinciden</string>
@@ -30,16 +30,16 @@
     <string name="signing_key_unavailable">Clave de firma no disponible</string>
     <string name="public_key_copied">Clave pública copiada</string>
     <string name="copy_public_key">Copiar clave pública</string>
-    <string name="choose_xml">Elegir archivo ZIP</string>
-    <string name="xml_limit">ZIP · hasta 64 XML · 10 MiB cada uno · 48 MiB en total</string>
+    <string name="choose_xml">Elegir XML o ZIP</string>
+    <string name="xml_limit">XML individual · hasta 10 MiB, o ZIP · hasta 64 XML · 10 MiB cada uno · 48 MiB en total</string>
     <string name="password">Contraseña</string>
     <string name="hide_password">Ocultar contraseña</string>
     <string name="show_password">Mostrar contraseña</string>
     <string name="confirm_password">Confirmar contraseña</string>
-    <string name="encrypt_save">Cifrar y guardar todos</string>
+    <string name="encrypt_save">Cifrar y guardar</string>
     <string name="crypto_summary">Rust AES-256-GCM · PBKDF2-HMAC-SHA256 · firma de Android Keystore</string>
     <string name="security_title">Cifrado reforzado y local</string>
-    <string name="security_body">Los XML dentro del ZIP nunca salen de esta aplicación. Cada CBOX se firma y cifra localmente; las escrituras atómicas de la bóveda privada se ejecutan en la capa Rust acotada.</string>
+    <string name="security_body">Los XML de keybox seleccionados nunca salen de esta aplicación. Cada CBOX se firma y cifra localmente; las escrituras atómicas de la bóveda privada se ejecutan en la capa Rust acotada.</string>
     <string name="language">Idioma</string>
     <string name="system_default">Predeterminado del sistema</string>
 </resources>
