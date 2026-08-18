@@ -18,6 +18,8 @@ internal object KeyboxZipReader {
     private const val MAX_ARCHIVE_ENTRIES = 256
     private const val MAX_ENTRY_NAME_CHARS = 1024
     private const val MAX_XML_BYTES = 10 * 1024 * 1024
+    private const val MAX_IGNORED_ENTRY_BYTES = 1024 * 1024
+    private const val MAX_TOTAL_IGNORED_BYTES = 4 * 1024 * 1024
 
     fun read(
         input: InputStream,
@@ -25,6 +27,7 @@ internal object KeyboxZipReader {
     ): List<SelectedKeybox> {
         val selected = ArrayList<SelectedKeybox>()
         var totalXmlBytes = 0
+        var totalIgnoredBytes = 0
         var archiveEntries = 0
         try {
             ZipInputStream(CountingInputStream(input, MAX_ARCHIVE_BYTES.toLong())).use { zip ->
@@ -37,43 +40,47 @@ internal object KeyboxZipReader {
                     if (entry.name.length > MAX_ENTRY_NAME_CHARS || entry.name.indexOf('\u0000') >= 0) {
                         throw IOException("ZIP entry name is invalid")
                     }
-                    try {
-                        if (entry.isDirectory || !entry.name.endsWith(".xml", ignoreCase = true)) {
-                            continue
-                        }
-                        if (entry.method != ZipEntry.STORED && entry.method != ZipEntry.DEFLATED) {
-                            throw IOException("ZIP entry compression is unsupported")
-                        }
-                        if (entry.size > MAX_XML_BYTES) {
-                            throw IOException("XML file exceeds 10 MiB")
-                        }
-                        if (selected.size == MAX_KEYBOX_FILES) {
-                            throw IOException("ZIP contains too many XML files")
-                        }
-
-                        val bytes = readBytes(zip)
-                        if (bytes.isEmpty()) {
-                            bytes.fill(0)
-                            throw IOException("XML file is empty")
-                        }
-                        if (bytes.size > MAX_TOTAL_XML_BYTES - totalXmlBytes) {
-                            bytes.fill(0)
-                            throw IOException("ZIP XML content exceeds the total size limit")
-                        }
-                        if (!validateXml(bytes)) {
-                            bytes.fill(0)
-                            throw IOException("ZIP contains an invalid keybox XML")
-                        }
-
-                        totalXmlBytes += bytes.size
-                        selected +=
-                            SelectedKeybox(
-                                bytes = bytes,
-                                displayName = safeDisplayName(entry.name),
-                            )
-                    } finally {
-                        zip.closeEntry()
+                    if (entry.method != ZipEntry.STORED && entry.method != ZipEntry.DEFLATED) {
+                        throw IOException("ZIP entry compression is unsupported")
                     }
+
+                    if (entry.isDirectory || !entry.name.endsWith(".xml", ignoreCase = true)) {
+                        val ignoredBytes = drainIgnoredEntry(zip)
+                        if (ignoredBytes > MAX_TOTAL_IGNORED_BYTES - totalIgnoredBytes) {
+                            throw IOException("ZIP contains too much unrelated content")
+                        }
+                        totalIgnoredBytes += ignoredBytes
+                        zip.closeEntry()
+                        continue
+                    }
+                    if (entry.size > MAX_XML_BYTES) {
+                        throw IOException("XML file exceeds 10 MiB")
+                    }
+                    if (selected.size == MAX_KEYBOX_FILES) {
+                        throw IOException("ZIP contains too many XML files")
+                    }
+
+                    val bytes = readBytes(zip)
+                    if (bytes.isEmpty()) {
+                        bytes.fill(0)
+                        throw IOException("XML file is empty")
+                    }
+                    if (bytes.size > MAX_TOTAL_XML_BYTES - totalXmlBytes) {
+                        bytes.fill(0)
+                        throw IOException("ZIP XML content exceeds the total size limit")
+                    }
+                    if (!validateXml(bytes)) {
+                        bytes.fill(0)
+                        throw IOException("ZIP contains an invalid keybox XML")
+                    }
+
+                    totalXmlBytes += bytes.size
+                    selected +=
+                        SelectedKeybox(
+                            bytes = bytes,
+                            displayName = safeDisplayName(entry.name),
+                        )
+                    zip.closeEntry()
                 }
             }
             if (selected.isEmpty()) throw IOException("ZIP does not contain keybox XML files")
@@ -81,6 +88,25 @@ internal object KeyboxZipReader {
         } catch (error: Exception) {
             selected.forEach { it.bytes.fill(0) }
             throw error
+        }
+    }
+
+    private fun drainIgnoredEntry(zip: ZipInputStream): Int {
+        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+        var total = 0
+        try {
+            while (true) {
+                val count = zip.read(buffer)
+                if (count < 0) break
+                if (count == 0) continue
+                if (count > MAX_IGNORED_ENTRY_BYTES - total) {
+                    throw IOException("Unrelated ZIP entry exceeds 1 MiB")
+                }
+                total += count
+            }
+            return total
+        } finally {
+            buffer.fill(0)
         }
     }
 
