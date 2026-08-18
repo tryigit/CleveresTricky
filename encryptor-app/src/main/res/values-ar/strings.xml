@@ -38,9 +38,6 @@
     <string name="confirm_password">تأكيد كلمة المرور</string>
     <string name="encrypt_save">تشفير الكل وحفظه</string>
     <string name="crypto_summary">Rust AES-256-GCM · PBKDF2-HMAC-SHA256 · توقيع Android Keystore</string>
-    <string name="replace_keybox_title">استبدال Keybox الموجود؟</string>
-    <string name="replace_keybox_message">%1$s موجود بالفعل. سيؤدي الاستبدال إلى الكتابة فوق الملف المشفر نهائياً.</string>
-    <string name="replace">استبدال</string>
     <string name="security_title">تشفير محلي ومحصّن</string>
     <string name="security_body">لا تغادر ملفات XML داخل ZIP هذا التطبيق. يتم توقيع كل CBOX وتشفيره محلياً؛ وتعمل الكتابة الذرية إلى الخزنة الخاصة داخل طبقة Rust محدودة.</string>
     <string name="language">اللغة</string>
