@@ -5,7 +5,7 @@
     <string name="export_failed">Ekspor gagal</string>
     <string name="keybox_deleted">Keybox dihapus</string>
     <string name="delete_failed">Keybox tidak dapat dihapus</string>
-    <string name="create_encrypted_keybox">Buat keybox terenkripsi</string>
+    <string name="create_encrypted_keybox">Buat CBOX terenkripsi</string>
     <string name="vault_title">Brankas Cleveres</string>
     <string name="vault_subtitle">Keybox terenkripsi tetap tersimpan lokal di perangkat.</string>
     <string name="delete_keybox_title">Hapus keybox?</string>
@@ -14,13 +14,13 @@
     <string name="cancel">Batal</string>
     <string name="vault_summary">%1$d · %2$s</string>
     <string name="empty_vault_title">Brankas Anda kosong</string>
-    <string name="empty_vault_body">Pilih ZIP berisi file XML keybox, lindungi semuanya dengan satu kata sandi, lalu simpan hasil terenkripsi secara lokal.</string>
-    <string name="create_keybox">Buat keybox</string>
+    <string name="empty_vault_body">Pilih satu file XML keybox atau ZIP berisi file XML keybox, lindungi dengan satu kata sandi, lalu simpan hasil CBOX terenkripsi secara lokal.</string>
+    <string name="create_keybox">Buat CBOX</string>
     <string name="export_file">Ekspor %1$s</string>
     <string name="delete_file">Hapus %1$s</string>
     <string name="encryption_failed">Enkripsi gagal</string>
     <string name="encrypted_success">Keybox terenkripsi disimpan</string>
-    <string name="xml_use_failed">ZIP yang dipilih tidak dapat digunakan</string>
+    <string name="xml_use_failed">XML atau ZIP yang dipilih tidak dapat digunakan</string>
     <string name="author_required">Penulis atau tautan kredit wajib diisi</string>
     <string name="password_minimum">Gunakan minimal 12 karakter</string>
     <string name="passwords_mismatch">Kata sandi tidak cocok</string>
@@ -30,16 +30,16 @@
     <string name="signing_key_unavailable">Kunci penandatanganan tidak tersedia</string>
     <string name="public_key_copied">Kunci publik disalin</string>
     <string name="copy_public_key">Salin kunci publik</string>
-    <string name="choose_xml">Pilih file ZIP</string>
-    <string name="xml_limit">ZIP · hingga 64 XML · masing-masing 10 MiB · total 48 MiB</string>
+    <string name="choose_xml">Pilih XML atau ZIP</string>
+    <string name="xml_limit">Satu XML · hingga 10 MiB, atau ZIP · hingga 64 XML · masing-masing 10 MiB · total 48 MiB</string>
     <string name="password">Kata sandi</string>
     <string name="hide_password">Sembunyikan kata sandi</string>
     <string name="show_password">Tampilkan kata sandi</string>
     <string name="confirm_password">Konfirmasi kata sandi</string>
-    <string name="encrypt_save">Enkripsi dan simpan semua</string>
+    <string name="encrypt_save">Enkripsi dan simpan</string>
     <string name="crypto_summary">Rust AES-256-GCM · PBKDF2-HMAC-SHA256 · tanda tangan Android Keystore</string>
     <string name="security_title">Enkripsi lokal yang diperkuat</string>
-    <string name="security_body">File XML di dalam ZIP tidak pernah keluar dari aplikasi. Setiap CBOX ditandatangani dan dienkripsi secara lokal; penulisan atomik ke brankas privat berjalan di lapisan Rust yang dibatasi.</string>
+    <string name="security_body">File XML keybox yang dipilih tidak pernah keluar dari aplikasi. Setiap CBOX ditandatangani dan dienkripsi secara lokal; penulisan atomik ke brankas privat berjalan di lapisan Rust yang dibatasi.</string>
     <string name="language">Bahasa</string>
     <string name="system_default">Default sistem</string>
 </resources>
