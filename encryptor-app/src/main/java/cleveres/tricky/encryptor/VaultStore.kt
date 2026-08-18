@@ -18,6 +18,11 @@ internal object VaultStore {
     private const val CBOX_SUFFIX = ".cbox"
     private val unsafeFilenameChars = Regex("[^a-zA-Z0-9._-]")
 
+    private data class VaultNameSnapshot(
+        val names: MutableSet<String>,
+        val entryCount: Int,
+    )
+
     fun directory(context: Context): File {
         check(NativeCrypto.ensureVault(context.noBackupFilesDir.absolutePath)) {
             "Secure vault is unavailable"
@@ -36,10 +41,11 @@ internal object VaultStore {
         sourceNames: List<String>,
     ): List<String> {
         require(sourceNames.isNotEmpty()) { "Batch is empty" }
-        val existing = list(context).mapTo(linkedSetOf()) { it.name.lowercase(Locale.ROOT) }
-        if (sourceNames.size > MAX_FILES - existing.size) {
+        val snapshot = vaultNameSnapshot(context)
+        if (sourceNames.size > MAX_FILES - snapshot.entryCount) {
             throw IOException("Vault capacity exceeded")
         }
+        val existing = snapshot.names
 
         return sourceNames.map { sourceName ->
             val base = batchBaseName(author, sourceName)
@@ -59,11 +65,8 @@ internal object VaultStore {
         sourceName: String,
     ): String {
         val safeAuthor = sanitizeComponent(author, 48).ifEmpty { "keybox" }
-        val sourceBase =
-            sourceName
-                .substringAfterLast('/')
-                .substringAfterLast('\\')
-                .substringBeforeLast('.', sourceName)
+        val basename = sourceName.substringAfterLast('/').substringAfterLast('\\')
+        val sourceBase = basename.substringBeforeLast('.', basename)
         val safeSource = sanitizeComponent(sourceBase, 64).ifEmpty { "keybox" }
         return "$safeAuthor-$safeSource".take(MAX_FILENAME_CHARS - CBOX_SUFFIX.length)
     }
@@ -165,6 +168,19 @@ internal object VaultStore {
                 }
             }
         }
+    }
+
+    private fun vaultNameSnapshot(context: Context): VaultNameSnapshot {
+        val names = linkedSetOf<String>()
+        var entryCount = 0
+        Files.newDirectoryStream(directory(context).toPath()).use { entries ->
+            for (entry in entries) {
+                entryCount++
+                if (entryCount > MAX_FILES) throw IOException("Vault capacity exceeded")
+                names += entry.fileName.toString().lowercase(Locale.ROOT)
+            }
+        }
+        return VaultNameSnapshot(names = names, entryCount = entryCount)
     }
 
     private fun exportFromRoot(
