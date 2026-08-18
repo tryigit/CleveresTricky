@@ -5,7 +5,7 @@
     <string name="export_failed">Ошибка экспорта</string>
     <string name="keybox_deleted">Keybox удалён</string>
     <string name="delete_failed">Не удалось удалить keybox</string>
-    <string name="create_encrypted_keybox">Создать зашифрованный keybox</string>
+    <string name="create_encrypted_keybox">Создать зашифрованный CBOX</string>
     <string name="vault_title">Хранилище Cleveres</string>
     <string name="vault_subtitle">Зашифрованные keybox хранятся только на устройстве.</string>
     <string name="delete_keybox_title">Удалить keybox?</string>
@@ -14,13 +14,13 @@
     <string name="cancel">Отмена</string>
     <string name="vault_summary">%1$d · %2$s</string>
     <string name="empty_vault_title">Хранилище пусто</string>
-    <string name="empty_vault_body">Выберите ZIP с XML-файлами keybox, защитите их одним паролем и сохраните зашифрованные результаты локально.</string>
-    <string name="create_keybox">Создать keybox</string>
+    <string name="empty_vault_body">Выберите один XML-файл keybox или ZIP с XML-файлами keybox, защитите их одним паролем и сохраните зашифрованные результаты CBOX локально.</string>
+    <string name="create_keybox">Создать CBOX</string>
     <string name="export_file">Экспортировать %1$s</string>
     <string name="delete_file">Удалить %1$s</string>
     <string name="encryption_failed">Ошибка шифрования</string>
     <string name="encrypted_success">Зашифрованные keybox сохранены</string>
-    <string name="xml_use_failed">Не удалось использовать выбранный ZIP</string>
+    <string name="xml_use_failed">Не удалось использовать выбранный XML или ZIP</string>
     <string name="author_required">Укажите автора или ссылку на источник</string>
     <string name="password_minimum">Используйте не менее 12 символов</string>
     <string name="passwords_mismatch">Пароли не совпадают</string>
@@ -30,16 +30,16 @@
     <string name="signing_key_unavailable">Ключ подписи недоступен</string>
     <string name="public_key_copied">Открытый ключ скопирован</string>
     <string name="copy_public_key">Копировать открытый ключ</string>
-    <string name="choose_xml">Выбрать ZIP-файл</string>
-    <string name="xml_limit">ZIP · до 64 XML-файлов · по 10 MiB · всего 48 MiB</string>
+    <string name="choose_xml">Выбрать XML или ZIP</string>
+    <string name="xml_limit">Один XML · до 10 MiB, или ZIP · до 64 XML-файлов · по 10 MiB · всего 48 MiB</string>
     <string name="password">Пароль</string>
     <string name="hide_password">Скрыть пароль</string>
     <string name="show_password">Показать пароль</string>
     <string name="confirm_password">Подтвердить пароль</string>
-    <string name="encrypt_save">Зашифровать и сохранить все</string>
+    <string name="encrypt_save">Зашифровать и сохранить</string>
     <string name="crypto_summary">Rust AES-256-GCM · PBKDF2-HMAC-SHA256 · подпись Android Keystore</string>
     <string name="security_title">Локальное усиленное шифрование</string>
-    <string name="security_body">XML-файлы внутри ZIP не покидают приложение. Каждый CBOX подписывается и шифруется локально; атомарная запись в приватное хранилище выполняется в ограниченном слое Rust.</string>
+    <string name="security_body">Выбранные XML-файлы keybox не покидают приложение. Каждый CBOX подписывается и шифруется локально; атомарная запись в приватное хранилище выполняется в ограниченном слое Rust.</string>
     <string name="language">Язык</string>
     <string name="system_default">Системный язык</string>
 </resources>
