@@ -68,6 +68,14 @@ jobs:
           if text.count(old) != 1:
               raise SystemExit(f'tearDown isolation block count: {text.count(old)}')
           path.write_text(text.replace(old, new, 1))
+
+          locales_path = Path('encryptor-app/src/main/res/xml/locales_config.xml')
+          locales = locales_path.read_text()
+          old_locale = '<locale android:name="in" />'
+          new_locale = '<locale android:name="id" />'
+          if locales.count(old_locale) != 1:
+              raise SystemExit(f'legacy Indonesian locale tag count: {locales.count(old_locale)}')
+          locales_path.write_text(locales.replace(old_locale, new_locale, 1))
           PY
 
           mkdir -p encryptor-app/src/main/res/values-b+id
@@ -99,7 +107,8 @@ jobs:
           set -euo pipefail
           git add -A service/src/test/java/cleveres/tricky/cleverestech/WebServerUploadTest.kt \
               encryptor-app/src/main/res/values-in \
-              'encryptor-app/src/main/res/values-b+id'
+              'encryptor-app/src/main/res/values-b+id' \
+              encryptor-app/src/main/res/xml/locales_config.xml
           git diff --cached --check
           git commit -m 'test: isolate keybox state and restore locale parity'
           git push origin HEAD:agent/rust-first-service-redesign
