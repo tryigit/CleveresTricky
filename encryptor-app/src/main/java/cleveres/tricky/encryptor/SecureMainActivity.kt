@@ -310,7 +310,7 @@ private fun CreateScreen(
     var password by remember { mutableStateOf("") }
     var confirmation by remember { mutableStateOf("") }
     var keyboxes by remember { mutableStateOf<List<SelectedKeybox>>(emptyList()) }
-    var zipName by remember { mutableStateOf<String?>(null) }
+    var sourceName by remember { mutableStateOf<String?>(null) }
     var publicKey by remember { mutableStateOf<String?>(null) }
     var showPassword by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
@@ -342,11 +342,12 @@ private fun CreateScreen(
                 val selected =
                     withContext(Dispatchers.IO) {
                         try {
+                            val selectedName = displayName(context, uri) ?: "keybox.xml"
                             val entries =
                                 context.contentResolver.openInputStream(uri)?.use { input ->
-                                    KeyboxZipReader.read(input, NativeCrypto::validateKeyboxXml)
+                                    KeyboxImportReader.read(input, selectedName, NativeCrypto::validateKeyboxXml)
                                 } ?: throw IOException("input unavailable")
-                            Pair(entries, displayName(context, uri) ?: "keyboxes.zip")
+                            Pair(entries, selectedName)
                         } catch (_: Exception) {
                             null
                         }
@@ -356,7 +357,7 @@ private fun CreateScreen(
                 } else {
                     keyboxes.forEach { it.bytes.fill(0) }
                     keyboxes = selected.first
-                    zipName = selected.second
+                    sourceName = selected.second
                 }
             }
         }
@@ -407,7 +408,7 @@ private fun CreateScreen(
                 MobileCrypto.EncryptResult.SUCCESS -> {
                     selectedKeyboxes.forEach { it.bytes.fill(0) }
                     keyboxes = emptyList()
-                    zipName = null
+                    sourceName = null
                     password = ""
                     confirmation = ""
                     snackbar.showSnackbar(encryptSuccess)
@@ -467,24 +468,27 @@ private fun CreateScreen(
                 )
             }
             item {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        text = publicKey ?: signingUnavailable,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    IconButton(
-                        onClick = {
-                            val key = publicKey ?: return@IconButton
-                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                            clipboard.setPrimaryClip(ClipData.newPlainText(signingPublicKey, key))
-                            scope.launch { snackbar.showSnackbar(publicKeyCopied) }
-                        },
-                        enabled = publicKey != null,
-                    ) {
-                        Icon(Icons.Default.ContentCopy, contentDescription = stringResource(R.string.copy_public_key))
-                    }
-                }
+                OutlinedTextField(
+                    value = publicKey ?: signingUnavailable,
+                    onValueChange = {},
+                    label = { Text(stringResource(R.string.signing_public_key)) },
+                    readOnly = true,
+                    maxLines = 3,
+                    trailingIcon = {
+                        IconButton(
+                            onClick = {
+                                val key = publicKey ?: return@IconButton
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                clipboard.setPrimaryClip(ClipData.newPlainText(signingPublicKey, key))
+                                scope.launch { snackbar.showSnackbar(publicKeyCopied) }
+                            },
+                            enabled = publicKey != null,
+                        ) {
+                            Icon(Icons.Default.ContentCopy, contentDescription = stringResource(R.string.copy_public_key))
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -492,6 +496,8 @@ private fun CreateScreen(
                         onClick = {
                             picker.launch(
                                 arrayOf(
+                                    "application/xml",
+                                    "text/xml",
                                     "application/zip",
                                     "application/x-zip-compressed",
                                     "application/octet-stream",
@@ -501,7 +507,7 @@ private fun CreateScreen(
                         enabled = !saving,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Text(zipName ?: stringResource(R.string.choose_xml))
+                        Text(sourceName ?: stringResource(R.string.choose_xml))
                     }
                     if (keyboxes.isNotEmpty()) {
                         Text(
