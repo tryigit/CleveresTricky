@@ -38,9 +38,6 @@
     <string name="confirm_password">पासवर्ड की पुष्टि करें</string>
     <string name="encrypt_save">सभी को एन्क्रिप्ट और सहेजें</string>
     <string name="crypto_summary">Rust AES-256-GCM · PBKDF2-HMAC-SHA256 · Android Keystore हस्ताक्षर</string>
-    <string name="replace_keybox_title">मौजूदा keybox बदलें?</string>
-    <string name="replace_keybox_message">%1$s पहले से मौजूद है। बदलने पर एन्क्रिप्टेड फ़ाइल स्थायी रूप से ओवरराइट होगी।</string>
-    <string name="replace">बदलें</string>
     <string name="security_title">स्थानीय और मजबूत एन्क्रिप्शन</string>
     <string name="security_body">ZIP के अंदर की XML फ़ाइलें ऐप से बाहर नहीं जातीं। हर CBOX स्थानीय रूप से हस्ताक्षरित और एन्क्रिप्ट होता है; निजी वॉल्ट में परमाणु लेखन सीमित Rust परत में चलता है।</string>
     <string name="language">भाषा</string>
