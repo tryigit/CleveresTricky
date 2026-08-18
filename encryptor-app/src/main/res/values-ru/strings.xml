@@ -38,9 +38,6 @@
     <string name="confirm_password">Подтвердить пароль</string>
     <string name="encrypt_save">Зашифровать и сохранить все</string>
     <string name="crypto_summary">Rust AES-256-GCM · PBKDF2-HMAC-SHA256 · подпись Android Keystore</string>
-    <string name="replace_keybox_title">Заменить существующий keybox?</string>
-    <string name="replace_keybox_message">%1$s уже существует. Замена навсегда перезапишет зашифрованный файл.</string>
-    <string name="replace">Заменить</string>
     <string name="security_title">Локальное усиленное шифрование</string>
     <string name="security_body">XML-файлы внутри ZIP не покидают приложение. Каждый CBOX подписывается и шифруется локально; атомарная запись в приватное хранилище выполняется в ограниченном слое Rust.</string>
     <string name="language">Язык</string>
