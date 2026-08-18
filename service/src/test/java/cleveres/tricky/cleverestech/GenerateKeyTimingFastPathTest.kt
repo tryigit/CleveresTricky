@@ -1,28 +1,13 @@
 package cleveres.tricky.cleverestech
 
-import cleveres.tricky.cleverestech.keystore.Utils
-import java.io.ByteArrayInputStream
 import java.io.File
-import java.security.cert.CertificateFactory
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class GenerateKeyTimingFastPathTest {
     @Test
-    fun `ordinary x509 leaf has no Android attestation extension`() {
-        val certificate =
-            CertificateFactory
-                .getInstance("X.509")
-                .generateCertificate(
-                    ByteArrayInputStream(TestKeyboxFixtures.certificate.toByteArray(Charsets.US_ASCII)),
-                )
-
-        assertFalse(Utils.hasAndroidAttestationExtension(certificate))
-    }
-
-    @Test
-    fun `generateKey rejects non-attested leaf before Rust certificate backend`() {
+    fun `generateKey keeps a shared certificate inspection preflight`() {
         val root = locateRoot()
         val source =
             File(
@@ -30,17 +15,17 @@ class GenerateKeyTimingFastPathTest {
                 "service/src/main/java/cleveres/tricky/cleverestech/SecurityLevelInterceptor.kt",
             ).readText()
         val postTransact = source.indexOf("override fun onPostTransact")
-        val localExtensionGuard =
-            source.indexOf("!Utils.hasAndroidAttestationExtension(originalLeaf)", postTransact)
-        val backendRewrite = source.indexOf("CertHack.hackCertificateChain", postTransact)
+        val leafParse = source.indexOf("Utils.getLeafCertificate(metadata)", postTransact)
+        val backendInspection = source.indexOf("CertHack.hackCertificateChain", postTransact)
 
         assertTrue(postTransact >= 0)
-        assertTrue(localExtensionGuard > postTransact)
-        assertTrue(backendRewrite > localExtensionGuard)
+        assertTrue(leafParse > postTransact)
+        assertTrue(backendInspection > leafParse)
+        assertFalse(source.contains("hasAndroidAttestationExtension"))
     }
 
     @Test
-    fun `getKeyEntry rejects non-attested leaf before Rust certificate backend`() {
+    fun `getKeyEntry keeps the same bounded certificate preflight`() {
         val root = locateRoot()
         val source =
             File(
@@ -49,15 +34,46 @@ class GenerateKeyTimingFastPathTest {
             ).readText()
         val postTransact = source.indexOf("override fun onPostTransact")
         val chainRead = source.indexOf("val originalChain = Utils.getCertificateChain(response)", postTransact)
-        val localExtensionGuard =
-            source.indexOf("!Utils.hasAndroidAttestationExtension(originalLeaf)", chainRead)
-        val backendRewrite =
+        val backendInspection =
             source.indexOf("CertHack.hackCertificateChain(originalChain, callingUid)", chainRead)
 
         assertTrue(postTransact >= 0)
         assertTrue(chainRead > postTransact)
-        assertTrue(localExtensionGuard > chainRead)
-        assertTrue(backendRewrite > localExtensionGuard)
+        assertTrue(backendInspection > chainRead)
+        assertFalse(source.contains("hasAndroidAttestationExtension"))
+    }
+
+    @Test
+    fun `local attestation classifier cannot reintroduce asymmetric hot paths`() {
+        val root = locateRoot()
+        val utils =
+            File(
+                root,
+                "service/src/main/java/cleveres/tricky/cleverestech/keystore/Utils.java",
+            ).readText()
+
+        assertFalse(utils.contains("hasAndroidAttestationExtension"))
+        assertFalse(utils.contains("ANDROID_ATTESTATION_EXTENSION_OID"))
+    }
+
+    @Test
+    fun `timing parity is not implemented with synthetic delay`() {
+        val root = locateRoot()
+        val sources =
+            listOf(
+                File(
+                    root,
+                    "service/src/main/java/cleveres/tricky/cleverestech/SecurityLevelInterceptor.kt",
+                ).readText(),
+                File(
+                    root,
+                    "service/src/main/java/cleveres/tricky/cleverestech/KeystoreInterceptor.kt",
+                ).readText(),
+            ).joinToString("\n")
+
+        assertFalse(sources.contains("Thread.sleep"))
+        assertFalse(sources.contains("parkNanos"))
+        assertFalse(sources.contains("busyWait"))
     }
 
     private fun locateRoot(): File {
