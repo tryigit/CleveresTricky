@@ -38,9 +38,6 @@
     <string name="confirm_password">Konfirmasi kata sandi</string>
     <string name="encrypt_save">Enkripsi dan simpan semua</string>
     <string name="crypto_summary">Rust AES-256-GCM · PBKDF2-HMAC-SHA256 · tanda tangan Android Keystore</string>
-    <string name="replace_keybox_title">Ganti keybox yang ada?</string>
-    <string name="replace_keybox_message">%1$s sudah ada. Menggantinya akan menimpa file terenkripsi secara permanen.</string>
-    <string name="replace">Ganti</string>
     <string name="security_title">Enkripsi lokal yang diperkuat</string>
     <string name="security_body">File XML di dalam ZIP tidak pernah keluar dari aplikasi. Setiap CBOX ditandatangani dan dienkripsi secara lokal; penulisan atomik ke brankas privat berjalan di lapisan Rust yang dibatasi.</string>
     <string name="language">Bahasa</string>
