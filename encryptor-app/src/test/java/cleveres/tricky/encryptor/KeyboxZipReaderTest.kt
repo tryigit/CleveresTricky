@@ -54,6 +54,27 @@ class KeyboxZipReaderTest {
     }
 
     @Test
+    fun `zeroizes current and previous XML buffers when validator throws`() {
+        val archive =
+            zipOf(
+                "first.xml" to "<first/>".toByteArray(),
+                "second.xml" to "<second/>".toByteArray(),
+            )
+        val observed = mutableListOf<ByteArray>()
+
+        assertThrows(IllegalStateException::class.java) {
+            KeyboxZipReader.read(ByteArrayInputStream(archive)) { bytes ->
+                observed += bytes
+                if (observed.size == 2) throw IllegalStateException("validator failure")
+                true
+            }
+        }
+
+        assertEquals(2, observed.size)
+        assertTrue(observed.all { bytes -> bytes.all { it == 0.toByte() } })
+    }
+
+    @Test
     fun `rejects ZIP archives with more than the bounded keybox count`() {
         val entries =
             (0..KeyboxZipReader.MAX_KEYBOX_FILES).map { index ->
