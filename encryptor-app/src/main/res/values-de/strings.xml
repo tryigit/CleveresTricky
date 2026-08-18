@@ -38,9 +38,6 @@
     <string name="confirm_password">Passwort bestätigen</string>
     <string name="encrypt_save">Alle verschlüsseln und speichern</string>
     <string name="crypto_summary">Rust AES-256-GCM · PBKDF2-HMAC-SHA256 · Android-Keystore-Signatur</string>
-    <string name="replace_keybox_title">Vorhandene Keybox ersetzen?</string>
-    <string name="replace_keybox_message">%1$s existiert bereits. Beim Ersetzen wird die verschlüsselte Datei dauerhaft überschrieben.</string>
-    <string name="replace">Ersetzen</string>
     <string name="security_title">Lokal zuerst, gehärtete Verschlüsselung</string>
     <string name="security_body">Die XML-Dateien in der ZIP-Datei verlassen diese App nicht. Jede CBOX wird lokal signiert und verschlüsselt; atomare Schreibvorgänge in den privaten Tresor laufen in der begrenzten Rust-Schicht.</string>
     <string name="language">Sprache</string>
