@@ -38,9 +38,6 @@
     <string name="confirm_password">确认密码</string>
     <string name="encrypt_save">全部加密并保存</string>
     <string name="crypto_summary">Rust AES-256-GCM · PBKDF2-HMAC-SHA256 · Android Keystore 签名</string>
-    <string name="replace_keybox_title">替换现有 Keybox？</string>
-    <string name="replace_keybox_message">%1$s 已存在。替换会永久覆盖现有加密文件。</string>
-    <string name="replace">替换</string>
     <string name="security_title">本地优先的强化加密</string>
     <string name="security_body">ZIP 中的 XML 文件不会离开此应用。每个 CBOX 都在本地签名和加密；私有保险库的原子写入在有界 Rust 层中执行。</string>
     <string name="language">语言</string>
