@@ -5,7 +5,7 @@
     <string name="export_failed">Export failed</string>
     <string name="keybox_deleted">Keybox deleted</string>
     <string name="delete_failed">Could not delete keybox</string>
-    <string name="create_encrypted_keybox">Create encrypted keybox</string>
+    <string name="create_encrypted_keybox">Create encrypted CBOX</string>
     <string name="vault_title">Cleveres Vault</string>
     <string name="vault_subtitle">Encrypted keyboxes, kept local.</string>
     <string name="delete_keybox_title">Delete keybox?</string>
@@ -14,13 +14,13 @@
     <string name="cancel">Cancel</string>
     <string name="vault_summary">%1$d · %2$s</string>
     <string name="empty_vault_title">Your vault is empty</string>
-    <string name="empty_vault_body">Choose a ZIP containing keybox XML files, protect them with one password, and save the encrypted results locally.</string>
-    <string name="create_keybox">Create keybox</string>
+    <string name="empty_vault_body">Choose one keybox XML file or a ZIP containing keybox XML files, protect them with one password, and save the encrypted CBOX results locally.</string>
+    <string name="create_keybox">Create CBOX</string>
     <string name="export_file">Export %1$s</string>
     <string name="delete_file">Delete %1$s</string>
     <string name="encryption_failed">Encryption failed</string>
     <string name="encrypted_success">Encrypted keyboxes saved</string>
-    <string name="xml_use_failed">Could not use the selected ZIP</string>
+    <string name="xml_use_failed">Could not use the selected XML or ZIP</string>
     <string name="author_required">Author or credit link is required</string>
     <string name="password_minimum">Use at least 12 characters</string>
     <string name="passwords_mismatch">Passwords do not match</string>
@@ -30,16 +30,16 @@
     <string name="signing_key_unavailable">Signing key unavailable</string>
     <string name="public_key_copied">Public key copied</string>
     <string name="copy_public_key">Copy public key</string>
-    <string name="choose_xml">Choose ZIP file</string>
-    <string name="xml_limit">ZIP · up to 64 XML files · 10 MiB each · 48 MiB total</string>
+    <string name="choose_xml">Choose XML or ZIP</string>
+    <string name="xml_limit">Single XML · up to 10 MiB, or ZIP · up to 64 XML files · 10 MiB each · 48 MiB total</string>
     <string name="password">Password</string>
     <string name="hide_password">Hide password</string>
     <string name="show_password">Show password</string>
     <string name="confirm_password">Confirm password</string>
-    <string name="encrypt_save">Encrypt &amp; save all</string>
+    <string name="encrypt_save">Encrypt &amp; save</string>
     <string name="crypto_summary">Rust AES-256-GCM · PBKDF2-HMAC-SHA256 · Android Keystore signature</string>
     <string name="security_title">Local-first, hardened encryption</string>
-    <string name="security_body">XML files inside the ZIP never leave this app. Each CBOX is signed and encrypted locally; atomic private-vault writes run in the bounded Rust layer.</string>
+    <string name="security_body">Selected keybox XML files never leave this app. Each CBOX is signed and encrypted locally; atomic private-vault writes run in the bounded Rust layer.</string>
     <string name="language">Language</string>
     <string name="system_default">System default</string>
 </resources>
