@@ -5,7 +5,7 @@
     <string name="export_failed">Export fehlgeschlagen</string>
     <string name="keybox_deleted">Keybox gelöscht</string>
     <string name="delete_failed">Keybox konnte nicht gelöscht werden</string>
-    <string name="create_encrypted_keybox">Verschlüsselte Keybox erstellen</string>
+    <string name="create_encrypted_keybox">Verschlüsselte CBOX erstellen</string>
     <string name="vault_title">Cleveres Tresor</string>
     <string name="vault_subtitle">Verschlüsselte Keyboxes bleiben lokal auf dem Gerät.</string>
     <string name="delete_keybox_title">Keybox löschen?</string>
@@ -14,13 +14,13 @@
     <string name="cancel">Abbrechen</string>
     <string name="vault_summary">%1$d · %2$s</string>
     <string name="empty_vault_title">Dein Tresor ist leer</string>
-    <string name="empty_vault_body">Wähle eine ZIP-Datei mit Keybox-XML-Dateien, schütze sie mit einem Passwort und speichere die verschlüsselten Ergebnisse lokal.</string>
-    <string name="create_keybox">Keybox erstellen</string>
+    <string name="empty_vault_body">Wähle eine einzelne Keybox-XML-Datei oder eine ZIP-Datei mit Keybox-XML-Dateien, schütze sie mit einem Passwort und speichere die verschlüsselten CBOX-Ergebnisse lokal.</string>
+    <string name="create_keybox">CBOX erstellen</string>
     <string name="export_file">%1$s exportieren</string>
     <string name="delete_file">%1$s löschen</string>
     <string name="encryption_failed">Verschlüsselung fehlgeschlagen</string>
     <string name="encrypted_success">Verschlüsselte Keyboxes gespeichert</string>
-    <string name="xml_use_failed">Die ausgewählte ZIP-Datei konnte nicht verwendet werden</string>
+    <string name="xml_use_failed">Die ausgewählte XML- oder ZIP-Datei konnte nicht verwendet werden</string>
     <string name="author_required">Autor oder Quellenlink ist erforderlich</string>
     <string name="password_minimum">Verwende mindestens 12 Zeichen</string>
     <string name="passwords_mismatch">Passwörter stimmen nicht überein</string>
@@ -30,16 +30,16 @@
     <string name="signing_key_unavailable">Signaturschlüssel nicht verfügbar</string>
     <string name="public_key_copied">Öffentlicher Schlüssel kopiert</string>
     <string name="copy_public_key">Öffentlichen Schlüssel kopieren</string>
-    <string name="choose_xml">ZIP-Datei auswählen</string>
-    <string name="xml_limit">ZIP · bis zu 64 XML-Dateien · je 10 MiB · insgesamt 48 MiB</string>
+    <string name="choose_xml">XML oder ZIP auswählen</string>
+    <string name="xml_limit">Einzelne XML · bis 10 MiB oder ZIP · bis zu 64 XML-Dateien · je 10 MiB · insgesamt 48 MiB</string>
     <string name="password">Passwort</string>
     <string name="hide_password">Passwort ausblenden</string>
     <string name="show_password">Passwort anzeigen</string>
     <string name="confirm_password">Passwort bestätigen</string>
-    <string name="encrypt_save">Alle verschlüsseln und speichern</string>
+    <string name="encrypt_save">Verschlüsseln und speichern</string>
     <string name="crypto_summary">Rust AES-256-GCM · PBKDF2-HMAC-SHA256 · Android-Keystore-Signatur</string>
     <string name="security_title">Lokal zuerst, gehärtete Verschlüsselung</string>
-    <string name="security_body">Die XML-Dateien in der ZIP-Datei verlassen diese App nicht. Jede CBOX wird lokal signiert und verschlüsselt; atomare Schreibvorgänge in den privaten Tresor laufen in der begrenzten Rust-Schicht.</string>
+    <string name="security_body">Ausgewählte Keybox-XML-Dateien verlassen diese App nicht. Jede CBOX wird lokal signiert und verschlüsselt; atomare Schreibvorgänge in den privaten Tresor laufen in der begrenzten Rust-Schicht.</string>
     <string name="language">Sprache</string>
     <string name="system_default">Systemstandard</string>
 </resources>
