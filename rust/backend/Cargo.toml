@@ -21,7 +21,7 @@ cleverestricky-service-core = { path = "../service-core" }
 cleverestricky-xml-core = { path = "../xml-core" }
 der = { version = "=0.7.10", features = ["alloc", "oid"] }
 x509-der = { package = "der", version = "=0.8.1", features = ["alloc", "oid"] }
-getrandom = "=0.4.3"
+getrandom = { workspace = true }
 libc = "0.2"
 sha2 = "=0.10.9"
 x509-cert = { version = "=0.3.0", default-features = false, features = ["std"] }
