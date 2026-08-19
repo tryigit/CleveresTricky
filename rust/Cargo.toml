@@ -18,6 +18,13 @@ members = [
 ]
 resolver = "2"
 
+[workspace.dependencies]
+# API-coupled storage crypto lane. Workspace members inherit these versions so
+# Dependabot cannot leave one crate on an older incompatible crypto stack.
+aes-gcm = { version = "=0.11.0", features = ["zeroize"] }
+getrandom = "=0.4.3"
+pbkdf2 = { version = "=0.13.0", features = ["sha2"] }
+
 [profile.release]
 lto = "fat"
 codegen-units = 1
