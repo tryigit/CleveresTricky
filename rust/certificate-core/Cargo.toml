@@ -13,7 +13,7 @@ path = "src/entry.rs"
 [dependencies]
 attestation-der = { package = "der", version = "=0.8.1", features = ["alloc"] }
 cleverestricky-attestation-core = { path = "../attestation-core" }
-der = { version = "=0.7.10", features = ["alloc", "oid", "pem"] }
+der = { version = "=0.8.1", features = ["alloc", "oid", "pem"] }
 p256 = { version = "=0.13.2", features = ["ecdsa", "pkcs8"] }
 rsa = { version = "=0.9.10", features = ["sha2"] }
 sha2 = { version = "=0.10.9", features = ["oid"] }
