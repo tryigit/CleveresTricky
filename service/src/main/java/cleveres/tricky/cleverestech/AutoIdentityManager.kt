@@ -66,6 +66,13 @@ object AutoIdentityManager {
         val storedAtMs: Long,
     )
 
+    private data class RankedCanary(
+        val value: JSONObject,
+        val dateKey: Int,
+        val numericKey: String,
+        val encounterOrder: Int,
+    )
+
     private const val ANDROID_DEVELOPERS = "https://developer.android.com"
     private const val FLASH_TOOL = "https://flash.android.com/"
     private const val FLASH_BUILDS = "https://content-flashstation-pa.googleapis.com/v1/builds"
@@ -277,12 +284,57 @@ object AutoIdentityManager {
             }
         val objects = ArrayList<JSONObject>()
         collectObjects(root, objects)
-        return objects.lastOrNull { obj ->
-            obj.optBoolean("canary", false) &&
-                obj.optString("releaseCandidateName").isNotBlank() &&
-                obj.optString("buildId").isNotBlank()
-        }
+        return objects
+            .asSequence()
+            .withIndex()
+            .filter { (_, obj) ->
+                obj.optBoolean("canary", false) &&
+                    obj.optString("releaseCandidateName").isNotBlank() &&
+                    obj.optString("buildId").isNotBlank()
+            }
+            .map { (index, obj) ->
+                val rankText =
+                    listOf(
+                        obj.optString("id"),
+                        obj.optString("releaseCandidateName"),
+                        obj.optString("buildId"),
+                        obj.optString("releaseTrackVersionName"),
+                    ).joinToString(" ")
+                RankedCanary(
+                    value = obj,
+                    dateKey = canaryDateKey(rankText),
+                    numericKey = numericVersionKey(rankText),
+                    encounterOrder = index,
+                )
+            }
+            .maxWithOrNull(
+                compareBy<RankedCanary> { it.dateKey }
+                    .thenBy { it.numericKey }
+                    .thenBy { it.encounterOrder },
+            )
+            ?.value
     }
+
+    private fun canaryDateKey(value: String): Int {
+        val full = Regex("""(?<!\d)(20\d{2})[-_.]?(0[1-9]|1[0-2])[-_.]?([0-2]\d|3[01])(?!\d)""").find(value)
+        if (full != null) {
+            val year = full.groupValues[1].toInt()
+            val month = full.groupValues[2].toInt()
+            val day = full.groupValues[3].toInt()
+            return year * 10_000 + month * 100 + day
+        }
+        val monthOnly = Regex("""(?<!\d)(20\d{2})[-_.]?(0[1-9]|1[0-2])(?!\d)""").find(value)
+        if (monthOnly != null) {
+            return monthOnly.groupValues[1].toInt() * 10_000 + monthOnly.groupValues[2].toInt() * 100
+        }
+        return 0
+    }
+
+    private fun numericVersionKey(value: String): String =
+        Regex("""\d+""")
+            .findAll(value)
+            .take(12)
+            .joinToString(":") { match -> match.value.take(18).padStart(18, '0') }
 
     private fun collectObjects(
         value: Any?,
