@@ -1,0 +1,215 @@
+name: Deep bug sweep patcher
+
+on:
+  push:
+    branches: [ "fix/deep-bug-sweep" ]
+    paths: [ ".github/workflows/deep-bug-sweep-patcher.yml" ]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: fix/deep-bug-sweep
+          fetch-depth: 0
+
+      - name: Apply focused source patches
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout origin/master -- service/src/main/java/cleveres/tricky/cleverestech/StoredKeyboxInventory.kt
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"expected exactly one match in {path}, got {count}")
+              p.write_text(text.replace(old, new, 1))
+
+          config = "service/src/main/java/cleveres/tricky/cleverestech/Config.kt"
+          replace_once(config, '''    private data class KeyboxFileCache(
+              val lastModified: Long,
+              val length: Long,
+              val keyboxes: List<CertHack.KeyBox>,
+          )
+
+          private val storedKeyboxCache = ConcurrentHashMap<String, KeyboxFileCache>()
+          ''', '''    private data class KeyboxFileCache(
+              val lastModified: Long,
+              val length: Long,
+              val digest: ByteArray,
+              val keyboxes: List<CertHack.KeyBox>,
+          )
+
+          private val storedKeyboxCache = ConcurrentHashMap<String, KeyboxFileCache>()
+
+          private fun digestStoredKeybox(file: File): ByteArray {
+              val digest = MessageDigest.getInstance("SHA-256")
+              Files.newInputStream(file.toPath(), LinkOption.NOFOLLOW_LINKS).use { input ->
+                  val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                  try {
+                      while (true) {
+                          val count = input.read(buffer)
+                          if (count < 0) break
+                          if (count > 0) digest.update(buffer, 0, count)
+                      }
+                  } finally {
+                      buffer.fill(0)
+                  }
+              }
+              return digest.digest()
+          }
+          ''')
+
+          replace_once(config, '''        val lastMod = file.lastModified()
+              val length = file.length()
+              val cached = storedKeyboxCache[source.id]
+              if (cached != null && cached.lastModified == lastMod && cached.length == length) {
+                  allKeyboxes.addAll(cached.keyboxes)
+              } else {
+                  try {
+                      val parsed = KeyboxLoader.parseFile(
+                          requireNotNull(source.scope.fileScope),
+                          source.filename,
+                      )
+                      storedKeyboxCache[source.id] = KeyboxFileCache(lastMod, length, parsed)
+                      allKeyboxes.addAll(parsed)
+                      Logger.i("Reloaded keybox source: ${source.id}")
+                  } catch (error: RustBackendUnavailableException) {
+                      throw error
+                  } catch (error: Exception) {
+                      storedKeyboxCache.remove(source.id)
+                      Logger.e("Failed to parse keybox source: ${source.id}", error)
+                  }
+              }
+          ''', '''        val lastMod = file.lastModified()
+              val length = file.length()
+              val cached = storedKeyboxCache[source.id]
+              val metadataMatches = cached != null && cached.lastModified == lastMod && cached.length == length
+              val digestMatches =
+                  if (metadataMatches) {
+                      val digest = digestStoredKeybox(file)
+                      try {
+                          MessageDigest.isEqual(requireNotNull(cached).digest, digest)
+                      } finally {
+                          digest.fill(0)
+                      }
+                  } else {
+                      false
+                  }
+              if (cached != null && metadataMatches && digestMatches) {
+                  allKeyboxes.addAll(cached.keyboxes)
+              } else {
+                  try {
+                      val beforeDigest = digestStoredKeybox(file)
+                      try {
+                          val parsed = KeyboxLoader.parseFile(
+                              requireNotNull(source.scope.fileScope),
+                              source.filename,
+                          )
+                          val afterDigest = digestStoredKeybox(file)
+                          try {
+                              if (!MessageDigest.isEqual(beforeDigest, afterDigest) ||
+                                  file.lastModified() != lastMod || file.length() != length
+                              ) {
+                                  throw IOException("Keybox source changed while it was being parsed")
+                              }
+                              storedKeyboxCache[source.id] =
+                                  KeyboxFileCache(lastMod, length, afterDigest.copyOf(), parsed)
+                              allKeyboxes.addAll(parsed)
+                              Logger.i("Reloaded keybox source: ${source.id}")
+                          } finally {
+                              afterDigest.fill(0)
+                          }
+                      } finally {
+                          beforeDigest.fill(0)
+                      }
+                  } catch (error: RustBackendUnavailableException) {
+                      throw error
+                  } catch (error: Exception) {
+                      storedKeyboxCache.remove(source.id)
+                      Logger.e("Failed to parse keybox source: ${source.id}", error)
+                  }
+              }
+          ''')
+
+          web = "service/src/main/java/cleveres/tricky/cleverestech/WebServer.kt"
+          replace_once(web, '''                        totalBytes += size
+                          if (totalBytes > MAX_BACKUP_UNCOMPRESSED_BYTES) {
+                              throw IOException("Backup exceeds uncompressed size limit")
+                          }
+                          zos.putNextEntry(ZipEntry(name))
+                          Files.newInputStream(file.toPath(), LinkOption.NOFOLLOW_LINKS).use { it.copyTo(zos) }
+                          zos.closeEntry()
+          ''', '''                        val remaining = MAX_BACKUP_UNCOMPRESSED_BYTES.toLong() - totalBytes
+                          if (remaining < 0) throw IOException("Backup exceeds uncompressed size limit")
+                          zos.putNextEntry(ZipEntry(name))
+                          val copied =
+                              Files.newInputStream(file.toPath(), LinkOption.NOFOLLOW_LINKS).use { input ->
+                                  BackupIo.copyBounded(input, zos, entryLimit.toLong(), remaining)
+                              }
+                          zos.closeEntry()
+                          totalBytes += copied
+          ''')
+
+          replace_once(web, '''                            totalBytes += size
+                              if (totalBytes > MAX_BACKUP_UNCOMPRESSED_BYTES) {
+                                  throw IOException("Backup exceeds uncompressed size limit")
+                              }
+                              zos.putNextEntry(ZipEntry("keyboxes/${keybox.name}"))
+                              Files.newInputStream(keybox.toPath(), LinkOption.NOFOLLOW_LINKS).use { it.copyTo(zos) }
+                              zos.closeEntry()
+          ''', '''                            val remaining = MAX_BACKUP_UNCOMPRESSED_BYTES.toLong() - totalBytes
+                              if (remaining < 0) throw IOException("Backup exceeds uncompressed size limit")
+                              zos.putNextEntry(ZipEntry("keyboxes/${keybox.name}"))
+                              val copied =
+                                  Files.newInputStream(keybox.toPath(), LinkOption.NOFOLLOW_LINKS).use { input ->
+                                      BackupIo.copyBounded(
+                                          input,
+                                          zos,
+                                          MAX_BACKUP_KEYBOX_ENTRY_BYTES.toLong(),
+                                          remaining,
+                                      )
+                                  }
+                              zos.closeEntry()
+                              totalBytes += copied
+          ''')
+
+          replace_once(web, '''                staged.forEach { (name, bytes) ->
+                      val file = requireNotNull(destinations[name])
+                      if (name.startsWith("keyboxes/")) SecureFile.mkdirs(keyboxDir, 448)
+                      SecureFile.writeBytes(file, bytes)
+                  }
+                  staleConfigFiles.forEach { Files.deleteIfExists(it.toPath()) }
+                  staleKeyboxFiles.forEach { Files.deleteIfExists(it.toPath()) }
+                  invalidatedCacheFiles.forEach { Files.deleteIfExists(it.toPath()) }
+          ''', '''                val mutations = ArrayList<BackupRestoreTransaction.Mutation>()
+                  staged.forEach { (name, bytes) ->
+                      mutations += BackupRestoreTransaction.Mutation(requireNotNull(destinations[name]), bytes)
+                  }
+                  staleConfigFiles.forEach { mutations += BackupRestoreTransaction.Mutation(it, null) }
+                  staleKeyboxFiles.forEach { mutations += BackupRestoreTransaction.Mutation(it, null) }
+                  invalidatedCacheFiles.forEach { mutations += BackupRestoreTransaction.Mutation(it, null) }
+                  BackupRestoreTransaction.apply(configDir, mutations)
+          ''')
+          PY
+
+      - name: Commit patch and remove patcher
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/deep-bug-sweep-patcher.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "fix: make keybox cache and backup restore content-safe"
+          git push origin HEAD:fix/deep-bug-sweep
