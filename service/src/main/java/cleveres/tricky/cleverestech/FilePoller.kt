@@ -63,7 +63,9 @@ class FilePoller(
                     FileObserver.MOVED_FROM or
                     FileObserver.CREATE or
                     FileObserver.DELETE or
-                    FileObserver.ATTRIB
+                    FileObserver.ATTRIB or
+                    FileObserver.DELETE_SELF or
+                    FileObserver.MOVE_SELF
 
             @Suppress("DEPRECATION")
             val fileObserver =
@@ -72,6 +74,11 @@ class FilePoller(
                         event: Int,
                         path: String?,
                     ) {
+                        val kind = event and FileObserver.ALL_EVENTS
+                        if (kind == FileObserver.DELETE_SELF || kind == FileObserver.MOVE_SELF) {
+                            handleObserverLoss()
+                            return
+                        }
                         if (path != file.name) return
                         try {
                             checkForChange()
@@ -89,7 +96,17 @@ class FilePoller(
         }
     }
 
+    @Synchronized
+    private fun handleObserverLoss() {
+        if (!isRunning) return
+        observer?.stopWatching()
+        observer = null
+        if (!startObserver()) scheduleFallbackPolling()
+    }
+
+    @Synchronized
     private fun scheduleFallbackPolling() {
+        if (scheduledFuture != null) return
         scheduledFuture =
             scheduler.scheduleWithFixedDelay(
                 {
