@@ -149,7 +149,12 @@ internal object BackupRestoreTransaction {
                             Files.deleteIfExists(original.target.toPath())
                         }
                     } catch (error: Throwable) {
-                        if (rollbackFailure == null) rollbackFailure = error else rollbackFailure!!.addSuppressed(error)
+                        val existingFailure = rollbackFailure
+                        if (existingFailure == null) {
+                            rollbackFailure = error
+                        } else {
+                            existingFailure.addSuppressed(error)
+                        }
                     }
                 }
                 rollbackFailure?.let { failure.addSuppressed(it) }
