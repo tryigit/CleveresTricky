@@ -1,22 +1,26 @@
 name: Fix deep bug sweep CI
 
 on:
-  push:
-    branches:
-      - fix/deep-bug-sweep
+  pull_request:
+    branches: [ "master" ]
+    paths: [ ".github/workflows/fix-deep-bug-sweep-ci.yml" ]
 
 permissions:
   contents: write
 
 jobs:
   fix:
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: fix/deep-bug-sweep
+          fetch-depth: 0
       - name: Repair Config scope and clean diagnostics
-        env:
-          HEAD_REF: ${{ github.ref_name }}
+        shell: bash
         run: |
+          set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
 
@@ -35,9 +39,9 @@ jobs:
           path.write_text(text.replace(old, new, 1))
           PY
           rm -f ci-diagnostics.txt
-          git rm --ignore-unmatch .github/workflows/fix-deep-bug-sweep-ci.yml
-          git add service/src/main/java/cleveres/tricky/cleverestech/Config.kt ci-diagnostics.txt
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          rm .github/workflows/fix-deep-bug-sweep-ci.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
           git commit -m "fix: repair keybox cache scope"
-          git push origin "HEAD:$HEAD_REF"
+          git push origin HEAD:fix/deep-bug-sweep
