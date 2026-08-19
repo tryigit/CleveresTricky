@@ -70,9 +70,7 @@ internal object BackupRestoreTransaction {
         val unique = LinkedHashMap<String, Mutation>()
         mutations.forEach { mutation ->
             val canonical = mutation.target.canonicalFile
-            if (canonical != canonicalRoot && canonical.parentFile != canonicalRoot &&
-                !canonical.path.startsWith(canonicalRoot.path + File.separator)
-            ) {
+            if (canonical != canonicalRoot && !canonical.path.startsWith(canonicalRoot.path + File.separator)) {
                 throw SecurityException("Restore transaction escaped configuration directory")
             }
             unique[canonical.path] = Mutation(canonical, mutation.replacement)
@@ -81,7 +79,6 @@ internal object BackupRestoreTransaction {
         val transactionDir = File(canonicalRoot, ".restore-txn-${UUID.randomUUID()}")
         SecureFile.mkdirs(transactionDir, 448)
         val originals = ArrayList<Original>(unique.size)
-        var committed = false
         try {
             unique.values.forEachIndexed { index, mutation ->
                 val path = mutation.target.toPath()
@@ -92,8 +89,14 @@ internal object BackupRestoreTransaction {
                 val backup =
                     if (existed) {
                         val copy = File(transactionDir, index.toString().padStart(4, '0') + ".bak")
-                        Files.newInputStream(path, LinkOption.NOFOLLOW_LINKS).use { input ->
-                            Files.newOutputStream(copy.toPath()).use { output -> input.copyTo(output) }
+                        Files.copy(
+                            path,
+                            copy.toPath(),
+                            LinkOption.NOFOLLOW_LINKS,
+                            StandardCopyOption.COPY_ATTRIBUTES,
+                        )
+                        if (!Files.isRegularFile(copy.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+                            throw SecurityException("Restore transaction source changed while snapshotting")
                         }
                         copy
                     } else {
@@ -102,23 +105,22 @@ internal object BackupRestoreTransaction {
                 originals += Original(mutation.target, existed, backup)
             }
 
-            unique.values.forEachIndexed { index, mutation ->
-                beforeMutation?.invoke(index, mutation.target)
-                val replacement = mutation.replacement
-                if (replacement == null) {
-                    Files.deleteIfExists(mutation.target.toPath())
-                } else {
-                    mutation.target.parentFile?.let { parent ->
-                        if (parent != canonicalRoot && !Files.isDirectory(parent.toPath(), LinkOption.NOFOLLOW_LINKS)) {
-                            SecureFile.mkdirs(parent, 448)
+            try {
+                unique.values.forEachIndexed { index, mutation ->
+                    beforeMutation?.invoke(index, mutation.target)
+                    val replacement = mutation.replacement
+                    if (replacement == null) {
+                        Files.deleteIfExists(mutation.target.toPath())
+                    } else {
+                        mutation.target.parentFile?.let { parent ->
+                            if (parent != canonicalRoot && !Files.isDirectory(parent.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+                                SecureFile.mkdirs(parent, 448)
+                            }
                         }
+                        SecureFile.writeBytes(mutation.target, replacement)
                     }
-                    SecureFile.writeBytes(mutation.target, replacement)
                 }
-            }
-            committed = true
-        } finally {
-            if (!committed) {
+            } catch (failure: Throwable) {
                 var rollbackFailure: Throwable? = null
                 originals.asReversed().forEach { original ->
                     try {
@@ -150,11 +152,10 @@ internal object BackupRestoreTransaction {
                         if (rollbackFailure == null) rollbackFailure = error else rollbackFailure!!.addSuppressed(error)
                     }
                 }
-                if (rollbackFailure != null) {
-                    throw IOException("Restore failed and rollback was incomplete", rollbackFailure)
-                }
+                rollbackFailure?.let { failure.addSuppressed(it) }
+                throw failure
             }
-
+        } finally {
             originals.forEach { original ->
                 runCatching { original.backup?.let { Files.deleteIfExists(it.toPath()) } }
             }
