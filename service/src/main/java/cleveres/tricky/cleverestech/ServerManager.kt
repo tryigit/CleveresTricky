@@ -17,6 +17,7 @@ import java.net.URL
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.LinkOption
+import java.security.MessageDigest
 import java.security.cert.X509Certificate
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
@@ -185,12 +186,16 @@ object ServerManager {
     internal fun cacheBindingChanged(
         previous: ServerConfig,
         replacement: ServerConfig,
-    ): Boolean =
-        previous.url != replacement.url ||
-            previous.authType != replacement.authType ||
-            previous.authData.toString() != replacement.authData.toString() ||
-            previous.contentPassword != replacement.contentPassword ||
-            previous.contentPublicKey != replacement.contentPublicKey
+    ): Boolean {
+        val first = serverCacheBinding(previous)
+        val second = serverCacheBinding(replacement)
+        return try {
+            !MessageDigest.isEqual(first, second)
+        } finally {
+            first.fill(0)
+            second.fill(0)
+        }
+    }
 
     @Synchronized
     fun addServer(server: ServerConfig) {
@@ -348,25 +353,26 @@ object ServerManager {
             if (server.enabled) {
                 val cacheFile = File(Config.keyboxDirectory.parentFile, "server_cache_${server.id}.enc")
                 if (Files.isRegularFile(cacheFile.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+                    var decrypted: ByteArray? = null
+                    var cachePayload: ByteArray? = null
                     try {
                         if (cacheFile.length() !in 1..MAX_CACHE_BYTES) {
                             throw SecurityException("Cached keybox file has an invalid size")
                         }
                         val enc = cacheFile.readBytes()
                         try {
-                            val dec = DeviceKeyManager.decrypt(enc)
-                            if (dec != null) {
-                                val parsed = KeyboxLoader.parse(dec, "server_${server.name}")
-                                val statuses = parsed.map { KeyboxVerifier.verifyKeybox(it, revoked) }
-                                if (parsed.isNotEmpty() && statuses.all { it == KeyboxVerifier.Status.VALID }) {
-                                    serverKeyboxes[server.id] = parsed
-                                    Logger.i("Loaded cached keyboxes for server: ${server.name}")
-                                } else {
-                                    deactivateServerContent(server.id, deleteCache = true)
-                                    Logger.w("Rejected incomplete or invalid server cache: ${server.name}")
-                                }
+                            decrypted = DeviceKeyManager.decrypt(enc)
+                                ?: throw SecurityException("Could not decrypt server cache")
+                            cachePayload = decodeServerCache(server, decrypted)
+                                ?: throw SecurityException("Server cache trust binding does not match current configuration")
+                            val parsed = KeyboxLoader.parse(cachePayload, "server_${server.name}")
+                            val statuses = parsed.map { KeyboxVerifier.verifyKeybox(it, revoked) }
+                            if (parsed.isNotEmpty() && statuses.all { it == KeyboxVerifier.Status.VALID }) {
+                                serverKeyboxes[server.id] = parsed
+                                Logger.i("Loaded cached keyboxes for server: ${server.name}")
                             } else {
                                 deactivateServerContent(server.id, deleteCache = true)
+                                Logger.w("Rejected incomplete or invalid server cache: ${server.name}")
                             }
                         } finally {
                             enc.fill(0)
@@ -374,6 +380,9 @@ object ServerManager {
                     } catch (e: Exception) {
                         deactivateServerContent(server.id, deleteCache = true)
                         Logger.e("Failed to load server cache for ${server.name}", e)
+                    } finally {
+                        cachePayload?.fill(0)
+                        decrypted?.fill(0)
                     }
                 }
             }
@@ -497,7 +506,7 @@ object ServerManager {
                     }
 
                     if (cacheBytes != null) {
-                        cacheXml(server.id, cacheBytes)
+                        cacheXml(server, cacheBytes)
                     }
                 } else {
                     server.lastStatus = "INVALID_CONTENT"
@@ -616,25 +625,97 @@ object ServerManager {
     }
 
     private fun cacheXml(
-        serverId: String,
+        server: ServerConfig,
         plaintext: ByteArray,
     ) {
+        var boundPlaintext: ByteArray? = null
+        var encrypted: ByteArray? = null
         try {
-            val encrypted = DeviceKeyManager.encrypt(plaintext)
+            boundPlaintext = encodeServerCache(server, plaintext)
+            encrypted = DeviceKeyManager.encrypt(boundPlaintext)
             if (encrypted != null) {
-                try {
-                    val file = File(Config.keyboxDirectory.parentFile, "server_cache_$serverId.enc")
-                    SecureFile.writeBytes(file, encrypted)
-                } finally {
-                    encrypted.fill(0)
-                }
+                val file = File(Config.keyboxDirectory.parentFile, "server_cache_${server.id}.enc")
+                SecureFile.writeBytes(file, encrypted)
             }
         } catch (e: Exception) {
             Logger.e("Failed to cache server content", e)
         } finally {
+            encrypted?.fill(0)
+            boundPlaintext?.fill(0)
             plaintext.fill(0)
         }
     }
+
+    private fun encodeServerCache(
+        server: ServerConfig,
+        plaintext: ByteArray,
+    ): ByteArray {
+        val binding = serverCacheBinding(server)
+        return try {
+            ByteArray(SERVER_CACHE_PREFIX_BYTES + plaintext.size).also { output ->
+                SERVER_CACHE_MAGIC.copyInto(output, 0)
+                binding.copyInto(output, SERVER_CACHE_MAGIC.size)
+                plaintext.copyInto(output, SERVER_CACHE_PREFIX_BYTES)
+            }
+        } finally {
+            binding.fill(0)
+        }
+    }
+
+    private fun decodeServerCache(
+        server: ServerConfig,
+        encoded: ByteArray,
+    ): ByteArray? {
+        if (encoded.size <= SERVER_CACHE_PREFIX_BYTES ||
+            !encoded.copyOfRange(0, SERVER_CACHE_MAGIC.size).contentEquals(SERVER_CACHE_MAGIC)
+        ) {
+            return null
+        }
+        val expected = serverCacheBinding(server)
+        return try {
+            val stored = encoded.copyOfRange(SERVER_CACHE_MAGIC.size, SERVER_CACHE_PREFIX_BYTES)
+            try {
+                if (!MessageDigest.isEqual(stored, expected)) return null
+            } finally {
+                stored.fill(0)
+            }
+            encoded.copyOfRange(SERVER_CACHE_PREFIX_BYTES, encoded.size)
+        } finally {
+            expected.fill(0)
+        }
+    }
+
+    private fun serverCacheBinding(server: ServerConfig): ByteArray {
+        val material =
+            buildString {
+                append(server.id).append('\n')
+                append(server.url).append('\n')
+                append(server.authType).append('\n')
+                append(canonicalJson(server.authData)).append('\n')
+                append(server.contentPassword.orEmpty()).append('\n')
+                append(server.contentPublicKey.orEmpty())
+            }.toByteArray(StandardCharsets.UTF_8)
+        return try {
+            MessageDigest.getInstance("SHA-256").digest(material)
+        } finally {
+            material.fill(0)
+        }
+    }
+
+    private fun canonicalJson(value: Any?): String =
+        when (value) {
+            null, JSONObject.NULL -> "null"
+            is JSONObject ->
+                value.keys().asSequence().toList().sorted().joinToString(prefix = "{", postfix = "}") { key ->
+                    "${JSONObject.quote(key)}:${canonicalJson(value.opt(key))}"
+                }
+            is JSONArray ->
+                (0 until value.length()).joinToString(prefix = "[", postfix = "]") { index ->
+                    canonicalJson(value.opt(index))
+                }
+            is Number, is Boolean -> value.toString()
+            else -> JSONObject.quote(value.toString())
+        }
 
     internal fun serializeKeyboxesForCache(keyboxes: List<CertHack.KeyBox>): String {
         require(keyboxes.isNotEmpty() && keyboxes.size <= MAX_REMOTE_KEYBOXES) {
@@ -779,4 +860,7 @@ object ServerManager {
     private const val MAX_REMOTE_KEYBOXES = 64
     private const val MAX_CONFIG_BYTES = 2L * 1024 * 1024
     private const val MAX_CACHE_BYTES = 16L * 1024 * 1024
+    private val SERVER_CACHE_MAGIC = byteArrayOf('C'.code.toByte(), 'T'.code.toByte(), 'S'.code.toByte(), 'C'.code.toByte(), 2)
+    private const val SERVER_CACHE_BINDING_BYTES = 32
+    private val SERVER_CACHE_PREFIX_BYTES = SERVER_CACHE_MAGIC.size + SERVER_CACHE_BINDING_BYTES
 }
