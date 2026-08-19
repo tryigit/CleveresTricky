@@ -58,6 +58,24 @@ class ServerManagerCacheBindingTest {
         assertFalse(ServerManager.cacheBindingChanged(original, replacement))
     }
 
+    @Test
+    fun `cache binding canonicalizes authentication object order`() {
+        val firstHeaders = JSONObject().put("X-B", "two").put("X-A", "one")
+        val secondHeaders = JSONObject().put("X-A", "one").put("X-B", "two")
+        val first =
+            server().copy(
+                authType = "CUSTOM",
+                authData = JSONObject().put("headers", firstHeaders),
+            )
+        val second =
+            server().copy(
+                authType = "CUSTOM",
+                authData = JSONObject().put("headers", secondHeaders),
+            )
+
+        assertFalse(ServerManager.cacheBindingChanged(first, second))
+    }
+
     private fun server() =
         ServerManager.ServerConfig(
             id = "server-a",
