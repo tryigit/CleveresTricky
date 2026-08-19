@@ -7,9 +7,9 @@ description = "Source-bound CBOX recovery-key derivation and decryption"
 license = "GPL-3.0-only"
 
 [dependencies]
-aes-gcm = { version = "=0.11.0", features = ["zeroize"] }
+aes-gcm = { workspace = true }
 cleverestricky-crypto-core = { path = "../crypto-core" }
-pbkdf2 = "=0.13.0"
+pbkdf2 = { workspace = true }
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.151"
 sha2 = "=0.10.9"
