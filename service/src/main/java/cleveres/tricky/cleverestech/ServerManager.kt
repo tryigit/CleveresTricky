@@ -182,6 +182,16 @@ object ServerManager {
 
     internal fun findServer(id: String): ServerConfig? = if (validServerId.matches(id)) serversMap[id] else null
 
+    internal fun cacheBindingChanged(
+        previous: ServerConfig,
+        replacement: ServerConfig,
+    ): Boolean =
+        previous.url != replacement.url ||
+            previous.authType != replacement.authType ||
+            previous.authData.toString() != replacement.authData.toString() ||
+            previous.contentPassword != replacement.contentPassword ||
+            previous.contentPublicKey != replacement.contentPublicKey
+
     @Synchronized
     fun addServer(server: ServerConfig) {
         validateServer(server)
@@ -201,6 +211,9 @@ object ServerManager {
                 serversList.add(previous)
             }
             throw error
+        }
+        if (previous != null && cacheBindingChanged(previous, server)) {
+            deactivateServerContent(server.id, deleteCache = true)
         }
     }
 
@@ -239,6 +252,9 @@ object ServerManager {
                 serversMap[id] = previous
                 serversList.replaceAll { if (it.id == id) previous else it }
                 throw error
+            }
+            if (cacheBindingChanged(previous, s)) {
+                deactivateServerContent(id, deleteCache = true)
             }
         }
     }
