@@ -1,12 +1,11 @@
 // Additional GPLv3 section 7(b) attribution term for tryigit-owned material: see ../../NOTICE.
 #![forbid(unsafe_code)]
 
-use aes_gcm::aead::{AeadInPlace, KeyInit};
-use aes_gcm::{Aes256Gcm, Nonce, Tag};
+use aes_gcm::aead::{AeadInOut, KeyInit};
+use aes_gcm::Aes256Gcm;
 use cleverestricky_crypto_core::{CboxPayload, CryptoError};
-use pbkdf2::pbkdf2_hmac;
+use pbkdf2::{pbkdf2_hmac, sha2::Sha256 as Pbkdf2Sha256};
 use serde::Deserialize;
-use sha2::Sha256;
 use zeroize::{Zeroize, Zeroizing};
 
 const KDF_ITERATIONS: u32 = 250_000;
@@ -68,7 +67,7 @@ pub fn derive_recovery_key(
     }
     let salt = &bytes[8..8 + SALT_BYTES];
     let mut key = Zeroizing::new(vec![0u8; RECOVERY_KEY_BYTES]);
-    pbkdf2_hmac::<Sha256>(
+    pbkdf2_hmac::<Pbkdf2Sha256>(
         password.as_bytes(),
         salt,
         KDF_ITERATIONS,
@@ -108,15 +107,17 @@ fn decrypt_inner(bytes: &mut [u8], recovery_key: &[u8]) -> Result<CboxPayload, C
     tag_bytes.copy_from_slice(&bytes[body_end..]);
 
     let cipher = Aes256Gcm::new_from_slice(recovery_key).map_err(|_| CryptoError::InvalidInput)?;
-    let nonce = Nonce::from_slice(&iv);
-    let tag = Tag::from_slice(&tag_bytes);
     let aad: &[u8] = if version == VERSION_CURRENT {
         &header
     } else {
         &[]
     };
-    let decrypted =
-        cipher.decrypt_in_place_detached(nonce, aad, &mut bytes[HEADER_BYTES..body_end], tag);
+    let decrypted = cipher.decrypt_inout_detached(
+        (&iv).into(),
+        aad,
+        (&mut bytes[HEADER_BYTES..body_end]).into(),
+        (&tag_bytes).into(),
+    );
     iv.zeroize();
     tag_bytes.zeroize();
     header.zeroize();
