@@ -1,23 +1,21 @@
 name: Fix deep bug sweep CI
 
 on:
-  pull_request:
-    types: [synchronize]
+  push:
+    branches:
+      - fix/deep-bug-sweep
 
 permissions:
   contents: write
 
 jobs:
   fix:
-    if: github.event.pull_request.number == 985
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: ${{ github.event.pull_request.head.ref }}
       - name: Repair Config scope and clean diagnostics
         env:
-          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_REF: ${{ github.ref_name }}
         run: |
           python3 - <<'PY'
           from pathlib import Path
