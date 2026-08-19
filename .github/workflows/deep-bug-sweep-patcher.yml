@@ -1,8 +1,8 @@
 name: Deep bug sweep patcher
 
 on:
-  push:
-    branches: [ "fix/deep-bug-sweep" ]
+  pull_request:
+    branches: [ "master" ]
     paths: [ ".github/workflows/deep-bug-sweep-patcher.yml" ]
 
 permissions:
@@ -10,6 +10,7 @@ permissions:
 
 jobs:
   patch:
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - name: Check out
