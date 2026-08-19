@@ -1,14 +1,16 @@
 name: Fix deep bug sweep CI
 
 on:
-  push:
-    branches: [ "fix/deep-bug-sweep" ]
+  pull_request:
+    branches: [ "master" ]
+    paths: [ ".github/workflows/fix-deep-bug-sweep-ci.yml" ]
 
 permissions:
   contents: write
 
 jobs:
   fix:
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
