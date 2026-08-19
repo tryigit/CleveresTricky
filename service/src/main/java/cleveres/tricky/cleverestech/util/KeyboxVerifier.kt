@@ -200,7 +200,18 @@ object KeyboxVerifier {
                 Logger.e("Rejected unsafe CRL URL")
                 return null
             }
+            return fetchNetworkCrlLocked(requestedUrl, now)
+        } finally {
+            cacheLock.unlock()
+        }
+    }
 
+    private fun fetchNetworkCrlLocked(
+        requestedUrl: String,
+        now: Long,
+    ): CrlWire.Handle? {
+        var conditionalEtag = cachedEtag
+        repeat(2) { attempt ->
             val connection = URL(requestedUrl).openConnection() as HttpURLConnection
             try {
                 connection.instanceFollowRedirects = false
@@ -209,12 +220,22 @@ object KeyboxVerifier {
                 connection.requestMethod = "GET"
                 connection.setRequestProperty("Accept", "application/json")
                 connection.setRequestProperty("Accept-Encoding", "identity")
-                cachedEtag?.let { connection.setRequestProperty("If-None-Match", it) }
+                conditionalEtag?.let { connection.setRequestProperty("If-None-Match", it) }
 
                 val responseCode = connection.responseCode
-                if (responseCode == HttpURLConnection.HTTP_NOT_MODIFIED && cachedCrl != null) {
-                    lastFetchTime = now
-                    return cachedCrl
+                if (responseCode == HttpURLConnection.HTTP_NOT_MODIFIED) {
+                    cachedCrl?.let { cached ->
+                        lastFetchTime = now
+                        return cached
+                    }
+                    if (conditionalEtag != null && attempt == 0) {
+                        Logger.w("CRL server returned 304 without usable local state; retrying unconditionally")
+                        cachedEtag = null
+                        conditionalEtag = null
+                        return@repeat
+                    }
+                    Logger.e("CRL server returned 304 without usable local state")
+                    return null
                 }
                 if (responseCode != HttpURLConnection.HTTP_OK) {
                     Logger.e("CRL fetch failed with HTTP $responseCode")
@@ -240,9 +261,8 @@ object KeyboxVerifier {
             } finally {
                 connection.disconnect()
             }
-        } finally {
-            cacheLock.unlock()
         }
+        return null
     }
 
     /** Rebuilds only from the persisted raw cache; restart recovery never performs recursive network work. */
@@ -251,6 +271,7 @@ object KeyboxVerifier {
         cacheLock.lock()
         try {
             cachedCrl = null
+            cachedEtag = null
             lastFetchTime = 0
             val persisted = loadPersistedCrlLocked(now) ?: return null
             val (raw, modified) = persisted
@@ -274,6 +295,7 @@ object KeyboxVerifier {
         cacheLock.lock()
         try {
             cachedCrl = null
+            cachedEtag = null
             lastFetchTime = 0
         } finally {
             cacheLock.unlock()
@@ -342,7 +364,7 @@ object KeyboxVerifier {
             if (!isSafeKeyboxFile(file)) {
                 return Result(file, file.name, Status.ERROR, "Unsafe or oversized keybox file")
             }
-                val keyboxes = KeyboxLoader.parseFile(scope, filename)
+            val keyboxes = KeyboxLoader.parseFile(scope, filename)
             if (keyboxes.isEmpty()) {
                 return Result(file, file.name, Status.INVALID, "No valid keybox found or parse error", storageId)
             }
