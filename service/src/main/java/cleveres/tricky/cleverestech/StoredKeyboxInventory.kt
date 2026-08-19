@@ -1,10 +1,8 @@
 package cleveres.tricky.cleverestech
 
 import java.io.File
-import java.nio.ByteBuffer
 import java.nio.file.Files
 import java.nio.file.LinkOption
-import java.security.MessageDigest
 import java.util.Locale
 
 /** One bounded inventory for keybox sources visible to both runtime and WebUI. */
@@ -28,45 +26,6 @@ internal object StoredKeyboxInventory {
             get() = filename.endsWith(".xml", ignoreCase = true)
         val isCbox: Boolean
             get() = filename.endsWith(".cbox", ignoreCase = true)
-    }
-
-    /**
-     * Config's hot-path cache historically keyed XML sources by File.lastModified + length.
-     * Preserve that API while making lastModified content-aware for inventory-created XML
-     * handles, so an equal-size replacement with a restored filesystem timestamp cannot
-     * keep stale key material alive in memory.
-     */
-    private class ContentStampedFile(pathname: String) : File(pathname) {
-        private val physicalLastModified = super.lastModified()
-        private val contentStamp: Long by lazy(LazyThreadSafetyMode.NONE) { calculateContentStamp() }
-
-        override fun lastModified(): Long = contentStamp
-
-        private fun calculateContentStamp(): Long {
-            val path = toPath()
-            if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) return physicalLastModified
-            val digest = MessageDigest.getInstance("SHA-256")
-            return runCatching {
-                Files.newInputStream(path, LinkOption.NOFOLLOW_LINKS).use { input ->
-                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                    try {
-                        while (true) {
-                            val count = input.read(buffer)
-                            if (count < 0) break
-                            if (count > 0) digest.update(buffer, 0, count)
-                        }
-                    } finally {
-                        buffer.fill(0)
-                    }
-                }
-                val bytes = digest.digest()
-                try {
-                    ByteBuffer.wrap(bytes, 0, Long.SIZE_BYTES).long xor physicalLastModified
-                } finally {
-                    bytes.fill(0)
-                }
-            }.getOrDefault(physicalLastModified)
-        }
     }
 
     const val MAX_ACTIVE_XML_SOURCES = 64
@@ -109,7 +68,7 @@ internal object StoredKeyboxInventory {
         val candidate = File(directory, filename)
         if (candidate.parentFile?.canonicalFile != directory.canonicalFile) return null
         if (!Files.isRegularFile(candidate.toPath(), LinkOption.NOFOLLOW_LINKS)) return null
-        return Source(scope, filename, inventoryFile(candidate, filename))
+        return Source(scope, filename, candidate)
     }
 
     private fun scan(
@@ -125,17 +84,10 @@ internal object StoredKeyboxInventory {
                 if (!isSafeStoredName(filename, allowCbox)) continue
                 if (!Files.isRegularFile(entry, LinkOption.NOFOLLOW_LINKS)) continue
                 require(output.size < MAX_STORED_SOURCES) { "Too many stored keybox sources" }
-                val file = entry.toFile()
-                output += Source(scope, filename, inventoryFile(file, filename))
+                output += Source(scope, filename, entry.toFile())
             }
         }
     }
-
-    private fun inventoryFile(
-        file: File,
-        filename: String,
-    ): File =
-        if (filename.endsWith(".xml", ignoreCase = true)) ContentStampedFile(file.path) else file
 
     private fun isSafeStoredName(
         filename: String,

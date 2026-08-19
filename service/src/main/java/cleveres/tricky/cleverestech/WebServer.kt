@@ -2563,13 +2563,15 @@ class WebServer(
                         if (size !in 0..entryLimit.toLong()) {
                             throw IOException("Backup entry exceeds size limit: $name")
                         }
-                        totalBytes += size
-                        if (totalBytes > MAX_BACKUP_UNCOMPRESSED_BYTES) {
-                            throw IOException("Backup exceeds uncompressed size limit")
-                        }
+                        val remaining = MAX_BACKUP_UNCOMPRESSED_BYTES.toLong() - totalBytes
+                        if (remaining < 0) throw IOException("Backup exceeds uncompressed size limit")
                         zos.putNextEntry(ZipEntry(name))
-                        Files.newInputStream(file.toPath(), LinkOption.NOFOLLOW_LINKS).use { it.copyTo(zos) }
+                        val copied =
+                            Files.newInputStream(file.toPath(), LinkOption.NOFOLLOW_LINKS).use { input ->
+                                BackupIo.copyBounded(input, zos, entryLimit.toLong(), remaining)
+                            }
                         zos.closeEntry()
+                        totalBytes += copied
                     }
 
                     val keyboxDir = File(configDir, "keyboxes")
@@ -2583,13 +2585,20 @@ class WebServer(
                             if (size !in 1..MAX_BACKUP_KEYBOX_ENTRY_BYTES.toLong()) {
                                 throw IOException("Keybox exceeds size limit: ${keybox.name}")
                             }
-                            totalBytes += size
-                            if (totalBytes > MAX_BACKUP_UNCOMPRESSED_BYTES) {
-                                throw IOException("Backup exceeds uncompressed size limit")
-                            }
+                            val remaining = MAX_BACKUP_UNCOMPRESSED_BYTES.toLong() - totalBytes
+                            if (remaining < 0) throw IOException("Backup exceeds uncompressed size limit")
                             zos.putNextEntry(ZipEntry("keyboxes/${keybox.name}"))
-                            Files.newInputStream(keybox.toPath(), LinkOption.NOFOLLOW_LINKS).use { it.copyTo(zos) }
+                            val copied =
+                                Files.newInputStream(keybox.toPath(), LinkOption.NOFOLLOW_LINKS).use { input ->
+                                    BackupIo.copyBounded(
+                                        input,
+                                        zos,
+                                        MAX_BACKUP_KEYBOX_ENTRY_BYTES.toLong(),
+                                        remaining,
+                                    )
+                                }
                             zos.closeEntry()
+                            totalBytes += copied
                         }
                     }
                 }
@@ -2722,14 +2731,14 @@ class WebServer(
                     }
                 }
 
+                val mutations = ArrayList<BackupRestoreTransaction.Mutation>()
                 staged.forEach { (name, bytes) ->
-                    val file = requireNotNull(destinations[name])
-                    if (name.startsWith("keyboxes/")) SecureFile.mkdirs(keyboxDir, 448)
-                    SecureFile.writeBytes(file, bytes)
+                    mutations += BackupRestoreTransaction.Mutation(requireNotNull(destinations[name]), bytes)
                 }
-                staleConfigFiles.forEach { Files.deleteIfExists(it.toPath()) }
-                staleKeyboxFiles.forEach { Files.deleteIfExists(it.toPath()) }
-                invalidatedCacheFiles.forEach { Files.deleteIfExists(it.toPath()) }
+                staleConfigFiles.forEach { mutations += BackupRestoreTransaction.Mutation(it, null) }
+                staleKeyboxFiles.forEach { mutations += BackupRestoreTransaction.Mutation(it, null) }
+                invalidatedCacheFiles.forEach { mutations += BackupRestoreTransaction.Mutation(it, null) }
+                BackupRestoreTransaction.apply(configDir, mutations)
             } finally {
                 staged.values.forEach { it.fill(0) }
             }
