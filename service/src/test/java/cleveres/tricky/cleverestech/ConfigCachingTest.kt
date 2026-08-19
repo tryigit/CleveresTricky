@@ -136,4 +136,23 @@ class ConfigCachingTest {
         val cached3 = getCachedKeyboxCount()
         assertEquals("Should still have 0 keyboxes", 0, cached3)
     }
+
+    @Test
+    fun testCacheReloadsWhenContentChangesWithSameLengthAndTimestamp() {
+        keyboxFile.writeText(xmlV1)
+        val originalTimestamp = 30000L
+        keyboxFile.setLastModified(originalTimestamp)
+
+        callUpdateKeyBoxes()
+        assertEquals("Should load the original keybox", 1, getCachedKeyboxCount())
+
+        val replacement = xmlV1.replace("AndroidAttestation", "AndroidAttestatioN")
+        assertEquals(xmlV1.toByteArray().size, replacement.toByteArray().size)
+        keyboxFile.writeText(replacement)
+        keyboxFile.setLastModified(originalTimestamp)
+
+        callUpdateKeyBoxes()
+
+        assertEquals("Should reject the same-metadata replacement", 0, getCachedKeyboxCount())
+    }
 }
