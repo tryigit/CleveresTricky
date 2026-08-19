@@ -15,6 +15,7 @@ object BootLogic {
     private const val OEM_UNLOCK_ALLOWED_PROPERTY = "sys.oem_unlock_allowed"
     private val nullDevice = File("/dev/null")
     private val ran = AtomicBoolean(false)
+    private val running = AtomicBoolean(false)
 
     private val configDir: File
         get() = Config.getConfigRoot().takeIf { it.path.isNotEmpty() } ?: File(CONFIG_PATH)
@@ -31,7 +32,7 @@ object BootLogic {
     }
 
     fun run() {
-        if (!ran.compareAndSet(false, true)) return
+        if (ran.get() || !running.compareAndSet(false, true)) return
 
         try {
             val mode = readBootPropsMode()
@@ -49,8 +50,11 @@ object BootLogic {
             if (requestedBuildIdentity && !buildIdentity) {
                 Logger.i("Identity build properties were skipped by the ${mode.name.lowercase()} compatibility policy")
             }
+            ran.set(true)
         } catch (e: Exception) {
             Logger.e("BootLogic failed", e)
+        } finally {
+            running.set(false)
         }
     }
 
