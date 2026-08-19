@@ -65,6 +65,20 @@ class AutoIdentityManagerTest {
     }
 
     @Test
+    fun `latest canary selection is independent of response order`() {
+        val older =
+            """{"id":"canary-20260715","canary":true,"releaseCandidateName":"BP31.260715.001","buildId":"100"}"""
+        val newer =
+            """{"id":"canary-20260820","canary":true,"releaseCandidateName":"BP31.260820.001","buildId":"200"}"""
+
+        val newerFirst = AutoIdentityManager.findLatestCanary("[$newer,$older]")
+        val newerLast = AutoIdentityManager.findLatestCanary("[$older,$newer]")
+
+        assertEquals("canary-20260820", newerFirst?.optString("id"))
+        assertEquals("canary-20260820", newerLast?.optString("id"))
+    }
+
+    @Test
     fun `security patch falls back to canary month when bulletin has no match`() {
         assertEquals("2026-08-05", AutoIdentityManager.estimateSecurityPatch("canary-2608"))
         assertEquals("2026-08-05", AutoIdentityManager.estimateSecurityPatch("canary-202608"))
