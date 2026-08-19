@@ -11,7 +11,7 @@ name = "cleveres_encryptor_crypto"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-aes-gcm = { version = "0.10.3", features = ["zeroize"] }
+aes-gcm = { version = "0.11.0", features = ["zeroize"] }
 getrandom = "0.4.3"
 jni = { version = "=0.22.4", default-features = false }
 pbkdf2 = "0.12.2"

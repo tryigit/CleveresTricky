@@ -7,7 +7,7 @@ description = "Bounded CBOX and backup cryptography for CleveresTricky"
 license = "GPL-3.0-only"
 
 [dependencies]
-aes-gcm = { version = "0.10.3", features = ["zeroize"] }
+aes-gcm = { version = "0.11.0", features = ["zeroize"] }
 base64 = "0.23.1"
 getrandom = "0.4.3"
 p256 = { version = "0.13.2", features = ["ecdsa", "pkcs8"] }
