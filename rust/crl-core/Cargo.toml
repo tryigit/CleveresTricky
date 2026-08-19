@@ -12,4 +12,4 @@ num-bigint = { package = "num-bigint-dig", version = "0.8.6" }
 serde = "1.0"
 serde_json = "1.0"
 sha1 = "0.11.0"
-sha2 = "0.10.9"
+sha2 = "0.11.0"
