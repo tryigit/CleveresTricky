@@ -1,4 +1,5 @@
 name: Fix deep bug sweep CI
+# synchronize trigger: workflow already existed in the previous PR head
 
 on:
   pull_request:
