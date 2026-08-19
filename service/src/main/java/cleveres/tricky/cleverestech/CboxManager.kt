@@ -21,6 +21,7 @@ object CboxManager {
     private data class UnlockedEntry(
         val sourceLastModified: Long,
         val sourceSize: Long,
+        val sourceDigest: ByteArray,
         val keyboxes: List<CertHack.KeyBox>,
     )
 
@@ -61,10 +62,24 @@ object CboxManager {
         for (file in files) {
             val name = file.name
             val current = unlockedCache[name]
+            val metadataMatches =
+                current != null &&
+                    current.sourceLastModified == file.lastModified() &&
+                    current.sourceSize == file.length()
+            val digestMatches =
+                if (metadataMatches) {
+                    val digest = runCatching { digestFile(file) }.getOrNull()
+                    try {
+                        digest != null && MessageDigest.isEqual(requireNotNull(current).sourceDigest, digest)
+                    } finally {
+                        digest?.fill(0)
+                    }
+                } else {
+                    false
+                }
             if (crl != null &&
                 current != null &&
-                current.sourceLastModified == file.lastModified() &&
-                current.sourceSize == file.length() &&
+                digestMatches &&
                 current.keyboxes.all {
                     KeyboxVerifier.verifyKeybox(it, crl) == KeyboxVerifier.Status.VALID
                 }
@@ -154,7 +169,8 @@ object CboxManager {
             }
 
             writeCredentialCache(file, unlockPayload.recoveryKey, verificationKey, sourceDigest)
-            unlockedCache[filename] = UnlockedEntry(afterModified, afterSize, verified.toList())
+            unlockedCache[filename] =
+                UnlockedEntry(afterModified, afterSize, sourceDigest.copyOf(), verified.toList())
             lockedFiles.remove(filename)
             true
         } catch (error: Exception) {
@@ -224,7 +240,7 @@ object CboxManager {
             val parsed = KeyboxJcaAdapter.materialize(payload.document, file.name)
             val verified = parsed.filter { KeyboxVerifier.verifyKeybox(it, crl) == KeyboxVerifier.Status.VALID }
             if (verified.isEmpty() || verified.size != parsed.size) return null
-            UnlockedEntry(file.lastModified(), file.length(), verified.toList())
+            UnlockedEntry(file.lastModified(), file.length(), sourceDigest.copyOf(), verified.toList())
         } catch (error: RustBackendUnavailableException) {
             Logger.w("Rust backend unavailable; preserving CBOX recovery cache ${cacheFile.name}")
             throw error
