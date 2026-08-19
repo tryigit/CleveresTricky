@@ -27,180 +27,177 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
-          def replace_once(path, old, new):
-              p = Path(path)
-              text = p.read_text()
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f"expected exactly one match in {path}, got {count}")
-              p.write_text(text.replace(old, new, 1))
+          def leading(line):
+              return line[:len(line) - len(line.lstrip())]
+
+          def find_unique(lines, predicate, label):
+              hits = [i for i, line in enumerate(lines) if predicate(i, line)]
+              if len(hits) != 1:
+                  raise SystemExit(f"expected one {label}, got {len(hits)}")
+              return hits[0]
+
+          def write_lines(path, lines):
+              Path(path).write_text("\n".join(lines) + "\n")
 
           config = "service/src/main/java/cleveres/tricky/cleverestech/Config.kt"
-          replace_once(config, '''    private data class KeyboxFileCache(
-              val lastModified: Long,
-              val length: Long,
-              val keyboxes: List<CertHack.KeyBox>,
-          )
-
-          private val storedKeyboxCache = ConcurrentHashMap<String, KeyboxFileCache>()
-          ''', '''    private data class KeyboxFileCache(
-              val lastModified: Long,
-              val length: Long,
-              val digest: ByteArray,
-              val keyboxes: List<CertHack.KeyBox>,
-          )
-
-          private val storedKeyboxCache = ConcurrentHashMap<String, KeyboxFileCache>()
-
-          private fun digestStoredKeybox(file: File): ByteArray {
-              val digest = MessageDigest.getInstance("SHA-256")
-              Files.newInputStream(file.toPath(), LinkOption.NOFOLLOW_LINKS).use { input ->
-                  val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                  try {
-                      while (true) {
-                          val count = input.read(buffer)
-                          if (count < 0) break
-                          if (count > 0) digest.update(buffer, 0, count)
-                      }
-                  } finally {
-                      buffer.fill(0)
-                  }
-              }
-              return digest.digest()
-          }
-          ''')
-
-          replace_once(config, '''        val lastMod = file.lastModified()
-              val length = file.length()
-              val cached = storedKeyboxCache[source.id]
-              if (cached != null && cached.lastModified == lastMod && cached.length == length) {
-                  allKeyboxes.addAll(cached.keyboxes)
-              } else {
-                  try {
-                      val parsed = KeyboxLoader.parseFile(
-                          requireNotNull(source.scope.fileScope),
-                          source.filename,
-                      )
-                      storedKeyboxCache[source.id] = KeyboxFileCache(lastMod, length, parsed)
-                      allKeyboxes.addAll(parsed)
-                      Logger.i("Reloaded keybox source: ${source.id}")
-                  } catch (error: RustBackendUnavailableException) {
-                      throw error
-                  } catch (error: Exception) {
-                      storedKeyboxCache.remove(source.id)
-                      Logger.e("Failed to parse keybox source: ${source.id}", error)
-                  }
-              }
-          ''', '''        val lastMod = file.lastModified()
-              val length = file.length()
-              val cached = storedKeyboxCache[source.id]
-              val metadataMatches = cached != null && cached.lastModified == lastMod && cached.length == length
-              val digestMatches =
-                  if (metadataMatches) {
-                      val digest = digestStoredKeybox(file)
-                      try {
-                          MessageDigest.isEqual(requireNotNull(cached).digest, digest)
-                      } finally {
-                          digest.fill(0)
-                      }
-                  } else {
-                      false
-                  }
-              if (cached != null && metadataMatches && digestMatches) {
-                  allKeyboxes.addAll(cached.keyboxes)
-              } else {
-                  try {
-                      val beforeDigest = digestStoredKeybox(file)
-                      try {
-                          val parsed = KeyboxLoader.parseFile(
-                              requireNotNull(source.scope.fileScope),
-                              source.filename,
-                          )
-                          val afterDigest = digestStoredKeybox(file)
-                          try {
-                              if (!MessageDigest.isEqual(beforeDigest, afterDigest) ||
-                                  file.lastModified() != lastMod || file.length() != length
-                              ) {
-                                  throw IOException("Keybox source changed while it was being parsed")
-                              }
-                              storedKeyboxCache[source.id] =
-                                  KeyboxFileCache(lastMod, length, afterDigest.copyOf(), parsed)
-                              allKeyboxes.addAll(parsed)
-                              Logger.i("Reloaded keybox source: ${source.id}")
-                          } finally {
-                              afterDigest.fill(0)
-                          }
-                      } finally {
-                          beforeDigest.fill(0)
-                      }
-                  } catch (error: RustBackendUnavailableException) {
-                      throw error
-                  } catch (error: Exception) {
-                      storedKeyboxCache.remove(source.id)
-                      Logger.e("Failed to parse keybox source: ${source.id}", error)
-                  }
-              }
-          ''')
+          lines = Path(config).read_text().splitlines()
+          start = find_unique(lines, lambda i, l: l.strip() == "private data class KeyboxFileCache(", "KeyboxFileCache")
+          cache_map = find_unique(lines, lambda i, l: l.strip() == "private val storedKeyboxCache = ConcurrentHashMap<String, KeyboxFileCache>()", "storedKeyboxCache")
+          if cache_map <= start:
+              raise SystemExit("invalid KeyboxFileCache layout")
+          lines[start:cache_map + 1] = [
+              "    private data class KeyboxFileCache(",
+              "        val lastModified: Long,",
+              "        val length: Long,",
+              "        val digest: ByteArray,",
+              "        val keyboxes: List<CertHack.KeyBox>,",
+              "    )",
+              "",
+              "    private val storedKeyboxCache = ConcurrentHashMap<String, KeyboxFileCache>()",
+              "",
+              "    private fun digestStoredKeybox(file: File): ByteArray {",
+              "        val digest = MessageDigest.getInstance(\"SHA-256\")",
+              "        Files.newInputStream(file.toPath(), LinkOption.NOFOLLOW_LINKS).use { input ->",
+              "            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)",
+              "            try {",
+              "                while (true) {",
+              "                    val count = input.read(buffer)",
+              "                    if (count < 0) break",
+              "                    if (count > 0) digest.update(buffer, 0, count)",
+              "                }",
+              "            } finally {",
+              "                buffer.fill(0)",
+              "            }",
+              "        }",
+              "        return digest.digest()",
+              "    }",
+          ]
+          start = find_unique(lines, lambda i, l: l.strip() == "val lastMod = file.lastModified()", "keybox cache decision")
+          cache_iterator = find_unique(lines, lambda i, l: l.strip() == "val cacheIterator = storedKeyboxCache.keys.iterator()", "keybox cache iterator")
+          if cache_iterator <= start:
+              raise SystemExit("invalid keybox cache decision layout")
+          lines[start:cache_iterator] = [
+              "        val lastMod = file.lastModified()",
+              "        val length = file.length()",
+              "        val cached = storedKeyboxCache[source.id]",
+              "        val metadataMatches = cached != null && cached.lastModified == lastMod && cached.length == length",
+              "        val digestMatches =",
+              "            if (metadataMatches) {",
+              "                val digest = digestStoredKeybox(file)",
+              "                try {",
+              "                    MessageDigest.isEqual(requireNotNull(cached).digest, digest)",
+              "                } finally {",
+              "                    digest.fill(0)",
+              "                }",
+              "            } else {",
+              "                false",
+              "            }",
+              "        if (cached != null && metadataMatches && digestMatches) {",
+              "            allKeyboxes.addAll(cached.keyboxes)",
+              "        } else {",
+              "            try {",
+              "                val beforeDigest = digestStoredKeybox(file)",
+              "                try {",
+              "                    val parsed = KeyboxLoader.parseFile(",
+              "                        requireNotNull(source.scope.fileScope),",
+              "                        source.filename,",
+              "                    )",
+              "                    val afterDigest = digestStoredKeybox(file)",
+              "                    try {",
+              "                        if (!MessageDigest.isEqual(beforeDigest, afterDigest) ||",
+              "                            file.lastModified() != lastMod || file.length() != length",
+              "                        ) {",
+              "                            throw IOException(\"Keybox source changed while it was being parsed\")",
+              "                        }",
+              "                        storedKeyboxCache[source.id] =",
+              "                            KeyboxFileCache(lastMod, length, afterDigest.copyOf(), parsed)",
+              "                        allKeyboxes.addAll(parsed)",
+              "                        Logger.i(\"Reloaded keybox source: ${source.id}\")",
+              "                    } finally {",
+              "                        afterDigest.fill(0)",
+              "                    }",
+              "                } finally {",
+              "                    beforeDigest.fill(0)",
+              "                }",
+              "            } catch (error: RustBackendUnavailableException) {",
+              "                throw error",
+              "            } catch (error: Exception) {",
+              "                storedKeyboxCache.remove(source.id)",
+              "                Logger.e(\"Failed to parse keybox source: ${source.id}\", error)",
+              "            }",
+              "        }",
+          ]
+          write_lines(config, lines)
 
           web = "service/src/main/java/cleveres/tricky/cleverestech/WebServer.kt"
-          replace_once(web, '''                        totalBytes += size
-                          if (totalBytes > MAX_BACKUP_UNCOMPRESSED_BYTES) {
-                              throw IOException("Backup exceeds uncompressed size limit")
-                          }
-                          zos.putNextEntry(ZipEntry(name))
-                          Files.newInputStream(file.toPath(), LinkOption.NOFOLLOW_LINKS).use { it.copyTo(zos) }
-                          zos.closeEntry()
-          ''', '''                        val remaining = MAX_BACKUP_UNCOMPRESSED_BYTES.toLong() - totalBytes
-                          if (remaining < 0) throw IOException("Backup exceeds uncompressed size limit")
-                          zos.putNextEntry(ZipEntry(name))
-                          val copied =
-                              Files.newInputStream(file.toPath(), LinkOption.NOFOLLOW_LINKS).use { input ->
-                                  BackupIo.copyBounded(input, zos, entryLimit.toLong(), remaining)
-                              }
-                          zos.closeEntry()
-                          totalBytes += copied
-          ''')
+          lines = Path(web).read_text().splitlines()
 
-          replace_once(web, '''                            totalBytes += size
-                              if (totalBytes > MAX_BACKUP_UNCOMPRESSED_BYTES) {
-                                  throw IOException("Backup exceeds uncompressed size limit")
-                              }
-                              zos.putNextEntry(ZipEntry("keyboxes/${keybox.name}"))
-                              Files.newInputStream(keybox.toPath(), LinkOption.NOFOLLOW_LINKS).use { it.copyTo(zos) }
-                              zos.closeEntry()
-          ''', '''                            val remaining = MAX_BACKUP_UNCOMPRESSED_BYTES.toLong() - totalBytes
-                              if (remaining < 0) throw IOException("Backup exceeds uncompressed size limit")
-                              zos.putNextEntry(ZipEntry("keyboxes/${keybox.name}"))
-                              val copied =
-                                  Files.newInputStream(keybox.toPath(), LinkOption.NOFOLLOW_LINKS).use { input ->
-                                      BackupIo.copyBounded(
-                                          input,
-                                          zos,
-                                          MAX_BACKUP_KEYBOX_ENTRY_BYTES.toLong(),
-                                          remaining,
-                                      )
-                                  }
-                              zos.closeEntry()
-                              totalBytes += copied
-          ''')
+          starts = [i for i, line in enumerate(lines) if line.strip() == "totalBytes += size"]
+          config_start = [i for i in starts if any("ZipEntry(name)" in lines[j] for j in range(i, min(i + 10, len(lines))))]
+          keybox_start = [i for i in starts if any("keyboxes/${keybox.name}" in lines[j] for j in range(i, min(i + 10, len(lines))))]
+          if len(config_start) != 1 or len(keybox_start) != 1:
+              raise SystemExit(f"backup copy blocks not unique: config={len(config_start)} keybox={len(keybox_start)}")
 
-          replace_once(web, '''                staged.forEach { (name, bytes) ->
-                      val file = requireNotNull(destinations[name])
-                      if (name.startsWith("keyboxes/")) SecureFile.mkdirs(keyboxDir, 448)
-                      SecureFile.writeBytes(file, bytes)
-                  }
-                  staleConfigFiles.forEach { Files.deleteIfExists(it.toPath()) }
-                  staleKeyboxFiles.forEach { Files.deleteIfExists(it.toPath()) }
-                  invalidatedCacheFiles.forEach { Files.deleteIfExists(it.toPath()) }
-          ''', '''                val mutations = ArrayList<BackupRestoreTransaction.Mutation>()
-                  staged.forEach { (name, bytes) ->
-                      mutations += BackupRestoreTransaction.Mutation(requireNotNull(destinations[name]), bytes)
-                  }
-                  staleConfigFiles.forEach { mutations += BackupRestoreTransaction.Mutation(it, null) }
-                  staleKeyboxFiles.forEach { mutations += BackupRestoreTransaction.Mutation(it, null) }
-                  invalidatedCacheFiles.forEach { mutations += BackupRestoreTransaction.Mutation(it, null) }
-                  BackupRestoreTransaction.apply(configDir, mutations)
-          ''')
+          i = config_start[0]
+          end = next(j for j in range(i, i + 12) if lines[j].strip() == "zos.closeEntry()")
+          p = leading(lines[i])
+          lines[i:end + 1] = [
+              p + "val remaining = MAX_BACKUP_UNCOMPRESSED_BYTES.toLong() - totalBytes",
+              p + "if (remaining < 0) throw IOException(\"Backup exceeds uncompressed size limit\")",
+              p + "zos.putNextEntry(ZipEntry(name))",
+              p + "val copied =",
+              p + "    Files.newInputStream(file.toPath(), LinkOption.NOFOLLOW_LINKS).use { input ->",
+              p + "        BackupIo.copyBounded(input, zos, entryLimit.toLong(), remaining)",
+              p + "    }",
+              p + "zos.closeEntry()",
+              p + "totalBytes += copied",
+          ]
+
+          starts = [i for i, line in enumerate(lines) if line.strip() == "totalBytes += size"]
+          keybox_start = [i for i in starts if any("keyboxes/${keybox.name}" in lines[j] for j in range(i, min(i + 10, len(lines))))]
+          if len(keybox_start) != 1:
+              raise SystemExit(f"keybox backup copy block not unique after first patch: {len(keybox_start)}")
+          i = keybox_start[0]
+          end = next(j for j in range(i, i + 12) if lines[j].strip() == "zos.closeEntry()")
+          p = leading(lines[i])
+          lines[i:end + 1] = [
+              p + "val remaining = MAX_BACKUP_UNCOMPRESSED_BYTES.toLong() - totalBytes",
+              p + "if (remaining < 0) throw IOException(\"Backup exceeds uncompressed size limit\")",
+              p + "zos.putNextEntry(ZipEntry(\"keyboxes/${keybox.name}\"))",
+              p + "val copied =",
+              p + "    Files.newInputStream(keybox.toPath(), LinkOption.NOFOLLOW_LINKS).use { input ->",
+              p + "        BackupIo.copyBounded(",
+              p + "            input,",
+              p + "            zos,",
+              p + "            MAX_BACKUP_KEYBOX_ENTRY_BYTES.toLong(),",
+              p + "            remaining,",
+              p + "        )",
+              p + "    }",
+              p + "zos.closeEntry()",
+              p + "totalBytes += copied",
+          ]
+
+          restore_start = [
+              i for i, line in enumerate(lines)
+              if line.strip() == "staged.forEach { (name, bytes) ->"
+              and any("SecureFile.writeBytes(file, bytes)" in lines[j] for j in range(i, min(i + 8, len(lines))))
+          ]
+          if len(restore_start) != 1:
+              raise SystemExit(f"restore commit block not unique: {len(restore_start)}")
+          i = restore_start[0]
+          end = next(j for j in range(i, i + 16) if lines[j].strip() == "invalidatedCacheFiles.forEach { Files.deleteIfExists(it.toPath()) }")
+          p = leading(lines[i])
+          lines[i:end + 1] = [
+              p + "val mutations = ArrayList<BackupRestoreTransaction.Mutation>()",
+              p + "staged.forEach { (name, bytes) ->",
+              p + "    mutations += BackupRestoreTransaction.Mutation(requireNotNull(destinations[name]), bytes)",
+              p + "}",
+              p + "staleConfigFiles.forEach { mutations += BackupRestoreTransaction.Mutation(it, null) }",
+              p + "staleKeyboxFiles.forEach { mutations += BackupRestoreTransaction.Mutation(it, null) }",
+              p + "invalidatedCacheFiles.forEach { mutations += BackupRestoreTransaction.Mutation(it, null) }",
+              p + "BackupRestoreTransaction.apply(configDir, mutations)",
+          ]
+          write_lines(web, lines)
           PY
 
       - name: Commit patch and remove patcher
