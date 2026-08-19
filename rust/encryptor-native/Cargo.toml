@@ -11,10 +11,10 @@ name = "cleveres_encryptor_crypto"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-aes-gcm = { version = "0.11.0", features = ["zeroize"] }
-getrandom = "0.4.3"
+aes-gcm = { workspace = true }
+getrandom = { workspace = true }
 jni = { version = "=0.22.4", default-features = false }
-pbkdf2 = { version = "0.13.0", features = ["sha2"] }
+pbkdf2 = { workspace = true }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sha2 = "0.10"
