@@ -3,6 +3,7 @@ package cleveres.tricky.cleverestech
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.LinkOption
+import java.security.MessageDigest
 import java.util.Locale
 
 /** One bounded inventory for keybox sources visible to both runtime and WebUI. */
@@ -26,6 +27,13 @@ internal object StoredKeyboxInventory {
             get() = filename.endsWith(".xml", ignoreCase = true)
         val isCbox: Boolean
             get() = filename.endsWith(".cbox", ignoreCase = true)
+    }
+
+    private class ContentStampedFile(
+        source: File,
+        private val contentStamp: Long,
+    ) : File(source.path) {
+        override fun lastModified(): Long = contentStamp
     }
 
     const val MAX_ACTIVE_XML_SOURCES = 64
@@ -54,7 +62,14 @@ internal object StoredKeyboxInventory {
         // managed XML in keyboxes/ may share the same basename. Source IDs remain
         // scope-qualified for cache, inventory and deletion, while CertHack intentionally
         // groups same-name keyboxes into one selectable filename pool.
-        return sources
+        //
+        // Runtime cache metadata historically used only mtime + length, allowing a replaced
+        // XML with identical metadata to retain stale parsed keyboxes. Keep the public/stored
+        // Source identity stable, but expose a content-derived lastModified stamp only to the
+        // runtime scanner so content replacement always invalidates that cache.
+        return sources.map { source ->
+            source.copy(file = ContentStampedFile(source.file, contentStamp(source.file)))
+        }
     }
 
     fun resolve(
@@ -69,6 +84,32 @@ internal object StoredKeyboxInventory {
         if (candidate.parentFile?.canonicalFile != directory.canonicalFile) return null
         if (!Files.isRegularFile(candidate.toPath(), LinkOption.NOFOLLOW_LINKS)) return null
         return Source(scope, filename, candidate)
+    }
+
+    private fun contentStamp(file: File): Long {
+        val digest = MessageDigest.getInstance("SHA-256")
+        Files.newInputStream(file.toPath(), LinkOption.NOFOLLOW_LINKS).use { input ->
+            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+            try {
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    if (count > 0) digest.update(buffer, 0, count)
+                }
+            } finally {
+                buffer.fill(0)
+            }
+        }
+        val bytes = digest.digest()
+        return try {
+            var value = 0L
+            for (index in 0 until Long.SIZE_BYTES) {
+                value = (value shl 8) or (bytes[index].toLong() and 0xffL)
+            }
+            value
+        } finally {
+            bytes.fill(0)
+        }
     }
 
     private fun scan(

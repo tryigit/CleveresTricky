@@ -406,28 +406,10 @@ object Config {
     private data class KeyboxFileCache(
         val lastModified: Long,
         val length: Long,
-        val digest: ByteArray,
         val keyboxes: List<CertHack.KeyBox>,
     )
 
     private val storedKeyboxCache = ConcurrentHashMap<String, KeyboxFileCache>()
-
-    private fun digestStoredKeybox(file: File): ByteArray {
-        val digest = MessageDigest.getInstance("SHA-256")
-        Files.newInputStream(file.toPath(), LinkOption.NOFOLLOW_LINKS).use { input ->
-            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-            try {
-                while (true) {
-                    val count = input.read(buffer)
-                    if (count < 0) break
-                    if (count > 0) digest.update(buffer, 0, count)
-                }
-            } finally {
-                buffer.fill(0)
-            }
-        }
-        return digest.digest()
-    }
 
     fun updateKeyBoxes() =
         scope.launch {
@@ -486,45 +468,17 @@ object Config {
         val lastMod = file.lastModified()
         val length = file.length()
         val cached = storedKeyboxCache[source.id]
-        val metadataMatches = cached != null && cached.lastModified == lastMod && cached.length == length
-        val digestMatches =
-            if (metadataMatches) {
-                val digest = digestStoredKeybox(file)
-                try {
-                    MessageDigest.isEqual(requireNotNull(cached).digest, digest)
-                } finally {
-                    digest.fill(0)
-                }
-            } else {
-                false
-            }
-        if (cached != null && metadataMatches && digestMatches) {
+        if (cached != null && cached.lastModified == lastMod && cached.length == length) {
             allKeyboxes.addAll(cached.keyboxes)
         } else {
             try {
-                val beforeDigest = digestStoredKeybox(file)
-                try {
-                    val parsed = KeyboxLoader.parseFile(
-                        requireNotNull(source.scope.fileScope),
-                        source.filename,
-                    )
-                    val afterDigest = digestStoredKeybox(file)
-                    try {
-                        if (!MessageDigest.isEqual(beforeDigest, afterDigest) ||
-                            file.lastModified() != lastMod || file.length() != length
-                        ) {
-                            throw IOException("Keybox source changed while it was being parsed")
-                        }
-                        storedKeyboxCache[source.id] =
-                            KeyboxFileCache(lastMod, length, afterDigest.copyOf(), parsed)
-                        allKeyboxes.addAll(parsed)
-                        Logger.i("Reloaded keybox source: ${source.id}")
-                    } finally {
-                        afterDigest.fill(0)
-                    }
-                } finally {
-                    beforeDigest.fill(0)
-                }
+                val parsed = KeyboxLoader.parseFile(
+                    requireNotNull(source.scope.fileScope),
+                    source.filename,
+                )
+                storedKeyboxCache[source.id] = KeyboxFileCache(lastMod, length, parsed)
+                allKeyboxes.addAll(parsed)
+                Logger.i("Reloaded keybox source: ${source.id}")
             } catch (error: RustBackendUnavailableException) {
                 throw error
             } catch (error: Exception) {
@@ -532,6 +486,7 @@ object Config {
                 Logger.e("Failed to parse keybox source: ${source.id}", error)
             }
         }
+    }
     val cacheIterator = storedKeyboxCache.keys.iterator()
     while (cacheIterator.hasNext()) {
         if (!currentFiles.contains(cacheIterator.next())) cacheIterator.remove()
