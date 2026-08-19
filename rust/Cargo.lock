@@ -156,7 +156,7 @@ dependencies = [
  "p256",
  "rsa",
  "sha2",
- "signature",
+ "signature 3.0.0",
  "x509-cert",
  "zeroize",
 ]
@@ -186,7 +186,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
- "signature",
+ "signature 3.0.0",
  "zeroize",
 ]
 
@@ -412,7 +412,7 @@ dependencies = [
  "digest 0.10.7",
  "elliptic-curve",
  "rfc6979",
- "signature",
+ "signature 2.2.0",
  "spki 0.7.3",
 ]
 
@@ -862,7 +862,7 @@ dependencies = [
  "pkcs8",
  "rand_core",
  "sha2",
- "signature",
+ "signature 2.2.0",
  "spki 0.7.3",
  "subtle",
  "zeroize",
@@ -980,6 +980,12 @@ dependencies = [
  "digest 0.10.7",
  "rand_core",
 ]
+
+[[package]]
+name = "signature"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "28d567dcbaf0049cb8ac2608a76cd95ff9e4412e1899d389ee400918ca7537f5"
 
 [[package]]
 name = "simd_cesu8"
