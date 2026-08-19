@@ -40,6 +40,12 @@ class FilePollerTest {
         method.invoke(poller)
     }
 
+    private fun handleObserverLoss() {
+        val method = FilePoller::class.java.getDeclaredMethod("handleObserverLoss")
+        method.isAccessible = true
+        method.invoke(poller)
+    }
+
     private fun scheduledFallback(): Any? {
         val field = FilePoller::class.java.getDeclaredField("scheduledFuture")
         field.isAccessible = true
@@ -129,6 +135,21 @@ class FilePollerTest {
         val missingFile = File(tempFolder.root, "missing-parent/file.txt")
         poller = FilePoller(missingFile, intervalMs) {}
         poller.start()
+
+        assertNotNull(scheduledFallback())
+    }
+
+    @Test
+    fun testParentReplacementFallsBackWhenObserverCannotBeRearmed() {
+        val watchedDir = tempFolder.newFolder("watched")
+        testFile = File(watchedDir, "state.txt").apply { writeText("initial") }
+        poller = FilePoller(testFile, intervalMs) {}
+        poller.start()
+        assertNull(scheduledFallback())
+
+        val movedDir = File(tempFolder.root, "watched-old")
+        Files.move(watchedDir.toPath(), movedDir.toPath())
+        handleObserverLoss()
 
         assertNotNull(scheduledFallback())
     }
