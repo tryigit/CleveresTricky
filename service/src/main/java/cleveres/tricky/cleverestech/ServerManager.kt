@@ -380,7 +380,7 @@ object ServerManager {
                                 ?: throw SecurityException("Could not decrypt server cache")
                             cachePayload = decodeServerCache(server, decrypted)
                                 ?: throw SecurityException("Server cache trust binding does not match current configuration")
-                            val parsed = KeyboxLoader.parse(cachePayload, "server_${server.name}")
+                            val parsed = parseCachedKeyboxes(cachePayload, server)
                             val statuses = parsed.map { KeyboxVerifier.verifyKeybox(it, revoked) }
                             if (parsed.isNotEmpty() && statuses.all { it == KeyboxVerifier.Status.VALID }) {
                                 serverKeyboxes[server.id] = parsed
@@ -401,6 +401,21 @@ object ServerManager {
                     }
                 }
             }
+        }
+    }
+
+    internal fun parseCachedKeyboxes(
+        bytes: ByteArray,
+        server: ServerConfig,
+    ): List<CertHack.KeyBox> {
+        val isZip = bytes.size > 4 && bytes[0] == 0x50.toByte() && bytes[1] == 0x4B.toByte()
+        if (!isZip) return KeyboxLoader.parse(bytes, "server_${server.name}")
+
+        val parsed = processContent(bytes, server)
+        return try {
+            parsed.first
+        } finally {
+            parsed.second?.fill(0)
         }
     }
 
@@ -653,10 +668,7 @@ object ServerManager {
                     }
 
                     if (allKeys.isNotEmpty()) {
-                        return Pair(
-                            allKeys,
-                            serializeKeyboxesForCache(allKeys).toByteArray(StandardCharsets.UTF_8),
-                        )
+                        return Pair(allKeys, bytes.copyOf())
                     }
                 } finally {
                     pack.cboxFiles.forEach { it.second.fill(0) }
