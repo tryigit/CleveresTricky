@@ -32,6 +32,9 @@ fn non_positive_patch_replacements_fail_closed() {
             ..PatchLevels::default()
         },
     ] {
-        assert_eq!(rewrite_extension(&request(patch_levels)), Err(Error::InvalidOverride));
+        assert_eq!(
+            rewrite_extension(&request(patch_levels)),
+            Err(Error::InvalidOverride)
+        );
     }
 }
