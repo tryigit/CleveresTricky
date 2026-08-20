@@ -15,6 +15,8 @@
     const communityUrl = 'https://t.me/cleverestech';
     const keyboxHubUrl = 'https://keybox.tryigit.dev/';
     const debugFlag = '/data/adb/cleverestricky/debug_logging';
+    const nativeSuccessMarker = '__CT_NATIVE_OK__';
+    const nativeFilePickerIds = new Set(['kbFilePicker', 'restoreInput']);
     let callbackCounter = 0;
 
     function abortError() {
@@ -46,12 +48,15 @@
         return encodeBytes(new TextEncoder().encode(value));
     }
 
-    function shellCommand(args) {
+    function shellCommand(args, markSuccess = false) {
         if (!args.every(value => typeof value === 'string' && /^[A-Za-z0-9_-]+$/.test(value))) {
             throw new Error('Invalid bridge argument');
         }
         const paths = modulePaths.map(path => `'${path}'`).join(' ');
-        return `CT_BRIDGE=''; for CT_PATH in ${paths}; do [ -x "$CT_PATH" ] && { CT_BRIDGE="$CT_PATH"; break; }; done; [ -n "$CT_BRIDGE" ] || { echo 'Native WebUI bridge is unavailable' >&2; exit 127; }; exec "$CT_BRIDGE" ${args.map(value => `'${value}'`).join(' ')}`;
+        const prefix = `CT_BRIDGE=''; for CT_PATH in ${paths}; do [ -x "$CT_PATH" ] && { CT_BRIDGE="$CT_PATH"; break; }; done; [ -n "$CT_BRIDGE" ] || { echo 'Native WebUI bridge is unavailable' >&2; exit 127; };`;
+        const invocation = `"$CT_BRIDGE" ${args.map(value => `'${value}'`).join(' ')}`;
+        if (!markSuccess) return `${prefix} exec ${invocation}`;
+        return `${prefix} ${invocation}; CT_STATUS=$?; [ "$CT_STATUS" -eq 0 ] || exit "$CT_STATUS"; printf '\n${nativeSuccessMarker}\n'`;
     }
 
     function validateResponseEnvelope(envelope) {
@@ -87,6 +92,22 @@
             if (key in value) {
                 const envelope = extractResponseEnvelope(value[key], depth + 1);
                 if (envelope) return envelope;
+            }
+        }
+        return null;
+    }
+
+    function extractMarkedNativeOutput(value, depth = 0) {
+        if (value === null || value === undefined || depth > 4) return null;
+        if (typeof value === 'string') {
+            if (!value.includes(nativeSuccessMarker)) return null;
+            return value.split(nativeSuccessMarker).join('').trim();
+        }
+        if (typeof value !== 'object' || Array.isArray(value)) return null;
+        for (const key of ['stdout', 'out', 'stderr', 'err', 'message', 'result', 'data', 'output']) {
+            if (key in value) {
+                const output = extractMarkedNativeOutput(value[key], depth + 1);
+                if (output !== null) return output;
             }
         }
         return null;
@@ -197,6 +218,15 @@
                 if (settled) return;
                 settled = true;
                 cleanup();
+                if (!expectEnvelope) {
+                    for (const value of [values[1], values[0], values[2], ...values.slice(3)]) {
+                        const output = extractMarkedNativeOutput(value);
+                        if (output !== null) {
+                            resolve(output);
+                            return;
+                        }
+                    }
+                }
                 let result;
                 try {
                     result = normalizeExecResult(values, expectEnvelope);
@@ -221,7 +251,7 @@
                 }
             }
             try {
-                nativeApi.exec(shellCommand(args), '{}', callbackName);
+                nativeApi.exec(shellCommand(args, !expectEnvelope), '{}', callbackName);
             } catch (error) {
                 if (settled) return;
                 settled = true;
@@ -611,6 +641,23 @@
         }, true);
     }
 
+    function relaxNativeFilePicker(input) {
+        if (!input || !nativeFilePickerIds.has(input.id)) return;
+        input.accept = '*/*';
+    }
+
+    function installNativeFilePickerCompatibility() {
+        const document = global.document;
+        if (!document) return;
+        nativeFilePickerIds.forEach(id => relaxNativeFilePicker(document.getElementById(id)));
+        if (!document.documentElement || document.documentElement.dataset.ctNativePickerCompatibility) return;
+        document.documentElement.dataset.ctNativePickerCompatibility = '1';
+        document.addEventListener('click', event => {
+            const target = event.target;
+            if (target && target.id) relaxNativeFilePicker(target);
+        }, true);
+    }
+
     function loadUxEnhancements() {
         const document = global.document;
         if (!document || !document.head || !document.createElement || document.getElementById('ct_ux_script')) return;
@@ -618,6 +665,7 @@
         script.id = 'ct_ux_script';
         script.src = 'ux.js?revision=9';
         script.defer = true;
+        script.onload = () => global.setTimeout(installNativeFilePickerCompatibility, 0);
         document.head.appendChild(script);
     }
 
@@ -632,8 +680,9 @@
 
     scheduleCommunityCard();
     routeExternalLinks();
+    installNativeFilePickerCompatibility();
     global.CleveresBridge = Object.freeze({
-        revision: 11,
+        revision: 12,
         fetch: nativeFetch,
         exportBlob,
         exportResponse,
