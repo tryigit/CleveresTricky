@@ -1,9 +1,11 @@
 package cleveres.tricky.cleverestech.util
 
+import cleveres.tricky.cleverestech.BackendStateRecovery
 import cleveres.tricky.cleverestech.CrlBackend
 import cleveres.tricky.cleverestech.CrlWire
 import cleveres.tricky.cleverestech.KeyboxLoader
 import cleveres.tricky.cleverestech.Logger
+import cleveres.tricky.cleverestech.NativeBackend
 import cleveres.tricky.cleverestech.RustBackendUnavailableException
 import cleveres.tricky.cleverestech.StoredKeyboxInventory
 import cleveres.tricky.cleverestech.keystore.CertHack
@@ -29,6 +31,7 @@ object KeyboxVerifier {
         val storageId: String = "",
         val certificateSerial: String? = null,
         val snapshotSha256: String? = null,
+        internal val retryableBackendFailure: Boolean = false,
     )
 
     enum class Status {
@@ -50,6 +53,9 @@ object KeyboxVerifier {
     private const val MAX_KEYBOX_FILES = 64
     private const val PERSISTED_CRL_FILE = "attestation_status_cache.json"
     private const val CACHE_TTL = 24 * 60 * 60 * 1000L
+    private const val MANUAL_VERIFY_RECOVERY_WAIT_MS = 1_200L
+    private const val MANUAL_VERIFY_READY_WAIT_MS = 800L
+    private const val MANUAL_VERIFY_POLL_MS = 25L
 
     @Volatile
     private var crlUrl = DEFAULT_CRL_URL
@@ -128,7 +134,11 @@ object KeyboxVerifier {
 
     @JvmStatic
     fun verify(configDir: File): List<Result> =
-        verifyWithSource(configDir) { fetchCrl()?.let(RevocationSource::Rust) }
+        verifyWithRetry(
+            configDir,
+            crlFetcher = { fetchCrl()?.let(RevocationSource::Rust) },
+            retryGate = ::waitForManualVerificationBackend,
+        )
 
     /** JVM test compatibility only; production never models a Rust CRL generation as a Set. */
     @JvmStatic
@@ -144,6 +154,43 @@ object KeyboxVerifier {
         crlFetcher: () -> Set<String>?,
     ): List<Result> =
         verifyWithSource(configDir) { crlFetcher()?.let(RevocationSource::Legacy) }
+
+    @androidx.annotation.VisibleForTesting
+    internal fun verifyWithRetryForTesting(
+        configDir: File,
+        crlFetcher: () -> Set<String>?,
+    ): List<Result> =
+        verifyWithRetry(
+            configDir,
+            crlFetcher = { crlFetcher()?.let(RevocationSource::Legacy) },
+            retryGate = { true },
+        )
+
+    private fun verifyWithRetry(
+        configDir: File,
+        crlFetcher: () -> RevocationSource?,
+        retryGate: () -> Boolean,
+    ): List<Result> {
+        val first = verifyWithSource(configDir, crlFetcher)
+        if (first.none(Result::retryableBackendFailure) || !retryGate()) return first
+        Logger.i("Retrying manual keybox verification after transient Rust backend recovery")
+        return verifyWithSource(configDir, crlFetcher)
+    }
+
+    private fun waitForManualVerificationBackend(): Boolean {
+        val deadline = System.nanoTime() + MANUAL_VERIFY_RECOVERY_WAIT_MS * 1_000_000L
+        while (BackendStateRecovery.isRecovering()) {
+            val remaining = deadline - System.nanoTime()
+            if (remaining <= 0L) return false
+            try {
+                Thread.sleep(minOf(MANUAL_VERIFY_POLL_MS, (remaining / 1_000_000L).coerceAtLeast(1L)))
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+                return false
+            }
+        }
+        return NativeBackend.awaitReady(MANUAL_VERIFY_READY_WAIT_MS)
+    }
 
     private fun verifyWithSource(
         configDir: File,
@@ -437,6 +484,7 @@ object KeyboxVerifier {
                             storageId,
                             certificateSerial = deviceSerial,
                             snapshotSha256 = snapshotSha256,
+                            retryableBackendFailure = true,
                         )
                     }
                     Status.VALID -> Unit
@@ -452,7 +500,14 @@ object KeyboxVerifier {
                 snapshotSha256 = snapshotSha256,
             )
         } catch (_: RustBackendUnavailableException) {
-            Result(file, file.name, Status.ERROR, "Rust backend unavailable", storageId)
+            Result(
+                file,
+                file.name,
+                Status.ERROR,
+                "Rust backend unavailable",
+                storageId,
+                retryableBackendFailure = true,
+            )
         } catch (error: Exception) {
             Result(file, file.name, Status.ERROR, "Error: ${error.javaClass.simpleName}", storageId)
         }
