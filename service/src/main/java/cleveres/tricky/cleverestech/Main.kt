@@ -113,7 +113,7 @@ fun main(args: Array<String>) {
             }
             KernelIdentityManager.initialize(configDir)
             Config.initialize()
-            BootLogic.run()
+            check(BootLogic.run()) { "Boot property compatibility initialization failed" }
             CertificatePolicyWatcher.start(configDir)
         } catch (e: Exception) {
             Logger.e("Failed to initialize Config/BootLogic", e)

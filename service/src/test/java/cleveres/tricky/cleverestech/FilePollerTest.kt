@@ -12,6 +12,8 @@ import java.io.File
 import java.lang.reflect.InvocationTargetException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 class FilePollerTest {
     @get:Rule
@@ -42,6 +44,12 @@ class FilePollerTest {
 
     private fun handleObserverLoss() {
         val method = FilePoller::class.java.getDeclaredMethod("handleObserverLoss")
+        method.isAccessible = true
+        method.invoke(poller)
+    }
+
+    private fun scheduleRetry() {
+        val method = FilePoller::class.java.getDeclaredMethod("scheduleRetry")
         method.isAccessible = true
         method.invoke(poller)
     }
@@ -155,12 +163,14 @@ class FilePollerTest {
     }
 
     @Test
-    fun testFailedCallbackRetriesSameChange() {
+    fun testFailedCallbackRetriesSameChangeWithoutAnotherEvent() {
         var callbackCount = 0
+        val retried = CountDownLatch(1)
         poller =
-            FilePoller(testFile, intervalMs) {
+            FilePoller(testFile, 25L) {
                 callbackCount++
                 if (callbackCount == 1) throw IllegalStateException("first attempt fails")
+                retried.countDown()
             }
         poller.start()
 
@@ -169,8 +179,9 @@ class FilePollerTest {
             checkForChange()
         } catch (_: InvocationTargetException) {
         }
-        checkForChange()
+        scheduleRetry()
 
+        org.junit.Assert.assertTrue("failed callback was not retried", retried.await(2, TimeUnit.SECONDS))
         assertEquals(2, callbackCount)
     }
 }

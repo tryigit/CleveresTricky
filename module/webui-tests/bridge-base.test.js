@@ -130,6 +130,15 @@ async function main() {
     const failing = createBridge(callback => callback(5, '', 'permission denied'));
     await assert.rejects(() => failing.fetch('/api/config'), /permission denied/);
 
+    let delayedCallback = null;
+    const aborting = createBridge(callback => { delayedCallback = callback; });
+    const abortController = new AbortController();
+    const abortedRequest = aborting.fetch('/api/config', { signal: abortController.signal });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    abortController.abort();
+    await assert.rejects(abortedRequest, error => error && error.name === 'AbortError');
+    if (delayedCallback) delayedCallback(0, raw, '');
+
     const malformed = createBridge(callback => callback('{"version":1,"status":200}'));
     await assert.rejects(() => malformed.fetch('/api/config'), /Invalid response/);
 
@@ -232,7 +241,7 @@ async function main() {
     });
     assert.strictEqual(normalizeUiMessage(oversized), 'HTTP 500 Server Error: response body is too large to display');
     assert.ok(indexSource.includes('text.textContent = normalizeUiMessage(msg);'));
-    assert.ok(indexSource.includes('<script src="bridge.js?revision=10"></script>'));
+    assert.ok(indexSource.includes('<script src="bridge.js?revision=11"></script>'));
     assert.match(bridgeSource, /ux\.js\?revision=9/);
     assert.ok(!bridgeSource.includes('ux.js?revision=3'), 'Bridge must not request the retired cached UX loader');
 

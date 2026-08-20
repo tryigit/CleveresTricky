@@ -31,10 +31,11 @@ object BootLogic {
         DISABLE,
     }
 
-    fun run() {
-        if (ran.get() || !running.compareAndSet(false, true)) return
+    fun run(): Boolean {
+        if (ran.get()) return true
+        if (!running.compareAndSet(false, true)) return false
 
-        try {
+        return try {
             val mode = readBootPropsMode()
             val requestedBuildIdentity = PolicyState.isFeatureEnabled(PolicyState.Feature.BUILD_IDENTITY)
             val buildIdentity = requestedBuildIdentity && shouldApplyBuildIdentity(mode)
@@ -51,8 +52,10 @@ object BootLogic {
                 Logger.i("Identity build properties were skipped by the ${mode.name.lowercase()} compatibility policy")
             }
             ran.set(true)
+            true
         } catch (e: Exception) {
             Logger.e("BootLogic failed", e)
+            false
         } finally {
             running.set(false)
         }

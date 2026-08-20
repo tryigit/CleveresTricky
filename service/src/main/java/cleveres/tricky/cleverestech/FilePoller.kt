@@ -26,9 +26,11 @@ class FilePoller(
     private var isRunning = false
     private var lastSnapshot = snapshot()
     private var scheduledFuture: ScheduledFuture<*>? = null
+    private var retryFuture: ScheduledFuture<*>? = null
     private var observer: FileObserver? = null
 
     companion object {
+        private const val CALLBACK_RETRY_DELAY_MS = 500L
         private val scheduler =
             Executors.newSingleThreadScheduledExecutor { runnable ->
                 Thread(runnable, "FilePoller-Fallback").apply {
@@ -84,6 +86,7 @@ class FilePoller(
                             checkForChange()
                         } catch (error: Throwable) {
                             Logger.e("FilePoller: Observer check failed for ${file.name}", error)
+                            scheduleRetry()
                         }
                     }
                 }
@@ -107,6 +110,8 @@ class FilePoller(
     @Synchronized
     private fun scheduleFallbackPolling() {
         if (scheduledFuture != null) return
+        retryFuture?.cancel(false)
+        retryFuture = null
         scheduledFuture =
             scheduler.scheduleWithFixedDelay(
                 {
@@ -118,6 +123,27 @@ class FilePoller(
                 },
                 intervalMs,
                 intervalMs,
+                TimeUnit.MILLISECONDS,
+            )
+    }
+
+    @Synchronized
+    private fun scheduleRetry() {
+        if (!isRunning || scheduledFuture != null) return
+        if (retryFuture?.isDone == false) return
+        val delayMs = minOf(intervalMs, CALLBACK_RETRY_DELAY_MS)
+        retryFuture =
+            scheduler.schedule(
+                {
+                    synchronized(this) { retryFuture = null }
+                    try {
+                        checkForChange()
+                    } catch (error: Throwable) {
+                        Logger.e("FilePoller: Retry check failed for ${file.name}", error)
+                        scheduleRetry()
+                    }
+                },
+                delayMs,
                 TimeUnit.MILLISECONDS,
             )
     }
@@ -144,6 +170,8 @@ class FilePoller(
         observer = null
         scheduledFuture?.cancel(false)
         scheduledFuture = null
+        retryFuture?.cancel(false)
+        retryFuture = null
     }
 
     @Synchronized

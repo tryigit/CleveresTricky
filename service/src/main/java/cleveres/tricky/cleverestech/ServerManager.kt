@@ -44,9 +44,17 @@ object ServerManager {
         var contentPublicKey: String? = null,
     )
 
+    private data class FetchContext(
+        val target: ServerConfig,
+        val snapshot: ServerConfig,
+        val generation: Long,
+    )
+
     private val serversList = CopyOnWriteArrayList<ServerConfig>()
     private val serversMap = ConcurrentHashMap<String, ServerConfig>()
     private val serverKeyboxes = ConcurrentHashMap<String, List<CertHack.KeyBox>>()
+    private var stateGeneration = 0L
+    private val fetchLocks = Array(FETCH_LOCK_STRIPES) { Any() }
     private val serverFile get() = File(Config.keyboxDirectory.parentFile, "servers.json")
     private val validServerId = Regex("[A-Za-z0-9_-]{1,64}")
     private val validHeaderName = Regex("[!#$%&'*+.^_`|~0-9A-Za-z-]{1,128}")
@@ -58,8 +66,12 @@ object ServerManager {
             Thread(runnable, "cleverestricky-server-refresh").apply { isDaemon = true }
         }
 
+    @Synchronized
     fun initialize() {
         loadServers()
+        // Invalidate every fetch snapshot captured before this reload. Recovery can run while
+        // a server request is in flight, but that request must never publish into rebuilt state.
+        stateGeneration++
         loadCachedKeyboxes()
         startScheduler()
     }
@@ -208,6 +220,7 @@ object ServerManager {
         serversList.add(server)
         try {
             saveServers()
+            stateGeneration++
         } catch (error: Exception) {
             serversList.removeIf { it.id == server.id }
             serversMap.remove(server.id)
@@ -230,6 +243,7 @@ object ServerManager {
         serversList.removeIf { it.id == id }
         try {
             saveServers()
+            stateGeneration++
         } catch (error: Exception) {
             serversMap[id] = previous
             serversList.add(previous)
@@ -253,6 +267,7 @@ object ServerManager {
                 block(s)
                 validateServer(s)
                 saveServers()
+                stateGeneration++
             } catch (error: Exception) {
                 serversMap[id] = previous
                 serversList.replaceAll { if (it.id == id) previous else it }
@@ -389,32 +404,90 @@ object ServerManager {
         }
     }
 
-    @Synchronized
-    fun fetchFromServer(server: ServerConfig): Boolean {
-        if (!server.enabled) return false
+    fun fetchFromServer(server: ServerConfig): Boolean =
+        synchronized(fetchLockFor(server.id)) {
+            fetchFromServerLocked(server)
+        }
 
+    private fun fetchLockFor(id: String): Any =
+        fetchLocks[(id.hashCode() and Int.MAX_VALUE) % fetchLocks.size]
+
+    @Synchronized
+    private fun beginFetch(server: ServerConfig): FetchContext? {
+        val target = serversMap[server.id] ?: return null
+        if (!target.enabled) return null
+        val snapshot = target.copy(authData = JSONObject(target.authData.toString()))
+        snapshot.lastChecked = System.currentTimeMillis()
+        return FetchContext(target, snapshot, stateGeneration)
+    }
+
+    private fun isFetchCurrent(context: FetchContext): Boolean =
+        context.generation == stateGeneration &&
+            serversMap[context.snapshot.id] === context.target &&
+            context.target.enabled
+
+    @Synchronized
+    private fun commitFetchFailure(
+        context: FetchContext,
+        status: String,
+        clearContent: Boolean = false,
+        deleteCache: Boolean = false,
+    ): Boolean {
+        if (!isFetchCurrent(context)) return false
+        context.target.lastChecked = context.snapshot.lastChecked
+        context.target.lastStatus = status
+        if (clearContent) deactivateServerContent(context.snapshot.id, deleteCache)
+        persistStatusSafely()
+        return false
+    }
+
+    @Synchronized
+    private fun commitFetchSuccess(
+        context: FetchContext,
+        keyboxes: List<CertHack.KeyBox>,
+        cacheBytes: ByteArray?,
+    ): Boolean {
+        if (!isFetchCurrent(context)) return false
+        val target = context.target
+        target.lastChecked = context.snapshot.lastChecked
+        target.lastStatus = "OK"
+        val cert = keyboxes.firstOrNull()?.certificates?.firstOrNull()
+        target.lastAuthor =
+            if (cert is X509Certificate) {
+                cert.subjectX500Principal.name.take(1024)
+            } else {
+                "Unknown"
+            }
+        serverKeyboxes[target.id] = keyboxes
+        if (cacheBytes != null) cacheXml(context.snapshot, cacheBytes)
+        persistStatusSafely()
+        return true
+    }
+
+    private fun fetchFromServerLocked(server: ServerConfig): Boolean {
+        val context = beginFetch(server) ?: return false
+        val snapshot = context.snapshot
         var conn: HttpsURLConnection? = null
         try {
-            validateServer(server)
-            server.lastChecked = System.currentTimeMillis()
-            conn = validatedServerUrl(server.url).openConnection() as HttpsURLConnection
+            validateServer(snapshot)
+            conn = validatedServerUrl(snapshot.url).openConnection() as HttpsURLConnection
             conn.connectTimeout = 15000
             conn.readTimeout = 30000
             conn.requestMethod = "GET"
             conn.instanceFollowRedirects = false
             conn.setRequestProperty("Accept-Encoding", "identity")
 
-            when (server.authType) {
+            when (snapshot.authType) {
                 "BEARER" -> {
-                    val token = server.authData.optString("token")
+                    val token = snapshot.authData.optString("token")
                     if (token.isNotEmpty()) {
                         requireSafeHeader("Authorization", "Bearer $token")
                         conn.setRequestProperty("Authorization", "Bearer $token")
                     }
                 }
                 "BASIC" -> {
-                    val user = server.authData.optString("username")
-                    val pass = server.authData.optString("password")
+                    val user = snapshot.authData.optString("username")
+                    val pass = snapshot.authData.optString("password")
                     if (user.isNotEmpty() || pass.isNotEmpty()) {
                         val auth = Base64.encodeToString("$user:$pass".toByteArray(), Base64.NO_WRAP)
                         requireSafeHeader("Authorization", "Basic $auth")
@@ -422,15 +495,15 @@ object ServerManager {
                     }
                 }
                 "API_KEY" -> {
-                    val key = server.authData.optString("key")
-                    val header = server.authData.optString("headerName", "X-API-Key")
+                    val key = snapshot.authData.optString("key")
+                    val header = snapshot.authData.optString("headerName", "X-API-Key")
                     if (key.isNotEmpty()) {
                         requireSafeHeader(header, key)
                         conn.setRequestProperty(header, key)
                     }
                 }
                 "CUSTOM" -> {
-                    val headers = server.authData.optJSONObject("headers")
+                    val headers = snapshot.authData.optJSONObject("headers")
                     headers?.keys()?.forEach { key ->
                         val value = headers.getString(key)
                         requireSafeHeader(key, value)
@@ -440,17 +513,13 @@ object ServerManager {
             }
 
             if (conn.responseCode != 200) {
-                server.lastStatus = "HTTP_${conn.responseCode}"
-                persistStatusSafely()
-                return false
+                return commitFetchFailure(context, "HTTP_${conn.responseCode}")
             }
 
             val maxResponseSize = 10 * 1024 * 1024
             val contentLength = conn.contentLengthLong
             if (contentLength > maxResponseSize) {
-                server.lastStatus = "RESPONSE_TOO_LARGE"
-                persistStatusSafely()
-                return false
+                return commitFetchFailure(context, "RESPONSE_TOO_LARGE")
             }
             val bytes =
                 conn.inputStream.use { input ->
@@ -479,7 +548,7 @@ object ServerManager {
 
             val result =
                 try {
-                    processContent(bytes, server)
+                    processContent(bytes, snapshot)
                 } finally {
                     bytes.fill(0)
                 }
@@ -488,48 +557,32 @@ object ServerManager {
             try {
                 val crl = KeyboxVerifier.fetchCrl()
                 if (crl == null) {
-                    server.lastStatus = "CRL_UNAVAILABLE"
-                    deactivateServerContent(server.id, deleteCache = false)
-                    persistStatusSafely()
-                    return false
+                    return commitFetchFailure(
+                        context,
+                        "CRL_UNAVAILABLE",
+                        clearContent = true,
+                        deleteCache = false,
+                    )
                 }
                 val statuses = keyboxes.map { KeyboxVerifier.verifyKeybox(it, crl) }
-
-                if (keyboxes.isNotEmpty() && statuses.all { it == KeyboxVerifier.Status.VALID }) {
-                    serverKeyboxes[server.id] = keyboxes
-                    server.lastStatus = "OK"
-                    val cert = keyboxes.firstOrNull()?.certificates?.firstOrNull()
-                    if (cert is X509Certificate) {
-                        server.lastAuthor = cert.subjectX500Principal.name.take(1024)
-                    } else {
-                        server.lastAuthor = "Unknown"
-                    }
-
-                    if (cacheBytes != null) {
-                        cacheXml(server, cacheBytes)
-                    }
-                } else {
-                    server.lastStatus = "INVALID_CONTENT"
-                    deactivateServerContent(server.id, deleteCache = true)
-                    persistStatusSafely()
-                    return false
+                if (keyboxes.isEmpty() || statuses.any { it != KeyboxVerifier.Status.VALID }) {
+                    return commitFetchFailure(
+                        context,
+                        "INVALID_CONTENT",
+                        clearContent = true,
+                        deleteCache = true,
+                    )
                 }
-
-                persistStatusSafely()
-                return true
+                return commitFetchSuccess(context, keyboxes, cacheBytes)
             } finally {
                 cacheBytes?.fill(0)
             }
         } catch (e: IllegalArgumentException) {
-            server.lastStatus = "INVALID_CONFIG"
-            Logger.e("Invalid server configuration: ${server.name}", e)
-            persistStatusSafely()
-            return false
+            Logger.e("Invalid server configuration: ${snapshot.name}", e)
+            return commitFetchFailure(context, "INVALID_CONFIG")
         } catch (e: Exception) {
-            server.lastStatus = "NETWORK_ERROR"
-            Logger.e("Server fetch failed: ${server.name}", e)
-            persistStatusSafely()
-            return false
+            Logger.e("Server fetch failed: ${snapshot.name}", e)
+            return commitFetchFailure(context, "NETWORK_ERROR")
         } finally {
             conn?.disconnect()
         }
@@ -856,6 +909,7 @@ object ServerManager {
         }
     }
 
+    private const val FETCH_LOCK_STRIPES = 16
     private const val MAX_SERVERS = 64
     private const val MAX_REMOTE_KEYBOXES = 64
     private const val MAX_CONFIG_BYTES = 2L * 1024 * 1024

@@ -67,7 +67,7 @@ assert.ok(!indexSource.includes('One-Click Reset (Refresh Environment)'));
 assert.match(indexSource, /Synchronize Runtime/);
 assert.ok(!indexSource.includes('<h3>System Control</h3>'));
 assert.match(indexSource, /policy\.js\?revision=4/);
-assert.match(indexSource, /bridge\.js\?revision=10/);
+assert.match(indexSource, /bridge\.js\?revision=11/);
 assert.match(policySource, /request\('\/api\/packages'\)/);
 assert.match(policySource, /bridge\.listPackages\(\)/);
 assert.match(policySource, /function refreshPresentation\(\)/);

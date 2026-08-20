@@ -17,6 +17,14 @@
     const debugFlag = '/data/adb/cleverestricky/debug_logging';
     let callbackCounter = 0;
 
+    function abortError() {
+        return new DOMException('The request was aborted', 'AbortError');
+    }
+
+    function throwIfAborted(signal) {
+        if (signal && signal.aborted) throw abortError();
+    }
+
     function encodeBytes(bytes) {
         let binary = '';
         for (let offset = 0; offset < bytes.length; offset += 0x8000) {
@@ -166,23 +174,29 @@
         });
     }
 
-    function execNative(args, timeoutMs, expectEnvelope = false) {
+    function execNative(args, timeoutMs, expectEnvelope = false, signal = null) {
         if (!nativeApi || typeof nativeApi.exec !== 'function') return Promise.reject(new Error('Open this page from the KernelSU or APatch WebUI button'));
+        try { throwIfAborted(signal); } catch (error) { return Promise.reject(error); }
         const boundedTimeout = Math.min(Math.max(Number(timeoutMs) || 60000, 1000), 125000);
         return new Promise((resolve, reject) => {
             const callbackName = `ct_exec_${Date.now()}_${callbackCounter++}`;
             let settled = false;
+            let abortHandler = null;
+            const cleanup = () => {
+                clearTimeout(timer);
+                delete global[callbackName];
+                if (signal && abortHandler) signal.removeEventListener('abort', abortHandler);
+            };
             const timer = setTimeout(() => {
                 if (settled) return;
                 settled = true;
-                delete global[callbackName];
+                cleanup();
                 reject(new Error('Native bridge timed out'));
             }, boundedTimeout + 5000);
             global[callbackName] = (...values) => {
                 if (settled) return;
                 settled = true;
-                clearTimeout(timer);
-                delete global[callbackName];
+                cleanup();
                 let result;
                 try {
                     result = normalizeExecResult(values, expectEnvelope);
@@ -193,12 +207,25 @@
                 if (result.errno === 0) resolve(result.stdout);
                 else reject(new Error(result.stderr || result.stdout || `Native bridge failed with code ${result.errno}`));
             };
+            if (signal) {
+                abortHandler = () => {
+                    if (settled) return;
+                    settled = true;
+                    cleanup();
+                    reject(abortError());
+                };
+                signal.addEventListener('abort', abortHandler, { once: true });
+                if (signal.aborted) {
+                    abortHandler();
+                    return;
+                }
+            }
             try {
                 nativeApi.exec(shellCommand(args), '{}', callbackName);
             } catch (error) {
+                if (settled) return;
                 settled = true;
-                clearTimeout(timer);
-                delete global[callbackName];
+                cleanup();
                 reject(error);
             }
         });
@@ -231,8 +258,8 @@
         return Boolean(enabled);
     }
 
-    async function createStage(kind, timeoutMs) {
-        const id = await execNative(['stage-create', kind], timeoutMs);
+    async function createStage(kind, timeoutMs, signal = null) {
+        const id = await execNative(['stage-create', kind], timeoutMs, false, signal);
         if (!/^[0-9a-f]{32}$/.test(id)) throw new Error('Invalid staging identifier');
         return id;
     }
@@ -245,21 +272,23 @@
         }
     }
 
-    async function appendStage(kind, id, bytes, timeoutMs) {
+    async function appendStage(kind, id, bytes, timeoutMs, signal = null) {
         for (let offset = 0; offset < bytes.length; offset += chunkBytes) {
+            throwIfAborted(signal);
             const chunk = bytes.subarray(offset, Math.min(offset + chunkBytes, bytes.length));
-            await execNative(['stage-append', kind, id, encodeBytes(chunk)], timeoutMs);
+            await execNative(['stage-append', kind, id, encodeBytes(chunk)], timeoutMs, false, signal);
         }
     }
 
-    async function stageBlob(kind, blob, timeoutMs) {
+    async function stageBlob(kind, blob, timeoutMs, signal = null) {
         const limit = kind === 'export' ? maxResponseBytes : maxUploadBytes;
         if (!['upload', 'export'].includes(kind) || !(blob instanceof Blob) || blob.size <= 0 || blob.size > limit) throw new Error('File size is outside the supported range');
-        const id = await createStage(kind, timeoutMs);
+        const id = await createStage(kind, timeoutMs, signal);
         try {
             for (let offset = 0; offset < blob.size; offset += chunkBytes) {
+                throwIfAborted(signal);
                 const bytes = new Uint8Array(await blob.slice(offset, Math.min(offset + chunkBytes, blob.size)).arrayBuffer());
-                await execNative(['stage-append', kind, id, encodeBytes(bytes)], timeoutMs);
+                await execNative(['stage-append', kind, id, encodeBytes(bytes)], timeoutMs, false, signal);
             }
             return id;
         } catch (error) {
@@ -268,15 +297,16 @@
         }
     }
 
-    async function readDownload(id, size, timeoutMs) {
+    async function readDownload(id, size, timeoutMs, signal = null) {
         if (!/^[0-9a-f]{32}$/.test(id) || !Number.isSafeInteger(size) || size < 0 || size > maxResponseBytes) {
             throw new Error('Invalid staged response');
         }
         const output = new Uint8Array(size);
         try {
             for (let offset = 0; offset < size; offset += chunkBytes) {
+                throwIfAborted(signal);
                 const length = Math.min(chunkBytes, size - offset);
-                const encoded = await execNative(['stage-read', 'download', id, String(offset), String(length)], timeoutMs);
+                const encoded = await execNative(['stage-read', 'download', id, String(offset), String(length)], timeoutMs, false, signal);
                 const chunk = decodeBytes(encoded);
                 if (chunk.length !== length) throw new Error('Incomplete staged response');
                 output.set(chunk, offset);
@@ -288,7 +318,7 @@
     }
 
     class NativeResponse {
-        constructor(envelope, timeoutMs) {
+        constructor(envelope, timeoutMs, signal = null) {
             this.status = Number(envelope.status);
             this.statusText = String(envelope.statusText || '');
             this.ok = this.status >= 200 && this.status < 300;
@@ -301,14 +331,16 @@
             this.downloadId = typeof envelope.downloadId === 'string' ? envelope.downloadId : null;
             this.size = Number(envelope.size || 0);
             this.timeoutMs = timeoutMs;
+            this.signal = signal;
             this.cachedBytes = null;
         }
 
         async bytes() {
+            throwIfAborted(this.signal);
             if (this.cachedBytes) return this.cachedBytes;
             if (this.bodyEncoded !== null) this.cachedBytes = decodeBytes(this.bodyEncoded);
             else if (this.downloadId) {
-                this.cachedBytes = await readDownload(this.downloadId, this.size, this.timeoutMs);
+                this.cachedBytes = await readDownload(this.downloadId, this.size, this.timeoutMs, this.signal);
                 this.downloadId = null;
             }
             else this.cachedBytes = new Uint8Array(0);
@@ -351,7 +383,8 @@
         parameters[key].push(value);
     }
 
-    async function prepareRequest(url, options, timeoutMs) {
+    async function prepareRequest(url, options, timeoutMs, signal = null) {
+        throwIfAborted(signal);
         const parsed = new URL(String(url), 'https://native.cleverestricky.invalid');
         if (parsed.origin !== 'https://native.cleverestricky.invalid' || !parsed.pathname.startsWith('/api/')) throw new Error('Unsupported WebUI request path');
         const parameters = Object.create(null);
@@ -366,7 +399,7 @@
                 for (const [key, value] of body.entries()) {
                     if (value instanceof File) {
                         if (uploadId) throw new Error('Only one file can be uploaded at a time');
-                        uploadId = await stageBlob('upload', value, timeoutMs);
+                        uploadId = await stageBlob('upload', value, timeoutMs, signal);
                         uploadField = key;
                         if (!parameters.filename && value.name) addParameter(parameters, 'filename', value.name);
                     } else {
@@ -390,17 +423,18 @@
         };
     }
 
-    async function callRequest(request, timeoutMs) {
+    async function callRequest(request, timeoutMs, signal = null) {
+        throwIfAborted(signal);
         const bytes = new TextEncoder().encode(JSON.stringify(request));
         if (bytes.length > 1024 * 1024) throw new Error('Request is too large');
         let raw;
         if (bytes.length <= chunkBytes) {
-            raw = await execNative(['call', encodeBytes(bytes), String(timeoutMs)], timeoutMs, true);
+            raw = await execNative(['call', encodeBytes(bytes), String(timeoutMs)], timeoutMs, true, signal);
         } else {
-            const stageId = await createStage('request', timeoutMs);
+            const stageId = await createStage('request', timeoutMs, signal);
             try {
-                await appendStage('request', stageId, bytes, timeoutMs);
-                raw = await execNative(['call-file', stageId, String(timeoutMs)], timeoutMs, true);
+                await appendStage('request', stageId, bytes, timeoutMs, signal);
+                raw = await execNative(['call-file', stageId, String(timeoutMs)], timeoutMs, true, signal);
             } catch (error) {
                 await dropStage('request', stageId);
                 throw error;
@@ -414,7 +448,7 @@
         }
         validateResponseEnvelope(envelope);
         const hasBody = typeof envelope.body === 'string';
-        const response = new NativeResponse(envelope, timeoutMs);
+        const response = new NativeResponse(envelope, timeoutMs, signal);
         if (hasBody) {
             const decoded = decodeBytes(envelope.body);
             if (decoded.length !== envelope.size) throw new Error('Incomplete inline response');
@@ -427,11 +461,13 @@
     async function nativeFetch(url, options = {}) {
         const requestedTimeout = Number(options.timeoutMs ?? 60000);
         const timeoutMs = Number.isFinite(requestedTimeout) ? Math.min(Math.max(Math.trunc(requestedTimeout), 1000), 120000) : 60000;
-        if (options.signal && options.signal.aborted) throw new DOMException('The request was aborted', 'AbortError');
+        const signal = options.signal || null;
+        throwIfAborted(signal);
         let request;
         try {
-            request = await prepareRequest(url, options, timeoutMs);
-            return await callRequest(request, timeoutMs);
+            request = await prepareRequest(url, options, timeoutMs, signal);
+            throwIfAborted(signal);
+            return await callRequest(request, timeoutMs, signal);
         } catch (error) {
             if (request && request.uploadId) await dropStage('upload', request.uploadId);
             throw error;
@@ -558,7 +594,7 @@
     scheduleCommunityCard();
     routeExternalLinks();
     global.CleveresBridge = Object.freeze({
-        revision: 9,
+        revision: 10,
         fetch: nativeFetch,
         exportBlob,
         exportResponse,
