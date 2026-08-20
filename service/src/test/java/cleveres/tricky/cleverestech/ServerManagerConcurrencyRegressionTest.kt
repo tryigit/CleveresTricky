@@ -22,7 +22,20 @@ class ServerManagerConcurrencyRegressionTest {
         assertTrue(source.contains("stateGeneration++"))
         assertTrue(source.contains("context.generation == stateGeneration"))
         assertTrue(source.contains("serversMap[context.snapshot.id] === context.target"))
-        assertTrue(source.contains("val snapshot = target.copy(authData = JSONObject(target.authData.toString()))"))
+        assertTrue(
+            source.contains(
+                "val snapshot = target.copy(authData = JSONObject(target.authData.toString()))",
+            ),
+        )
+    }
+
+    @Test
+    fun `stale fetch results are checked before every publication path`() {
+        val source = source()
+        val currentGuard = "if (!isFetchCurrent(context)) return false"
+        assertTrue(source.split(currentGuard).size - 1 >= 2)
+        assertTrue(source.contains("private fun commitFetchFailure"))
+        assertTrue(source.contains("private fun commitFetchSuccess"))
     }
 
     private fun source(): String {
