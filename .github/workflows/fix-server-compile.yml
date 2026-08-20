@@ -1,0 +1,37 @@
+name: Fix Server Compile
+
+on:
+  push:
+    branches:
+      - fix/deep-bug-sweep-followup
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/deep-bug-sweep-followup
+          fetch-depth: 0
+      - name: Apply correction
+        run: python3 tools/fix_server_compile.py
+      - name: Verify Kotlin compilation
+        run: ./gradlew :service:compileDebugKotlin
+      - name: Validate diff
+        run: git diff --check
+      - name: Remove temporary patch machinery
+        run: |
+          rm tools/fix_server_compile.py
+          rm .github/workflows/fix-server-compile.yml
+      - name: Commit correction
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet && exit 1
+          git commit -m "fix: resolve ServerManager Kotlin compilation"
+          git push origin HEAD:fix/deep-bug-sweep-followup
