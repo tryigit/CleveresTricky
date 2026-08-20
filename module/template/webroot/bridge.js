@@ -302,19 +302,15 @@
             throw new Error('Invalid staged response');
         }
         const output = new Uint8Array(size);
-        try {
-            for (let offset = 0; offset < size; offset += chunkBytes) {
-                throwIfAborted(signal);
-                const length = Math.min(chunkBytes, size - offset);
-                const encoded = await execNative(['stage-read', 'download', id, String(offset), String(length)], timeoutMs, false, signal);
-                const chunk = decodeBytes(encoded);
-                if (chunk.length !== length) throw new Error('Incomplete staged response');
-                output.set(chunk, offset);
-            }
-            return output;
-        } finally {
-            await dropStage('download', id);
+        for (let offset = 0; offset < size; offset += chunkBytes) {
+            throwIfAborted(signal);
+            const length = Math.min(chunkBytes, size - offset);
+            const encoded = await execNative(['stage-read', 'download', id, String(offset), String(length)], timeoutMs, false, signal);
+            const chunk = decodeBytes(encoded);
+            if (chunk.length !== length) throw new Error('Incomplete staged response');
+            output.set(chunk, offset);
         }
+        return output;
     }
 
     class NativeResponse {
@@ -329,27 +325,55 @@
             this.bodyUsed = false;
             this.bodyEncoded = typeof envelope.body === 'string' ? envelope.body : null;
             this.downloadId = typeof envelope.downloadId === 'string' ? envelope.downloadId : null;
+            this.downloadRef = this.downloadId ? { id: this.downloadId, readers: 1, completed: 0, error: null } : null;
             this.size = Number(envelope.size || 0);
             this.timeoutMs = timeoutMs;
             this.signal = signal;
             this.cachedBytes = null;
         }
 
-        async bytes() {
+        async consumeBytes() {
             throwIfAborted(this.signal);
+            if (this.bodyUsed) throw new TypeError('Response body has already been consumed');
+            this.bodyUsed = true;
             if (this.cachedBytes) return this.cachedBytes;
-            if (this.bodyEncoded !== null) this.cachedBytes = decodeBytes(this.bodyEncoded);
-            else if (this.downloadId) {
-                this.cachedBytes = await readDownload(this.downloadId, this.size, this.timeoutMs, this.signal);
+            if (this.bodyEncoded !== null) {
+                this.cachedBytes = decodeBytes(this.bodyEncoded);
+                this.bodyEncoded = null;
+            } else if (this.downloadRef) {
+                const reference = this.downloadRef;
+                if (reference.error) throw reference.error;
+                const id = reference.id;
+                if (!id) throw new Error('Staged response is unavailable');
+                try {
+                    this.cachedBytes = await readDownload(id, this.size, this.timeoutMs, this.signal);
+                } catch (error) {
+                    reference.error = error;
+                    reference.id = null;
+                    this.downloadId = null;
+                    this.downloadRef = null;
+                    await dropStage('download', id);
+                    throw error;
+                }
+                reference.completed += 1;
                 this.downloadId = null;
+                this.downloadRef = null;
+                if (reference.completed >= reference.readers && reference.id === id) {
+                    reference.id = null;
+                    await dropStage('download', id);
+                }
+            } else {
+                this.cachedBytes = new Uint8Array(0);
             }
-            else this.cachedBytes = new Uint8Array(0);
             return this.cachedBytes;
         }
 
+        async bytes() {
+            return this.consumeBytes();
+        }
+
         async text() {
-            this.bodyUsed = true;
-            return new TextDecoder('utf-8', { fatal: false }).decode(await this.bytes());
+            return new TextDecoder('utf-8', { fatal: false }).decode(await this.consumeBytes());
         }
 
         async json() {
@@ -357,20 +381,21 @@
         }
 
         async blob() {
-            this.bodyUsed = true;
-            return new Blob([await this.bytes()], { type: this.headers.get('content-type') || 'application/octet-stream' });
+            return new Blob([await this.consumeBytes()], { type: this.headers.get('content-type') || 'application/octet-stream' });
         }
 
         async arrayBuffer() {
-            this.bodyUsed = true;
-            const bytes = await this.bytes();
+            const bytes = await this.consumeBytes();
             return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
         }
 
         clone() {
+            if (this.bodyUsed) throw new TypeError('Cannot clone a consumed response');
             const copy = Object.create(NativeResponse.prototype);
             Object.assign(copy, this);
             copy.bodyUsed = false;
+            copy.cachedBytes = this.cachedBytes ? this.cachedBytes.slice() : null;
+            if (copy.downloadRef) copy.downloadRef.readers += 1;
             return copy;
         }
     }
@@ -488,10 +513,14 @@
 
     async function exportResponse(response, filename) {
         if (!(response instanceof NativeResponse) || typeof filename !== 'string' || filename.length < 1 || filename.length > 128) throw new Error('Invalid download');
-        if (response.downloadId) {
-            const id = response.downloadId;
-            response.downloadId = null;
+        if (response.bodyUsed) throw new TypeError('Response body has already been consumed');
+        if (response.downloadRef && response.downloadRef.id && response.downloadRef.readers === 1) {
+            const reference = response.downloadRef;
+            const id = reference.id;
             response.bodyUsed = true;
+            response.downloadId = null;
+            response.downloadRef = null;
+            reference.id = null;
             try {
                 return await execNative(['export', 'download', id, encodeText(filename)], 120000);
             } catch (error) {
