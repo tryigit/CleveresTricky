@@ -4,9 +4,9 @@ use cleverestricky_service_core::ipc::{
 use cleverestricky_service_core::secure_fs::TrustedDir;
 use cleverestricky_service_core::unix_socket::{connect_abstract, DAEMON_SOCKET_NAME};
 use std::env;
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, File};
 use std::io::{self, Read, Write};
-use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process;
 use std::time::{Duration, SystemTime};
@@ -19,7 +19,6 @@ const MAX_DOWNLOAD_BYTES: usize = 20 * 1024 * 1024;
 const MAX_RESPONSE_ENVELOPE_BYTES: usize = 512 * 1024;
 const MAX_CHUNK_BYTES: usize = 64 * 1024;
 const STALE_AGE: Duration = Duration::from_secs(10 * 60);
-const O_NOFOLLOW: i32 = 0x20000;
 
 fn main() {
     if let Err(error) = run() {
@@ -293,8 +292,9 @@ fn export_file(
     let filename =
         String::from_utf8(filename_bytes).map_err(|_| "Download filename is not valid UTF-8")?;
     validate_filename(&filename)?;
-    let download_dir = select_download_dir()?;
-    let (destination, mut output) = create_export_destination(&download_dir, &filename)?;
+    let (download_path, download_dir) = select_download_dir()?;
+    let (destination_name, mut output) = create_export_destination(&download_dir, &filename)?;
+    let destination = download_path.join(&destination_name);
     let created_metadata = output
         .metadata()
         .map_err(|error| format!("Could not inspect download descriptor: {error}"))?;
@@ -316,7 +316,7 @@ fn export_file(
     })();
     if let Err(error) = export_result {
         drop(output);
-        remove_if_same_file(&destination, &created_metadata);
+        remove_if_same_file(&download_dir, &destination_name, &created_metadata);
         return Err(error);
     }
     drop(output);
@@ -325,14 +325,11 @@ fn export_file(
     Ok(())
 }
 
-fn select_download_dir() -> Result<PathBuf, String> {
-    let candidate = Path::new("/storage/emulated/0/Download");
-    if let Ok(metadata) = fs::symlink_metadata(candidate) {
-        if metadata.is_dir() && !metadata.file_type().is_symlink() {
-            return Ok(candidate.to_path_buf());
-        }
-    }
-    Err("Android Download directory is unavailable".to_string())
+fn select_download_dir() -> Result<(PathBuf, TrustedDir), String> {
+    let candidate = PathBuf::from("/storage/emulated/0/Download");
+    let directory = TrustedDir::open(&candidate)
+        .map_err(|error| format!("Android Download directory is unavailable: {error}"))?;
+    Ok((candidate, directory))
 }
 
 fn validate_filename(filename: &str) -> Result<(), String> {
@@ -353,22 +350,15 @@ fn validate_filename(filename: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn create_export_destination(directory: &Path, filename: &str) -> Result<(PathBuf, File), String> {
+fn create_export_destination(directory: &TrustedDir, filename: &str) -> Result<(String, File), String> {
     for attempt in 0..16 {
         let name = if attempt == 0 {
             filename.to_string()
         } else {
             suffixed_filename(filename, &random_id()?[..8])
         };
-        let path = directory.join(name);
-        match OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .mode(0o600)
-            .custom_flags(O_NOFOLLOW)
-            .open(&path)
-        {
-            Ok(file) => return Ok((path, file)),
+        match directory.create_new_file(&name, 0o600) {
+            Ok(file) => return Ok((name, file)),
             Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
             Err(error) => return Err(format!("Could not create download: {error}")),
         }
@@ -406,15 +396,15 @@ fn safe_file_metadata(path: &Path) -> Result<fs::Metadata, String> {
     Ok(metadata)
 }
 
-fn remove_if_same_file(path: &Path, expected: &fs::Metadata) {
-    if let Ok(metadata) = fs::symlink_metadata(path) {
-        if metadata.is_file()
-            && !metadata.file_type().is_symlink()
-            && metadata.dev() == expected.dev()
-            && metadata.ino() == expected.ino()
-        {
-            let _ = fs::remove_file(path);
-        }
+fn remove_if_same_file(directory: &TrustedDir, name: &str, expected: &fs::Metadata) {
+    let Ok((file, _)) = directory.open_file_bounded(name, MAX_DOWNLOAD_BYTES) else {
+        return;
+    };
+    let Ok(metadata) = file.metadata() else {
+        return;
+    };
+    if metadata.dev() == expected.dev() && metadata.ino() == expected.ino() {
+        let _ = directory.unlink_file(name);
     }
 }
 
@@ -522,6 +512,8 @@ fn encode_base64url(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::os::unix::fs::symlink;
+    use std::sync::atomic::{AtomicU64, Ordering};
 
     #[test]
     fn base64url_round_trip() {
@@ -558,6 +550,36 @@ mod tests {
         assert!(validate_filename("../backup.zip").is_err());
         assert!(validate_filename(".hidden").is_err());
         assert_eq!(suffixed_filename("backup.zip", "1234"), "backup_1234.zip");
+    }
+
+    #[test]
+    fn export_creation_stays_with_preopened_download_directory() {
+        static COUNTER: AtomicU64 = AtomicU64::new(1);
+        let base = env::temp_dir().join(format!(
+            "ct-webui-export-{}-{}",
+            process::id(),
+            COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        let download = base.join("Download");
+        let pinned = base.join("Download.pinned");
+        let outside = base.join("outside");
+        fs::create_dir_all(&download).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+        let directory = TrustedDir::open(&download).unwrap();
+
+        fs::rename(&download, &pinned).unwrap();
+        symlink(&outside, &download).unwrap();
+
+        let (name, mut file) = create_export_destination(&directory, "report.txt").unwrap();
+        file.write_all(b"pinned-directory").unwrap();
+        file.sync_all().unwrap();
+        drop(file);
+
+        assert_eq!(fs::read(pinned.join(&name)).unwrap(), b"pinned-directory");
+        assert!(!outside.join(&name).exists());
+
+        fs::remove_file(&download).unwrap();
+        fs::remove_dir_all(&base).unwrap();
     }
 
     #[test]
