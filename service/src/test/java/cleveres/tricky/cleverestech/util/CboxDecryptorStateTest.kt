@@ -34,6 +34,35 @@ class CboxDecryptorStateTest {
     }
 
     @Test
+    fun `signed plaintext remains hidden until verification succeeds`() {
+        val encrypted = byteArrayOf(9, 10, 11, 12)
+        CboxDecryptor.backendOpenOverride = { _, _, publicKey ->
+            when (publicKey) {
+                null, GOOD_KEY -> signedPayload()
+                else -> null
+            }
+        }
+
+        try {
+            val payload = CboxDecryptor.CboxPayload(encrypted, "password")
+            assertEquals("fixture", payload.author)
+            assertEquals("", payload.xmlContent)
+            assertTrue(payload.xmlContentBytes.isEmpty())
+            assertTrue(CboxDecryptor.verifySignature(payload, GOOD_KEY))
+            assertEquals("<AndroidAttestation/>", payload.xmlContent)
+            val bytes = payload.xmlContentBytes
+            try {
+                assertEquals("<AndroidAttestation/>", String(bytes))
+            } finally {
+                bytes.fill(0)
+            }
+            assertTrue(encrypted.all { it == 0.toByte() })
+        } finally {
+            CboxDecryptor.resetForTesting()
+        }
+    }
+
+    @Test
     fun `unsigned payload cannot be approved by adding a verification key later`() {
         val encrypted = byteArrayOf(5, 6, 7, 8)
         var keyedVerificationAttempted = false
