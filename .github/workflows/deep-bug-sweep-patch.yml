@@ -1,0 +1,479 @@
+name: Apply deep bug sweep patch
+
+on:
+  push:
+    branches: ["fix/deep-bug-sweep-20260820"]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out patch branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: fix/deep-bug-sweep-20260820
+          fetch-depth: 0
+
+      - name: Apply fixes and regression tests
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one match, found {count}")
+              p.write_text(text.replace(old, new, 1))
+
+          # 1) Never hash oversized XML before the runtime size gate, and keep the
+          # content-stamp read itself bounded against a concurrent file growth race.
+          replace_once(
+              "service/src/main/java/cleveres/tricky/cleverestech/StoredKeyboxInventory.kt",
+              '''    const val MAX_FILENAME_BYTES = 255
+          const val MAX_XML_BYTES = 10L * 1024 * 1024
+          ''',
+              '''    const val MAX_FILENAME_BYTES = 255
+          const val MAX_XML_BYTES = 10L * 1024 * 1024
+          private const val UNCACHEABLE_CONTENT_STAMP = Long.MIN_VALUE
+          ''',
+          )
+          replace_once(
+              "service/src/main/java/cleveres/tricky/cleverestech/StoredKeyboxInventory.kt",
+              '''        return sources.map { source ->
+              source.copy(file = ContentStampedFile(source.file, contentStamp(source.file)))
+          }
+          ''',
+              '''        return sources.map { source ->
+              val size = source.file.length()
+              if (size !in 1..MAX_XML_BYTES) {
+                  source
+              } else {
+                  val stamp = contentStamp(source.file) ?: UNCACHEABLE_CONTENT_STAMP
+                  source.copy(file = ContentStampedFile(source.file, stamp))
+              }
+          }
+          ''',
+          )
+          replace_once(
+              "service/src/main/java/cleveres/tricky/cleverestech/StoredKeyboxInventory.kt",
+              '''    private fun contentStamp(file: File): Long {
+              val digest = MessageDigest.getInstance("SHA-256")
+              Files.newInputStream(file.toPath(), LinkOption.NOFOLLOW_LINKS).use { input ->
+                  val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                  try {
+                      while (true) {
+                          val count = input.read(buffer)
+                          if (count < 0) break
+                          if (count > 0) digest.update(buffer, 0, count)
+                      }
+                  } finally {
+                      buffer.fill(0)
+                  }
+              }
+          ''',
+              '''    private fun contentStamp(file: File): Long? {
+              val digest = MessageDigest.getInstance("SHA-256")
+              Files.newInputStream(file.toPath(), LinkOption.NOFOLLOW_LINKS).use { input ->
+                  val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                  var total = 0L
+                  try {
+                      while (true) {
+                          val count = input.read(buffer)
+                          if (count < 0) break
+                          if (count > 0) {
+                              total += count
+                              if (total > MAX_XML_BYTES) return null
+                              digest.update(buffer, 0, count)
+                          }
+                      }
+                  } finally {
+                      buffer.fill(0)
+                  }
+              }
+          ''',
+          )
+
+          # 2) Preserve a pending generation when a refresh throws. Cancellation still
+          # stops the scheduler and never resurrects work after cancel().
+          replace_once(
+              "service/src/main/java/cleveres/tricky/cleverestech/RuntimeWorkCoordinator.kt",
+              '''import android.os.FileObserver
+          import kotlinx.coroutines.CoroutineScope
+          ''',
+              '''import android.os.FileObserver
+          import kotlinx.coroutines.CancellationException
+          import kotlinx.coroutines.CoroutineScope
+          ''',
+          )
+          replace_once(
+              "service/src/main/java/cleveres/tricky/cleverestech/RuntimeWorkCoordinator.kt",
+              '''            executionMutex.withLock { refresh() }
+
+              val finished =
+          ''',
+              '''            try {
+                  executionMutex.withLock { refresh() }
+              } catch (error: CancellationException) {
+                  throw error
+              } catch (error: Throwable) {
+                  synchronized(stateLock) {
+                      workerJob =
+                          if (requestedGeneration != generation) {
+                              scope.launch { drainRequests() }
+                          } else {
+                              null
+                          }
+                  }
+                  throw error
+              }
+
+              val finished =
+          ''',
+          )
+
+          # 3) Linux /proc/stat guest and guest_nice are already included in user/nice.
+          # Stop after steal (the first eight aggregate fields) to avoid double counting.
+          replace_once(
+              "service/src/main/java/cleveres/tricky/cleverestech/WebServer.kt",
+              '''    var total = 0L
+              var count = 0
+              while (index < stat.length) {
+          ''',
+              '''    var total = 0L
+              var count = 0
+              while (index < stat.length && count < 8) {
+          ''',
+          )
+
+          # 4) Expose only the signature-presence bit needed for fail-closed server policy,
+          # plus an explicit wipe path for payloads rejected before parsing.
+          replace_once(
+              "service/src/main/java/cleveres/tricky/cleverestech/util/CboxDecryptor.kt",
+              '''        val author: String
+              get() = openWithoutVerification()?.author.orEmpty()
+
+              /** Temporary legacy accessor. Prefer [takeXmlContentBytes] for production parsing. */
+          ''',
+              '''        val author: String
+              get() = openWithoutVerification()?.author.orEmpty()
+
+              internal val hasSignature: Boolean
+              get() = openWithoutVerification()?.hasSignature == true
+
+              @Synchronized
+              internal fun discard() {
+                  opened?.xmlContent?.fill(0)
+                  opened = null
+                  encryptedBytes?.fill(0)
+                  encryptedBytes = null
+              }
+
+              /** Temporary legacy accessor. Prefer [takeXmlContentBytes] for production parsing. */
+          ''',
+          )
+
+          replace_once(
+              "service/src/main/java/cleveres/tricky/cleverestech/ServerManager.kt",
+              '''            val payload = CboxDecryptor.decrypt(ByteArrayInputStream(bytes), password)
+              if (payload != null) {
+                  if (!server.contentPublicKey.isNullOrBlank() &&
+                      !CboxDecryptor.verifySignature(payload, server.contentPublicKey!!)
+                  ) {
+                      Logger.e("Signature verification failed for server ${server.name}")
+                      return Pair(emptyList(), null)
+                  }
+                  val xml = payload.takeXmlContentBytes()
+          ''',
+              '''            val payload = CboxDecryptor.decrypt(ByteArrayInputStream(bytes), password)
+              if (payload != null) {
+                  val publicKey = server.contentPublicKey?.takeUnless { it.isBlank() }
+                  if (publicKey == null && payload.hasSignature) {
+                      payload.discard()
+                      Logger.e("Signed CBOX requires an explicit verification key for server ${server.name}")
+                      return Pair(emptyList(), null)
+                  }
+                  if (publicKey != null && !CboxDecryptor.verifySignature(payload, publicKey)) {
+                      payload.discard()
+                      Logger.e("Signature verification failed for server ${server.name}")
+                      return Pair(emptyList(), null)
+                  }
+                  val xml = payload.takeXmlContentBytes()
+          ''',
+          )
+          replace_once(
+              "service/src/main/java/cleveres/tricky/cleverestech/ServerManager.kt",
+              '''                val allKeys = ArrayList<CertHack.KeyBox>()
+                  val password = pack.password ?: server.contentPassword ?: ""
+                  val publicKey = server.contentPublicKey
+
+                  for ((name, content) in pack.cboxFiles) {
+          ''',
+              '''                val allKeys = ArrayList<CertHack.KeyBox>()
+                  val password = pack.password ?: server.contentPassword ?: ""
+                  val publicKey = server.contentPublicKey?.takeUnless { it.isBlank() }
+
+                  for ((name, content) in pack.cboxFiles) {
+          ''',
+          )
+          replace_once(
+              "service/src/main/java/cleveres/tricky/cleverestech/ServerManager.kt",
+              '''                    if (!publicKey.isNullOrBlank() &&
+                          !CboxDecryptor.verifySignature(payload, publicKey)
+                      ) {
+                          Logger.e("Signature verification failed for zip entry $name")
+                          return Pair(emptyList(), null)
+                      }
+                      val xml = payload.takeXmlContentBytes()
+          ''',
+              '''                    if (publicKey == null && payload.hasSignature) {
+                          payload.discard()
+                          Logger.e("Signed zip entry requires an explicit verification key: $name")
+                          return Pair(emptyList(), null)
+                      }
+                      if (publicKey != null && !CboxDecryptor.verifySignature(payload, publicKey)) {
+                          payload.discard()
+                          Logger.e("Signature verification failed for zip entry $name")
+                          return Pair(emptyList(), null)
+                      }
+                      val xml = payload.takeXmlContentBytes()
+          ''',
+          )
+
+          # Regression tests: CPU guest fields, oversized XML pre-hash gate, refresh failure
+          # follow-up, and direct/ZIP signed CBOX fail-closed behavior.
+          replace_once(
+              "service/src/test/java/cleveres/tricky/cleverestech/ProcStatParsingTest.kt",
+              '''    fun parsesAggregateCpuTicks() {
+              assertEquals(550L, parseTotalCpuTicks("cpu  10 20 30 40 50 60 70 80 90 100"))
+          }
+          ''',
+              '''    fun parsesAggregateCpuTicksWithoutDoubleCountingGuestTime() {
+              assertEquals(360L, parseTotalCpuTicks("cpu  10 20 30 40 50 60 70 80 90 100"))
+              assertEquals(36L, parseTotalCpuTicks("cpu 1 2 3 4 5 6 7 8 100 200"))
+          }
+          ''',
+          )
+
+          replace_once(
+              "service/src/test/java/cleveres/tricky/cleverestech/StoredKeyboxInventoryTest.kt",
+              '''import org.junit.rules.TemporaryFolder
+          import java.io.File
+          ''',
+              '''import org.junit.rules.TemporaryFolder
+          import java.io.File
+          import java.io.RandomAccessFile
+          ''',
+          )
+          replace_once(
+              "service/src/test/java/cleveres/tricky/cleverestech/StoredKeyboxInventoryTest.kt",
+              '''    @Test
+              fun `runtime XML source count is bounded`() {
+          ''',
+              '''    @Test
+              fun `oversized XML is rejected before content stamping`() {
+                  val root = temp.newFolder("oversized")
+                  val oversized = File(root, "oversized.xml")
+                  RandomAccessFile(oversized, "rw").use { file ->
+                      file.setLength(StoredKeyboxInventory.MAX_XML_BYTES + 1)
+                  }
+
+                  val source = StoredKeyboxInventory.runtimeXmlSources(root).single()
+
+                  assertEquals(File::class.java, source.file.javaClass)
+                  assertEquals(StoredKeyboxInventory.MAX_XML_BYTES + 1, source.file.length())
+              }
+
+              @Test
+              fun `runtime XML source count is bounded`() {
+          ''',
+          )
+
+          replace_once(
+              "service/src/test/java/cleveres/tricky/cleverestech/RuntimeWorkCoordinatorTest.kt",
+              '''import kotlinx.coroutines.CompletableDeferred
+          import kotlinx.coroutines.CoroutineScope
+          ''',
+              '''import kotlinx.coroutines.CompletableDeferred
+          import kotlinx.coroutines.CoroutineExceptionHandler
+          import kotlinx.coroutines.CoroutineScope
+          ''',
+          )
+          replace_once(
+              "service/src/test/java/cleveres/tricky/cleverestech/RuntimeWorkCoordinatorTest.kt",
+              '''    @Test
+              fun refreshSchedulerKeepsRefreshesSerializedAcrossCancelAndRestart() {
+          ''',
+              '''    @Test
+              fun refreshSchedulerRunsPendingFollowUpAfterRefreshFailure() {
+                  val failureObserved = CountDownLatch(1)
+                  val exceptionHandler = CoroutineExceptionHandler { _, _ -> failureObserved.countDown() }
+                  val scope = CoroutineScope(Dispatchers.Default + SupervisorJob() + exceptionHandler)
+                  val firstStarted = CountDownLatch(1)
+                  val releaseFirst = CompletableDeferred<Unit>()
+                  val secondFinished = CountDownLatch(1)
+                  val count = AtomicInteger(0)
+                  val scheduler =
+                      ConflatedRefreshScheduler(scope, debounceMs = 10L) {
+                          when (count.incrementAndGet()) {
+                              1 -> {
+                                  firstStarted.countDown()
+                                  releaseFirst.await()
+                                  throw IllegalStateException("refresh failed")
+                              }
+                              2 -> secondFinished.countDown()
+                          }
+                      }
+
+                  try {
+                      scheduler.submit()
+                      assertTrue("Initial refresh did not start", firstStarted.await(2, TimeUnit.SECONDS))
+                      scheduler.submit()
+                      releaseFirst.complete(Unit)
+                      assertTrue("Refresh failure was not observed", failureObserved.await(2, TimeUnit.SECONDS))
+                      assertTrue("Pending follow-up was lost after failure", secondFinished.await(2, TimeUnit.SECONDS))
+                      assertEquals(2, count.get())
+                  } finally {
+                      releaseFirst.complete(Unit)
+                      scheduler.cancel()
+                      scope.cancel()
+                  }
+              }
+
+              @Test
+              fun refreshSchedulerKeepsRefreshesSerializedAcrossCancelAndRestart() {
+          ''',
+          )
+
+          replace_once(
+              "service/src/test/java/cleveres/tricky/cleverestech/ServerManagerCacheTest.kt",
+              '''import org.junit.Assert.assertArrayEquals
+          import org.junit.Assert.assertEquals
+          import org.junit.Test
+          ''',
+              '''import org.junit.Assert.assertArrayEquals
+          import org.junit.Assert.assertEquals
+          import org.junit.Assert.assertNull
+          import org.junit.Assert.assertTrue
+          import org.junit.Test
+          ''',
+          )
+          replace_once(
+              "service/src/test/java/cleveres/tricky/cleverestech/ServerManagerCacheTest.kt",
+              '''    private fun serverConfig() =
+              ServerManager.ServerConfig(
+          ''',
+              '''    @Test
+              fun `signed direct cbox requires explicit verification key`() {
+                  val sourceXml = TestKeyboxFixtures.validEcKeyboxXml.toByteArray(StandardCharsets.UTF_8)
+                  CboxDecryptor.backendOpenOverride = { _, _, _ ->
+                      NativeBackend.CboxPayload(
+                          author = "signed-test",
+                          xmlContent = sourceXml.copyOf(),
+                          hasSignature = true,
+                      )
+                  }
+                  KeyboxLoader.parserOverride = { xml, filename ->
+                      ManagedOpaqueKeyOracle.parse(StringReader(String(xml, StandardCharsets.UTF_8)), filename)
+                  }
+                  val cbox = supportedCboxEnvelope()
+
+                  try {
+                      val result = ServerManager.processContent(cbox, serverConfig())
+                      assertTrue(result.first.isEmpty())
+                      assertNull(result.second)
+                  } finally {
+                      cbox.fill(0)
+                      sourceXml.fill(0)
+                  }
+              }
+
+              @Test
+              fun `signed zip cbox requires explicit verification key`() {
+                  val sourceXml = TestKeyboxFixtures.validEcKeyboxXml.toByteArray(StandardCharsets.UTF_8)
+                  CboxDecryptor.backendOpenOverride = { _, _, _ ->
+                      NativeBackend.CboxPayload(
+                          author = "signed-zip-test",
+                          xmlContent = sourceXml.copyOf(),
+                          hasSignature = true,
+                      )
+                  }
+                  KeyboxLoader.parserOverride = { xml, filename ->
+                      ManagedOpaqueKeyOracle.parse(StringReader(String(xml, StandardCharsets.UTF_8)), filename)
+                  }
+                  val cbox = supportedCboxEnvelope()
+                  val archive = zipOf("issuer.cbox", cbox)
+
+                  try {
+                      val result = ServerManager.processContent(archive, serverConfig())
+                      assertTrue(result.first.isEmpty())
+                      assertNull(result.second)
+                  } finally {
+                      archive.fill(0)
+                      cbox.fill(0)
+                      sourceXml.fill(0)
+                  }
+              }
+
+              @Test
+              fun `signed cbox with verification key remains accepted`() {
+                  val sourceXml = TestKeyboxFixtures.validEcKeyboxXml.toByteArray(StandardCharsets.UTF_8)
+                  CboxDecryptor.backendOpenOverride = { _, _, _ ->
+                      NativeBackend.CboxPayload(
+                          author = "signed-key-test",
+                          xmlContent = sourceXml.copyOf(),
+                          hasSignature = true,
+                      )
+                  }
+                  KeyboxLoader.parserOverride = { xml, filename ->
+                      ManagedOpaqueKeyOracle.parse(StringReader(String(xml, StandardCharsets.UTF_8)), filename)
+                  }
+                  val cbox = supportedCboxEnvelope()
+                  var cached: ByteArray? = null
+
+                  try {
+                      val result = ServerManager.processContent(cbox, serverConfig(contentPublicKey = "test-key"))
+                      cached = result.second
+                      assertEquals(1, result.first.size)
+                      assertTrue(cached != null)
+                  } finally {
+                      cached?.fill(0)
+                      cbox.fill(0)
+                      sourceXml.fill(0)
+                  }
+              }
+
+              private fun serverConfig(contentPublicKey: String? = null) =
+              ServerManager.ServerConfig(
+          ''',
+          )
+          replace_once(
+              "service/src/test/java/cleveres/tricky/cleverestech/ServerManagerCacheTest.kt",
+              '''            refreshIntervalHours = 24,
+              )
+          ''',
+              '''            refreshIntervalHours = 24,
+                  contentPublicKey = contentPublicKey,
+              )
+          ''',
+          )
+          PY
+
+          rm .github/workflows/deep-bug-sweep-patch.yml
+          git diff --check
+
+      - name: Commit patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "fix: close deep bug sweep findings"
+          git push origin HEAD:fix/deep-bug-sweep-20260820
