@@ -130,6 +130,35 @@ async function main() {
     const failing = createBridge(callback => callback(5, '', 'permission denied'));
     await assert.rejects(() => failing.fetch('/api/config'), /permission denied/);
 
+    let rawCommand = '';
+    const rawCallbackBridge = createBridge(
+        callback => {
+            if (rawCommand.includes("'stage-create'")) {
+                callback(1, '', '0123456789abcdef0123456789abcdef\n__CT_NATIVE_OK__');
+            } else if (rawCommand.includes("'stage-append'")) {
+                callback(1, '', '__CT_NATIVE_OK__');
+            } else if (rawCommand.includes("'export'")) {
+                callback(1, '', '/storage/emulated/0/Download/bridge-test.bin\n__CT_NATIVE_OK__');
+            } else {
+                callback(5, '', 'unexpected command');
+            }
+        },
+        null,
+        command => { rawCommand = command; }
+    );
+    const exportedPath = await rawCallbackBridge.exportBlob(new Blob([Uint8Array.from([1, 2, 3])]), 'bridge-test.bin');
+    assert.strictEqual(exportedPath, '/storage/emulated/0/Download/bridge-test.bin', 'validated success marker must win over manager-specific callback status/channel ordering');
+    assert.match(rawCommand, /__CT_NATIVE_OK__/, 'raw native commands must append an authenticated-by-exit-status success marker');
+
+    let rawFailureCommand = '';
+    const rawFailureBridge = createBridge(
+        callback => callback(1, '', 'permission denied'),
+        null,
+        command => { rawFailureCommand = command; }
+    );
+    await assert.rejects(() => rawFailureBridge.exportBlob(new Blob([Uint8Array.from([1])]), 'bridge-fail.bin'), /permission denied/);
+    assert.match(rawFailureCommand, /__CT_NATIVE_OK__/, 'raw failures must still use the marker-aware command wrapper');
+
     let delayedCallback = null;
     const aborting = createBridge(callback => { delayedCallback = callback; });
     const abortController = new AbortController();
@@ -229,6 +258,10 @@ async function main() {
     assert.match(uxSource, /ct_debug_panel/);
     assert.match(uxSource, /All major features and runtime paths in one place\./);
     assert.ok(!/setInterval\s*\(/.test(uxSource), 'UX presentation must not add permanent polling');
+
+    assert.match(bridgeSource, /const nativeSuccessMarker = '__CT_NATIVE_OK__'/);
+    assert.match(bridgeSource, /nativeFilePickerIds = new Set\(\['kbFilePicker', 'restoreInput'\]\)/);
+    assert.match(bridgeSource, /input\.accept = '\*\/\*'/);
 
     const normalizeUiMessage = loadMessageNormalizer();
     assert.strictEqual(normalizeUiMessage(envelope('{"error":"keybox rejected"}')), 'keybox rejected');
