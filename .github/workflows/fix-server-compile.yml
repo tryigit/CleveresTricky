@@ -1,16 +1,16 @@
 name: Fix Server Compile
 
 on:
-  push:
+  pull_request:
     branches:
-      - fix/deep-bug-sweep-followup
+      - master
 
 permissions:
   contents: write
 
 jobs:
   apply:
-    if: github.actor != 'github-actions[bot]'
+    if: github.event.pull_request.head.ref == 'fix/deep-bug-sweep-followup'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
