@@ -350,7 +350,10 @@ fn validate_filename(filename: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn create_export_destination(directory: &TrustedDir, filename: &str) -> Result<(String, File), String> {
+fn create_export_destination(
+    directory: &TrustedDir,
+    filename: &str,
+) -> Result<(String, File), String> {
     for attempt in 0..16 {
         let name = if attempt == 0 {
             filename.to_string()
