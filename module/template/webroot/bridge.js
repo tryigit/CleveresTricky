@@ -313,6 +313,28 @@
         return output;
     }
 
+    async function materializeDownload(reference, size, timeoutMs, signal = null) {
+        if (reference.bytes) return reference.bytes;
+        if (reference.error) throw reference.error;
+        if (reference.promise) return reference.promise;
+        const id = reference.id;
+        if (!id) throw new Error('Staged response is unavailable');
+        reference.promise = (async () => {
+            try {
+                const bytes = await readDownload(id, size, timeoutMs, signal);
+                reference.bytes = bytes;
+                return bytes;
+            } catch (error) {
+                reference.error = error;
+                throw error;
+            } finally {
+                if (reference.id === id) reference.id = null;
+                await dropStage('download', id);
+            }
+        })();
+        return reference.promise;
+    }
+
     class NativeResponse {
         constructor(envelope, timeoutMs, signal = null) {
             this.status = Number(envelope.status);
@@ -325,7 +347,7 @@
             this.bodyUsed = false;
             this.bodyEncoded = typeof envelope.body === 'string' ? envelope.body : null;
             this.downloadId = typeof envelope.downloadId === 'string' ? envelope.downloadId : null;
-            this.downloadRef = this.downloadId ? { id: this.downloadId, readers: 1, completed: 0, error: null } : null;
+            this.downloadRef = this.downloadId ? { id: this.downloadId, promise: null, bytes: null, error: null, shared: false } : null;
             this.size = Number(envelope.size || 0);
             this.timeoutMs = timeoutMs;
             this.signal = signal;
@@ -342,25 +364,12 @@
                 this.bodyEncoded = null;
             } else if (this.downloadRef) {
                 const reference = this.downloadRef;
-                if (reference.error) throw reference.error;
-                const id = reference.id;
-                if (!id) throw new Error('Staged response is unavailable');
                 try {
-                    this.cachedBytes = await readDownload(id, this.size, this.timeoutMs, this.signal);
-                } catch (error) {
-                    reference.error = error;
-                    reference.id = null;
+                    const bytes = await materializeDownload(reference, this.size, this.timeoutMs, this.signal);
+                    this.cachedBytes = bytes.slice();
+                } finally {
                     this.downloadId = null;
                     this.downloadRef = null;
-                    await dropStage('download', id);
-                    throw error;
-                }
-                reference.completed += 1;
-                this.downloadId = null;
-                this.downloadRef = null;
-                if (reference.completed >= reference.readers && reference.id === id) {
-                    reference.id = null;
-                    await dropStage('download', id);
                 }
             } else {
                 this.cachedBytes = new Uint8Array(0);
@@ -393,9 +402,10 @@
             if (this.bodyUsed) throw new TypeError('Cannot clone a consumed response');
             const copy = Object.create(NativeResponse.prototype);
             Object.assign(copy, this);
+            copy.headers = new Headers(this.headers);
             copy.bodyUsed = false;
             copy.cachedBytes = this.cachedBytes ? this.cachedBytes.slice() : null;
-            if (copy.downloadRef) copy.downloadRef.readers += 1;
+            if (copy.downloadRef) copy.downloadRef.shared = true;
             return copy;
         }
     }
@@ -514,7 +524,7 @@
     async function exportResponse(response, filename) {
         if (!(response instanceof NativeResponse) || typeof filename !== 'string' || filename.length < 1 || filename.length > 128) throw new Error('Invalid download');
         if (response.bodyUsed) throw new TypeError('Response body has already been consumed');
-        if (response.downloadRef && response.downloadRef.id && response.downloadRef.readers === 1) {
+        if (response.downloadRef && response.downloadRef.id && !response.downloadRef.shared && !response.downloadRef.promise && !response.downloadRef.bytes) {
             const reference = response.downloadRef;
             const id = reference.id;
             response.bodyUsed = true;
@@ -623,7 +633,7 @@
     scheduleCommunityCard();
     routeExternalLinks();
     global.CleveresBridge = Object.freeze({
-        revision: 10,
+        revision: 11,
         fetch: nativeFetch,
         exportBlob,
         exportResponse,
