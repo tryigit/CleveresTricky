@@ -40,6 +40,7 @@ internal object StoredKeyboxInventory {
     const val MAX_STORED_SOURCES = 256
     const val MAX_FILENAME_BYTES = 255
     const val MAX_XML_BYTES = 10L * 1024 * 1024
+    private const val UNCACHEABLE_CONTENT_STAMP = Long.MIN_VALUE
 
     fun list(configDir: File): List<Source> {
         val output = ArrayList<Source>()
@@ -68,7 +69,13 @@ internal object StoredKeyboxInventory {
         // Source identity stable, but expose a content-derived lastModified stamp only to the
         // runtime scanner so content replacement always invalidates that cache.
         return sources.map { source ->
-            source.copy(file = ContentStampedFile(source.file, contentStamp(source.file)))
+            val size = source.file.length()
+            if (size !in 1..MAX_XML_BYTES) {
+                source
+            } else {
+                val stamp = contentStamp(source.file) ?: UNCACHEABLE_CONTENT_STAMP
+                source.copy(file = ContentStampedFile(source.file, stamp))
+            }
         }
     }
 
@@ -86,15 +93,20 @@ internal object StoredKeyboxInventory {
         return Source(scope, filename, candidate)
     }
 
-    private fun contentStamp(file: File): Long {
+    private fun contentStamp(file: File): Long? {
         val digest = MessageDigest.getInstance("SHA-256")
         Files.newInputStream(file.toPath(), LinkOption.NOFOLLOW_LINKS).use { input ->
             val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+            var total = 0L
             try {
                 while (true) {
                     val count = input.read(buffer)
                     if (count < 0) break
-                    if (count > 0) digest.update(buffer, 0, count)
+                    if (count > 0) {
+                        total += count
+                        if (total > MAX_XML_BYTES) return null
+                        digest.update(buffer, 0, count)
+                    }
                 }
             } finally {
                 buffer.fill(0)

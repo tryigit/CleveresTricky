@@ -7,6 +7,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
+import java.io.RandomAccessFile
 
 class StoredKeyboxInventoryTest {
     @get:Rule val temp = TemporaryFolder()
@@ -35,6 +36,20 @@ class StoredKeyboxInventoryTest {
             listOf("keyboxes:same.xml", "root:same.xml"),
             StoredKeyboxInventory.runtimeXmlSources(root).map { it.id }.sorted(),
         )
+    }
+
+    @Test
+    fun `oversized XML is rejected before content stamping`() {
+        val root = temp.newFolder("oversized")
+        val oversized = File(root, "oversized.xml")
+        RandomAccessFile(oversized, "rw").use { file ->
+            file.setLength(StoredKeyboxInventory.MAX_XML_BYTES + 1)
+        }
+
+        val source = StoredKeyboxInventory.runtimeXmlSources(root).single()
+
+        assertEquals(File::class.java, source.file.javaClass)
+        assertEquals(StoredKeyboxInventory.MAX_XML_BYTES + 1, source.file.length())
     }
 
     @Test

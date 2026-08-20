@@ -37,6 +37,17 @@ object CboxDecryptor {
         val author: String
             get() = openWithoutVerification()?.author.orEmpty()
 
+        internal val hasSignature: Boolean
+            get() = openWithoutVerification()?.hasSignature == true
+
+        @Synchronized
+        internal fun discard() {
+            opened?.xmlContent?.fill(0)
+            opened = null
+            encryptedBytes?.fill(0)
+            encryptedBytes = null
+        }
+
         /** Temporary legacy accessor. Prefer [takeXmlContentBytes] for production parsing. */
         val xmlContent: String
             get() {
@@ -55,6 +66,10 @@ object CboxDecryptor {
         @Synchronized
         internal fun takeXmlContentBytes(): ByteArray {
             val payload = openWithoutVerification() ?: return ByteArray(0)
+            if (hasSignature && verifiedPublicKey == null) {
+                discard()
+                return ByteArray(0)
+            }
             val copy = payload.xmlContent.copyOf()
             payload.xmlContent.fill(0)
             return copy

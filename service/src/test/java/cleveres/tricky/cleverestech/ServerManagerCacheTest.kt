@@ -5,6 +5,8 @@ import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.ByteArrayOutputStream
 import java.io.StringReader
@@ -63,7 +65,87 @@ class ServerManagerCacheTest {
         }
     }
 
-    private fun serverConfig() =
+    @Test
+    fun `signed direct cbox requires explicit verification key`() {
+        val sourceXml = TestKeyboxFixtures.validEcKeyboxXml.toByteArray(StandardCharsets.UTF_8)
+        CboxDecryptor.backendOpenOverride = { _, _, _ ->
+            NativeBackend.CboxPayload(
+                author = "signed-test",
+                xmlContent = sourceXml.copyOf(),
+                hasSignature = true,
+            )
+        }
+        KeyboxLoader.parserOverride = { xml, filename ->
+            ManagedOpaqueKeyOracle.parse(StringReader(String(xml, StandardCharsets.UTF_8)), filename)
+        }
+        val cbox = supportedCboxEnvelope()
+
+        try {
+            val result = ServerManager.processContent(cbox, serverConfig())
+            assertTrue(result.first.isEmpty())
+            assertNull(result.second)
+        } finally {
+            cbox.fill(0)
+            sourceXml.fill(0)
+        }
+    }
+
+    @Test
+    fun `signed zip cbox requires explicit verification key`() {
+        val sourceXml = TestKeyboxFixtures.validEcKeyboxXml.toByteArray(StandardCharsets.UTF_8)
+        CboxDecryptor.backendOpenOverride = { _, _, _ ->
+            NativeBackend.CboxPayload(
+                author = "signed-zip-test",
+                xmlContent = sourceXml.copyOf(),
+                hasSignature = true,
+            )
+        }
+        KeyboxLoader.parserOverride = { xml, filename ->
+            ManagedOpaqueKeyOracle.parse(StringReader(String(xml, StandardCharsets.UTF_8)), filename)
+        }
+        val cbox = supportedCboxEnvelope()
+        val archive = zipOf("issuer.cbox", cbox)
+
+        try {
+            val result = ServerManager.processContent(archive, serverConfig())
+            assertTrue(result.first.isEmpty())
+            assertNull(result.second)
+        } finally {
+            archive.fill(0)
+            cbox.fill(0)
+            sourceXml.fill(0)
+        }
+    }
+
+    @Test
+    fun `signed cbox with verification key remains accepted`() {
+        val sourceXml = TestKeyboxFixtures.validEcKeyboxXml.toByteArray(StandardCharsets.UTF_8)
+        CboxDecryptor.backendOpenOverride = { _, _, _ ->
+            NativeBackend.CboxPayload(
+                author = "signed-key-test",
+                xmlContent = sourceXml.copyOf(),
+                hasSignature = true,
+            )
+        }
+        KeyboxLoader.parserOverride = { xml, filename ->
+            ManagedOpaqueKeyOracle.parse(StringReader(String(xml, StandardCharsets.UTF_8)), filename)
+        }
+        val cbox = supportedCboxEnvelope()
+        var cached: ByteArray? = null
+
+        try {
+            val result = ServerManager.processContent(cbox, serverConfig(contentPublicKey = "test-key"))
+            cached = result.second
+            assertEquals(1, result.first.size)
+            assertTrue(cached != null)
+        } finally {
+            cached?.fill(0)
+            cbox.fill(0)
+            sourceXml.fill(0)
+        }
+    }
+
+    private fun serverConfig(contentPublicKey: String? = null) =
         ServerManager.ServerConfig(
             id = "cache-test",
             name = "Cache Test",
@@ -74,6 +156,7 @@ class ServerManagerCacheTest {
             authData = JSONObject(),
             autoRefresh = false,
             refreshIntervalHours = 24,
+            contentPublicKey = contentPublicKey,
         )
 
     private fun supportedCboxEnvelope(): ByteArray =

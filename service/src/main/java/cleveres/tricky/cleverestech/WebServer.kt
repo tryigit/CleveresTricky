@@ -165,7 +165,7 @@ internal fun parseTotalCpuTicks(stat: CharSequence): Long? {
 
     var total = 0L
     var count = 0
-    while (index < stat.length) {
+    while (index < stat.length && count < 8) {
         while (index < stat.length && stat[index].isWhitespace()) index++
         if (index >= stat.length) break
         val start = index

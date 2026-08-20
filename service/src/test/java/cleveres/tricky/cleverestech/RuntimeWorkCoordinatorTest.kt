@@ -2,6 +2,7 @@ package cleveres.tricky.cleverestech
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -89,6 +90,42 @@ class RuntimeWorkCoordinatorTest {
             Thread.sleep(100)
             assertEquals(2, count.get())
             assertFalse("Active refresh was cancelled", firstCancelled.get())
+        } finally {
+            releaseFirst.complete(Unit)
+            scheduler.cancel()
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun refreshSchedulerRunsPendingFollowUpAfterRefreshFailure() {
+        val failureObserved = CountDownLatch(1)
+        val exceptionHandler = CoroutineExceptionHandler { _, _ -> failureObserved.countDown() }
+        val scope = CoroutineScope(Dispatchers.Default + SupervisorJob() + exceptionHandler)
+        val firstStarted = CountDownLatch(1)
+        val releaseFirst = CompletableDeferred<Unit>()
+        val secondFinished = CountDownLatch(1)
+        val count = AtomicInteger(0)
+        val scheduler =
+            ConflatedRefreshScheduler(scope, debounceMs = 10L) {
+                when (count.incrementAndGet()) {
+                    1 -> {
+                        firstStarted.countDown()
+                        releaseFirst.await()
+                        throw IllegalStateException("refresh failed")
+                    }
+                    2 -> secondFinished.countDown()
+                }
+            }
+
+        try {
+            scheduler.submit()
+            assertTrue("Initial refresh did not start", firstStarted.await(2, TimeUnit.SECONDS))
+            scheduler.submit()
+            releaseFirst.complete(Unit)
+            assertTrue("Refresh failure was not observed", failureObserved.await(2, TimeUnit.SECONDS))
+            assertTrue("Pending follow-up was lost after failure", secondFinished.await(2, TimeUnit.SECONDS))
+            assertEquals(2, count.get())
         } finally {
             releaseFirst.complete(Unit)
             scheduler.cancel()

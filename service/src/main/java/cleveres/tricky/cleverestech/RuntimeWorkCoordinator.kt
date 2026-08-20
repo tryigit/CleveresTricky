@@ -1,8 +1,10 @@
 package cleveres.tricky.cleverestech
 
 import android.os.FileObserver
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
@@ -55,6 +57,7 @@ internal class ConflatedRefreshScheduler(
     }
 
     private suspend fun drainRequests() {
+        val currentWorker = currentCoroutineContext()[Job]
         while (true) {
             val generation = synchronized(stateLock) { requestedGeneration }
             if (debounceMs > 0) delay(debounceMs)
@@ -63,7 +66,23 @@ internal class ConflatedRefreshScheduler(
                 continue
             }
 
-            executionMutex.withLock { refresh() }
+            try {
+                executionMutex.withLock { refresh() }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                synchronized(stateLock) {
+                    if (workerJob === currentWorker) {
+                        workerJob =
+                            if (requestedGeneration != generation) {
+                                scope.launch { drainRequests() }
+                            } else {
+                                null
+                            }
+                    }
+                }
+                throw error
+            }
 
             val finished =
                 synchronized(stateLock) {
