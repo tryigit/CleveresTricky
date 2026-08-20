@@ -51,13 +51,18 @@ object CboxDecryptor {
         /** Temporary legacy accessor. Prefer [takeXmlContentBytes] for production parsing. */
         val xmlContent: String
             get() {
-                val bytes = openWithoutVerification()?.xmlContent ?: return ""
-                return String(bytes, StandardCharsets.UTF_8)
+                val payload = openWithoutVerification() ?: return ""
+                if (payload.hasSignature && verifiedPublicKey == null) return ""
+                return String(payload.xmlContent, StandardCharsets.UTF_8)
             }
 
         /** Mutable copy for compatibility callers. The caller owns and must clear the returned bytes. */
         internal val xmlContentBytes: ByteArray
-            get() = openWithoutVerification()?.xmlContent?.copyOf() ?: ByteArray(0)
+            get() {
+                val payload = openWithoutVerification() ?: return ByteArray(0)
+                if (payload.hasSignature && verifiedPublicKey == null) return ByteArray(0)
+                return payload.xmlContent.copyOf()
+            }
 
         /**
          * Transfer plaintext XML to a byte-oriented caller and wipe the backend response buffer.
@@ -66,7 +71,7 @@ object CboxDecryptor {
         @Synchronized
         internal fun takeXmlContentBytes(): ByteArray {
             val payload = openWithoutVerification() ?: return ByteArray(0)
-            if (hasSignature && verifiedPublicKey == null) {
+            if (payload.hasSignature && verifiedPublicKey == null) {
                 discard()
                 return ByteArray(0)
             }
