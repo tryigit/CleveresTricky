@@ -3,6 +3,8 @@ name: Apply deep bug sweep patch
 on:
   push:
     branches: ["fix/deep-bug-sweep-20260820"]
+  pull_request:
+    branches: ["master"]
 
 permissions:
   contents: write
