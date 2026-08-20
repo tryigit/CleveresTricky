@@ -316,6 +316,18 @@ fn validate_request(request: &RewriteRequest<'_>) -> Result<(), Error> {
     {
         return Err(Error::InvalidStructure);
     }
+    if [
+        request.patch_levels.system,
+        request.patch_levels.vendor,
+        request.patch_levels.boot,
+    ]
+    .into_iter()
+    .any(|component| {
+        component.disposition == PatchDisposition::Replace && component.value <= 0
+    })
+    {
+        return Err(Error::InvalidOverride);
+    }
     let mut seen = [false; ATTESTATION_ID_TAGS.len()];
     for configured in request.id_overrides {
         let Some(index) = ATTESTATION_ID_TAGS
