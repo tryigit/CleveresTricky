@@ -1,6 +1,7 @@
 package cleveres.tricky.cleverestech.util
 
 import cleveres.tricky.cleverestech.KeyboxLoader
+import cleveres.tricky.cleverestech.RustBackendUnavailableException
 import cleveres.tricky.cleverestech.keystore.CertHack
 import java.io.IOException
 import java.nio.file.Files
@@ -89,6 +90,39 @@ class KeyboxVerifierTest {
             assertEquals("00".repeat(32), result.snapshotSha256)
             assertEquals(KeyboxLoader.FileScope.CONFIG_ROOT, observedScope)
             assertEquals("keybox.xml", observedFilename)
+        } finally {
+            KeyboxLoader.resetForTesting()
+            configDir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `manual verification retries one transient Rust backend outage`() {
+        val configDir = Files.createTempDirectory("keybox-verifier-retry").toFile()
+        configDir.resolve("keybox.xml").writeText("backend-owned input")
+        val mockCert = Mockito.mock(X509Certificate::class.java)
+        Mockito.`when`(mockCert.serialNumber).thenReturn(java.math.BigInteger.ONE)
+        val publicKey = Mockito.mock(java.security.PublicKey::class.java)
+        Mockito.`when`(publicKey.encoded).thenReturn(byteArrayOf(1, 2, 3))
+        Mockito.`when`(mockCert.publicKey).thenReturn(publicKey)
+        val mockKeyBox = Mockito.mock(CertHack.KeyBox::class.java)
+        Mockito.`when`(mockKeyBox.certificates()).thenReturn(listOf(mockCert))
+        var attempts = 0
+        KeyboxLoader.fileParserOverride = { _, _ ->
+            attempts++
+            if (attempts == 1) throw RustBackendUnavailableException(IOException("backend restart"))
+            KeyboxLoader.ParsedFile(
+                snapshotSha256 = "11".repeat(32),
+                keyboxes = listOf(mockKeyBox),
+            )
+        }
+
+        try {
+            val result = KeyboxVerifier.verifyWithRetryForTesting(configDir) { emptySet() }.single()
+
+            assertEquals(2, attempts)
+            assertEquals(KeyboxVerifier.Status.VALID, result.status)
+            assertEquals("11".repeat(32), result.snapshotSha256)
         } finally {
             KeyboxLoader.resetForTesting()
             configDir.deleteRecursively()
