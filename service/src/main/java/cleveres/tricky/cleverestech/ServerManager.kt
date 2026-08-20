@@ -535,7 +535,7 @@ object ServerManager {
                             if (count == 0) continue
                             totalRead += count
                             if (totalRead > maxResponseSize) {
-                                throw SecurityException("Server response exceeds ${maxResponseSize / 1024 / 1024}MB limit")
+                                throw SecurityException("Server response exceeds 10MB limit")
                             }
                             output.write(chunk, 0, count)
                         }
