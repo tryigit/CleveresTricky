@@ -118,7 +118,7 @@ function stateForSave(source) {
       telephonyIdentity: Boolean(features.telephonyIdentity),
       regionIdentity: Boolean(features.regionIdentity),
       identityRefresh: Boolean(features.identityRefresh),
-      securityPatch: Boolean(features.securityPatch) || FEATURE_KEYS.some(([key]) => Boolean(features[key]))
+      securityPatch: Boolean(features.securityPatch)
     },
     securityPatch: {
       automaticThresholdMonths: Math.min(24, Math.max(1, Number(patch.automaticThresholdMonths) || 6)),
@@ -427,9 +427,9 @@ function identityFeatureCardsMarkup(prefix) {
   const features = policyState ? policyState.features : {};
   const identityOn = policyIdentityEnabled();
   const cameraOn = Boolean(legacyConfig && legacyConfig.camera_visibility);
-  const securityPatchRow = `<div class="row"><div style="flex:1;min-width:0;padding-right:10px"><strong>Security Patch</strong><span class="res-desc">Part of Identity. It follows the Identity master switch and has no separate enable/disable toggle.</span></div><span class="ct-readonly-state">${identityOn ? 'Enabled with Identity' : 'Disabled'}</span></div>`;
+  const securityPatchRow = `<div class="row"><label for="${prefix}_securityPatch" style="flex:1;min-width:0;padding-right:10px"><strong>Security Patch</strong><span class="res-desc">Controls patch-level presentation independently from the other Identity child features.</span></label>${switchMarkup(`${prefix}_securityPatch`,Boolean(features && features.securityPatch),`data-policy-feature="securityPatch"`)}</div>`;
   const children = FEATURE_KEYS.map(([key,title,desc]) => `<div class="row"><label for="${prefix}_${key}" style="flex:1;padding-right:10px"><strong>${escapeHtml(title)}</strong><span class="res-desc">${escapeHtml(desc)}</span></label>${switchMarkup(`${prefix}_${key}`,Boolean(features && features[key]),`data-policy-feature="${key}"`)}</div>`).join('') + securityPatchRow;
-  const core = `<div class="ct-feature-card"><div class="row"><label for="${prefix}_master" style="flex:1;min-width:0;padding-right:12px"><strong>Identity</strong><span class="res-desc">All Identity enable/disable controls live on Dashboard. Turn Identity on to reveal its child switches.</span></label>${switchMarkup(`${prefix}_master`,identityOn)}</div><div class="ct-subcontrols" id="${prefix}_children" ${identityOn ? '' : 'hidden'}>${children}<button type="button" data-open-tab="spoof" class="primary" style="width:100%;margin-top:10px">Open Identity settings</button></div>${helpMarkup('Security Patch follows this Identity master switch; its detailed modes are configured on the Identity page without a second master toggle.')}</div>`;
+  const core = `<div class="ct-feature-card"><div class="row"><label for="${prefix}_master" style="flex:1;min-width:0;padding-right:12px"><strong>Identity</strong><span class="res-desc">All Identity enable/disable controls live on Dashboard. Turn Identity on to reveal its child switches.</span></label>${switchMarkup(`${prefix}_master`,identityOn)}</div><div class="ct-subcontrols" id="${prefix}_children" ${identityOn ? '' : 'hidden'}>${children}<button type="button" data-open-tab="spoof" class="primary" style="width:100%;margin-top:10px">Open Identity settings</button></div>${helpMarkup('The Identity master toggles all child features together. Security Patch also has its own child switch so it can be disabled without disabling the other Identity paths.')}</div>`;
   const camera = cardMarkup(`${prefix}_camera_visibility`,'Camera visibility','Filters camera discovery for selected apps. Disabled means no cameraserver interceptor is started.',cameraOn,helpMarkup('This only reduces discoverable real camera IDs; it does not create cameras or block direct access.'));
   return `${core}${camera}`;
 }
@@ -633,7 +633,7 @@ function staticPages() {
   if (!patchHost && spoofPage) {
     patchHost = document.createElement('div');
     patchHost.id = 'ct_identity_patch';
-    patchHost.innerHTML = `<div class="panel"><h3>Security Patch</h3><div id="ct_patch_identity_state" class="scope-note">Security Patch follows the Identity master switch.</div><div id="ct_patch_children"><div class="row"><label for="ct_patch_auto" style="flex:1;padding-right:12px"><strong style="color:#fff">Auto Security Patch</strong><span class="res-desc">Use automatic mode for System, Vendor and Boot.</span></label>${switchMarkup('ct_patch_auto',false)}</div><div style="margin:12px 0"><label for="ct_patch_threshold">Stale ROM threshold (months)</label><input id="ct_patch_threshold" type="number" min="1" max="24" inputmode="numeric"></div><div id="ct_patch_components"></div><button id="ct_patch_save" class="primary" type="button" style="width:100%">Save Security Patch</button></div></div><div class="panel"><h3>Resolve for an app</h3><div class="scope-note">Shows captured, configured and effective values from the runtime resolver.</div><input id="ct_patch_package" type="search" placeholder="com.example.app" autocomplete="off"><button id="ct_patch_inspect" type="button" style="width:100%;margin-top:10px">Resolve</button><div id="ct_patch_result" class="scope-note" style="margin-top:12px"></div></div>`;
+    patchHost.innerHTML = `<div class="panel"><h3>Security Patch</h3><div id="ct_patch_identity_state" class="scope-note">Enable or disable Security Patch from its Dashboard switch.</div><div id="ct_patch_children"><div class="row"><label for="ct_patch_auto" style="flex:1;padding-right:12px"><strong style="color:#fff">Auto Security Patch</strong><span class="res-desc">Use automatic mode for System, Vendor and Boot.</span></label>${switchMarkup('ct_patch_auto',false)}</div><div style="margin:12px 0"><label for="ct_patch_threshold">Stale ROM threshold (months)</label><input id="ct_patch_threshold" type="number" min="1" max="24" inputmode="numeric"></div><div id="ct_patch_components"></div><button id="ct_patch_save" class="primary" type="button" style="width:100%">Save Security Patch</button></div></div><div class="panel"><h3>Resolve for an app</h3><div class="scope-note">Shows captured, configured and effective values from the runtime resolver.</div><input id="ct_patch_package" type="search" placeholder="com.example.app" autocomplete="off"><button id="ct_patch_inspect" type="button" style="width:100%;margin-top:10px">Resolve</button><div id="ct_patch_result" class="scope-note" style="margin-top:12px"></div></div>`;
     const identityManager = [...spoofPage.querySelectorAll('.panel')].find(panel => /^Identity Manager$/i.test((panel.querySelector('h3')?.textContent || '').trim()));
     if (identityManager) identityManager.insertAdjacentElement('afterend', patchHost);
     else spoofPage.prepend(patchHost);
@@ -688,28 +688,26 @@ function renderPatchPage() {
   const host = document.getElementById('ct_patch_components');
   const saveButton = document.getElementById('ct_patch_save');
   if (!children || !identityState || !auto || !threshold || !host || !saveButton) return;
-  const identityOn = policyIdentityEnabled();
-  children.hidden = !identityOn;
-  identityState.textContent = identityOn
-    ? 'Security Patch follows the Dashboard Identity master switch. Configure only its patch modes here.'
-    : 'Enable Identity on Dashboard to configure Security Patch.';
+  const patchOn = Boolean(policyState.features && policyState.features.securityPatch);
+  children.hidden = !patchOn;
+  identityState.textContent = patchOn
+    ? 'Security Patch is enabled on Dashboard. Configure its patch modes here.'
+    : 'Enable Security Patch on Dashboard to configure its patch modes.';
   auto.checked = isAutoPatch();
   threshold.value = String(policyState.securityPatch.automaticThresholdMonths || 6);
   host.innerHTML = PATCH_COMPONENTS.map(([key,title]) => patchEditor('ct_patch',key,title,policyState.securityPatch[key],false)).join('');
   PATCH_COMPONENTS.forEach(([key]) => bindPatchEditor('ct_patch',key));
-  auto.disabled = !identityOn;
-  threshold.disabled = !identityOn;
-  saveButton.disabled = !identityOn;
-  host.querySelectorAll('select,input').forEach(control => { control.disabled = !identityOn; });
+  auto.disabled = !patchOn;
+  threshold.disabled = !patchOn;
+  saveButton.disabled = !patchOn;
+  host.querySelectorAll('select,input').forEach(control => { control.disabled = !patchOn; });
   auto.onchange = event => savePolicy(next => {
-    next.features.securityPatch = true;
     PATCH_COMPONENTS.forEach(([key]) => {
       if (event.target.checked) next.securityPatch[key] = {mode:'automatic'};
       else if ((next.securityPatch[key] || {}).mode === 'automatic') next.securityPatch[key] = {mode:'device_default'};
     });
   },event.target.checked ? 'Auto Security Patch enabled' : 'Auto Security Patch disabled');
   saveButton.onclick = () => savePolicy(next => {
-    next.features.securityPatch = true;
     next.securityPatch.automaticThresholdMonths = Number(threshold.value) || 6;
     PATCH_COMPONENTS.forEach(([key]) => { next.securityPatch[key] = readPatchEditor('ct_patch',key,false); });
   },'Security Patch policy saved');
