@@ -322,9 +322,7 @@ fn validate_request(request: &RewriteRequest<'_>) -> Result<(), Error> {
         request.patch_levels.boot,
     ]
     .into_iter()
-    .any(|component| {
-        component.disposition == PatchDisposition::Replace && component.value <= 0
-    })
+    .any(|component| component.disposition == PatchDisposition::Replace && component.value <= 0)
     {
         return Err(Error::InvalidOverride);
     }
