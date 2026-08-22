@@ -1,0 +1,99 @@
+name: Release Source Coherence
+
+on:
+  pull_request:
+    branches: [ "master" ]
+    paths:
+      - "update.json"
+  push:
+    branches: [ "master" ]
+    paths:
+      - "update.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-release-source:
+    name: "🔗 Verify Release Source"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out canonical history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Parse update metadata
+        id: metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          import os
+          import re
+          import urllib.parse
+
+          with open("update.json", "r", encoding="utf-8") as handle:
+              metadata = json.load(handle)
+
+          version = str(metadata.get("version", ""))
+          version_code = metadata.get("versionCode")
+          zip_url = str(metadata.get("zipUrl", ""))
+
+          match = re.fullmatch(
+              r"V(?P<version>[0-9]+\.[0-9]+\.[0-9]+) \((?P<code>[0-9]+)-(?P<sha>[0-9a-f]{8,40})-release\)",
+              version,
+          )
+          if match is None:
+              raise SystemExit(f"update.json version has an unsupported release identity: {version!r}")
+
+          code = int(match.group("code"))
+          if not isinstance(version_code, int) or version_code != code:
+              raise SystemExit(
+                  f"versionCode mismatch: field={version_code!r}, embedded={code}"
+              )
+
+          source_sha = match.group("sha")
+          expected_asset = (
+              f"CleveresTricky-V{match.group('version')}-{code}-{source_sha}-release.zip"
+          )
+          asset = os.path.basename(urllib.parse.urlparse(zip_url).path)
+          if asset != expected_asset:
+              raise SystemExit(
+                  f"zipUrl asset mismatch: expected {expected_asset!r}, got {asset!r}"
+              )
+
+          print(f"version_code={code}")
+          print(f"source_sha={source_sha}")
+          print(f"asset={asset}")
+          PY
+
+      - name: Verify source is canonical master history
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ steps.metadata.outputs.source_sha }}
+          VERSION_CODE: ${{ steps.metadata.outputs.version_code }}
+        run: |
+          set -euo pipefail
+
+          full_sha=$(git rev-parse --verify "${SOURCE_SHA}^{commit}") || {
+            echo "::error::update.json references a source commit that is not present in repository history: $SOURCE_SHA"
+            exit 1
+          }
+
+          git fetch --no-tags origin master
+          if ! git merge-base --is-ancestor "$full_sha" origin/master; then
+            echo "::error::update.json source $SOURCE_SHA is not reachable from canonical master history"
+            echo "::error::Do not publish artifacts built from refs/pull/*/merge or other synthetic/diverged refs"
+            exit 1
+          fi
+
+          canonical_count=$(git rev-list --count "$full_sha")
+          if [ "$canonical_count" != "$VERSION_CODE" ]; then
+            echo "::error::versionCode $VERSION_CODE does not match canonical commit count $canonical_count at $SOURCE_SHA"
+            exit 1
+          fi
+
+          echo "Verified release source: $full_sha (versionCode=$VERSION_CODE)"
