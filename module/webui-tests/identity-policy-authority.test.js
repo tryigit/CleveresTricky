@@ -32,6 +32,7 @@ function runCase(policy, expectedEnabled) {
             encoding: 'utf8',
             env: {
                 ...process.env,
+                CONFIG_DIR: config,
                 CLEVERES_TRICKY_CONFIG_DIR: config
             }
         }
