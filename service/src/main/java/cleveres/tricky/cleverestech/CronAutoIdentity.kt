@@ -139,19 +139,32 @@ internal object CronAutoIdentity {
                 refreshEnabled()
                 return
             }
-            AutoIdentityPersistence.save(root, resolved).getOrThrow()
-            if (!ownsWork(root, generation)) {
-                Logger.i("Cron Auto Identity: refresh saved but follow-up apply skipped because the worker was replaced")
-                return
-            }
             val decision = currentDecision(root)
             if (!decision.shouldRun) {
-                Logger.i("Cron Auto Identity: refresh saved but follow-up apply skipped because Auto Identity was disabled")
+                Logger.i("Cron Auto Identity: fetched identity discarded because Auto Identity was disabled")
                 refreshEnabled()
                 return
             }
+            if (decision.profileScoped) {
+                ProfileAutoIdentityStore.save(root, resolved).getOrThrow()
+            }
+            if (!ownsWork(root, generation)) {
+                Logger.i("Cron Auto Identity: profile snapshot saved but follow-up work skipped because the worker was replaced")
+                return
+            }
             if (!decision.globalLiveApply) {
-                Logger.i("Cron Auto Identity: profile-scoped identity refreshed; global Build properties were left unchanged")
+                Logger.i("Cron Auto Identity: profile-scoped identity refreshed; global identity storage and Build properties were left unchanged")
+                return
+            }
+            if (!currentDecision(root).globalLiveApply) {
+                Logger.i("Cron Auto Identity: global identity save skipped because global Auto Identity was disabled")
+                refreshEnabled()
+                return
+            }
+            AutoIdentityPersistence.save(root, resolved).getOrThrow()
+            if (!ownsWork(root, generation) || !currentDecision(root).globalLiveApply) {
+                Logger.i("Cron Auto Identity: global identity refreshed but live apply skipped because the worker or policy changed")
+                refreshEnabled()
                 return
             }
             val applied = IdentityRuntimeApplier.apply(root)

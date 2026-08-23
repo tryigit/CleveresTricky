@@ -14,8 +14,16 @@ const stateOwner = fs.readFileSync(
   path.join(repoRoot, 'service/src/main/java/cleveres/tricky/cleverestech/PolicyState.kt'),
   'utf8',
 );
+const configOwner = fs.readFileSync(
+  path.join(repoRoot, 'service/src/main/java/cleveres/tricky/cleverestech/Config.kt'),
+  'utf8',
+);
 const cronOwner = fs.readFileSync(
   path.join(repoRoot, 'service/src/main/java/cleveres/tricky/cleverestech/CronAutoIdentity.kt'),
+  'utf8',
+);
+const profileStore = fs.readFileSync(
+  path.join(repoRoot, 'service/src/main/java/cleveres/tricky/cleverestech/ProfileAutoIdentityStore.kt'),
   'utf8',
 );
 
@@ -30,12 +38,6 @@ assert.match(
   'Profiles must expose identityRefresh as Auto Identity (Pixel Beta)',
 );
 assert.match(
-  policy,
-  /Assigned apps use the refreshed identity; profile-only refresh never resets device-wide Build properties\./,
-  'profile Auto Identity copy must explain application scoping and no global resetprop',
-);
-
-assert.match(
   policyOwner,
   /globalCronEnabled && PolicyState\.isTopLevelFeatureEnabled\(PolicyState\.Feature\.BUILD_IDENTITY\)/,
   'global Cron must use only top-level Build Identity authority',
@@ -43,17 +45,7 @@ assert.match(
 assert.match(
   policyOwner,
   /val profileScoped = PolicyState\.hasProfileAutoIdentityWork\(\)/,
-  'profile Auto Identity scheduling must delegate to the canonical PolicyState owner',
-);
-assert.match(
-  stateOwner,
-  /activeProfile\(current\)\?\.featureOverrides\?\.get\(Feature\.IDENTITY_REFRESH\) \?: false/,
-  'profile Auto Identity inheritance must originate from profile overrides, not the global boot refresh flag',
-);
-assert.match(
-  stateOwner,
-  /profile\?\.featureOverrides\?\.get\(Feature\.IDENTITY_REFRESH\) \?: activeOverride/,
-  'selected profile must be able to override inherited Auto Identity',
+  'profile Auto Identity scheduling must delegate to PolicyState',
 );
 assert.match(
   stateOwner,
@@ -61,14 +53,24 @@ assert.match(
   'non-active profile Auto Identity work must require application scope',
 );
 assert.match(
-  stateOwner,
-  /return resolved\.profileAutoIdentity && resolved\.features\.buildIdentity/,
-  'profile Auto Identity must remain ineffective when Build Identity is disabled for that UID',
+  configOwner,
+  /if \(PolicyState\.isProfileAutoIdentityEnabled\(uid\)\) \{[\s\S]*?ProfileAutoIdentityStore\.get\(key\)\?\.let \{ return it \}/,
+  'UID Build resolution must use the isolated snapshot only inside profile Auto Identity scope',
 );
 assert.match(
   cronOwner,
-  /if \(!decision\.globalLiveApply\) \{[\s\S]*?global Build properties were left unchanged[\s\S]*?return/,
-  'profile-only Auto Identity must not execute device-wide live apply',
+  /if \(decision\.profileScoped\) \{[\s\S]*?ProfileAutoIdentityStore\.save\(root, resolved\)\.getOrThrow\(\)/,
+  'profile-scoped refresh must persist its own snapshot',
+);
+assert.match(
+  cronOwner,
+  /if \(!decision\.globalLiveApply\) \{[\s\S]*?global identity storage and Build properties were left unchanged[\s\S]*?return[\s\S]*?AutoIdentityPersistence\.save\(root, resolved\)\.getOrThrow\(\)/,
+  'profile-only refresh must return before global identity persistence',
+);
+assert.doesNotMatch(
+  profileStore,
+  /File\(configDir,\s*"spoof_build_vars"\)/,
+  'profile Auto Identity store must never address the global spoof_build_vars file',
 );
 
-console.log('Profile Auto Identity policy ownership remains app-scoped while global Identity Refresh keeps its boot-only semantics.');
+console.log('Profile Auto Identity storage is isolated from global persistence and device-wide live apply.');

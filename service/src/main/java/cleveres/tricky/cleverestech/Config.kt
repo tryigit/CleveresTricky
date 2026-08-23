@@ -653,6 +653,7 @@ object Config {
             updateDrmPackages(restoredFile(DRM_PACKAGES_FILE)).getOrThrow()
             updateCustomTemplates(restoredFile(CUSTOM_TEMPLATES_FILE)).getOrThrow()
             updateBuildVars(restoredFile(SPOOF_BUILD_VARS_FILE)).getOrThrow()
+            ProfileAutoIdentityStore.load(root)
             updateModuleHash(restoredFile(MODULE_HASH_FILE)).getOrThrow()
             updateSecurityPatch(restoredFile(SECURITY_PATCH_FILE)).getOrThrow()
             updateAppConfigs(restoredFile(APP_CONFIG_FILE)).getOrThrow()
@@ -1104,6 +1105,9 @@ object Config {
     }
 
     fun getBuildVar(key: String, uid: Int): String? {
+        if (PolicyState.isProfileAutoIdentityEnabled(uid)) {
+            ProfileAutoIdentityStore.get(key)?.let { return it }
+        }
         val appConfig = getAppConfig(uid)
         val template = if (appConfig?.template != null) templates[appConfig.template] else null
         return template?.get(key) ?: buildVars[key]
@@ -1561,6 +1565,7 @@ object Config {
     fun setRootForTesting(newRoot: File) {
         privacySeed?.fill(0)
         privacySeed = null
+        ProfileAutoIdentityStore.resetForTesting()
         root = newRoot
         KeyboxLoader.fileParserOverride = { scope, filename ->
             val file =
@@ -1857,6 +1862,7 @@ object Config {
         updateDrmPackages(File(root, DRM_PACKAGES_FILE))
         updateCustomTemplates(File(root, CUSTOM_TEMPLATES_FILE))
         updateBuildVars(File(root, SPOOF_BUILD_VARS_FILE))
+        ProfileAutoIdentityStore.load(root)
         updateModuleHash(File(root, MODULE_HASH_FILE))
         updateSecurityPatch(File(root, SECURITY_PATCH_FILE))
         updateAppConfigs(File(root, APP_CONFIG_FILE))
@@ -2071,6 +2077,7 @@ object Config {
         KeyboxLoader.resetForTesting()
         BackendRecovery.resetForTesting()
         NativeBackend.resetIdentityForTesting()
+        ProfileAutoIdentityStore.resetForTesting()
         PolicyState.resetForTesting()
     }
 }
