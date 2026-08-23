@@ -112,6 +112,7 @@ object PolicyState {
 
     data class Profile(
         val name: String,
+        val enabled: Boolean,
         val applications: Set<String>,
         val template: String?,
         val keybox: String?,
@@ -132,6 +133,7 @@ object PolicyState {
             bootPatch?.let { patch.put("boot", it.toJson()) }
             return JSONObject()
                 .put("name", name)
+                .put("enabled", enabled)
                 .put("applications", JSONArray(applications.sorted()))
                 .put("template", template ?: JSONObject.NULL)
                 .put("keybox", keybox ?: JSONObject.NULL)
@@ -325,7 +327,11 @@ object PolicyState {
         }
         val assignments = buildAssignments(profiles.values)
         val activeProfile = nullableString(rootObject, "activeProfile")
-        if (activeProfile != null) require(findProfile(profiles, activeProfile) != null) { "Active profile does not exist" }
+        if (activeProfile != null) {
+            val active = findProfile(profiles, activeProfile)
+            require(active != null) { "Active profile does not exist" }
+            require(active.enabled) { "Disabled profile cannot be active" }
+        }
         if (validateReferences) validateAssignedProfileReferences(profiles.values)
         return Snapshot(
             explicit = true,
@@ -415,6 +421,7 @@ object PolicyState {
             value,
             setOf(
                 "name",
+                "enabled",
                 "applications",
                 "template",
                 "keybox",
@@ -427,6 +434,13 @@ object PolicyState {
         )
         val name = value.getString("name").trim()
         require(profileNamePattern.matches(name)) { "Invalid profile name" }
+        val enabled =
+            if (!value.has("enabled")) {
+                true
+            } else {
+                require(value.opt("enabled") is Boolean) { "Invalid profile enabled state" }
+                value.getBoolean("enabled")
+            }
         val applicationsArray = value.optJSONArray("applications") ?: JSONArray()
         require(applicationsArray.length() <= MAX_PROFILE_APPLICATIONS) { "Too many applications in profile" }
         val applications = LinkedHashSet<String>()
@@ -448,6 +462,7 @@ object PolicyState {
         val drm = nullableBoolean(value, "drmPassthrough")
         return Profile(
             name = name,
+            enabled = enabled,
             applications = applications.toSet(),
             template = template,
             keybox = keybox,
@@ -464,7 +479,7 @@ object PolicyState {
     private fun buildAssignments(profiles: Collection<Profile>): List<Assignment> {
         val exactOwners = HashMap<String, String>()
         val assignments = ArrayList<Assignment>()
-        profiles.forEach { profile ->
+        profiles.filter { it.enabled }.forEach { profile ->
             profile.applications.forEach { pattern ->
                 if ('*' !in pattern) {
                     val previous = exactOwners.putIfAbsent(pattern, profile.name)
@@ -481,7 +496,7 @@ object PolicyState {
     }
 
     private fun validateAssignedProfileReferences(profiles: Collection<Profile>) {
-        profiles.filter { it.applications.isNotEmpty() }.forEach(::validateProfileReferences)
+        profiles.filter { it.enabled && it.applications.isNotEmpty() }.forEach(::validateProfileReferences)
     }
 
     private fun validateProfileReferences(profile: Profile) {
@@ -570,7 +585,7 @@ object PolicyState {
         )
 
     private fun activeProfile(snapshotValue: Snapshot): Profile? =
-        snapshotValue.activeProfile?.let { findProfile(snapshotValue.profiles, it) }
+        snapshotValue.activeProfile?.let { findProfile(snapshotValue.profiles, it) }?.takeIf { it.enabled }
 
     private fun findProfile(profiles: Map<String, Profile>, name: String): Profile? =
         profiles.values.firstOrNull { it.name.equals(name, ignoreCase = true) }
@@ -583,7 +598,7 @@ object PolicyState {
         val matches = ArrayList<Pair<Assignment, Profile>>()
         normalizedPackages.forEach { packageName ->
             val assignment = snapshotValue.assignments.firstOrNull { wildcardMatches(it.pattern, packageName) }
-            val profile = assignment?.let { findProfile(snapshotValue.profiles, it.profileName) }
+            val profile = assignment?.let { findProfile(snapshotValue.profiles, it.profileName) }?.takeIf { it.enabled }
             if (assignment != null && profile != null) matches += assignment to profile
         }
         if (matches.isEmpty()) return SelectedProfile(activeProfile(snapshotValue), null, false)
@@ -645,7 +660,8 @@ object PolicyState {
     fun isFeatureEnabled(feature: Feature, uid: Int): Boolean = resolveUid(uid).features.enabled(feature)
 
     private fun hasRuntimeScope(profile: Profile, current: Snapshot): Boolean =
-        profile.applications.isNotEmpty() || current.activeProfile?.equals(profile.name, ignoreCase = true) == true
+        profile.enabled &&
+            (profile.applications.isNotEmpty() || current.activeProfile?.equals(profile.name, ignoreCase = true) == true)
 
     fun hasTelephonyProfileWork(): Boolean {
         val current = snapshot
@@ -899,7 +915,7 @@ object PolicyState {
             .put("keyMint", "genuine_platform_keymint_strongbox")
             .put("keystoreCore", if (KeystoreInterceptor.isRunning()) "active" else "waiting")
             .put("providerCoexistence", providerMode)
-            .put("rebootRequired", features.buildIdentity || features.regionIdentity)
+            .put("rebootRequired", features.regionIdentity)
     }
 
     private fun componentStateJson(
@@ -983,7 +999,7 @@ object PolicyState {
             }
         val certReady = cleveres.tricky.cleverestech.keystore.CertHack.canHack()
         return JSONObject()
-            .put("buildIdentity", state(global.buildIdentity, false, global.buildIdentity))
+            .put("buildIdentity", state(global.buildIdentity, global.buildIdentity))
             .put("attestationIdentity", state(global.attestationIdentity, certReady))
             .put("telephonyIdentity", state(global.telephonyIdentity || hasTelephonyProfileWork(), TelephonyInterceptor.isRunning()))
             .put("regionIdentity", state(global.regionIdentity, false, global.regionIdentity))
@@ -1021,7 +1037,9 @@ object PolicyState {
                     require(conflicting == null || conflicting.name == existing.name) { "Profile name already exists" }
                     profiles.remove(existing.name)
                     profiles[profile.name] = profile
-                    if (active?.equals(existing.name, ignoreCase = true) == true) active = profile.name
+                    if (active?.equals(existing.name, ignoreCase = true) == true) {
+                        active = profile.name.takeIf { profile.enabled }
+                    }
                 }
                 "rename" -> {
                     val oldName = payload.getString("name")
@@ -1039,7 +1057,7 @@ object PolicyState {
                     require(profileNamePattern.matches(newName) && newName.lowercase(Locale.ROOT) !in builtInProfiles)
                     require(findProfile(profiles, newName) == null) { "Profile name already exists" }
                     val source = findProfile(profiles, sourceName) ?: throw IllegalArgumentException("Profile not found")
-                    profiles[newName] = source.copy(name = newName, applications = emptySet())
+                    profiles[newName] = source.copy(name = newName, enabled = true, applications = emptySet())
                 }
                 "delete" -> {
                     val existing = findProfile(profiles, payload.getString("name")) ?: throw IllegalArgumentException("Profile not found")
@@ -1061,13 +1079,14 @@ object PolicyState {
                         return@runCatching stateJson()
                     }
                     val profile = findProfile(profiles, requested) ?: throw IllegalArgumentException("Profile not found")
+                    require(profile.enabled) { "Disabled profile cannot be activated" }
                     validateProfileReferences(profile)
                     active = profile.name
                 }
                 "deactivate" -> active = null
                 "assign" -> {
                     val profile = findProfile(profiles, payload.getString("name")) ?: throw IllegalArgumentException("Profile not found")
-                    validateProfileReferences(profile)
+                    if (profile.enabled) validateProfileReferences(profile)
                     val packageName = payload.getString("package").trim()
                     require(packagePattern.matches(packageName)) { "Invalid package assignment" }
                     profiles.entries.forEach { entry ->
@@ -1113,7 +1132,11 @@ object PolicyState {
         val assignments = buildAssignments(profiles.values)
         require(assignments.size <= MAX_TOTAL_ASSIGNMENTS) { "Too many profile assignments" }
         validateAssignedProfileReferences(profiles.values)
-        if (activeProfile != null) require(findProfile(profiles, activeProfile) != null) { "Active profile does not exist" }
+        if (activeProfile != null) {
+            val active = findProfile(profiles, activeProfile)
+            require(active != null) { "Active profile does not exist" }
+            require(active.enabled) { "Disabled profile cannot be active" }
+        }
         return current.copy(
             explicit = true,
             profiles = profiles.toMap(),
@@ -1124,24 +1147,16 @@ object PolicyState {
         )
     }
 
-    private fun recommendedSecurityPatchRequired(thresholdMonths: Long): Boolean {
-    // Restore Defaults follows the device's primary Android security patch.
-    // Vendor/boot metadata can legitimately lag and must not enable the global
-    // feature by themselves. If the system patch is stale, all component
-    // policies below still remain automatic.
-    val systemPatch = readPropertyDate("system") ?: return false
-    return systemPatch.isBefore(currentDateSource().minusMonths(thresholdMonths))
-}
-
-@Synchronized
-fun applyRecommendedDefaults() {
+    @Synchronized
+    fun applyRecommendedDefaults() {
         val thresholdMonths = 6L
         val automatic = PatchPolicy(PatchMode.AUTOMATIC)
-        val securityPatchRequired = recommendedSecurityPatchRequired(thresholdMonths)
+        runCatching { Files.deleteIfExists(File(root, CronAutoIdentity.TOGGLE_FILE).toPath()) }
+            .onFailure { Logger.e("Could not clear Cron Auto Identity while restoring defaults", it) }
         persistAndPublish(
             Snapshot(
                 explicit = true,
-                features = FeatureSet(false, false, false, false, false, securityPatchRequired),
+                features = FeatureSet(false, false, false, false, false, false),
                 patch = PatchSet(thresholdMonths, automatic, automatic, automatic),
                 profiles = emptyMap(),
                 activeProfile = null,
@@ -1186,6 +1201,7 @@ fun applyRecommendedDefaults() {
         snapshot = parsed
         invalidateResolutionCaches()
         Config.signalRuntimeController()
+        CronAutoIdentity.onPolicyChanged()
         cleveres.tricky.cleverestech.keystore.CertHack.clearCertificateCache()
     }
 
