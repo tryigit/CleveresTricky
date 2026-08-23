@@ -110,6 +110,27 @@ generate_backend_auth() {
   return 0
 }
 
+rotate_native_log() {
+  [ -d "$CONFIG_DIR" ] && [ ! -L "$CONFIG_DIR" ] || return 1
+  [ -f "$NATIVE_LOG" ] && [ ! -L "$NATIVE_LOG" ] || return 1
+  log_size=$(wc -c < "$NATIVE_LOG" 2>/dev/null) || return 1
+  case "$log_size" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$log_size" -gt 524288 ] || return 0
+
+  tmp_log="$CONFIG_DIR/.native_runtime.log.$$"
+  [ ! -e "$tmp_log" ] && [ ! -L "$tmp_log" ] || return 1
+  umask 077
+  if tail -c 262144 "$NATIVE_LOG" > "$tmp_log" 2>/dev/null; then
+    chown 0:0 "$tmp_log" 2>/dev/null || { rm -f "$tmp_log"; return 1; }
+    chmod 600 "$tmp_log" 2>/dev/null || { rm -f "$tmp_log"; return 1; }
+    chcon u:object_r:system_file:s0 "$tmp_log" 2>/dev/null
+    mv -f "$tmp_log" "$NATIVE_LOG" 2>/dev/null || { rm -f "$tmp_log"; return 1; }
+  else
+    rm -f "$tmp_log"
+    return 1
+  fi
+}
+
 prepare_native_log() {
   [ -d "$CONFIG_DIR" ] && [ ! -L "$CONFIG_DIR" ] || return 1
   if [ -L "$NATIVE_LOG" ] || { [ -e "$NATIVE_LOG" ] && [ ! -f "$NATIVE_LOG" ]; }; then
@@ -117,30 +138,56 @@ prepare_native_log() {
     return 1
   fi
 
-  if [ -f "$NATIVE_LOG" ]; then
-    log_size=$(wc -c < "$NATIVE_LOG" 2>/dev/null) || log_size=0
-    case "$log_size" in ''|*[!0-9]*) log_size=0 ;; esac
-    if [ "$log_size" -gt 524288 ]; then
-      tmp_log="$CONFIG_DIR/.native_runtime.log.$$"
-      umask 077
-      if tail -c 262144 "$NATIVE_LOG" > "$tmp_log" 2>/dev/null; then
-        chown 0:0 "$tmp_log" 2>/dev/null || { rm -f "$tmp_log"; return 1; }
-        chmod 600 "$tmp_log" 2>/dev/null || { rm -f "$tmp_log"; return 1; }
-        chcon u:object_r:system_file:s0 "$tmp_log" 2>/dev/null
-        mv -f "$tmp_log" "$NATIVE_LOG" 2>/dev/null || { rm -f "$tmp_log"; return 1; }
-      else
-        rm -f "$tmp_log"
-        return 1
-      fi
-    fi
-  else
+  if [ ! -f "$NATIVE_LOG" ]; then
     umask 077
     : > "$NATIVE_LOG" || return 1
   fi
   chown 0:0 "$NATIVE_LOG" 2>/dev/null || return 1
   chmod 600 "$NATIVE_LOG" 2>/dev/null || return 1
   chcon u:object_r:system_file:s0 "$NATIVE_LOG" 2>/dev/null
+  rotate_native_log || return 1
   return 0
+}
+
+run_daemon_with_bounded_log() {
+  prepare_native_log || return 125
+  runtime_pipe="$CONFIG_DIR/.native_runtime.pipe.$$"
+  if [ -e "$runtime_pipe" ] || [ -L "$runtime_pipe" ]; then
+    return 125
+  fi
+  umask 077
+  mkfifo "$runtime_pipe" 2>/dev/null || return 125
+  chmod 600 "$runtime_pipe" 2>/dev/null || { rm -f "$runtime_pipe"; return 125; }
+  chown 0:0 "$runtime_pipe" 2>/dev/null || { rm -f "$runtime_pipe"; return 125; }
+  chcon u:object_r:system_file:s0 "$runtime_pipe" 2>/dev/null
+
+  (
+    capture_ok=true
+    line_count=0
+    while IFS= read -r line || [ -n "$line" ]; do
+      if [ "$capture_ok" = true ]; then
+        if ! printf '%.8192s\n' "$line" >> "$NATIVE_LOG" 2>/dev/null; then
+          capture_ok=false
+        else
+          line_count=$((line_count + 1))
+          if [ "$line_count" -ge 32 ]; then
+            rotate_native_log || capture_ok=false
+            line_count=0
+          fi
+        fi
+      fi
+    done < "$runtime_pipe"
+    if [ "$capture_ok" = true ]; then
+      rotate_native_log || true
+    fi
+  ) &
+  log_reader_pid=$!
+
+  "$MODDIR/daemon" > "$runtime_pipe" 2>&1
+  daemon_status=$?
+  wait "$log_reader_pid" 2>/dev/null || true
+  rm -f "$runtime_pipe"
+  return "$daemon_status"
 }
 
 if [ -d "$CONFIG_DIR" ] && [ ! -L "$CONFIG_DIR" ]; then
@@ -186,12 +233,13 @@ while true; do
   fi
 
   started_at=$(date +%s)
-  if prepare_native_log; then
-    "$MODDIR/daemon" >> "$NATIVE_LOG" 2>&1
-  else
-    "$MODDIR/daemon"
-  fi
+  run_daemon_with_bounded_log
   exit_code=$?
+  if [ "$exit_code" -eq 125 ]; then
+    log -t CleveresTricky "Native runtime log capture is unavailable; running daemon without file capture"
+    "$MODDIR/daemon"
+    exit_code=$?
+  fi
   unset CLEVERES_TRICKY_BACKEND_AUTH
   stopped_at=$(date +%s)
   runtime=$((stopped_at - started_at))
