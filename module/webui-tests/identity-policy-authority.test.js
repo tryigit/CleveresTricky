@@ -65,4 +65,30 @@ runCase(basePolicy(false), false);
 runCase(basePolicy(true), true);
 runCase(null, true);
 
+const nestedOverride = {
+    version: 2,
+    profiles: [{
+        name: 'App Override',
+        enabled: true,
+        applications: ['com.example.app'],
+        features: { buildIdentity: true }
+    }],
+    features: {
+        buildIdentity: false,
+        attestationIdentity: false,
+        telephonyIdentity: false,
+        regionIdentity: false,
+        identityRefresh: false,
+        securityPatch: false
+    },
+    securityPatch: {
+        automaticThresholdMonths: 6,
+        system: { mode: 'automatic' },
+        vendor: { mode: 'automatic' },
+        boot: { mode: 'automatic' }
+    },
+    activeProfile: null
+};
+runCase(nestedOverride, false);
+
 console.log('v2 policy authority for early Build Identity passed');
