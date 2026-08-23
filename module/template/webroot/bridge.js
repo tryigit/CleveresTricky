@@ -19,6 +19,138 @@
     const nativeFilePickerIds = new Set(['kbFilePicker', 'restoreInput']);
     let callbackCounter = 0;
 
+    const configRoot = '/data/adb/cleverestricky';
+    const cronAutoIdentityFlag = `${configRoot}/cron_auto_identity`;
+    const nativeRuntimeLog = `${configRoot}/native_runtime.log`;
+    const policyResponsePaths = new Set(['/api/policy_state', '/api/profile_v2']);
+    let latestPolicyState = null;
+    const profileEnabledByName = new Map();
+    const profileEnabledBySignature = new Map();
+    let identityWrapperInstallStarted = false;
+
+    const EXTENSION_COPY = {
+        tr: {
+            'Cron Auto Identity': 'Cron Otomatik Kimlik',
+            'Fetches and applies a fresh Auto Identity every 24 hours while Build Identity is enabled.': 'Build Identity açıkken her 24 saatte bir yeni Otomatik Kimlik indirir ve uygular.',
+            'Profile enabled': 'Profil etkin',
+            'Profile disabled': 'Profil devre dışı',
+            'Enabled': 'Etkin',
+            'Disabled': 'Devre dışı',
+            'Auto Identity saved. Build Identity remains disabled.': 'Otomatik Kimlik kaydedildi. Build Identity devre dışı kalmaya devam ediyor.',
+            'Identity applied without reboot. Restart open apps if they still show previous Build values.': 'Kimlik yeniden başlatma olmadan uygulandı. Açık uygulamalar eski Build değerlerini gösteriyorsa uygulamaları yeniden başlatın.',
+            'Live Identity apply is unavailable. Reboot is required for these Build/region property changes.': 'Canlı Kimlik uygulaması kullanılamıyor. Bu Build/bölge özellik değişiklikleri için yeniden başlatma gerekiyor.',
+            'Disabling an already applied Build/region identity may require a reboot to restore original properties.': 'Daha önce uygulanmış Build/bölge kimliğini kapatmak, özgün özellikleri geri yüklemek için yeniden başlatma gerekebilir.',
+            'No CleveresTricky logs found.': 'CleveresTricky günlüğü bulunamadı.'
+        },
+        'zh-CN': {
+            'Cron Auto Identity': 'Cron 自动身份',
+            'Fetches and applies a fresh Auto Identity every 24 hours while Build Identity is enabled.': '启用 Build Identity 时，每 24 小时获取并应用新的自动身份。',
+            'Profile enabled': '配置档案已启用',
+            'Profile disabled': '配置档案已禁用',
+            'Enabled': '已启用',
+            'Disabled': '已禁用',
+            'Auto Identity saved. Build Identity remains disabled.': '自动身份已保存，Build Identity 仍保持禁用。',
+            'Identity applied without reboot. Restart open apps if they still show previous Build values.': '身份已无需重启直接应用。若已打开的应用仍显示旧 Build 值，请重启这些应用。',
+            'Live Identity apply is unavailable. Reboot is required for these Build/region property changes.': '无法实时应用身份；这些 Build/区域属性更改需要重启。',
+            'Disabling an already applied Build/region identity may require a reboot to restore original properties.': '关闭已应用的 Build/区域身份后，可能需要重启才能恢复原始属性。',
+            'No CleveresTricky logs found.': '未找到 CleveresTricky 日志。'
+        },
+        es: {
+            'Cron Auto Identity': 'Identidad automática Cron',
+            'Fetches and applies a fresh Auto Identity every 24 hours while Build Identity is enabled.': 'Obtiene y aplica una nueva identidad automática cada 24 horas mientras Build Identity está activado.',
+            'Profile enabled': 'Perfil activado',
+            'Profile disabled': 'Perfil desactivado',
+            'Enabled': 'Activado',
+            'Disabled': 'Desactivado',
+            'Auto Identity saved. Build Identity remains disabled.': 'Identidad automática guardada. Build Identity permanece desactivado.',
+            'Identity applied without reboot. Restart open apps if they still show previous Build values.': 'Identidad aplicada sin reiniciar. Reinicia las apps abiertas si aún muestran valores Build anteriores.',
+            'Live Identity apply is unavailable. Reboot is required for these Build/region property changes.': 'La aplicación en vivo de identidad no está disponible. Estos cambios de propiedades Build/región requieren reinicio.',
+            'Disabling an already applied Build/region identity may require a reboot to restore original properties.': 'Desactivar una identidad Build/región ya aplicada puede requerir reinicio para restaurar las propiedades originales.',
+            'No CleveresTricky logs found.': 'No se encontraron registros de CleveresTricky.'
+        },
+        de: {
+            'Cron Auto Identity': 'Cron Auto-Identität',
+            'Fetches and applies a fresh Auto Identity every 24 hours while Build Identity is enabled.': 'Ruft alle 24 Stunden eine neue Auto-Identität ab und wendet sie an, solange Build Identity aktiviert ist.',
+            'Profile enabled': 'Profil aktiviert',
+            'Profile disabled': 'Profil deaktiviert',
+            'Enabled': 'Aktiviert',
+            'Disabled': 'Deaktiviert',
+            'Auto Identity saved. Build Identity remains disabled.': 'Auto-Identität gespeichert. Build Identity bleibt deaktiviert.',
+            'Identity applied without reboot. Restart open apps if they still show previous Build values.': 'Identität ohne Neustart angewendet. Starte offene Apps neu, falls sie noch alte Build-Werte anzeigen.',
+            'Live Identity apply is unavailable. Reboot is required for these Build/region property changes.': 'Live-Anwendung der Identität ist nicht verfügbar. Für diese Build-/Regionsänderungen ist ein Neustart erforderlich.',
+            'Disabling an already applied Build/region identity may require a reboot to restore original properties.': 'Das Deaktivieren einer bereits angewendeten Build-/Regionsidentität kann einen Neustart zum Wiederherstellen der Originalwerte erfordern.',
+            'No CleveresTricky logs found.': 'Keine CleveresTricky-Protokolle gefunden.'
+        },
+        ru: {
+            'Cron Auto Identity': 'Cron Автоидентичность',
+            'Fetches and applies a fresh Auto Identity every 24 hours while Build Identity is enabled.': 'Получает и применяет новую автоидентичность каждые 24 часа, пока включён Build Identity.',
+            'Profile enabled': 'Профиль включён',
+            'Profile disabled': 'Профиль отключён',
+            'Enabled': 'Включено',
+            'Disabled': 'Отключено',
+            'Auto Identity saved. Build Identity remains disabled.': 'Автоидентичность сохранена. Build Identity остаётся отключённым.',
+            'Identity applied without reboot. Restart open apps if they still show previous Build values.': 'Идентичность применена без перезагрузки. Перезапустите открытые приложения, если они показывают старые значения Build.',
+            'Live Identity apply is unavailable. Reboot is required for these Build/region property changes.': 'Живое применение идентичности недоступно. Для этих изменений Build/региона требуется перезагрузка.',
+            'Disabling an already applied Build/region identity may require a reboot to restore original properties.': 'Отключение уже применённой Build/региональной идентичности может потребовать перезагрузки для возврата исходных свойств.',
+            'No CleveresTricky logs found.': 'Журналы CleveresTricky не найдены.'
+        },
+        id: {
+            'Cron Auto Identity': 'Cron Identitas Otomatis',
+            'Fetches and applies a fresh Auto Identity every 24 hours while Build Identity is enabled.': 'Mengambil dan menerapkan Identitas Otomatis baru setiap 24 jam saat Build Identity aktif.',
+            'Profile enabled': 'Profil diaktifkan',
+            'Profile disabled': 'Profil dinonaktifkan',
+            'Enabled': 'Aktif',
+            'Disabled': 'Nonaktif',
+            'Auto Identity saved. Build Identity remains disabled.': 'Identitas Otomatis disimpan. Build Identity tetap nonaktif.',
+            'Identity applied without reboot. Restart open apps if they still show previous Build values.': 'Identitas diterapkan tanpa reboot. Mulai ulang aplikasi yang masih menampilkan nilai Build lama.',
+            'Live Identity apply is unavailable. Reboot is required for these Build/region property changes.': 'Penerapan Identitas langsung tidak tersedia. Perubahan properti Build/wilayah ini memerlukan reboot.',
+            'Disabling an already applied Build/region identity may require a reboot to restore original properties.': 'Menonaktifkan identitas Build/wilayah yang sudah diterapkan mungkin memerlukan reboot untuk memulihkan properti asli.',
+            'No CleveresTricky logs found.': 'Log CleveresTricky tidak ditemukan.'
+        },
+        hi: {
+            'Cron Auto Identity': 'Cron ऑटो पहचान',
+            'Fetches and applies a fresh Auto Identity every 24 hours while Build Identity is enabled.': 'Build Identity चालू रहने पर हर 24 घंटे में नई ऑटो पहचान लाता और लागू करता है।',
+            'Profile enabled': 'प्रोफ़ाइल चालू',
+            'Profile disabled': 'प्रोफ़ाइल बंद',
+            'Enabled': 'चालू',
+            'Disabled': 'बंद',
+            'Auto Identity saved. Build Identity remains disabled.': 'ऑटो पहचान सहेजी गई। Build Identity बंद ही रहेगा।',
+            'Identity applied without reboot. Restart open apps if they still show previous Build values.': 'पहचान बिना रीबूट के लागू हुई। खुले ऐप पुराने Build मान दिखाएँ तो उन्हें पुनः शुरू करें।',
+            'Live Identity apply is unavailable. Reboot is required for these Build/region property changes.': 'लाइव पहचान लागू करना उपलब्ध नहीं है। इन Build/क्षेत्र प्रॉपर्टी बदलावों के लिए रीबूट आवश्यक है।',
+            'Disabling an already applied Build/region identity may require a reboot to restore original properties.': 'पहले से लागू Build/क्षेत्र पहचान बंद करने पर मूल प्रॉपर्टी लौटाने के लिए रीबूट आवश्यक हो सकता है।',
+            'No CleveresTricky logs found.': 'CleveresTricky लॉग नहीं मिले।'
+        },
+        ar: {
+            'Cron Auto Identity': 'هوية تلقائية مجدولة',
+            'Fetches and applies a fresh Auto Identity every 24 hours while Build Identity is enabled.': 'يجلب ويطبق هوية تلقائية جديدة كل 24 ساعة ما دامت Build Identity مفعلة.',
+            'Profile enabled': 'تم تفعيل الملف الشخصي',
+            'Profile disabled': 'تم تعطيل الملف الشخصي',
+            'Enabled': 'مفعّل',
+            'Disabled': 'معطّل',
+            'Auto Identity saved. Build Identity remains disabled.': 'تم حفظ الهوية التلقائية. ستبقى Build Identity معطلة.',
+            'Identity applied without reboot. Restart open apps if they still show previous Build values.': 'تم تطبيق الهوية دون إعادة تشغيل. أعد تشغيل التطبيقات المفتوحة إذا استمرت في عرض قيم Build القديمة.',
+            'Live Identity apply is unavailable. Reboot is required for these Build/region property changes.': 'التطبيق المباشر للهوية غير متاح. تتطلب تغييرات خصائص Build/المنطقة هذه إعادة تشغيل.',
+            'Disabling an already applied Build/region identity may require a reboot to restore original properties.': 'قد يتطلب تعطيل هوية Build/المنطقة المطبقة سابقًا إعادة تشغيل لاستعادة الخصائص الأصلية.',
+            'No CleveresTricky logs found.': 'لم يتم العثور على سجلات CleveresTricky.'
+        }
+    };
+
+    function extensionLocale() {
+        const active = global.CleveresI18n && global.CleveresI18n.locale;
+        if (typeof active === 'string' && active) return active;
+        try {
+            const stored = global.localStorage && global.localStorage.getItem('cleverestricky.language.v1');
+            return typeof stored === 'string' && stored ? stored : 'en';
+        } catch (_) {
+            return 'en';
+        }
+    }
+
+    function extensionText(source) {
+        const catalog = EXTENSION_COPY[extensionLocale()];
+        return catalog && typeof catalog[source] === 'string' ? catalog[source] : source;
+    }
+
     function abortError() {
         return new DOMException('The request was aborted', 'AbortError');
     }
@@ -523,16 +655,108 @@
         return response;
     }
 
+    function canonicalProfileValue(value) {
+        if (Array.isArray(value)) return value.map(canonicalProfileValue);
+        if (!value || typeof value !== 'object') return value;
+        const result = {};
+        Object.keys(value).sort().forEach(key => { result[key] = canonicalProfileValue(value[key]); });
+        return result;
+    }
+
+    function profileSignature(profile) {
+        if (!profile || typeof profile !== 'object') return '';
+        return JSON.stringify(canonicalProfileValue({
+            applications: Array.isArray(profile.applications) ? profile.applications.map(String).sort() : [],
+            template: profile.template || null,
+            keybox: profile.keybox || null,
+            privacy: profile.privacy || 'inherit',
+            features: profile.features && typeof profile.features === 'object' ? profile.features : {},
+            securityPatch: profile.securityPatch && typeof profile.securityPatch === 'object' ? profile.securityPatch : {},
+            rkpPassthrough: typeof profile.rkpPassthrough === 'boolean' ? profile.rkpPassthrough : null,
+            drmPassthrough: typeof profile.drmPassthrough === 'boolean' ? profile.drmPassthrough : null
+        }));
+    }
+
+    function rememberPolicyState(state) {
+        if (!state || typeof state !== 'object' || !Array.isArray(state.profiles)) return;
+        latestPolicyState = state;
+        profileEnabledByName.clear();
+        profileEnabledBySignature.clear();
+        state.profiles.forEach(profile => {
+            const enabled = !profile || typeof profile.enabled !== 'boolean' ? true : profile.enabled;
+            const name = profile && typeof profile.name === 'string' ? profile.name.trim().toLowerCase() : '';
+            if (name) profileEnabledByName.set(name, enabled);
+            const signature = profileSignature(profile);
+            if (!signature) return;
+            if (!profileEnabledBySignature.has(signature)) profileEnabledBySignature.set(signature, enabled);
+            else if (profileEnabledBySignature.get(signature) !== enabled) profileEnabledBySignature.set(signature, null);
+        });
+    }
+
+    function preparePolicySaveOptions(url, options) {
+        const parsed = new URL(String(url), 'https://native.cleverestricky.invalid');
+        const method = String(options.method || 'GET').toUpperCase();
+        if (parsed.pathname !== '/api/policy_state' || method !== 'POST' || !(options.body instanceof URLSearchParams)) {
+            return options;
+        }
+        const encoded = options.body.get('data');
+        if (typeof encoded !== 'string' || encoded.length > 1024 * 1024) return options;
+
+        let state;
+        try {
+            state = JSON.parse(encoded);
+        } catch (_) {
+            return options;
+        }
+        if (!state || typeof state !== 'object' || !Array.isArray(state.profiles)) return options;
+
+        state.profiles.forEach(profile => {
+            if (!profile || typeof profile !== 'object' || typeof profile.enabled === 'boolean') return;
+            const name = typeof profile.name === 'string' ? profile.name.trim().toLowerCase() : '';
+            const signature = profileSignature(profile);
+            if (name && profileEnabledByName.has(name)) {
+                profile.enabled = profileEnabledByName.get(name);
+            } else if (signature && typeof profileEnabledBySignature.get(signature) === 'boolean') {
+                profile.enabled = profileEnabledBySignature.get(signature);
+            } else {
+                profile.enabled = true;
+            }
+        });
+        if (state.activeProfile) {
+            const activeName = String(state.activeProfile).trim().toLowerCase();
+            const active = state.profiles.find(profile => profile && String(profile.name || '').trim().toLowerCase() === activeName);
+            if (active && active.enabled === false) state.activeProfile = null;
+        }
+
+        const body = new URLSearchParams(options.body.toString());
+        body.set('data', JSON.stringify(state));
+        return Object.assign({}, options, { body });
+    }
+
+    async function rememberPolicyResponse(url, response) {
+        if (!response || !response.ok) return;
+        const parsed = new URL(String(url), 'https://native.cleverestricky.invalid');
+        if (!policyResponsePaths.has(parsed.pathname)) return;
+        try {
+            const state = await response.clone().json();
+            rememberPolicyState(state);
+        } catch (_) {
+        }
+    }
+
     async function nativeFetch(url, options = {}) {
-        const requestedTimeout = Number(options.timeoutMs ?? 60000);
+        const effectiveOptions = preparePolicySaveOptions(url, options);
+        const requestedTimeout = Number(effectiveOptions.timeoutMs ?? 60000);
         const timeoutMs = Number.isFinite(requestedTimeout) ? Math.min(Math.max(Math.trunc(requestedTimeout), 1000), 120000) : 60000;
-        const signal = options.signal || null;
+        const signal = effectiveOptions.signal || null;
         throwIfAborted(signal);
         let request;
         try {
-            request = await prepareRequest(url, options, timeoutMs, signal);
+            request = await prepareRequest(url, effectiveOptions, timeoutMs, signal);
             throwIfAborted(signal);
-            return await callRequest(request, timeoutMs, signal);
+            const response = await callRequest(request, timeoutMs, signal);
+            await rememberPolicyResponse(url, response);
+            return response;
         } catch (error) {
             if (request && request.uploadId) await dropStage('upload', request.uploadId);
             throw error;
@@ -658,6 +882,377 @@
         }, true);
     }
 
+    function notifyExtension(message, type = 'normal') {
+        if (typeof global.notify === 'function') global.notify(extensionText(message), type);
+    }
+
+    async function readPolicyState() {
+        const response = await nativeFetch('/api/policy_state');
+        if (!response.ok) throw new Error(await response.text());
+        const state = await response.json();
+        rememberPolicyState(state);
+        return state;
+    }
+
+    async function setProfileEnabled(profile, enabled) {
+        if (!profile || typeof profile !== 'object' || typeof profile.name !== 'string') throw new Error('Invalid profile');
+        const nextProfile = JSON.parse(JSON.stringify(profile));
+        nextProfile.enabled = Boolean(enabled);
+        const body = new URLSearchParams();
+        body.set('action', 'edit');
+        body.set('data', JSON.stringify({ name: profile.name, profile: nextProfile }));
+        const response = await nativeFetch('/api/profile_v2', { method: 'POST', body });
+        if (!response.ok) throw new Error(await response.text());
+        const state = await response.json();
+        rememberPolicyState(state);
+        return state;
+    }
+
+    function decorateProfileEnablement() {
+        const document = global.document;
+        const list = document && document.getElementById('ct_profile_list');
+        const profiles = latestPolicyState && Array.isArray(latestPolicyState.profiles) ? latestPolicyState.profiles : [];
+        if (!list || !profiles.length) return;
+        const rows = Array.from(list.querySelectorAll('.ct-profile-item'));
+        rows.forEach((row, index) => {
+            if (row.dataset.ctProfileEnablement === '1') return;
+            const profile = profiles[index];
+            if (!profile) return;
+            row.dataset.ctProfileEnablement = '1';
+
+            const label = document.createElement('label');
+            label.className = 'ct-profile-enabled-control';
+            label.style.cssText = 'display:inline-flex;align-items:center;gap:8px;min-height:44px;flex:0 0 auto;';
+            const text = document.createElement('span');
+            text.dataset.ctExtensionCopy = 'profile-state';
+            text.textContent = extensionText(profile.enabled === false ? 'Disabled' : 'Enabled');
+            const input = document.createElement('input');
+            input.type = 'checkbox';
+            input.className = 'ct-switch';
+            input.checked = profile.enabled !== false;
+            input.setAttribute('aria-label', `${profile.name}: ${extensionText('Enabled')}`);
+            input.addEventListener('change', async () => {
+                const requested = input.checked;
+                input.disabled = true;
+                try {
+                    await setProfileEnabled(profile, requested);
+                    text.textContent = extensionText(requested ? 'Enabled' : 'Disabled');
+                    notifyExtension(requested ? 'Profile enabled' : 'Profile disabled');
+                    global.setTimeout(() => {
+                        if (global.location && typeof global.location.reload === 'function') global.location.reload();
+                    }, 250);
+                } catch (error) {
+                    input.checked = !requested;
+                    input.disabled = false;
+                    if (typeof global.notify === 'function') global.notify(error.message || 'Could not update profile', 'error');
+                }
+            });
+            label.append(text, input);
+            const editButton = row.querySelector('[data-edit-profile]');
+            row.insertBefore(label, editButton || null);
+        });
+    }
+
+    async function ensureProfileEnablement() {
+        const document = global.document;
+        const list = document && document.getElementById('ct_profile_list');
+        if (!list) return false;
+        if (!latestPolicyState) {
+            try { await readPolicyState(); } catch (_) { return false; }
+        }
+        decorateProfileEnablement();
+        if (!list.dataset.ctProfileEnablementObserver && typeof global.MutationObserver === 'function') {
+            list.dataset.ctProfileEnablementObserver = '1';
+            new global.MutationObserver(() => decorateProfileEnablement()).observe(list, { childList: true });
+        }
+        return true;
+    }
+
+    function getCronAutoIdentity() {
+        return execHostCommand(`[ -f '${cronAutoIdentityFlag}' ] && [ ! -L '${cronAutoIdentityFlag}' ] && printf on || printf off`, 5000)
+            .then(value => value === 'on');
+    }
+
+    async function setCronAutoIdentity(enabled) {
+        const command = enabled
+            ? `umask 077; [ -d '${configRoot}' ] && [ ! -L '${configRoot}' ] || exit 2; [ ! -L '${cronAutoIdentityFlag}' ] || exit 2; : > '${cronAutoIdentityFlag}'; chmod 0600 '${cronAutoIdentityFlag}'`
+            : `[ ! -L '${cronAutoIdentityFlag}' ] || exit 2; rm -f '${cronAutoIdentityFlag}'`;
+        await execHostCommand(command, 5000);
+        return Boolean(enabled);
+    }
+
+    async function installCronAutoIdentity() {
+        const document = global.document;
+        const children = document && document.getElementById('ct_dash_identity_children');
+        if (!children || document.getElementById('ct_cron_auto_identity_row')) return Boolean(children);
+
+        const row = document.createElement('div');
+        row.id = 'ct_cron_auto_identity_row';
+        row.className = 'row';
+        const label = document.createElement('label');
+        label.htmlFor = 'ct_cron_auto_identity';
+        label.style.cssText = 'flex:1;padding-right:10px;';
+        const title = document.createElement('strong');
+        title.style.color = '#fff';
+        title.dataset.ctExtensionSource = 'Cron Auto Identity';
+        title.textContent = extensionText('Cron Auto Identity');
+        const description = document.createElement('span');
+        description.className = 'res-desc';
+        description.dataset.ctExtensionSource = 'Fetches and applies a fresh Auto Identity every 24 hours while Build Identity is enabled.';
+        description.textContent = extensionText(description.dataset.ctExtensionSource);
+        label.append(title, description);
+
+        const toggle = document.createElement('input');
+        toggle.id = 'ct_cron_auto_identity';
+        toggle.type = 'checkbox';
+        toggle.className = 'ct-switch';
+        toggle.disabled = true;
+        toggle.addEventListener('change', async () => {
+            const requested = toggle.checked;
+            toggle.disabled = true;
+            try {
+                await setCronAutoIdentity(requested);
+                notifyExtension(requested ? 'Enabled' : 'Disabled');
+            } catch (error) {
+                toggle.checked = !requested;
+                if (typeof global.notify === 'function') global.notify(error.message || 'Could not update Cron Auto Identity', 'error');
+            } finally {
+                toggle.disabled = false;
+            }
+        });
+        row.append(label, toggle);
+        children.appendChild(row);
+
+        try {
+            toggle.checked = await getCronAutoIdentity();
+        } catch (_) {
+            toggle.checked = false;
+        } finally {
+            toggle.disabled = false;
+        }
+        return true;
+    }
+
+    async function disableLegacyBuildIdentityMarker() {
+        const body = new URLSearchParams();
+        body.set('setting', 'spoof_build_identity');
+        body.set('value', 'false');
+        try {
+            const response = await nativeFetch('/api/toggle', { method: 'POST', body });
+            if (!response.ok) throw new Error(await response.text());
+        } catch (_) {
+            await execHostCommand(`[ ! -L '${configRoot}/spoof_build_identity' ] || exit 2; rm -f '${configRoot}/spoof_build_identity'`, 5000);
+        }
+    }
+
+    const liveIdentityCommand =
+        `CONFIG='${configRoot}'; ` +
+        `[ -d "$CONFIG" ] && [ ! -L "$CONFIG" ] || { echo unsafe_config >&2; exit 2; }; ` +
+        `SCRIPT=''; for ROOT in /data/adb/modules/cleverestricky /data/adb/ksu/modules/cleverestricky /data/adb/ap/modules/cleverestricky; do CANDIDATE="$ROOT/post-fs-data.sh"; [ -f "$CANDIDATE" ] && [ ! -L "$CANDIDATE" ] && { SCRIPT="$CANDIDATE"; break; }; done; ` +
+        `[ -n "$SCRIPT" ] || { echo script_unavailable >&2; exit 4; }; command -v resetprop >/dev/null 2>&1 || { echo resetprop_unavailable >&2; exit 5; }; ` +
+        `CLEVERES_TRICKY_IDENTITY_ONLY=1 CLEVERES_TRICKY_CONFIG_DIR="$CONFIG" /system/bin/sh "$SCRIPT" >/dev/null 2>&1 || { echo apply_failed >&2; exit 6; }; printf applied`;
+
+    const verifyBuildIdentityCommand =
+        `CONFIG='${configRoot}'; VARS="$CONFIG/spoof_build_vars"; ` +
+        `[ -f "$VARS" ] && [ ! -L "$VARS" ] || { echo vars_unavailable >&2; exit 7; }; ` +
+        `VARS_SIZE=$(wc -c < "$VARS" 2>/dev/null) || exit 7; case "$VARS_SIZE" in ''|*[!0-9]*) exit 7;; esac; [ "$VARS_SIZE" -le 1048576 ] || exit 7; ` +
+        `EXPECTED=$(awk -F= '$1=="FINGERPRINT"{value=substr($0,index($0,"=")+1)} END{print value}' "$VARS"); ` +
+        `[ -n "$EXPECTED" ] || { echo fingerprint_unavailable >&2; exit 7; }; [ "$(getprop ro.build.fingerprint)" = "$EXPECTED" ] || { echo verification_failed >&2; exit 8; }; printf verified`;
+
+    const verifyRegionIdentityCommand =
+        `[ "$(getprop ro.boot.hwc)" = CN ] || { echo region_verification_failed >&2; exit 9; }; printf verified`;
+
+    async function applyIdentityLive(stateOverride = null) {
+        try {
+            const state = stateOverride && typeof stateOverride === 'object' ? stateOverride : await readPolicyState();
+            await execHostCommand(liveIdentityCommand, 15000);
+            if (state.features && state.features.buildIdentity) await execHostCommand(verifyBuildIdentityCommand, 5000);
+            if (state.features && state.features.regionIdentity) await execHostCommand(verifyRegionIdentityCommand, 5000);
+            return { applied: true, rebootRequired: false };
+        } catch (error) {
+            return { applied: false, rebootRequired: true, error };
+        }
+    }
+
+    function notifyLiveIdentityResult(result) {
+        if (result && result.applied) {
+            notifyExtension('Identity applied without reboot. Restart open apps if they still show previous Build values.');
+        } else {
+            notifyExtension('Live Identity apply is unavailable. Reboot is required for these Build/region property changes.', 'error');
+        }
+    }
+
+    function continueIdentitySaveWrapper(attempt) {
+        const current = global.applySpoofing;
+        if (typeof current !== 'function') {
+            if (attempt < 100) global.setTimeout(() => continueIdentitySaveWrapper(attempt + 1), 100);
+            else identityWrapperInstallStarted = false;
+            return;
+        }
+        if (current.ctLiveIdentityApply) return;
+        if (!current.ctSavedBuildIdentity && attempt < 50) {
+            global.setTimeout(() => continueIdentitySaveWrapper(attempt + 1), 100);
+            return;
+        }
+        const wrapped = async function () {
+            const result = await current.apply(this, arguments);
+            try {
+                const state = await readPolicyState();
+                if (state.features && (state.features.buildIdentity || state.features.regionIdentity)) {
+                    notifyLiveIdentityResult(await applyIdentityLive(state));
+                }
+            } catch (error) {
+                if (typeof global.notify === 'function') global.notify(error.message || 'Could not apply Identity live', 'error');
+            }
+            return result;
+        };
+        wrapped.ctLiveIdentityApply = true;
+        global.applySpoofing = wrapped;
+    }
+
+    function installIdentitySaveWrapper() {
+        if (identityWrapperInstallStarted || (global.applySpoofing && global.applySpoofing.ctLiveIdentityApply)) return;
+        identityWrapperInstallStarted = true;
+        continueIdentitySaveWrapper(0);
+    }
+
+    function installIdentityPolicyTransitionWatcher() {
+        const document = global.document;
+        if (!document || !document.documentElement || document.documentElement.dataset.ctIdentityTransitionWatcher) return;
+        document.documentElement.dataset.ctIdentityTransitionWatcher = '1';
+        document.addEventListener('change', event => {
+            const target = event.target;
+            if (!target || target.type !== 'checkbox') return;
+            const feature = target.dataset && target.dataset.policyFeature;
+            const isBuildOrRegion = feature === 'buildIdentity' || feature === 'regionIdentity';
+            const isMaster = typeof target.id === 'string' && /_identity_master$/.test(target.id);
+            if (!isBuildOrRegion && !isMaster) return;
+            const previous = latestPolicyState && latestPolicyState.features ? latestPolicyState.features : {};
+            const previouslyRuntimeVisible = Boolean(previous.buildIdentity || previous.regionIdentity);
+            global.setTimeout(async () => {
+                try {
+                    const state = await readPolicyState();
+                    const enabled = Boolean(state.features && (state.features.buildIdentity || state.features.regionIdentity));
+                    if (enabled) notifyLiveIdentityResult(await applyIdentityLive(state));
+                    else if (previouslyRuntimeVisible) notifyExtension('Disabling an already applied Build/region identity may require a reboot to restore original properties.', 'error');
+                } catch (_) {
+                }
+            }, 500);
+        }, true);
+    }
+
+    function installAutoIdentityOwner() {
+        const current = global.applyAutoIdentity;
+        if (typeof current !== 'function' || current.ctAutoIdentityOwner) return false;
+        const wrapped = async function () {
+            const before = await readPolicyState();
+            const buildEnabled = Boolean(before.features && before.features.buildIdentity);
+            const response = await nativeFetch('/api/auto_identity', { method: 'POST', timeoutMs: 120000 });
+            if (!response.ok) throw new Error(await response.text());
+            const data = await response.json();
+
+            const select = global.document && global.document.getElementById('templateSelect');
+            if (select) select.value = '';
+            const model = global.document && global.document.getElementById('pModel');
+            const manufacturer = global.document && global.document.getElementById('pManuf');
+            const fingerprint = global.document && global.document.getElementById('pFing');
+            if (model) model.innerText = String(data.model || 'Pixel Beta') + ' (Auto Identity)';
+            if (manufacturer) manufacturer.innerText = 'Google';
+            if (fingerprint) fingerprint.innerText = String(data.fingerprint || '');
+
+            if (!buildEnabled) {
+                await disableLegacyBuildIdentityMarker();
+                notifyExtension('Auto Identity saved. Build Identity remains disabled.');
+            } else {
+                notifyLiveIdentityResult(await applyIdentityLive(before));
+            }
+            if (typeof global.loadIdentity === 'function') {
+                try { await global.loadIdentity(); } catch (_) {}
+            }
+            return data;
+        };
+        wrapped.ctAutoIdentityOwner = true;
+        global.applyAutoIdentity = wrapped;
+        return true;
+    }
+
+    const cleveresLogsCommand =
+        `{ logcat -d -t 2000 2>/dev/null | grep -E 'CleveresTricky|cleverestricky|cleverestrickyd|cleverestricky_backend' || true; ` +
+        `if [ -f '${nativeRuntimeLog}' ] && [ ! -L '${nativeRuntimeLog}' ]; then printf '\n--- native runtime ---\n'; tail -n 1000 '${nativeRuntimeLog}' 2>/dev/null; fi; } | tail -n 2500 | tail -c 1048576`;
+
+    async function loadCleveresLogs() {
+        return (await execHostCommand(cleveresLogsCommand, 10000)).trim();
+    }
+
+    function installLogsOwner() {
+        const original = global.fetchLogs;
+        if (typeof original !== 'function' || original.ctCleveresLogs) return false;
+        const wrapped = async function () {
+            const typeNode = global.document && global.document.getElementById('logType');
+            const type = typeNode ? typeNode.value : 'cleverestricky';
+            if (type !== 'cleverestricky') return original.apply(this, arguments);
+            try {
+                const logs = await loadCleveresLogs();
+                const viewer = global.document.getElementById('logViewer');
+                if (viewer) {
+                    viewer.value = logs.trim() || extensionText('No CleveresTricky logs found.');
+                    viewer.scrollTop = viewer.scrollHeight;
+                }
+                if (typeof global.notify === 'function') global.notify(extensionText('Refresh Logs'));
+            } catch (error) {
+                if (typeof global.notify === 'function') global.notify(error.message || 'Failed to load logs', 'error');
+            }
+        };
+        wrapped.ctCleveresLogs = true;
+        global.fetchLogs = wrapped;
+        return true;
+    }
+
+    function refreshExtensionCopy() {
+        const document = global.document;
+        if (!document) return;
+        document.querySelectorAll('[data-ct-extension-source]').forEach(node => {
+            node.textContent = extensionText(node.dataset.ctExtensionSource);
+        });
+        document.querySelectorAll('[data-ct-extension-copy="profile-state"]').forEach(node => {
+            const input = node.parentElement && node.parentElement.querySelector('input[type="checkbox"]');
+            node.textContent = extensionText(input && input.checked ? 'Enabled' : 'Disabled');
+        });
+    }
+
+    function installRuntimeEnhancements(attempt = 0) {
+        const document = global.document;
+        if (!document || !document.body) return;
+        ensureProfileEnablement().catch(() => {});
+        installCronAutoIdentity().catch(() => {});
+        const logsReady = installLogsOwner() || (typeof global.fetchLogs === 'function' && global.fetchLogs.ctCleveresLogs === true);
+        installIdentitySaveWrapper();
+        installIdentityPolicyTransitionWatcher();
+        const autoIdentityReady = installAutoIdentityOwner() || (typeof global.applyAutoIdentity === 'function' && global.applyAutoIdentity.ctAutoIdentityOwner === true);
+
+        const dashboard = document.getElementById('ct_dashboard_controls');
+        if (dashboard && !dashboard.dataset.ctCronObserver && typeof global.MutationObserver === 'function') {
+            dashboard.dataset.ctCronObserver = '1';
+            new global.MutationObserver(() => installCronAutoIdentity().catch(() => {})).observe(dashboard, { childList: true, subtree: true });
+        }
+        const language = document.getElementById('ct_language_selector');
+        if (language && !language.dataset.ctExtensionLanguage) {
+            language.dataset.ctExtensionLanguage = '1';
+            language.addEventListener('change', () => global.setTimeout(refreshExtensionCopy, 0));
+        }
+        if (attempt < 100 && (!document.getElementById('ct_profile_list') || !document.getElementById('ct_dash_identity_children') || !logsReady || !autoIdentityReady)) {
+            global.setTimeout(() => installRuntimeEnhancements(attempt + 1), 100);
+        }
+    }
+
+    function scheduleRuntimeEnhancements() {
+        const document = global.document;
+        if (!document || !document.getElementById('tab_dashboard')) return;
+        const start = () => global.setTimeout(() => installRuntimeEnhancements(), 0);
+        if (document.readyState === 'complete') start();
+        else global.addEventListener('load', start, { once: true });
+    }
+
     function loadUxEnhancements() {
         const document = global.document;
         if (!document || !document.head || !document.createElement || document.getElementById('ct_ux_script')) return;
@@ -681,8 +1276,9 @@
     scheduleCommunityCard();
     routeExternalLinks();
     installNativeFilePickerCompatibility();
+    scheduleRuntimeEnhancements();
     global.CleveresBridge = Object.freeze({
-        revision: 12,
+        revision: 13,
         fetch: nativeFetch,
         exportBlob,
         exportResponse,
@@ -690,7 +1286,13 @@
         openCommunity,
         openKeyboxHub,
         getDebugLogging,
-        setDebugLogging
+        setDebugLogging,
+        setProfileEnabled,
+        getCronAutoIdentity,
+        setCronAutoIdentity,
+        applyIdentityLive,
+        loadCleveresLogs,
+        translateExtension: extensionText
     });
     loadUxEnhancements();
 })(window);
