@@ -29,7 +29,7 @@ class CronAutoIdentityTest {
     }
 
     @Test
-    fun `worker exists only while marker and Build Identity are both enabled`() {
+    fun `global worker exists only while marker and Build Identity are both enabled`() {
         File(root, CronAutoIdentity.TOGGLE_FILE).writeText("")
         PolicyState.installStateForTesting(state(buildIdentity = false).toString())
 
@@ -45,7 +45,60 @@ class CronAutoIdentityTest {
         assertFalse(CronAutoIdentity.isRunningForTesting())
     }
 
-    private fun state(buildIdentity: Boolean): JSONObject =
+    @Test
+    fun `profile Auto Identity starts worker without global cron marker`() {
+        val profile =
+            JSONObject()
+                .put("name", "Banking")
+                .put("enabled", true)
+                .put("applications", JSONArray().put("com.example.bank"))
+                .put("template", JSONObject.NULL)
+                .put("keybox", JSONObject.NULL)
+                .put("privacy", "inherit")
+                .put(
+                    "features",
+                    JSONObject()
+                        .put("buildIdentity", true)
+                        .put("identityRefresh", true),
+                )
+                .put("securityPatch", JSONObject())
+                .put("rkpPassthrough", JSONObject.NULL)
+                .put("drmPassthrough", JSONObject.NULL)
+        PolicyState.installStateForTesting(state(buildIdentity = false, profiles = listOf(profile)).toString())
+
+        CronAutoIdentity.refreshEnabled()
+        assertTrue(CronAutoIdentity.isRunningForTesting())
+    }
+
+    @Test
+    fun `disabled profile Auto Identity cannot keep worker alive`() {
+        val profile =
+            JSONObject()
+                .put("name", "Disabled")
+                .put("enabled", false)
+                .put("applications", JSONArray().put("com.example.disabled"))
+                .put("template", JSONObject.NULL)
+                .put("keybox", JSONObject.NULL)
+                .put("privacy", "inherit")
+                .put(
+                    "features",
+                    JSONObject()
+                        .put("buildIdentity", true)
+                        .put("identityRefresh", true),
+                )
+                .put("securityPatch", JSONObject())
+                .put("rkpPassthrough", JSONObject.NULL)
+                .put("drmPassthrough", JSONObject.NULL)
+        PolicyState.installStateForTesting(state(buildIdentity = false, profiles = listOf(profile)).toString())
+
+        CronAutoIdentity.refreshEnabled()
+        assertFalse(CronAutoIdentity.isRunningForTesting())
+    }
+
+    private fun state(
+        buildIdentity: Boolean,
+        profiles: List<JSONObject> = emptyList(),
+    ): JSONObject =
         JSONObject()
             .put("version", PolicyState.SCHEMA_VERSION)
             .put(
@@ -66,6 +119,6 @@ class CronAutoIdentityTest {
                     .put("vendor", JSONObject().put("mode", "automatic"))
                     .put("boot", JSONObject().put("mode", "automatic")),
             )
-            .put("profiles", JSONArray())
+            .put("profiles", JSONArray().also { array -> profiles.forEach(array::put) })
             .put("activeProfile", JSONObject.NULL)
 }
