@@ -1151,12 +1151,14 @@ object PolicyState {
     fun applyRecommendedDefaults() {
         val thresholdMonths = 6L
         val automatic = PatchPolicy(PatchMode.AUTOMATIC)
+        val securityPatchRecommended =
+            readPropertyDate("system")?.isBefore(currentDateSource().minusMonths(thresholdMonths)) == true
         runCatching { Files.deleteIfExists(File(root, CronAutoIdentity.TOGGLE_FILE).toPath()) }
             .onFailure { Logger.e("Could not clear Cron Auto Identity while restoring defaults", it) }
         persistAndPublish(
             Snapshot(
                 explicit = true,
-                features = FeatureSet(false, false, false, false, false, false),
+                features = FeatureSet(false, false, false, false, false, securityPatchRecommended),
                 patch = PatchSet(thresholdMonths, automatic, automatic, automatic),
                 profiles = emptyMap(),
                 activeProfile = null,

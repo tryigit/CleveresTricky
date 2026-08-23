@@ -21,6 +21,7 @@ class IdentityRuntimeApplierTest {
         File(root, "spoof_build_vars").writeText(
             "FINGERPRINT=google/test/device:16/TEST/1:user/release-keys\n",
         )
+        Config.updateBuildVars(File(root, "spoof_build_vars")).getOrThrow()
     }
 
     @After
