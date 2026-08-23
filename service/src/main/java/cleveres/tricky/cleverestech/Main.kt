@@ -180,6 +180,7 @@ fun main(args: Array<String>) {
             .onFailure { Logger.e("Failed to install conflated keybox watcher; keeping legacy observer", it) }
 
         KeyboxAutoCleaner.start()
+        CronAutoIdentity.start(configDir)
 
         // During an upgrade the native service can start before networking is ready. Revocation
         // checks intentionally fail closed, so a verified keybox may be unavailable on the first
@@ -359,6 +360,7 @@ fun main(args: Array<String>) {
             } catch (_: InterruptedException) {
                 Thread.currentThread().interrupt()
                 startupRetryJobs.forEach { it.cancel() }
+                CronAutoIdentity.stop()
                 KeyboxDirectoryRefreshWatcher.stop()
                 CertificatePolicyWatcher.stop()
                 SubscriptionVisibilityInterceptor.stop()
