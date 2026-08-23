@@ -1,6 +1,7 @@
 #!/system/bin/sh
 MODDIR=${0%/*}
 CONFIG_DIR="/data/adb/cleverestricky"
+NATIVE_LOG="$CONFIG_DIR/native_runtime.log"
 
 (
 retry_delay=2
@@ -28,51 +29,17 @@ bootstrap_default_policy() {
   fi
 
   # Do not reinterpret an upgrading user's legacy identity/security settings.
-  # This bootstrap is only for a clean policy surface.
+  # This bootstrap is only for a clean policy surface. Fresh defaults keep every
+  # optional Identity/Security Patch child disabled; automatic patch *mode* is
+  # preselected only for when the user explicitly enables Security Patch later.
   if has_legacy_optional_policy; then
     return 0
   fi
 
-  patch_enabled=false
-  patch_mode=device_default
-  rom_patch=$(getprop ro.build.version.security_patch 2>/dev/null)
-  now=$(date +%Y-%m-%d 2>/dev/null)
-
-  case "$rom_patch:$now" in
-    [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]:[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9])
-      patch_year=${rom_patch%%-*}
-      patch_rest=${rom_patch#*-}
-      patch_month=${patch_rest%%-*}
-      patch_day=${patch_rest##*-}
-      now_year=${now%%-*}
-      now_rest=${now#*-}
-      now_month=${now_rest%%-*}
-      now_day=${now_rest##*-}
-
-      patch_month=${patch_month#0}; [ -n "$patch_month" ] || patch_month=0
-      patch_day=${patch_day#0}; [ -n "$patch_day" ] || patch_day=0
-      now_month=${now_month#0}; [ -n "$now_month" ] || now_month=0
-      now_day=${now_day#0}; [ -n "$now_day" ] || now_day=0
-
-      case "$patch_year:$patch_month:$patch_day:$now_year:$now_month:$now_day" in
-        *[!0-9:]*) ;;
-        *)
-          patch_serial=$((patch_year * 12 + patch_month))
-          now_serial=$((now_year * 12 + now_month))
-          month_age=$((now_serial - patch_serial))
-          if [ "$month_age" -gt 6 ] || { [ "$month_age" -eq 6 ] && [ "$now_day" -gt "$patch_day" ]; }; then
-            patch_enabled=true
-            patch_mode=automatic
-          fi
-          ;;
-      esac
-      ;;
-  esac
-
   tmp="$CONFIG_DIR/.policy_state_v2.json.$$"
   umask 077
   if ! cat > "$tmp" <<EOF
-{"version":2,"features":{"buildIdentity":false,"attestationIdentity":false,"telephonyIdentity":false,"regionIdentity":false,"identityRefresh":false,"securityPatch":$patch_enabled},"securityPatch":{"automaticThresholdMonths":6,"system":{"mode":"$patch_mode"},"vendor":{"mode":"$patch_mode"},"boot":{"mode":"$patch_mode"}},"profiles":[],"activeProfile":null}
+{"version":2,"features":{"buildIdentity":false,"attestationIdentity":false,"telephonyIdentity":false,"regionIdentity":false,"identityRefresh":false,"securityPatch":false},"securityPatch":{"automaticThresholdMonths":6,"system":{"mode":"automatic"},"vendor":{"mode":"automatic"},"boot":{"mode":"automatic"}},"profiles":[],"activeProfile":null}
 EOF
   then
     rm -f "$tmp"
@@ -82,11 +49,7 @@ EOF
   chmod 600 "$tmp" 2>/dev/null || { rm -f "$tmp"; return 0; }
   chcon u:object_r:system_file:s0 "$tmp" 2>/dev/null
   if mv -f "$tmp" "$state"; then
-    if [ "$patch_enabled" = true ]; then
-      log -t CleveresTricky "Security Patch + Auto Security Patch enabled: ROM patch is older than six months"
-    else
-      log -t CleveresTricky "Initialized policy defaults: Global Mode independent, Identity and Security Patch off"
-    fi
+    log -t CleveresTricky "Initialized policy defaults: Global Mode independent, Identity and Security Patch off"
   else
     rm -f "$tmp"
   fi
@@ -147,6 +110,39 @@ generate_backend_auth() {
   return 0
 }
 
+prepare_native_log() {
+  [ -d "$CONFIG_DIR" ] && [ ! -L "$CONFIG_DIR" ] || return 1
+  if [ -L "$NATIVE_LOG" ] || { [ -e "$NATIVE_LOG" ] && [ ! -f "$NATIVE_LOG" ]; }; then
+    log -t CleveresTricky "Unsafe native runtime log path; native stderr capture was skipped"
+    return 1
+  fi
+
+  if [ -f "$NATIVE_LOG" ]; then
+    log_size=$(wc -c < "$NATIVE_LOG" 2>/dev/null) || log_size=0
+    case "$log_size" in ''|*[!0-9]*) log_size=0 ;; esac
+    if [ "$log_size" -gt 524288 ]; then
+      tmp_log="$CONFIG_DIR/.native_runtime.log.$$"
+      umask 077
+      if tail -c 262144 "$NATIVE_LOG" > "$tmp_log" 2>/dev/null; then
+        chown 0:0 "$tmp_log" 2>/dev/null || { rm -f "$tmp_log"; return 1; }
+        chmod 600 "$tmp_log" 2>/dev/null || { rm -f "$tmp_log"; return 1; }
+        chcon u:object_r:system_file:s0 "$tmp_log" 2>/dev/null
+        mv -f "$tmp_log" "$NATIVE_LOG" 2>/dev/null || { rm -f "$tmp_log"; return 1; }
+      else
+        rm -f "$tmp_log"
+        return 1
+      fi
+    fi
+  else
+    umask 077
+    : > "$NATIVE_LOG" || return 1
+  fi
+  chown 0:0 "$NATIVE_LOG" 2>/dev/null || return 1
+  chmod 600 "$NATIVE_LOG" 2>/dev/null || return 1
+  chcon u:object_r:system_file:s0 "$NATIVE_LOG" 2>/dev/null
+  return 0
+}
+
 if [ -d "$CONFIG_DIR" ] && [ ! -L "$CONFIG_DIR" ]; then
   chown 0:0 "$CONFIG_DIR" 2>/dev/null
   chmod 700 "$CONFIG_DIR" 2>/dev/null
@@ -190,7 +186,11 @@ while true; do
   fi
 
   started_at=$(date +%s)
-  "$MODDIR/daemon"
+  if prepare_native_log; then
+    "$MODDIR/daemon" >> "$NATIVE_LOG" 2>&1
+  else
+    "$MODDIR/daemon"
+  fi
   exit_code=$?
   unset CLEVERES_TRICKY_BACKEND_AUTH
   stopped_at=$(date +%s)
