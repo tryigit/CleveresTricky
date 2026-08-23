@@ -175,10 +175,10 @@ load_build_identity_vars() {
   CT_SECURITY_PATCH=
   BUILD_IDENTITY_LOAD_REASON=not_configured
 
-  [ -d "$CONFIG_DIR" ] && [ ! -L "$CONFIG_DIR" ] || {
+  if [ ! -d "$CONFIG_DIR" ] || [ -L "$CONFIG_DIR" ]; then
     BUILD_IDENTITY_LOAD_REASON=unsafe_config_root
     return 1
-  }
+  fi
   [ -f "$CONFIG_DIR/spoof_enabled" ] && [ ! -L "$CONFIG_DIR/spoof_enabled" ] || return 1
   [ -f "$CONFIG_DIR/spoof_build_identity" ] && [ ! -L "$CONFIG_DIR/spoof_build_identity" ] || return 1
 
@@ -196,10 +196,10 @@ load_build_identity_vars() {
   esac
 
   vars_file="$CONFIG_DIR/spoof_build_vars"
-  [ -f "$vars_file" ] && [ ! -L "$vars_file" ] || {
+  if [ ! -f "$vars_file" ] || [ -L "$vars_file" ]; then
     BUILD_IDENTITY_LOAD_REASON=missing_build_vars
     return 1
-  }
+  fi
   vars_size=$(wc -c < "$vars_file" 2>/dev/null) || {
     BUILD_IDENTITY_LOAD_REASON=unreadable_build_vars
     return 1
