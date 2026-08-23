@@ -5,6 +5,7 @@ import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -61,6 +62,47 @@ class ProfileEnablementTest {
         assertTrue(PolicyState.isFeatureEnabled(PolicyState.Feature.TELEPHONY_IDENTITY, 20_002))
         assertEquals("Legacy", PolicyState.effectiveStateJson("com.example.legacy").getString("matchedProfile"))
         assertTrue(PolicyState.stateJson().getJSONArray("profiles").getJSONObject(0).getBoolean("enabled"))
+    }
+
+    @Test
+    fun `profile Auto Identity overrides a fixed template only while Build Identity is effective`() {
+        val dynamic =
+            profile("Dynamic", enabled = true)
+                .put("applications", JSONArray().put("com.example.dynamic"))
+                .put("template", "fixed_pixel")
+                .put(
+                    "features",
+                    JSONObject()
+                        .put("buildIdentity", true)
+                        .put("identityRefresh", true),
+                )
+        PolicyState.installStateForTesting(state(dynamic).toString())
+        Config.setPackagesForTesting(20_003, arrayOf("com.example.dynamic"))
+
+        assertTrue(PolicyState.isProfileAutoIdentityEnabled(20_003))
+        assertNull(PolicyState.resolveAppConfig(20_003, null))
+        val dynamicEffective = PolicyState.effectiveStateJson("com.example.dynamic")
+        assertTrue(dynamicEffective.isNull("identityTemplate"))
+        assertEquals("auto_identity", dynamicEffective.getString("identitySource"))
+
+        val inactive =
+            profile("Inactive", enabled = true)
+                .put("applications", JSONArray().put("com.example.inactive"))
+                .put("template", "fixed_pixel")
+                .put(
+                    "features",
+                    JSONObject()
+                        .put("buildIdentity", false)
+                        .put("identityRefresh", true),
+                )
+        PolicyState.installStateForTesting(state(inactive).toString())
+        Config.setPackagesForTesting(20_004, arrayOf("com.example.inactive"))
+
+        assertFalse(PolicyState.isProfileAutoIdentityEnabled(20_004))
+        assertEquals("fixed_pixel", PolicyState.resolveAppConfig(20_004, null)?.template)
+        val inactiveEffective = PolicyState.effectiveStateJson("com.example.inactive")
+        assertEquals("fixed_pixel", inactiveEffective.getString("identityTemplate"))
+        assertEquals("template", inactiveEffective.getString("identitySource"))
     }
 
     private fun profile(
