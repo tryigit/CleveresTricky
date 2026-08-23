@@ -640,14 +640,14 @@ object PolicyState {
     }
 
     private fun profileAutoIdentityEnabled(profile: Profile?, current: Snapshot): Boolean {
-    val activeOverride = activeProfile(current)?.featureOverrides?.get(Feature.IDENTITY_REFRESH) ?: false
-    return profile?.featureOverrides?.get(Feature.IDENTITY_REFRESH) ?: activeOverride
-}
+        val activeOverride = activeProfile(current)?.featureOverrides?.get(Feature.IDENTITY_REFRESH) ?: false
+        return profile?.featureOverrides?.get(Feature.IDENTITY_REFRESH) ?: activeOverride
+    }
 
-private fun featuresForProfile(profile: Profile?, current: Snapshot): FeatureSet {
-    val base = activeProfile(current)?.let { current.features.withOverrides(it.featureOverrides) } ?: current.features
-    return profile?.let { base.withOverrides(it.featureOverrides) } ?: base
-}
+    private fun featuresForProfile(profile: Profile?, current: Snapshot): FeatureSet {
+        val base = activeProfile(current)?.let { current.features.withOverrides(it.featureOverrides) } ?: current.features
+        return profile?.let { base.withOverrides(it.featureOverrides) } ?: base
+    }
 
     private fun resolveUid(uid: Int): UidResolution {
         val current = snapshot
@@ -672,30 +672,30 @@ private fun featuresForProfile(profile: Profile?, current: Snapshot): FeatureSet
 
     internal fun isTopLevelFeatureEnabled(feature: Feature): Boolean = snapshot.features.enabled(feature)
 
-internal fun isProfileAutoIdentityEnabled(uid: Int): Boolean {
-    if (!snapshot.explicit) return false
-    val resolved = resolveUid(uid)
-    return resolved.profileAutoIdentity && resolved.features.buildIdentity
-}
-
-internal fun hasProfileAutoIdentityWork(): Boolean {
-    val current = snapshot
-    if (!current.explicit) return false
-    val active = activeProfile(current)
-
-    fun hasWork(profile: Profile): Boolean {
-        val features = featuresForProfile(profile, current)
-        return profileAutoIdentityEnabled(profile, current) && features.buildIdentity
+    internal fun isProfileAutoIdentityEnabled(uid: Int): Boolean {
+        if (!snapshot.explicit) return false
+        val resolved = resolveUid(uid)
+        return resolved.profileAutoIdentity && resolved.features.buildIdentity
     }
 
-    if (active != null && hasWork(active)) return true
-    return current.profiles.values.any { profile ->
-        profile.enabled &&
-            profile.applications.isNotEmpty() &&
-            (active == null || !profile.name.equals(active.name, ignoreCase = true)) &&
-            hasWork(profile)
+    internal fun hasProfileAutoIdentityWork(): Boolean {
+        val current = snapshot
+        if (!current.explicit) return false
+        val active = activeProfile(current)
+
+        fun hasWork(profile: Profile): Boolean {
+            val features = featuresForProfile(profile, current)
+            return profileAutoIdentityEnabled(profile, current) && features.buildIdentity
+        }
+
+        if (active != null && hasWork(active)) return true
+        return current.profiles.values.any { profile ->
+            profile.enabled &&
+                profile.applications.isNotEmpty() &&
+                (active == null || !profile.name.equals(active.name, ignoreCase = true)) &&
+                hasWork(profile)
+        }
     }
-}
 
     private fun hasRuntimeScope(profile: Profile, current: Snapshot): Boolean =
         profile.enabled &&
