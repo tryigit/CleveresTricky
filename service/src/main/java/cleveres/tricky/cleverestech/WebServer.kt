@@ -1327,16 +1327,7 @@ class WebServer(
         if (uri == "/api/auto_identity" && method == Method.POST) {
             return try {
                 val resolved = autoIdentityFetcher()
-                val updates = linkedMapOf<String, String?>("TEMPLATE" to null)
-                resolved.buildVars().forEach { (key, value) ->
-                    require(Config.isValidBuildVarEntry(key, value)) { "Auto Identity returned an invalid build field" }
-                    updates[key] = value
-                }
-                if (!saveIdentityUpdates(updates)) {
-                    return secureResponse(Response.Status.INTERNAL_ERROR, "text/plain", "Auto Identity could not be saved")
-                }
-                SecureFile.touch(File(configDir, "spoof_build_identity"), 384)
-                Config.refreshRuntimeSetting("spoof_build_identity")
+                AutoIdentityPersistence.save(configDir, resolved).getOrThrow()
                 val json =
                     JSONObject()
                         .put("model", resolved.model)
