@@ -84,6 +84,24 @@ class AutoIdentityPolicyTest {
     }
 
     @Test
+    fun `global cron never promotes active profile Build Identity to global live apply`() {
+        val active =
+            profile(
+                name = "Active",
+                enabled = true,
+                applications = emptyArray(),
+                buildIdentity = true,
+                identityRefresh = null,
+            )
+        install(active, globalBuildIdentity = false, activeProfile = "Active")
+
+        val decision = AutoIdentityPolicy.evaluate(globalCronEnabled = true)
+        assertFalse(decision.shouldRun)
+        assertFalse(decision.globalLiveApply)
+        assertFalse(decision.profileScoped)
+    }
+
+    @Test
     fun `profile Auto Identity requires explicit refresh opt in and effective Build Identity`() {
         install(
             profile(
