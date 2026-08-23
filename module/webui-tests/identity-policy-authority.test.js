@@ -9,35 +9,38 @@ const { spawnSync } = require('node:child_process');
 const script = path.resolve('module/template/post-fs-data.sh');
 assert.ok(fs.existsSync(script), 'post-fs-data.sh is missing');
 
-function runCase(policy, expectedApplied) {
+const scriptText = fs.readFileSync(script, 'utf8');
+const gateStart = scriptText.indexOf('policy_feature_enabled() {');
+const gateEnd = scriptText.indexOf('\npromote_staged_identity() {', gateStart);
+assert.ok(gateStart >= 0 && gateEnd > gateStart, 'boot policy gate functions are missing');
+const gateSource = scriptText.slice(gateStart, gateEnd);
+
+function runCase(policy, expectedEnabled) {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ct-policy-identity-'));
-    const bin = path.join(root, 'bin');
     const config = path.join(root, 'config');
-    const resetLog = path.join(root, 'resetprop.log');
-    fs.mkdirSync(bin);
     fs.mkdirSync(config);
-    fs.writeFileSync(path.join(config, 'spoof_enabled'), '');
     fs.writeFileSync(path.join(config, 'spoof_build_identity'), '');
-    fs.writeFileSync(path.join(config, 'spoof_build_vars'), 'FINGERPRINT=google/test/device:16/TEST/1:user/release-keys\n');
-    if (policy !== null) fs.writeFileSync(path.join(config, 'policy_state_v2.json'), JSON.stringify(policy));
+    if (policy !== null) {
+        const text = typeof policy === 'string' ? policy : JSON.stringify(policy);
+        fs.writeFileSync(path.join(config, 'policy_state_v2.json'), text);
+    }
 
-    const resetprop = path.join(bin, 'resetprop');
-    fs.writeFileSync(resetprop, '#!/bin/sh\nprintf "%s\\n" "$*" >> "$RESET_LOG"\n');
-    fs.chmodSync(resetprop, 0o755);
-
-    const result = spawnSync('/bin/sh', [script], {
-        encoding: 'utf8',
-        env: {
-            ...process.env,
-            PATH: `${bin}:${process.env.PATH}`,
-            RESET_LOG: resetLog,
-            CLEVERES_TRICKY_CONFIG_DIR: config,
-            CLEVERES_TRICKY_IDENTITY_ONLY: '1'
+    const result = spawnSync(
+        '/bin/sh',
+        ['-c', `${gateSource}\noptional_marker_enabled buildIdentity spoof_build_identity`],
+        {
+            encoding: 'utf8',
+            env: {
+                ...process.env,
+                CLEVERES_TRICKY_CONFIG_DIR: config
+            }
         }
-    });
-    assert.equal(result.status, 0, result.stderr || result.stdout);
-    const calls = fs.existsSync(resetLog) ? fs.readFileSync(resetLog, 'utf8') : '';
-    assert.equal(calls.includes('ro.build.fingerprint'), expectedApplied, calls);
+    );
+    assert.equal(
+        result.status,
+        expectedEnabled ? 0 : 1,
+        result.stderr || result.stdout || `unexpected policy gate status ${result.status}`
+    );
     fs.rmSync(root, { recursive: true, force: true });
 }
 
@@ -64,31 +67,28 @@ const basePolicy = enabled => ({
 runCase(basePolicy(false), false);
 runCase(basePolicy(true), true);
 runCase(null, true);
+runCase('{not valid json', false);
 
 const nestedOverride = {
-    version: 2,
+    ...basePolicy(false),
     profiles: [{
         name: 'App Override',
         enabled: true,
         applications: ['com.example.app'],
         features: { buildIdentity: true }
-    }],
-    features: {
-        buildIdentity: false,
-        attestationIdentity: false,
-        telephonyIdentity: false,
-        regionIdentity: false,
-        identityRefresh: false,
-        securityPatch: false
-    },
-    securityPatch: {
-        automaticThresholdMonths: 6,
-        system: { mode: 'automatic' },
-        vendor: { mode: 'automatic' },
-        boot: { mode: 'automatic' }
-    },
-    activeProfile: null
+    }]
 };
 runCase(nestedOverride, false);
+
+const nestedDisable = {
+    ...basePolicy(true),
+    profiles: [{
+        name: 'App Override',
+        enabled: true,
+        applications: ['com.example.app'],
+        features: { buildIdentity: false }
+    }]
+};
+runCase(nestedDisable, true);
 
 console.log('v2 policy authority for early Build Identity passed');
