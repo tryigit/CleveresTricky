@@ -3,6 +3,7 @@ package cleveres.tricky.cleverestech
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -38,6 +39,34 @@ class IdentityRuntimeApplierTest {
 
         assertFalse(result.applied)
         assertFalse(result.rebootRequired)
+    }
+
+    @Test
+    fun `active profile Build Identity never authorizes device-wide live apply`() {
+        val activeProfile =
+            JSONObject()
+                .put("name", "Active")
+                .put("enabled", true)
+                .put("applications", JSONArray())
+                .put("template", JSONObject.NULL)
+                .put("keybox", JSONObject.NULL)
+                .put("privacy", "inherit")
+                .put("features", JSONObject().put("buildIdentity", true))
+                .put("securityPatch", JSONObject())
+                .put("rkpPassthrough", JSONObject.NULL)
+                .put("drmPassthrough", JSONObject.NULL)
+        PolicyState.installStateForTesting(
+            state(buildIdentity = false)
+                .put("profiles", JSONArray().put(activeProfile))
+                .put("activeProfile", "Active")
+                .toString(),
+        )
+
+        val result = IdentityRuntimeApplier.apply(root)
+
+        assertFalse(result.applied)
+        assertFalse(result.rebootRequired)
+        assertEquals("disabled", result.reason)
     }
 
     @Test
