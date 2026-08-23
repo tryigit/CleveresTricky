@@ -12,10 +12,13 @@ function requireToken(token, message) {
   assert.ok(postFs.includes(token), message || `missing boot identity contract: ${token}`);
 }
 
-// Identity is an explicit user feature: both owner markers and the canonical
-// persisted build-vars file must gate the early-boot application path.
+// Identity is still an explicit user feature, but v2 policy is authoritative when
+// it exists. The legacy marker remains the fallback only when no v2 state exists.
 requireToken('[ -f "$CONFIG_DIR/spoof_enabled" ] || return 0');
-requireToken('[ -f "$CONFIG_DIR/spoof_build_identity" ] || return 0');
+requireToken('policy_feature_enabled() {', 'v2 policy gate must remain explicit');
+requireToken('depth == 1 && token == "features"', 'only the top-level features object may authorize global boot identity');
+requireToken('[ "$policy_status" -eq 2 ] && return 0', 'legacy marker fallback must remain available when v2 state is absent');
+requireToken('optional_marker_enabled buildIdentity spoof_build_identity || return 0', 'Build Identity must pass the v2/legacy compatibility gate');
 requireToken('vars_file="$CONFIG_DIR/spoof_build_vars"');
 requireToken('done < "$vars_file"');
 
@@ -83,4 +86,4 @@ assert.match(
   'post-mount must reuse the same validated Build Identity owner instead of duplicating property mapping',
 );
 
-console.log('Build Identity boot contract is failure-isolated, exhaustive and reasserted after root-manager property loading.');
+console.log('Build Identity boot contract is policy-authoritative, failure-isolated, exhaustive and reasserted after root-manager property loading.');
