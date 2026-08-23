@@ -202,15 +202,21 @@ class WebServerIdentityTest {
     }
 
     @Test
-    fun `auto identity persists Pixel beta build fields without enabling identity engine`() {
+    fun `auto identity persists build fields without enabling identity or overwriting telephony`() {
+        val telephonyImei = RandomUtils.generateLuhn(15, "35")
+        val file = File(configDir, "spoof_build_vars")
+        file.writeText("ATTESTATION_ID_IMEI=$telephonyImei\n")
+        Config.updateBuildVars(file).getOrThrow()
+
         val response = request("POST", "/api/auto_identity", "")
         assertEquals(200, response.first)
         val data = JSONObject(response.second)
         assertEquals("Pixel Test", data.getString("model"))
-        val vars = File(configDir, "spoof_build_vars").readText()
+        val vars = file.readText()
         assertTrue(vars.contains("FINGERPRINT=google/test_beta/test:CANARY/BP31.260801.001/12345678:user/release-keys"))
         assertTrue(vars.contains("SECURITY_PATCH=2026-08-05"))
-        assertTrue(File(configDir, "spoof_build_identity").isFile)
+        assertTrue(vars.contains("ATTESTATION_ID_IMEI=$telephonyImei"))
+        assertFalse(File(configDir, "spoof_build_identity").exists())
         assertFalse(File(configDir, "spoof_enabled").exists())
     }
 
