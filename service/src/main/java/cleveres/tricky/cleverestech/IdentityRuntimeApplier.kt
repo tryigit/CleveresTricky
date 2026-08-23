@@ -22,7 +22,7 @@ internal object IdentityRuntimeApplier {
         )
 
     fun apply(configDir: File): Result {
-        if (!PolicyState.isFeatureEnabled(PolicyState.Feature.BUILD_IDENTITY)) {
+        if (!PolicyState.isTopLevelFeatureEnabled(PolicyState.Feature.BUILD_IDENTITY)) {
             return Result(false, false, false, "disabled")
         }
         val expectedFingerprint = Config.getBuildIdentity()["FINGERPRINT"].orEmpty()
