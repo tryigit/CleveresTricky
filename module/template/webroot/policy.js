@@ -15,7 +15,11 @@ const PATCH_COMPONENTS = [['system', 'System'], ['vendor', 'Vendor'], ['boot', '
 const PATCH_MODES = [
   ['device_default', 'Device default'], ['prop', 'ROM property'], ['manual', 'Manual date'], ['automatic', 'Automatic'], ['no', 'Omit']
 ];
-const PROFILE_FEATURES = FEATURE_KEYS.concat([
+const PROFILE_FEATURES = FEATURE_KEYS.map((feature) =>
+  feature[0] === 'identityRefresh'
+    ? ['identityRefresh', 'Auto Identity (Pixel Beta)', 'Fetches a fresh Pixel Beta identity every 24 hours while this profile is enabled and Build Identity is effective. Assigned apps use the refreshed identity; profile-only refresh never resets device-wide Build properties.']
+    : feature
+).concat([
   ['securityPatch', 'Security Patch', 'Override the Security Patch feature only for apps assigned to this profile.']
 ]);
 const IMPACTS = {
