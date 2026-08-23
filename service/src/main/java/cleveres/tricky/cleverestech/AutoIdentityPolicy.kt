@@ -41,12 +41,10 @@ internal object AutoIdentityPolicy {
                 ""
             }
         var activeBuild = globalBuild
-        var activeProfile: JSONObject? = null
         if (activeName.isNotEmpty()) {
             for (index in 0 until profiles.length()) {
                 val profile = profiles.optJSONObject(index) ?: continue
                 if (!isEnabled(profile) || !profile.optString("name").equals(activeName, ignoreCase = true)) continue
-                activeProfile = profile
                 activeBuild = overriddenBuild(globalBuild, profile)
                 if (explicitAutoIdentity(profile) && activeBuild) return true
                 break
@@ -55,7 +53,9 @@ internal object AutoIdentityPolicy {
 
         for (index in 0 until profiles.length()) {
             val profile = profiles.optJSONObject(index) ?: continue
-            if (!isEnabled(profile) || profile === activeProfile || !hasApplicationScope(profile)) continue
+            if (!isEnabled(profile) || profile.optString("name").equals(activeName, ignoreCase = true) || !hasApplicationScope(profile)) {
+                continue
+            }
             if (!explicitAutoIdentity(profile)) continue
             if (overriddenBuild(activeBuild, profile)) return true
         }
