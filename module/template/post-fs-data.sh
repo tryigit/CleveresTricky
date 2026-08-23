@@ -32,7 +32,114 @@ policy_feature_enabled() {
     *) return 1 ;;
   esac
 
-  grep -Eq "\"$feature\"[[:space:]]*:[[:space:]]*true([[:space:],}]|$)" "$state" 2>/dev/null
+  # policy_state_v2.json can also contain per-profile feature overrides. Only
+  # the top-level `features` object may authorize global early-boot properties.
+  # Scan JSON structure rather than grepping the whole file so a nested profile
+  # override can never resurrect a disabled global feature.
+  awk -v target="$feature" '
+    BEGIN {
+      depth = 0
+      in_string = 0
+      escaped = 0
+      capture_key = 0
+      candidate = 0
+      seek_object = 0
+      in_features = 0
+      object = ""
+      result = -1
+    }
+    {
+      for (i = 1; i <= length($0); i++) {
+        char = substr($0, i, 1)
+        if (in_string) {
+          if (escaped) {
+            escaped = 0
+            if (capture_key) token = token char
+            if (in_features) object = object char
+            continue
+          }
+          if (char == "\\") {
+            escaped = 1
+            if (in_features) object = object char
+            continue
+          }
+          if (char == "\"") {
+            in_string = 0
+            if (capture_key) {
+              capture_key = 0
+              candidate = (depth == 1 && token == "features")
+              token = ""
+            }
+            if (in_features) object = object char
+            continue
+          }
+          if (capture_key) token = token char
+          if (in_features) object = object char
+          continue
+        }
+
+        if (char == "\"") {
+          in_string = 1
+          if (in_features) object = object char
+          else if (depth == 1) {
+            capture_key = 1
+            token = ""
+          }
+          continue
+        }
+
+        if (candidate) {
+          if (char ~ /[[:space:]]/) continue
+          if (char == ":") {
+            seek_object = 1
+            candidate = 0
+            continue
+          }
+          candidate = 0
+        }
+
+        if (seek_object) {
+          if (char ~ /[[:space:]]/) continue
+          if (char == "{" && depth == 1) {
+            depth++
+            in_features = 1
+            object = "{"
+            seek_object = 0
+            continue
+          }
+          result = 1
+          exit
+        }
+
+        if (char == "{") {
+          depth++
+          if (in_features) object = object char
+          continue
+        }
+        if (char == "}") {
+          if (in_features) {
+            object = object char
+            if (depth == 2) {
+              pattern = "\\\"" target "\\\"[[:space:]]*:[[:space:]]*true([[:space:],}]|$)"
+              result = object ~ pattern ? 0 : 1
+              exit
+            }
+          }
+          depth--
+          if (depth < 0) {
+            result = 1
+            exit
+          }
+          continue
+        }
+        if (in_features) object = object char
+      }
+    }
+    END {
+      if (result < 0) result = 1
+      exit result
+    }
+  ' "$state"
 }
 
 optional_marker_enabled() {
