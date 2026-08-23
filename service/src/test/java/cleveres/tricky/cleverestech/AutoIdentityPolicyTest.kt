@@ -102,6 +102,78 @@ class AutoIdentityPolicyTest {
     }
 
     @Test
+    fun `assigned profile can inherit active Auto Identity and re-enable Build Identity`() {
+        val active =
+            profile(
+                name = "Active",
+                enabled = true,
+                applications = emptyArray(),
+                buildIdentity = false,
+                identityRefresh = true,
+            )
+        val banking =
+            profile(
+                name = "Banking",
+                enabled = true,
+                applications = arrayOf("com.example.bank"),
+                buildIdentity = true,
+                identityRefresh = null,
+            )
+        install(active, banking, activeProfile = "Active")
+        Config.setPackagesForTesting(20_101, arrayOf("com.example.bank"))
+
+        val decision = AutoIdentityPolicy.evaluate(globalCronEnabled = false)
+        assertTrue(decision.shouldRun)
+        assertTrue(decision.profileScoped)
+        assertFalse(decision.globalLiveApply)
+        assertTrue(PolicyState.isProfileAutoIdentityEnabled(20_101))
+    }
+
+    @Test
+    fun `selected profile can explicitly disable active Auto Identity inheritance`() {
+        val active =
+            profile(
+                name = "Active",
+                enabled = true,
+                applications = emptyArray(),
+                buildIdentity = true,
+                identityRefresh = true,
+            )
+        val banking =
+            profile(
+                name = "Banking",
+                enabled = true,
+                applications = arrayOf("com.example.bank"),
+                buildIdentity = null,
+                identityRefresh = false,
+            )
+        install(active, banking, activeProfile = "Active")
+        Config.setPackagesForTesting(20_102, arrayOf("com.example.bank"))
+
+        assertFalse(PolicyState.isProfileAutoIdentityEnabled(20_102))
+    }
+
+    @Test
+    fun `global boot Identity Refresh never becomes profile Auto Identity`() {
+        install(
+            profile(
+                name = "Banking",
+                enabled = true,
+                applications = arrayOf("com.example.bank"),
+                buildIdentity = true,
+                identityRefresh = null,
+            ),
+            globalIdentityRefresh = true,
+        )
+        Config.setPackagesForTesting(20_103, arrayOf("com.example.bank"))
+
+        val decision = AutoIdentityPolicy.evaluate(globalCronEnabled = false)
+        assertFalse(decision.shouldRun)
+        assertFalse(decision.profileScoped)
+        assertFalse(PolicyState.isProfileAutoIdentityEnabled(20_103))
+    }
+
+    @Test
     fun `profile Auto Identity requires explicit refresh opt in and effective Build Identity`() {
         install(
             profile(
@@ -155,12 +227,14 @@ class AutoIdentityPolicyTest {
     private fun install(
         vararg profiles: JSONObject,
         globalBuildIdentity: Boolean = false,
+        globalIdentityRefresh: Boolean = false,
         activeProfile: String? = null,
     ) {
         PolicyState.installStateForTesting(
             state(
                 profiles = profiles.toList(),
                 globalBuildIdentity = globalBuildIdentity,
+                globalIdentityRefresh = globalIdentityRefresh,
                 activeProfile = activeProfile,
             ).toString(),
         )
@@ -192,6 +266,7 @@ class AutoIdentityPolicyTest {
     private fun state(
         profiles: List<JSONObject> = emptyList(),
         globalBuildIdentity: Boolean = false,
+        globalIdentityRefresh: Boolean = false,
         activeProfile: String? = null,
     ): JSONObject =
         JSONObject()
@@ -203,7 +278,7 @@ class AutoIdentityPolicyTest {
                     .put("attestationIdentity", false)
                     .put("telephonyIdentity", false)
                     .put("regionIdentity", false)
-                    .put("identityRefresh", false)
+                    .put("identityRefresh", globalIdentityRefresh)
                     .put("securityPatch", false),
             )
             .put(
