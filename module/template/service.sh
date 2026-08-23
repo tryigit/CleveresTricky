@@ -150,15 +150,30 @@ prepare_native_log() {
 }
 
 run_daemon_with_bounded_log() {
-  prepare_native_log || return 125
+  if ! prepare_native_log; then
+    log -t CleveresTricky "Native runtime log capture is unavailable; running daemon without file capture"
+    "$MODDIR/daemon"
+    return $?
+  fi
+
   runtime_pipe="$CONFIG_DIR/.native_runtime.pipe.$$"
   if [ -e "$runtime_pipe" ] || [ -L "$runtime_pipe" ]; then
-    return 125
+    log -t CleveresTricky "Native runtime log pipe is unavailable; running daemon without file capture"
+    "$MODDIR/daemon"
+    return $?
   fi
   umask 077
-  mkfifo "$runtime_pipe" 2>/dev/null || return 125
-  chmod 600 "$runtime_pipe" 2>/dev/null || { rm -f "$runtime_pipe"; return 125; }
-  chown 0:0 "$runtime_pipe" 2>/dev/null || { rm -f "$runtime_pipe"; return 125; }
+  if ! mkfifo "$runtime_pipe" 2>/dev/null; then
+    log -t CleveresTricky "Native runtime log pipe could not be created; running daemon without file capture"
+    "$MODDIR/daemon"
+    return $?
+  fi
+  if ! chmod 600 "$runtime_pipe" 2>/dev/null || ! chown 0:0 "$runtime_pipe" 2>/dev/null; then
+    rm -f "$runtime_pipe"
+    log -t CleveresTricky "Native runtime log pipe permissions failed; running daemon without file capture"
+    "$MODDIR/daemon"
+    return $?
+  fi
   chcon u:object_r:system_file:s0 "$runtime_pipe" 2>/dev/null
 
   (
@@ -235,11 +250,6 @@ while true; do
   started_at=$(date +%s)
   run_daemon_with_bounded_log
   exit_code=$?
-  if [ "$exit_code" -eq 125 ]; then
-    log -t CleveresTricky "Native runtime log capture is unavailable; running daemon without file capture"
-    "$MODDIR/daemon"
-    exit_code=$?
-  fi
   unset CLEVERES_TRICKY_BACKEND_AUTH
   stopped_at=$(date +%s)
   runtime=$((stopped_at - started_at))
