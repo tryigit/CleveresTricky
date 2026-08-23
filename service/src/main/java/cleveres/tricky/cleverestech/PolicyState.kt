@@ -184,6 +184,7 @@ object PolicyState {
         val packages: Array<String>,
         val selection: SelectedProfile,
         val features: FeatureSet,
+        val profileAutoIdentity: Boolean,
     )
 
     private data class CapturedPatch(
@@ -638,6 +639,16 @@ object PolicyState {
         return selected?.let { base.withOverrides(it.featureOverrides) } ?: base
     }
 
+    private fun profileAutoIdentityEnabled(profile: Profile?, current: Snapshot): Boolean {
+    val activeOverride = activeProfile(current)?.featureOverrides?.get(Feature.IDENTITY_REFRESH) ?: false
+    return profile?.featureOverrides?.get(Feature.IDENTITY_REFRESH) ?: activeOverride
+}
+
+private fun featuresForProfile(profile: Profile?, current: Snapshot): FeatureSet {
+    val base = activeProfile(current)?.let { current.features.withOverrides(it.featureOverrides) } ?: current.features
+    return profile?.let { base.withOverrides(it.featureOverrides) } ?: base
+}
+
     private fun resolveUid(uid: Int): UidResolution {
         val current = snapshot
         val packages = Config.getPackages(uid)
@@ -645,9 +656,9 @@ object PolicyState {
             if (cached.generation == current.generation && cached.packages.contentEquals(packages)) return cached
         }
         val selection = selectProfile(packages, current)
-        val base = activeProfile(current)?.let { current.features.withOverrides(it.featureOverrides) } ?: current.features
-        val features = selection.profile?.let { base.withOverrides(it.featureOverrides) } ?: base
-        val resolved = UidResolution(current.generation, packages.clone(), selection, features)
+        val features = featuresForProfile(selection.profile, current)
+        val profileAutoIdentity = profileAutoIdentityEnabled(selection.profile, current)
+        val resolved = UidResolution(current.generation, packages.clone(), selection, features, profileAutoIdentity)
         if (uidResolutionCache.size >= MAX_UID_RESOLUTIONS && !uidResolutionCache.containsKey(uid)) uidResolutionCache.clear()
         uidResolutionCache[uid] = resolved
         return resolved
@@ -658,6 +669,33 @@ object PolicyState {
     fun isFeatureEnabled(feature: Feature): Boolean = resolvedFeatures(emptyArray()).enabled(feature)
 
     fun isFeatureEnabled(feature: Feature, uid: Int): Boolean = resolveUid(uid).features.enabled(feature)
+
+    internal fun isTopLevelFeatureEnabled(feature: Feature): Boolean = snapshot.features.enabled(feature)
+
+internal fun isProfileAutoIdentityEnabled(uid: Int): Boolean {
+    if (!snapshot.explicit) return false
+    val resolved = resolveUid(uid)
+    return resolved.profileAutoIdentity && resolved.features.buildIdentity
+}
+
+internal fun hasProfileAutoIdentityWork(): Boolean {
+    val current = snapshot
+    if (!current.explicit) return false
+    val active = activeProfile(current)
+
+    fun hasWork(profile: Profile): Boolean {
+        val features = featuresForProfile(profile, current)
+        return profileAutoIdentityEnabled(profile, current) && features.buildIdentity
+    }
+
+    if (active != null && hasWork(active)) return true
+    return current.profiles.values.any { profile ->
+        profile.enabled &&
+            profile.applications.isNotEmpty() &&
+            (active == null || !profile.name.equals(active.name, ignoreCase = true)) &&
+            hasWork(profile)
+    }
+}
 
     private fun hasRuntimeScope(profile: Profile, current: Snapshot): Boolean =
         profile.enabled &&
@@ -683,6 +721,7 @@ object PolicyState {
     private fun mergeAppConfig(
         profile: Profile?,
         legacy: Config.AppSpoofConfig?,
+        useAutoIdentitySource: Boolean = false,
     ): Config.AppSpoofConfig? {
         if (profile == null) return legacy
         val privacy =
@@ -691,7 +730,7 @@ object PolicyState {
                 ?: Config.AppPrivacyMode.INHERIT
         val merged =
             Config.AppSpoofConfig(
-                profile.template ?: legacy?.template,
+                if (useAutoIdentitySource) null else profile.template ?: legacy?.template,
                 profile.keybox ?: legacy?.keyboxFilename,
                 privacy,
             )
@@ -705,7 +744,11 @@ object PolicyState {
     fun resolveAppConfig(
         uid: Int,
         legacy: Config.AppSpoofConfig?,
-    ): Config.AppSpoofConfig? = mergeAppConfig(resolveUid(uid).selection.profile, legacy)
+    ): Config.AppSpoofConfig? {
+        val resolved = resolveUid(uid)
+        val useAutoIdentitySource = resolved.profileAutoIdentity && resolved.features.buildIdentity
+        return mergeAppConfig(resolved.selection.profile, legacy, useAutoIdentitySource)
+    }
 
     fun profilePrivacyMode(uid: Int): Config.AppPrivacyMode? =
         resolveUid(uid).selection.profile?.privacy?.takeUnless { it == Config.AppPrivacyMode.INHERIT }
@@ -886,7 +929,8 @@ object PolicyState {
         val vendorPolicy = profile?.vendorPatch ?: patch.vendor
         val bootPolicy = profile?.bootPatch ?: patch.boot
         val legacyRule = readLegacyAppRule(packageName)
-        val appConfig = mergeAppConfig(profile, legacyRule)
+        val profileAutoIdentity = profileAutoIdentityEnabled(profile, current) && features.buildIdentity
+        val appConfig = mergeAppConfig(profile, legacyRule, profileAutoIdentity)
         val rkpPassthrough = profile?.rkpPassthrough ?: Config.isRkpPassthroughEnabled
         val drmPassthrough = profile?.drmPassthrough ?: Config.isDrmPassthroughEnabled
         val patchJson = JSONObject()
@@ -901,6 +945,7 @@ object PolicyState {
             .put("profileConflict", selected.conflict)
             .put("scope", if (selected.matchedRule != null || legacyRule != null) "targeted" else if (Config.isGlobalMode) "global" else "unmatched")
             .put("identityTemplate", appConfig?.template ?: JSONObject.NULL)
+            .put("identitySource", if (profileAutoIdentity) "auto_identity" else if (appConfig?.template != null) "template" else "global")
             .put("keyboxReference", appConfig?.keyboxFilename ?: JSONObject.NULL)
             .put("privacy", appConfig?.privacyMode?.configValue ?: Config.AppPrivacyMode.INHERIT.configValue)
             .put("buildIdentity", features.buildIdentity)
