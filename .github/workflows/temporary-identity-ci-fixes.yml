@@ -27,6 +27,9 @@ jobs:
 
           changed = False
 
+          def lines(*values: str) -> str:
+              return "\n".join(values) + "\n"
+
           def replace_once(path: str, old: str, new: str) -> None:
               global changed
               file = Path(path)
@@ -41,16 +44,18 @@ jobs:
 
           replace_once(
               'service/src/main/java/cleveres/tricky/cleverestech/PolicyState.kt',
-              '''        val thresholdMonths = 6L
-              val automatic = PatchPolicy(PatchMode.AUTOMATIC)
-              runCatching { Files.deleteIfExists(File(root, CronAutoIdentity.TOGGLE_FILE).toPath()) }
-          ''',
-              '''        val thresholdMonths = 6L
-              val automatic = PatchPolicy(PatchMode.AUTOMATIC)
-              val securityPatchRecommended =
-                  readPropertyDate("system")?.isBefore(currentDateSource().minusMonths(thresholdMonths)) == true
-              runCatching { Files.deleteIfExists(File(root, CronAutoIdentity.TOGGLE_FILE).toPath()) }
-          ''',
+              lines(
+                  '        val thresholdMonths = 6L',
+                  '        val automatic = PatchPolicy(PatchMode.AUTOMATIC)',
+                  '        runCatching { Files.deleteIfExists(File(root, CronAutoIdentity.TOGGLE_FILE).toPath()) }',
+              ),
+              lines(
+                  '        val thresholdMonths = 6L',
+                  '        val automatic = PatchPolicy(PatchMode.AUTOMATIC)',
+                  '        val securityPatchRecommended =',
+                  '            readPropertyDate("system")?.isBefore(currentDateSource().minusMonths(thresholdMonths)) == true',
+                  '        runCatching { Files.deleteIfExists(File(root, CronAutoIdentity.TOGGLE_FILE).toPath()) }',
+              ),
           )
           replace_once(
               'service/src/main/java/cleveres/tricky/cleverestech/PolicyState.kt',
@@ -60,50 +65,54 @@ jobs:
 
           replace_once(
               'service/src/test/java/cleveres/tricky/cleverestech/IdentityRuntimeApplierTest.kt',
-              '''        File(root, "spoof_build_vars").writeText(
-                  "FINGERPRINT=google/test/device:16/TEST/1:user/release-keys\\n",
-              )
-          ''',
-              '''        File(root, "spoof_build_vars").writeText(
-                  "FINGERPRINT=google/test/device:16/TEST/1:user/release-keys\\n",
-              )
-              Config.updateBuildVars(File(root, "spoof_build_vars")).getOrThrow()
-          ''',
+              lines(
+                  '        File(root, "spoof_build_vars").writeText(',
+                  '            "FINGERPRINT=google/test/device:16/TEST/1:user/release-keys\\n",',
+                  '        )',
+              ),
+              lines(
+                  '        File(root, "spoof_build_vars").writeText(',
+                  '            "FINGERPRINT=google/test/device:16/TEST/1:user/release-keys\\n",',
+                  '        )',
+                  '        Config.updateBuildVars(File(root, "spoof_build_vars")).getOrThrow()',
+              ),
           )
 
           replace_once(
               'service/src/androidTest/java/cleveres/tricky/cleverestech/WebUiFeatureMatrixInstrumentationTest.kt',
-              '''        val auto = request("POST", "/api/auto_identity")
-              assertEquals(200, auto.status)
-              val autoJson = JSONObject(auto.text)
-              assertEquals("Pixel API37", autoJson.getString("model"))
-              assertEquals("google/api37/api37:17/CT37/1234567:user/release-keys", autoJson.getString("fingerprint"))
-              assertTrue(File(root, "spoof_build_identity").isFile)
-              assertEquals("Pixel API37", readBuildVar("MODEL"))
-              assertEquals("google/api37/api37:17/CT37/1234567:user/release-keys", readBuildVar("FINGERPRINT"))
-          ''',
-              '''        val buildIdentityMarker = File(root, "spoof_build_identity")
-              val buildIdentityBefore =
-                  JSONObject(request("GET", "/api/policy_state").text)
-                      .getJSONObject("features")
-                      .getBoolean("buildIdentity")
-              assertFalse(buildIdentityBefore)
-              assertFalse(buildIdentityMarker.exists())
-
-              val auto = request("POST", "/api/auto_identity")
-              assertEquals(200, auto.status)
-              val autoJson = JSONObject(auto.text)
-              assertEquals("Pixel API37", autoJson.getString("model"))
-              assertEquals("google/api37/api37:17/CT37/1234567:user/release-keys", autoJson.getString("fingerprint"))
-              assertFalse("manual Auto Identity must not enable Build Identity", buildIdentityMarker.exists())
-              val buildIdentityAfter =
-                  JSONObject(request("GET", "/api/policy_state").text)
-                      .getJSONObject("features")
-                      .getBoolean("buildIdentity")
-              assertEquals(buildIdentityBefore, buildIdentityAfter)
-              assertEquals("Pixel API37", readBuildVar("MODEL"))
-              assertEquals("google/api37/api37:17/CT37/1234567:user/release-keys", readBuildVar("FINGERPRINT"))
-          ''',
+              lines(
+                  '        val auto = request("POST", "/api/auto_identity")',
+                  '        assertEquals(200, auto.status)',
+                  '        val autoJson = JSONObject(auto.text)',
+                  '        assertEquals("Pixel API37", autoJson.getString("model"))',
+                  '        assertEquals("google/api37/api37:17/CT37/1234567:user/release-keys", autoJson.getString("fingerprint"))',
+                  '        assertTrue(File(root, "spoof_build_identity").isFile)',
+                  '        assertEquals("Pixel API37", readBuildVar("MODEL"))',
+                  '        assertEquals("google/api37/api37:17/CT37/1234567:user/release-keys", readBuildVar("FINGERPRINT"))',
+              ),
+              lines(
+                  '        val buildIdentityMarker = File(root, "spoof_build_identity")',
+                  '        val buildIdentityBefore =',
+                  '            JSONObject(request("GET", "/api/policy_state").text)',
+                  '                .getJSONObject("features")',
+                  '                .getBoolean("buildIdentity")',
+                  '        assertFalse(buildIdentityBefore)',
+                  '        assertFalse(buildIdentityMarker.exists())',
+                  '',
+                  '        val auto = request("POST", "/api/auto_identity")',
+                  '        assertEquals(200, auto.status)',
+                  '        val autoJson = JSONObject(auto.text)',
+                  '        assertEquals("Pixel API37", autoJson.getString("model"))',
+                  '        assertEquals("google/api37/api37:17/CT37/1234567:user/release-keys", autoJson.getString("fingerprint"))',
+                  '        assertFalse("manual Auto Identity must not enable Build Identity", buildIdentityMarker.exists())',
+                  '        val buildIdentityAfter =',
+                  '            JSONObject(request("GET", "/api/policy_state").text)',
+                  '                .getJSONObject("features")',
+                  '                .getBoolean("buildIdentity")',
+                  '        assertEquals(buildIdentityBefore, buildIdentityAfter)',
+                  '        assertEquals("Pixel API37", readBuildVar("MODEL"))',
+                  '        assertEquals("google/api37/api37:17/CT37/1234567:user/release-keys", readBuildVar("FINGERPRINT"))',
+              ),
           )
 
           if not changed:
