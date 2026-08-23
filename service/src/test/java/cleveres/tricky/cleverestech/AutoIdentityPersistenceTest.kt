@@ -29,7 +29,7 @@ class AutoIdentityPersistenceTest {
         val vars = File(root, "spoof_build_vars")
         vars.writeText(
             """
-            ATTESTATION_ID_IMEI=351234567890123
+            ATTESTATION_ID_IMEI=356938035643809
             TEMPLATE=pixel8
             # BEGIN CLEVERESTRICKY BUILD IDENTITY
             FINGERPRINT=old/fingerprint
@@ -53,7 +53,7 @@ class AutoIdentityPersistenceTest {
         assertTrue(AutoIdentityPersistence.save(root, result).isSuccess)
 
         val content = vars.readText()
-        assertTrue(content.contains("ATTESTATION_ID_IMEI=351234567890123"))
+        assertTrue(content.contains("ATTESTATION_ID_IMEI=356938035643809"))
         assertTrue(content.contains("MODEL=Pixel 9"))
         assertTrue(content.contains("FINGERPRINT=${result.fingerprint}"))
         assertFalse(content.lineSequence().any { it.startsWith("TEMPLATE=") })
