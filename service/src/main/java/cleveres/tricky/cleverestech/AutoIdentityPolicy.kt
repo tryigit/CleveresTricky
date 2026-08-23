@@ -11,8 +11,13 @@ internal object AutoIdentityPolicy {
     )
 
     fun evaluate(globalCronEnabled: Boolean): Decision {
-        val globalLiveApply =
-            globalCronEnabled && PolicyState.isFeatureEnabled(PolicyState.Feature.BUILD_IDENTITY)
+        val globalBuildIdentity =
+            if (PolicyState.usesV2()) {
+                PolicyState.stateJson().optJSONObject("features")?.optBoolean("buildIdentity", false) == true
+            } else {
+                PolicyState.isFeatureEnabled(PolicyState.Feature.BUILD_IDENTITY)
+            }
+        val globalLiveApply = globalCronEnabled && globalBuildIdentity
         val profileScoped = hasProfileScopedRefreshWork()
         return Decision(
             shouldRun = globalLiveApply || profileScoped,
