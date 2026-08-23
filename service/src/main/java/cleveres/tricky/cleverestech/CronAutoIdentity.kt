@@ -12,9 +12,10 @@ import java.util.concurrent.TimeUnit
 /**
  * Optional daily Auto Identity refresh.
  *
- * The worker exists only while both the explicit cron marker and Build Identity are enabled.
- * Its cadence intentionally matches Auto Keybox Check: first run after one minute, then every
- * 1440 minutes. Turning either prerequisite off tears the worker down immediately.
+ * Global mode requires both the explicit cron marker and global Build Identity. Profiles can opt
+ * in independently through their identityRefresh override while Build Identity is effective for
+ * that profile. Profile-only work refreshes the shared identity data but never applies global
+ * resetprop changes, so apps outside that profile do not inherit device-wide Build properties.
  */
 internal object CronAutoIdentity {
     const val TOGGLE_FILE = "cron_auto_identity"
@@ -68,11 +69,9 @@ internal object CronAutoIdentity {
     internal fun refreshEnabled() {
         synchronized(lock) {
             val root = configDir ?: return
-            val shouldRun =
-                isRegularMarker(File(root, TOGGLE_FILE)) &&
-                    PolicyState.isFeatureEnabled(PolicyState.Feature.BUILD_IDENTITY)
+            val decision = currentDecision(root)
             val current = executor
-            if (!shouldRun) {
+            if (!decision.shouldRun) {
                 if (current != null) stopExecutorLocked()
                 return
             }
@@ -93,7 +92,16 @@ internal object CronAutoIdentity {
                 1440,
                 TimeUnit.MINUTES,
             )
-            Logger.i("Cron Auto Identity enabled; next refresh is scheduled")
+            Logger.i(
+                when {
+                    decision.globalLiveApply && decision.profileScoped ->
+                        "Cron Auto Identity enabled for global and profile scopes; next refresh is scheduled"
+                    decision.globalLiveApply ->
+                        "Cron Auto Identity enabled; next refresh is scheduled"
+                    else ->
+                        "Profile Auto Identity enabled; next refresh is scheduled"
+                },
+            )
         }
     }
 
@@ -119,22 +127,31 @@ internal object CronAutoIdentity {
         root: File,
         generation: Long,
     ) {
-        if (!ownsWork(root, generation) || !isEnabledNow(root)) {
+        if (!ownsWork(root, generation) || !currentDecision(root).shouldRun) {
             refreshEnabled()
             return
         }
         try {
             Logger.i("Cron Auto Identity: fetching a fresh identity")
             val resolved = AutoIdentityManager.fetchLatest()
-            if (!ownsWork(root, generation) || !isEnabledNow(root)) {
+            if (!ownsWork(root, generation) || !currentDecision(root).shouldRun) {
                 Logger.i("Cron Auto Identity: fetched identity discarded because the worker was disabled or replaced")
                 refreshEnabled()
                 return
             }
             AutoIdentityPersistence.save(root, resolved).getOrThrow()
-            if (!ownsWork(root, generation) || !isEnabledNow(root)) {
-                Logger.i("Cron Auto Identity: refresh saved but live apply skipped because the worker was disabled or replaced")
+            if (!ownsWork(root, generation)) {
+                Logger.i("Cron Auto Identity: refresh saved but follow-up apply skipped because the worker was replaced")
+                return
+            }
+            val decision = currentDecision(root)
+            if (!decision.shouldRun) {
+                Logger.i("Cron Auto Identity: refresh saved but follow-up apply skipped because Auto Identity was disabled")
                 refreshEnabled()
+                return
+            }
+            if (!decision.globalLiveApply) {
+                Logger.i("Cron Auto Identity: profile-scoped identity refreshed; global Build properties were left unchanged")
                 return
             }
             val applied = IdentityRuntimeApplier.apply(root)
@@ -153,9 +170,8 @@ internal object CronAutoIdentity {
         }
     }
 
-    private fun isEnabledNow(root: File): Boolean =
-        isRegularMarker(File(root, TOGGLE_FILE)) &&
-            PolicyState.isFeatureEnabled(PolicyState.Feature.BUILD_IDENTITY)
+    private fun currentDecision(root: File): AutoIdentityPolicy.Decision =
+        AutoIdentityPolicy.evaluate(isRegularMarker(File(root, TOGGLE_FILE)))
 
     private fun isRegularMarker(file: File): Boolean =
         Files.isRegularFile(file.toPath(), LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(file.toPath())
