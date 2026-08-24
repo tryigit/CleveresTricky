@@ -13,15 +13,23 @@ import org.mockito.Mockito.mockStatic
 import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
+import java.io.File
+import java.nio.file.Files
 import java.security.KeyStore
 import javax.crypto.spec.SecretKeySpec
+import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
+import java.io.IOException
 
 class DeviceKeyManagerTest {
     private lateinit var keyStoreMock: KeyStore
     private lateinit var keyStoreStaticMock: MockedStatic<KeyStore>
+    private lateinit var tempDir: File
 
     @Before
     fun setUp() {
+        tempDir = Files.createTempDirectory("devicekeymanager").toFile()
+        SecureFile.resetDefaultForTesting()
         // Reset DeviceKeyManager state via reflection
         val instance = DeviceKeyManager
         val fallbackField = instance.javaClass.getDeclaredField("fallbackKey")
@@ -50,6 +58,7 @@ class DeviceKeyManagerTest {
     @After
     fun tearDown() {
         keyStoreStaticMock.close()
+        tempDir.deleteRecursively()
     }
 
     @Test
@@ -78,5 +87,71 @@ class DeviceKeyManagerTest {
         val decrypted = DeviceKeyManager.decrypt(requireNotNull(encrypted))
         assertNotNull(decrypted)
         assertArrayEquals(data, decrypted)
+    }
+
+    @Test
+    fun testLoadFallbackKey_CreatesNewKeyWhenFileDoesNotExist() {
+        val keyFile = File(tempDir, "device_secret.key")
+        assertFalse(keyFile.exists())
+
+        // Force DeviceKeyManager to use fallback by throwing exception from KeyStore.getInstance
+        keyStoreStaticMock.`when`<KeyStore> { KeyStore.getInstance("AndroidKeyStore") }.thenThrow(RuntimeException("Mock KeyStore Failure"))
+
+        DeviceKeyManager.initialize(tempDir)
+
+        assertTrue(keyFile.exists())
+        assertTrue(keyFile.length() == 32L) // FALLBACK_KEY_BYTES
+
+        val data = "test fallback data".toByteArray()
+        val encrypted = DeviceKeyManager.encrypt(data)
+        assertNotNull(encrypted)
+
+        val decrypted = DeviceKeyManager.decrypt(requireNotNull(encrypted))
+        assertNotNull(decrypted)
+        assertArrayEquals(data, decrypted)
+    }
+
+    @Test
+    fun testLoadFallbackKey_UsesExistingKey() {
+        val keyFile = File(tempDir, "device_secret.key")
+
+        // Setup existing key file
+        val bytes = ByteArray(32) { (it and 0xFF).toByte() }
+        SecureFile.writeBytes(keyFile, bytes)
+
+        keyStoreStaticMock.`when`<KeyStore> { KeyStore.getInstance("AndroidKeyStore") }.thenThrow(RuntimeException("Mock KeyStore Failure"))
+
+        DeviceKeyManager.initialize(tempDir)
+
+        val data = "test fallback data".toByteArray()
+        val encrypted = DeviceKeyManager.encrypt(data)
+        assertNotNull(encrypted)
+
+        val decrypted = DeviceKeyManager.decrypt(requireNotNull(encrypted))
+        assertNotNull(decrypted)
+        assertArrayEquals(data, decrypted)
+    }
+
+    @Test(expected = IOException::class)
+    fun testLoadFallbackKey_FailsOnSymbolicLink() {
+        val keyFile = File(tempDir, "device_secret.key")
+        val target = File(tempDir, "target.key")
+        target.createNewFile()
+        Files.createSymbolicLink(keyFile.toPath(), target.toPath())
+
+        keyStoreStaticMock.`when`<KeyStore> { KeyStore.getInstance("AndroidKeyStore") }.thenThrow(RuntimeException("Mock KeyStore Failure"))
+
+        DeviceKeyManager.initialize(tempDir)
+    }
+
+    @Test(expected = IOException::class)
+    fun testLoadFallbackKey_FailsOnInvalidSize() {
+        val keyFile = File(tempDir, "device_secret.key")
+        val invalidBytes = ByteArray(16) { (it and 0xFF).toByte() }
+        SecureFile.writeBytes(keyFile, invalidBytes)
+
+        keyStoreStaticMock.`when`<KeyStore> { KeyStore.getInstance("AndroidKeyStore") }.thenThrow(RuntimeException("Mock KeyStore Failure"))
+
+        DeviceKeyManager.initialize(tempDir)
     }
 }
