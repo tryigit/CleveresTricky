@@ -6,6 +6,7 @@ import cleveres.tricky.cleverestech.keystore.CertHack
 import java.io.IOException
 import java.nio.file.Files
 import java.security.cert.X509Certificate
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Test
@@ -143,6 +144,37 @@ class KeyboxVerifierTest {
             assertEquals("Too many keybox XML files", results.single().details)
         } finally {
             configDir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `resetCacheRootForTesting resets cacheRoot to default and clears cache`() {
+        val testDir = Files.createTempDirectory("keybox-verifier-cache-root").toFile()
+        try {
+            // Set to non-default state
+            KeyboxVerifier.setCacheRootForTesting(testDir)
+
+            // Use reflection to set private cache state to simulate a populated cache
+            val cachedEtagField = KeyboxVerifier::class.java.getDeclaredField("cachedEtag")
+            cachedEtagField.isAccessible = true
+            cachedEtagField.set(KeyboxVerifier, "test-etag")
+
+            // Reset
+            KeyboxVerifier.resetCacheRootForTesting()
+
+            // Verify cacheRoot is reset
+            val cacheRootField = KeyboxVerifier::class.java.getDeclaredField("cacheRoot")
+            cacheRootField.isAccessible = true
+            val cacheRoot = cacheRootField.get(KeyboxVerifier) as File
+            assertEquals(File("/data/adb/cleverestricky"), cacheRoot)
+
+            // Verify cache is cleared
+            val cachedEtag = cachedEtagField.get(KeyboxVerifier)
+            assertEquals(null, cachedEtag)
+        } finally {
+            // Clean up
+            KeyboxVerifier.resetCacheRootForTesting()
+            testDir.deleteRecursively()
         }
     }
 }
