@@ -145,4 +145,58 @@ class KeyboxVerifierTest {
             configDir.deleteRecursively()
         }
     }
+
+
+    @Test
+    fun countCrlEntries_validJson_returnsCount() {
+        val json = """
+            {
+                "entries": {
+                    "123": "REVOKED",
+                    "456": "REVOKED"
+                }
+            }
+        """.trimIndent()
+
+        val reader = java.io.StringReader(json)
+        val count = KeyboxVerifier.countCrlEntries(reader)
+        assertEquals(2, count)
+    }
+
+    @Test
+    fun countCrlEntries_emptyEntries_returnsZero() {
+        val json = """
+            {
+                "entries": {}
+            }
+        """.trimIndent()
+
+        val reader = java.io.StringReader(json)
+        val count = KeyboxVerifier.countCrlEntries(reader)
+        assertEquals(0, count)
+    }
+
+    @Test
+    fun countCrlEntries_noEntriesKey_returnsMinusOne() {
+        val json = """
+            {
+                "other": {
+                    "123": "REVOKED"
+                }
+            }
+        """.trimIndent()
+
+        val reader = java.io.StringReader(json)
+        val count = KeyboxVerifier.countCrlEntries(reader)
+        assertEquals(-1, count)
+    }
+
+    @Test
+    fun countCrlEntries_invalidJson_returnsMinusOne() {
+        val json = "invalid json"
+
+        val reader = java.io.StringReader(json)
+        val count = KeyboxVerifier.countCrlEntries(reader)
+        assertEquals(-1, count)
+    }
 }

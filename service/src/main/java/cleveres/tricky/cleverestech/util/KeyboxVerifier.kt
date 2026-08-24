@@ -337,6 +337,38 @@ object KeyboxVerifier {
     }
 
     @JvmStatic
+    fun countCrlEntries(reader: java.io.Reader): Int {
+        var count = 0
+        val jsonReader = android.util.JsonReader(reader)
+        var entriesFound = false
+        try {
+            jsonReader.beginObject()
+            while (jsonReader.hasNext()) {
+                val name = jsonReader.nextName()
+                if (name == "entries") {
+                    entriesFound = true
+                    jsonReader.beginObject()
+                    while (jsonReader.hasNext()) {
+                        jsonReader.nextName() // Skip key
+                        jsonReader.skipValue() // Skip value
+                        count++
+                    }
+                    jsonReader.endObject()
+                } else {
+                    jsonReader.skipValue()
+                }
+            }
+            jsonReader.endObject()
+        } catch (e: Exception) {
+            cleveres.tricky.cleverestech.Logger.e("Failed to count CRL JSON entries", e)
+            return -1
+        } finally {
+            try { jsonReader.close() } catch (e: Exception) {}
+        }
+        return if (entriesFound) count else -1
+    }
+
+    @JvmStatic
     fun countRevokedKeys(): Int = fetchCrl()?.normalizedEntryCount ?: -1
 
     internal fun invalidateBackendGeneration() {
