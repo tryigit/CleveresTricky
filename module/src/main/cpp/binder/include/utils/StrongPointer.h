@@ -188,8 +188,6 @@ namespace android {
 // ---------------------------------------------------------------------------
 // No user serviceable parts below here.
 
-// TODO: Ideally we should find a way to increment the reference count before running the
-// constructor, so that generating an sp<> to this in the constructor is no longer dangerous.
     template <typename T>
     template <typename... Args>
     sp<T> sp<T>::make(Args&&... args) {
