@@ -512,7 +512,8 @@ object KeyboxVerifier {
             Result(file, file.name, Status.ERROR, "Error: ${error.javaClass.simpleName}", storageId)
         }
 
-    private fun isSafeKeyboxFile(file: File): Boolean =
+    @androidx.annotation.VisibleForTesting
+    internal fun isSafeKeyboxFile(file: File): Boolean =
         Files.isRegularFile(file.toPath(), LinkOption.NOFOLLOW_LINKS) &&
             file.length() in 1..MAX_KEYBOX_XML_BYTES
 

@@ -145,4 +145,64 @@ class KeyboxVerifierTest {
             configDir.deleteRecursively()
         }
     }
+
+    @Test
+    fun `isSafeKeyboxFile returns true for valid file`() {
+        val file = Files.createTempFile("keybox", ".xml").toFile()
+        try {
+            file.writeText("valid content")
+            assertEquals(true, KeyboxVerifier.isSafeKeyboxFile(file))
+        } finally {
+            file.delete()
+        }
+    }
+
+    @Test
+    fun `isSafeKeyboxFile returns false for empty file`() {
+        val file = Files.createTempFile("keybox", ".xml").toFile()
+        try {
+            assertEquals(false, KeyboxVerifier.isSafeKeyboxFile(file))
+        } finally {
+            file.delete()
+        }
+    }
+
+    @Test
+    fun `isSafeKeyboxFile returns false for oversized file`() {
+        val file = Files.createTempFile("keybox", ".xml").toFile()
+        try {
+            val randomAccessFile = java.io.RandomAccessFile(file, "rw")
+            randomAccessFile.setLength(10L * 1024 * 1024 + 1)
+            randomAccessFile.close()
+            assertEquals(false, KeyboxVerifier.isSafeKeyboxFile(file))
+        } finally {
+            file.delete()
+        }
+    }
+
+    @Test
+    fun `isSafeKeyboxFile returns false for directory`() {
+        val dir = Files.createTempDirectory("keybox_dir").toFile()
+        try {
+            assertEquals(false, KeyboxVerifier.isSafeKeyboxFile(dir))
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `isSafeKeyboxFile returns false for symlink`() {
+        val target = Files.createTempFile("target", ".xml").toFile()
+        val link = java.nio.file.Paths.get(target.parent, "symlink.xml")
+        try {
+            target.writeText("valid content")
+            Files.createSymbolicLink(link, target.toPath())
+            assertEquals(false, KeyboxVerifier.isSafeKeyboxFile(link.toFile()))
+        } catch (e: UnsupportedOperationException) {
+            // Symlinks not supported on this OS/filesystem
+        } finally {
+            Files.deleteIfExists(link)
+            target.delete()
+        }
+    }
 }
