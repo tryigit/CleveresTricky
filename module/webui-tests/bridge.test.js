@@ -4,12 +4,13 @@ const path = require('path');
 const vm = require('vm');
 
 const webroot = 'module/template/webroot';
-const uxSource = fs.readFileSync(path.join(webroot, 'ux.js'), 'utf8');
+const uxLoaderSource = fs.readFileSync(path.join(webroot, 'ux.js'), 'utf8');
 const uxCoreSource = fs.readFileSync(path.join(webroot, 'ux-core.js'), 'utf8');
+const uxSource = `${uxLoaderSource}\n${uxCoreSource}`;
 const policySource = fs.readFileSync(path.join(webroot, 'policy.js'), 'utf8');
 const indexSource = fs.readFileSync(path.join(webroot, 'index.html'), 'utf8');
 
-new vm.Script(uxSource, { filename: 'ux.js' });
+new vm.Script(uxLoaderSource, { filename: 'ux.js' });
 new vm.Script(uxCoreSource, { filename: 'ux-core.js' });
 new vm.Script(policySource, { filename: 'policy.js' });
 
@@ -19,10 +20,9 @@ assert.deepStrictEqual(runtimeJs, ['bridge.js', 'policy.js', 'ux-core.js', 'ux.j
 assert.deepStrictEqual(runtimeCss, [], 'WebUI must not grow standalone runtime CSS files without an intentional architecture redesign');
 assert.ok(!fs.existsSync(path.join(webroot, 'ux-base.js')), 'ux-base.js was consolidated into ux.js and must not return');
 assert.ok(!uxSource.includes('ux-patch.js'), 'The retired patch overlay must not be loaded');
-assert.ok(!uxSource.includes('ux-base.js'), 'ux.js must be the real UX loader/entrypoint, not the retired base loader');
-assert.match(uxSource, /ux-core\.js\?revision=/, 'ux.js must load the split UX core');
+assert.ok(!uxSource.includes('ux-base.js'), 'ux.js/ux-core.js must not load the retired base layer');
+assert.match(uxLoaderSource, /ux-core\.js\?revision=/, 'ux.js must load the split UX core');
 assert.ok(!/setInterval\s*\(/.test(uxSource), 'UX presentation must not add permanent polling');
-assert.ok(!/setInterval\s*\(/.test(uxCoreSource), 'UX core must not add permanent polling');
 assert.ok(!/setInterval\s*\(/.test(policySource), 'Policy UI must not add permanent polling');
 
 assert.match(uxSource, /\['en', 'English'\]/);
