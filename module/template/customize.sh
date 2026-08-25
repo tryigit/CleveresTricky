@@ -16,6 +16,7 @@ esac
 printf '%s  %s\n' "$expected_core_hash" "$core" | sha256sum -c - >/dev/null 2>&1 \
   || abort "! Failed to verify installer core"
 # The core installer owns all existing validation and installation behavior.
+# shellcheck disable=SC1091
 . "$core" || abort "! Installer core failed"
 
 # ux.js is a small bootstrap on this branch; keep the original UX implementation
