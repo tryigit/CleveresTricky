@@ -4,7 +4,9 @@ const vm = require('vm');
 
 const bridgeSource = fs.readFileSync('module/template/webroot/bridge.js', 'utf8');
 const indexSource = fs.readFileSync('module/template/webroot/index.html', 'utf8');
-const uxSource = fs.readFileSync('module/template/webroot/ux.js', 'utf8');
+const uxLoaderSource = fs.readFileSync('module/template/webroot/ux.js', 'utf8');
+const uxCoreSource = fs.readFileSync('module/template/webroot/ux-core.js', 'utf8');
+const uxSource = `${uxLoaderSource}\n${uxCoreSource}`;
 
 function encodeBody(value) {
     return Buffer.from(value, 'utf8').toString('base64url');
@@ -255,7 +257,7 @@ async function main() {
     assert.strictEqual(communityLink.rel, 'noopener noreferrer');
     assert.strictEqual(communityLink.textContent, 'Join Telegram Community');
 
-    assert.ok(!uxSource.includes('ux-base.js'), 'ux.js must contain the UX implementation directly');
+    assert.ok(!uxSource.includes('ux-base.js'), 'ux.js/ux-core.js must not load the retired base layer');
     assert.ok(!uxSource.includes('ux-patch.js'), 'The retired patch layer must not be loaded');
     assert.match(uxSource, /\['en', 'English'\]/);
     assert.match(uxSource, /\['tr', 'Türkçe'\]/);
