@@ -1,15 +1,14 @@
 #!/system/bin/sh
 # Keep the verified installer implementation intact while allowing the package
 # to carry auxiliary WebUI assets that are loaded after the core extraction.
-# shellcheck disable=SC1091
-core="$TMPDIR/cleveres_customize_core.sh"
-core_hash="$TMPDIR/cleveres_customize_core.sh.sha256"
+# shellcheck source=customize-core.sh
+core="$TMPDIR/customize-core.sh"
 unzip -o "$ZIPFILE" 'customize-core.sh' 'customize-core.sh.sha256' -d "$TMPDIR" >&2 \
   || abort "! Unable to extract installer core"
-if [ -L "$core" ] || [ ! -f "$core" ] || [ -L "$core_hash" ] || [ ! -f "$core_hash" ]; then
+if [ -L "$core" ] || [ ! -f "$core" ] || [ -L "$core.sha256" ] || [ ! -f "$core.sha256" ]; then
   abort "! Installer core is unsafe"
 fi
-expected_core_hash=$(tr -d '[:space:]' < "$core_hash")
+expected_core_hash=$(tr -d '[:space:]' < "$core.sha256")
 case "$expected_core_hash" in
   ''|*[!0-9A-Fa-f]*) abort "! Invalid installer core checksum" ;;
 esac
