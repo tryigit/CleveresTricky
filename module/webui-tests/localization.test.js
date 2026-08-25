@@ -17,6 +17,10 @@ function loadI18n(locale) {
         readyState: 'loading',
         documentElement: {},
         body: null,
+        head: { appendChild() {} },
+        createElement(tagName) {
+            return { tagName: String(tagName).toUpperCase(), defer: false, src: '' };
+        },
         addEventListener() {}
     };
     const context = {
