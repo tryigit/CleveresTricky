@@ -92,12 +92,14 @@ private fun verifyRuntimePayloadContract(
         listOf(
             RuntimePayloadFloor("service.apk", 300_000),
             RuntimePayloadFloor("service.sh", 4_000),
-            RuntimePayloadFloor("customize.sh", 10_000),
+            RuntimePayloadFloor("customize.sh", 1_000),
+            RuntimePayloadFloor("customize-core.sh", 10_000),
             RuntimePayloadFloor("daemon", 32),
             RuntimePayloadFloor("webroot/index.html", 100_000),
             RuntimePayloadFloor("webroot/bridge.js", 15_000),
             RuntimePayloadFloor("webroot/policy.js", 40_000),
-            RuntimePayloadFloor("webroot/ux.js", 250_000),
+            RuntimePayloadFloor("webroot/ux.js", 4_000),
+            RuntimePayloadFloor("webroot/ux-core.js", 250_000),
         )
     val nativeFloors =
         mapOf(
@@ -150,7 +152,9 @@ private fun verifyRuntimePayloadContract(
         }
     }
 
-    val installer = File(moduleRoot, "customize.sh").readText()
+    val installer =
+        File(moduleRoot, "customize.sh").readText() + "\n" +
+            File(moduleRoot, "customize-core.sh").readText()
     listOf("inject", "webui_bridge", "cleverestrickyd", "cleverestricky_backend").forEach { executable ->
         if (!installer.contains("/$executable\"") && !installer.contains("/$executable'")) {
             throw GradleException("Runtime contract installer no longer extracts $executable")
@@ -165,8 +169,7 @@ private fun verifyRuntimePayloadContract(
                 File(moduleRoot, "webroot/bridge.js").length() +
                 File(moduleRoot, "webroot/policy.js").length() +
                 File(moduleRoot, "webroot/ux.js").length() +
-                File(moduleRoot, "webroot/ux-core.js").length() +
-                File(moduleRoot, "webroot/zip-import.js").length()
+                File(moduleRoot, "webroot/ux-core.js").length()
         if (runtimeBytes < 2_500_000L) {
             throw GradleException(
                 "Runtime contract aggregate payload for $abi is unexpectedly small: $runtimeBytes bytes",
@@ -289,7 +292,7 @@ afterEvaluate {
                     )
                 }
                 from(layout.projectDirectory.file("template")) {
-                    include("customize.sh", "post-fs-data.sh", "service.sh", "daemon", "webroot/index.html")
+                    include("customize.sh", "customize-core.sh", "post-fs-data.sh", "service.sh", "daemon", "webroot/index.html")
                     val tokens =
                         mapOf(
                             "DEBUG" to if (buildTypeLowered == "debug") "true" else "false",
