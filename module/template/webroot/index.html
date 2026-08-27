@@ -128,8 +128,12 @@
         #info { overflow-x: hidden; }
         #info .responsive-table { table-layout: fixed; }
         #info .responsive-table td { overflow-wrap: anywhere; }
+        .log-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) repeat(3, minmax(124px, auto)); gap: 10px; align-items: stretch; margin-bottom: 10px; }
+        .log-toolbar > * { min-width: 0; }
+        .log-toolbar select, .log-toolbar button { width: 100%; min-width: 0; margin: 0; }
+        .log-toolbar button { white-space: normal; overflow-wrap: anywhere; line-height: 1.25; }
         #fileEditor { height: min(500px, 60dvh) !important; resize: vertical; }
-        #logViewer { height: min(400px, 55dvh) !important; resize: vertical; }
+        #logViewer { display: block; width: 100%; height: min(400px, 55dvh) !important; min-height: 220px; box-sizing: border-box; resize: vertical; overflow: auto; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: clamp(0.75rem, 0.72rem + 0.2vw, 0.86rem); line-height: 1.4; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--input-bg); color: var(--fg); white-space: pre-wrap; overflow-wrap: anywhere; }
         @media screen and (max-width: 600px) {
 .grid-2 { grid-template-columns: 1fr; }
 .content { padding: 12px max(12px, env(safe-area-inset-right)) max(100px, calc(64px + env(safe-area-inset-bottom))) max(12px, env(safe-area-inset-left)); }
@@ -172,6 +176,7 @@ input[type="text"], input[type="tel"], input[type="password"], input[type="searc
 .tabs { position: fixed; top: auto; bottom: 0; left: 0; right: 0; z-index: 1000; border-top: 1px solid var(--border); border-bottom: 0; padding-bottom: env(safe-area-inset-bottom); background: var(--panel); }
 .content { padding-bottom: calc(104px + env(safe-area-inset-bottom)); }
 .tab { min-height: 54px; padding: 12px 16px; }
+.log-toolbar { grid-template-columns: 1fr; }
         }
         @media screen and (max-width: 380px) {
 .resource-summary { grid-template-columns: 1fr; }
@@ -438,18 +443,18 @@ input[type="text"], input[type="tel"], input[type="password"], input[type="searc
     <div id="log" class="content" role="tabpanel" aria-labelledby="tab_log">
         <div class="panel">
 <h3>Module Logs</h3>
-<p style="font-size:0.9em; color:#888;">View recent logs from the module. You can also download them for sharing.</p>
-<div style="display: flex; gap: 10px; margin-bottom: 10px; align-items: center; flex-wrap: wrap;">
-    <select id="logType" style="flex: 1; min-width: 150px; margin: 0; min-height: 44px; padding: 12px 14px; background: var(--input-bg); border: 1px solid var(--border); color: #fff; border-radius: 6px;" aria-label="Select Log Type">
+<p id="logHint" class="info-section-copy">View recent logs from the module. You can also download them for sharing.</p>
+<div class="log-toolbar" role="group" aria-label="Log actions">
+    <select id="logType" aria-label="Select Log Type">
         <option value="cleverestricky">CleveresTricky Logs</option>
         <option value="errors">Errors Only</option>
         <option value="system">Full System (Recent)</option>
     </select>
-    <button onclick="runWithState(this, 'Refreshing...', fetchLogs)" class="primary">Refresh Logs</button>
-    <button onclick="downloadLogs()">Download Logs</button>
-    <button onclick="copyToClipboard(document.getElementById('logViewer').value, 'Logs Copied', this)">Copy Logs</button>
+    <button type="button" onclick="runWithState(this, 'Refreshing...', fetchLogs)" class="primary">Refresh Logs</button>
+    <button type="button" onclick="downloadLogs()">Download Logs</button>
+    <button type="button" onclick="copyToClipboard(document.getElementById('logViewer').value, 'Logs Copied', this)">Copy Logs</button>
 </div>
-<textarea id="logViewer" style="height:400px; width:100%; font-family:monospace; font-size:0.8em; line-height:1.4; padding: 10px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--text);" readonly aria-label="Module Logs"></textarea>
+<textarea id="logViewer" class="log-viewer" wrap="soft" spellcheck="false" readonly aria-label="Module Logs" aria-describedby="logHint"></textarea>
         </div>
     </div>
 
@@ -502,6 +507,7 @@ if (event.reason && event.reason.message && event.reason.message.includes('fetch
         let currentFile = '';
         let originalContent = '';
         let resourceUsageController = null;
+        let logsRequestController = null;
 
         function togglePassword(btn) {
 const input = btn.previousElementSibling;
@@ -859,6 +865,10 @@ activeTab.classList.add('active');
 activeTab.setAttribute('aria-selected', 'true');
 activeTab.setAttribute('tabindex', '0');
 document.getElementById(id).classList.add('active');
+if (id !== 'log' && logsRequestController) {
+    logsRequestController.abort();
+    logsRequestController = null;
+}
 if (id === 'apps') loadAppConfig();
 if (id === 'keys') loadKeyInfo();
 if (id === 'info') loadResourceUsage();
@@ -884,19 +894,28 @@ if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
         }
 
         async function fetchLogs() {
+const previousController = logsRequestController;
+if (previousController) previousController.abort();
+const controller = new AbortController();
+logsRequestController = controller;
 try {
     const logTypeEl = document.getElementById('logType');
     const logType = logTypeEl ? logTypeEl.value : 'cleverestricky';
-    const res = await fetchAuth('/api/logs?type=' + encodeURIComponent(logType));
+    const res = await fetchAuth('/api/logs?type=' + encodeURIComponent(logType), { signal: controller.signal });
     if (!res.ok) throw new Error(await res.text());
     const data = await res.text();
+    if (controller.signal.aborted) return;
     const viewer = document.getElementById('logViewer');
+    if (!viewer) return;
     viewer.value = data;
     viewer.scrollTop = viewer.scrollHeight;
     notify('Logs refreshed', 'normal');
 } catch (e) {
+    if (controller.signal.aborted || (e && e.name === 'AbortError')) return;
     console.error(e);
     notify('Failed to load logs: ' + e.message, 'error');
+} finally {
+    if (logsRequestController === controller) logsRequestController = null;
 }
         }
 
