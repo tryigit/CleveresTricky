@@ -1,5 +1,12 @@
 # Changelog
 
+## V2.6.5
+
+- **Safer and more responsive WebUI:** all WebUI surfaces were audited beyond Logs for mobile layout, accessibility, localized Telegram community messaging, stale async responses, duplicate mutations, and secure DOM rendering.
+- **Bounded runtime work:** retry loops, file observers, auto-identity/keybox workers, IPC workers, Binder interception queues, archive readers, and native process supervision remain policy-gated, cancellable, timeout-bounded, and capped against CPU/RAM runaway.
+- **Stronger release integrity:** hostile input, malformed response, lifecycle, concurrency, resource-bound, native, Rust, and Android regression checks cover the broad audit fixes and release artifact path.
+- **Automated release metadata:** the published release body is sourced from this version’s changelog section, while the post-build workflow verifies the release ZIP digest and synchronizes `update.json` with the artifact version, URL, versionCode, and changelog URL.
+
 ## V2.6.4
 
 - **Safer backups and restores:** invalid policies, templates and keyboxes are rejected before activation, and failed restores no longer leave partial configuration behind.
