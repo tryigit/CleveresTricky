@@ -101,9 +101,11 @@ object CryptoUtils {
         if (initialByte in 0x80..0x97) {
             arraySize = initialByte - 0x80
         } else if (initialByte == 0x98) {
+            if (offset >= cborBytes.size) return elements
             arraySize = cborBytes[offset].toInt() and 0xFF
             offset++
         } else if (initialByte == 0x99) {
+            if (offset + 1 >= cborBytes.size) return elements
             arraySize = ((cborBytes[offset].toInt() and 0xFF) shl 8) or (cborBytes[offset + 1].toInt() and 0xFF)
             offset += 2
         } else {
@@ -142,18 +144,22 @@ object CryptoUtils {
             when (additionalInfo) {
                 in 0..23 -> additionalInfo.toLong()
                 24 -> {
+                    if (offset >= cborBytes.size) return cborBytes.size
                     offset++
                     (cborBytes[offset - 1].toInt() and 0xFF).toLong()
                 }
                 25 -> {
+                    if (offset + 1 >= cborBytes.size) return cborBytes.size
                     offset += 2
                     (((cborBytes[offset - 2].toInt() and 0xFF) shl 8) or (cborBytes[offset - 1].toInt() and 0xFF)).toLong()
                 }
                 26 -> {
+                    if (offset + 3 >= cborBytes.size) return cborBytes.size
                     offset += 4
                     0L
                 } // Simplified
                 27 -> {
+                    if (offset + 7 >= cborBytes.size) return cborBytes.size
                     offset += 8
                     0L
                 } // Simplified
