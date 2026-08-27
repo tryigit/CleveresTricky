@@ -24,7 +24,7 @@ assert.ok(!policy.includes("panel.id = 'ct_identity_controls'"), 'Identity page 
 assert.ok(policy.includes("const stale = document.getElementById('ct_identity_controls')"), 'legacy Identity-page toggle panel must be removed');
 assert.ok(!policy.includes('id="ct_patch_master"'), 'Security Patch must not expose a second master toggle on the detail page');
 assert.ok(!policy.includes("document.getElementById('ct_patch_master')"), 'Security Patch renderer must not bind a retired detail-page master toggle');
-assert.ok(policy.includes('securityPatch: Boolean(features.securityPatch)'), 'Security Patch persistence must preserve the explicit global switch');
+assert.ok(policy.includes('securityPatch: source.securityPatch === true'), 'Security Patch persistence must preserve the explicit global switch with strict boolean normalization');
 assert.ok(!policy.includes('securityPatch: Boolean(features.securityPatch) || FEATURE_KEYS.some'), 'other Identity child switches must not silently force Security Patch back on');
 assert.ok(policy.includes("FEATURE_KEYS.some(([key]) => Boolean(policyState.features[key]))"), 'Identity master state must follow only its own identity features');
 assert.ok(policy.includes("['securityPatch', 'Security Patch'"), 'per-profile Security Patch compatibility must remain intact');

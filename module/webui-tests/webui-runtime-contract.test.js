@@ -75,7 +75,10 @@ function loadPolicyRuntime(fetchImpl = async () => makeResponse()) {
         getPolicyStateForTest() { return policyState; },
         refreshSavedBuildIdentityBestEffort,
         installIdentityManagerState,
-        installAutoIdentityOverride
+        installAutoIdentityOverride,
+        normalizePolicyState,
+        normalizeProfile,
+        normalizeSecurityPatch
     });`;
     const instrumented = policySource.replace('onReady(initialize);', hookExport);
     assert.notStrictEqual(instrumented, policySource, 'policy.js test hook injection point is missing');
@@ -179,6 +182,63 @@ async function testSaveUsesCanonicalReadbackInsteadOfStaleUiState() {
         'a pending compatibility sync must warn without reverting to stale UI state or reporting the committed mutation as failed');
 }
 
+async function testPolicyNormalizationRejectsMalformedAndOversizedState() {
+    const { hooks } = loadPolicyRuntime();
+    const malformed = {
+        features: {
+            buildIdentity: 'true',
+            attestationIdentity: 1,
+            telephonyIdentity: true,
+            regionIdentity: {},
+            identityRefresh: false,
+            securityPatch: 'false'
+        },
+        securityPatch: {
+            automaticThresholdMonths: 999,
+            system: { mode: 'manual', value: '2026-08-27-extra' },
+            vendor: { mode: 'not-allowed', value: '<script>' },
+            boot: null
+        },
+        profiles: Array.from({ length: 300 }, (_, index) => ({
+            name: `<profile-${index}>`,
+            applications: Array.from({ length: 100 }, (_, appIndex) => `com.example.${index}.${appIndex}`),
+            template: 't'.repeat(300),
+            keybox: 'k'.repeat(300),
+            privacy: 'unknown',
+            features: { buildIdentity: 'true', securityPatch: 1 },
+            securityPatch: { system: { mode: 'manual', value: '2026-08-27-extra' } },
+            rkpPassthrough: 'yes',
+            drmPassthrough: true
+        })),
+        activeProfile: 'a'.repeat(400)
+    };
+
+    const normalized = hooks.normalizePolicyState(malformed);
+    assert.strictEqual(normalized.features.buildIdentity, false, 'string feature values must not become truthy');
+    assert.strictEqual(normalized.features.attestationIdentity, false, 'numeric feature values must not become truthy');
+    assert.strictEqual(normalized.features.telephonyIdentity, true, 'actual boolean feature values must be retained');
+    assert.strictEqual(normalized.features.regionIdentity, false, 'object feature values must not become truthy');
+    assert.strictEqual(normalized.features.identityRefresh, false, 'false feature values must remain false');
+    assert.strictEqual(normalized.features.securityPatch, false, 'string false feature values must remain false');
+    assert.strictEqual(normalized.securityPatch.automaticThresholdMonths, 24, 'security patch threshold must be capped');
+    assert.strictEqual(normalized.securityPatch.system.mode, 'manual', 'valid patch modes must be retained');
+    assert.strictEqual(normalized.securityPatch.system.value, '2026-08-27', 'manual dates must be bounded');
+    assert.strictEqual(normalized.securityPatch.vendor.mode, 'device_default', 'unknown patch modes must fall back safely');
+    assert.strictEqual(normalized.profiles.length, 256, 'policy profiles must be capped');
+    assert.strictEqual(normalized.profiles[0].applications.length, 64, 'profile assignments must be capped');
+    assert.strictEqual(normalized.profiles[0].template, null, 'oversized profile template references must be rejected');
+    assert.strictEqual(normalized.profiles[0].keybox, null, 'oversized profile keybox references must be rejected');
+    assert.strictEqual(normalized.profiles[0].privacy, 'inherit', 'unknown privacy modes must fall back safely');
+    assert.strictEqual(normalized.profiles[0].securityPatch.system.mode, 'manual', 'profile patch modes must be retained');
+    assert.strictEqual(normalized.profiles[0].securityPatch.system.value, '2026-08-27', 'profile patch dates must be bounded');
+    assert.strictEqual(normalized.profiles[0].rkpPassthrough, null, 'malformed passthrough flags must be removed');
+    assert.strictEqual(normalized.profiles[0].drmPassthrough, true, 'valid passthrough flags must be retained');
+    assert.strictEqual(normalized.activeProfile.length, 256, 'active profile reference must be bounded');
+
+    const saved = hooks.normalizePolicyState({ features: { securityPatch: 'true' } });
+    assert.strictEqual(saved.features.securityPatch, false, 'malformed feature values must not become truthy after readback normalization');
+}
+
 async function testApplyIdentitySurvivesPresentationRefreshFailure() {
     const runtime = loadPolicyRuntime(async () => makeResponse({
         ok: false,
@@ -260,6 +320,7 @@ async function testAutoIdentityBackendFailureStillFails() {
     await testEscapingPrimitive();
     await testCanonicalSaveWarningIsNotReportedAsFailure();
     await testSaveUsesCanonicalReadbackInsteadOfStaleUiState();
+    await testPolicyNormalizationRejectsMalformedAndOversizedState();
     await testApplyIdentitySurvivesPresentationRefreshFailure();
     await testAutoIdentitySurvivesPresentationRefreshFailure();
     await testAutoIdentityBackendFailureStillFails();

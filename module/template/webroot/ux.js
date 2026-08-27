@@ -39,7 +39,8 @@
             'Language': 'Dil', 'Debug Logging': 'Hata Ayıklama Günlükleri', 'Effective State': 'Etkin Durum',
             'Resolved Configuration': 'Çözümlenen Yapılandırma', 'Inspect': 'İncele', 'Select an app.': 'Bir uygulama seçin.',
             'Identity is currently disabled. You can enable it from Dashboard.': 'Kimlik şu anda devre dışı. Gösterge Paneli üzerinden etkinleştirebilirsiniz.',
-            'Open Telegram Community': 'Telegram Topluluğunu Aç', 'Join Telegram Community': 'Telegram Topluluğuna Katıl',
+            'CleveresTech Telegram community': 'CleveresTech Telegram topluluğu', 'CleveresTech Community': 'CleveresTech Topluluğu', 'Join our Telegram group for mutual help, testing, discussion, and development of CleveresTricky.': 'Yardımlaşma, test, tartışma ve CleveresTricky geliştirme için Telegram grubumuza katılın.',
+            'Upload Keybox or CBOX file': 'Keybox veya CBOX dosyası yükle', 'Open Telegram Community': 'Telegram Topluluğunu Aç', 'Join Telegram Community': 'Telegram Topluluğuna Katıl',
             'Save profile': 'Profili kaydet', 'Clone': 'Klonla', 'Delete': 'Sil', 'Profile saved': 'Profil kaydedildi',
             'System / preinstalled packages are included in this search.': 'Sistem / ön yüklü paketler de bu aramaya dahildir.',
             'Built-in translations are local and require no network connection. English is the default unless you choose another language here.': 'Yerleşik çeviriler tamamen yereldir ve ağ bağlantısı gerektirmez. Buradan başka bir dil seçmediğiniz sürece varsayılan dil İngilizcedir.',
@@ -77,7 +78,8 @@
             'Download Logs': '下载日志', 'Copy Logs': '复制日志', 'Language': '语言', 'Debug Logging': '调试日志',
             'Effective State': '有效状态', 'Resolved Configuration': '解析后的配置', 'Inspect': '检查', 'Select an app.': '请选择应用。',
             'Identity is currently disabled. You can enable it from Dashboard.': '身份功能当前已关闭。可在仪表盘中启用。',
-            'Open Telegram Community': '打开 Telegram 社区', 'Join Telegram Community': '加入 Telegram 社区',
+            'CleveresTech Telegram community': 'CleveresTech Telegram 社区', 'CleveresTech Community': 'CleveresTech 社区', 'Join our Telegram group for mutual help, testing, discussion, and development of CleveresTricky.': '加入我们的 Telegram 群组，互相帮助、测试、讨论并参与 CleveresTricky 的开发。',
+            'Upload Keybox or CBOX file': '上传 Keybox 或 CBOX 文件', 'Open Telegram Community': '打开 Telegram 社区', 'Join Telegram Community': '加入 Telegram 社区',
             'Save profile': '保存配置', 'Clone': '克隆', 'Delete': '删除',
             'System / preinstalled packages are included in this search.': '此搜索也包含系统 / 预装应用。',
             'Built-in translations are local and require no network connection. English is the default unless you choose another language here.': '内置翻译完全在本地运行，不需要网络。除非在这里选择其他语言，否则默认使用英语。',
@@ -118,7 +120,8 @@
             'Effective State': 'Estado efectivo', 'Resolved Configuration': 'Configuración resuelta', 'Inspect': 'Inspeccionar',
             'Select an app.': 'Selecciona una app.',
             'Identity is currently disabled. You can enable it from Dashboard.': 'La identidad está desactivada. Puedes activarla desde el Panel.',
-            'Open Telegram Community': 'Abrir comunidad de Telegram', 'Join Telegram Community': 'Unirse a la comunidad de Telegram',
+            'CleveresTech Telegram community': 'comunidad de Telegram de CleveresTech', 'CleveresTech Community': 'Comunidad de CleveresTech', 'Join our Telegram group for mutual help, testing, discussion, and development of CleveresTricky.': 'Únete a nuestro grupo de Telegram para obtener ayuda mutua, realizar pruebas, debatir y desarrollar CleveresTricky.',
+            'Upload Keybox or CBOX file': 'Subir archivo Keybox o CBOX', 'Open Telegram Community': 'Abrir comunidad de Telegram', 'Join Telegram Community': 'Unirse a la comunidad de Telegram',
             'Save profile': 'Guardar perfil', 'Clone': 'Clonar', 'Delete': 'Eliminar',
             'System / preinstalled packages are included in this search.': 'La búsqueda incluye paquetes del sistema y preinstalados.',
             'Built-in translations are local and require no network connection. English is the default unless you choose another language here.': 'Las traducciones integradas son locales y no requieren conexión. El inglés es el idioma predeterminado hasta que elijas otro aquí.',
@@ -158,7 +161,8 @@
             'Language': 'Sprache', 'Debug Logging': 'Debug-Protokollierung', 'Effective State': 'Effektiver Zustand',
             'Resolved Configuration': 'Aufgelöste Konfiguration', 'Inspect': 'Prüfen', 'Select an app.': 'App auswählen.',
             'Identity is currently disabled. You can enable it from Dashboard.': 'Identität ist derzeit deaktiviert. Sie kann in der Übersicht aktiviert werden.',
-            'Open Telegram Community': 'Telegram-Community öffnen', 'Join Telegram Community': 'Telegram-Community beitreten',
+            'CleveresTech Telegram community': 'CleveresTech-Telegram-Community', 'CleveresTech Community': 'CleveresTech-Community', 'Join our Telegram group for mutual help, testing, discussion, and development of CleveresTricky.': 'Tritt unserer Telegram-Gruppe bei, um gegenseitige Hilfe, Tests, Diskussionen und die Entwicklung von CleveresTricky zu unterstützen.',
+            'Upload Keybox or CBOX file': 'Keybox- oder CBOX-Datei hochladen', 'Open Telegram Community': 'Telegram-Community öffnen', 'Join Telegram Community': 'Telegram-Community beitreten',
             'Save profile': 'Profil speichern', 'Clone': 'Klonen', 'Delete': 'Löschen',
             'System / preinstalled packages are included in this search.': 'System- und vorinstallierte Pakete sind in dieser Suche enthalten.',
             'Built-in translations are local and require no network connection. English is the default unless you choose another language here.': 'Die integrierten Übersetzungen funktionieren lokal und benötigen kein Netzwerk. Englisch bleibt Standard, bis hier eine andere Sprache gewählt wird.',
@@ -197,7 +201,8 @@
             'Language': 'Язык', 'Debug Logging': 'Отладочное логирование', 'Effective State': 'Эффективное состояние',
             'Resolved Configuration': 'Итоговая конфигурация', 'Inspect': 'Проверить', 'Select an app.': 'Выберите приложение.',
             'Identity is currently disabled. You can enable it from Dashboard.': 'Идентичность отключена. Её можно включить на Панели.',
-            'Open Telegram Community': 'Открыть Telegram-сообщество', 'Join Telegram Community': 'Вступить в Telegram-сообщество',
+            'CleveresTech Telegram community': 'Telegram-сообщество CleveresTech', 'CleveresTech Community': 'Сообщество CleveresTech', 'Join our Telegram group for mutual help, testing, discussion, and development of CleveresTricky.': 'Присоединяйтесь к нашей группе в Telegram для взаимопомощи, тестирования, обсуждения и развития CleveresTricky.',
+            'Upload Keybox or CBOX file': 'Загрузить файл Keybox или CBOX', 'Open Telegram Community': 'Открыть Telegram-сообщество', 'Join Telegram Community': 'Вступить в Telegram-сообщество',
             'Save profile': 'Сохранить профиль', 'Clone': 'Клонировать', 'Delete': 'Удалить',
             'System / preinstalled packages are included in this search.': 'Поиск включает системные и предустановленные пакеты.',
             'Built-in translations are local and require no network connection. English is the default unless you choose another language here.': 'Встроенные переводы работают локально и не требуют сети. Английский используется по умолчанию, пока здесь не выбран другой язык.',
@@ -237,7 +242,8 @@
             'Language': 'Bahasa', 'Debug Logging': 'Log Debug', 'Effective State': 'Status Efektif',
             'Resolved Configuration': 'Konfigurasi Terselesaikan', 'Inspect': 'Periksa', 'Select an app.': 'Pilih aplikasi.',
             'Identity is currently disabled. You can enable it from Dashboard.': 'Identitas saat ini dinonaktifkan. Anda dapat mengaktifkannya dari Dasbor.',
-            'Open Telegram Community': 'Buka Komunitas Telegram', 'Join Telegram Community': 'Gabung Komunitas Telegram',
+            'CleveresTech Telegram community': 'komunitas Telegram CleveresTech', 'CleveresTech Community': 'Komunitas CleveresTech', 'Join our Telegram group for mutual help, testing, discussion, and development of CleveresTricky.': 'Bergabunglah dengan grup Telegram kami untuk saling membantu, menguji, berdiskusi, dan mengembangkan CleveresTricky.',
+            'Upload Keybox or CBOX file': 'Unggah file Keybox atau CBOX', 'Open Telegram Community': 'Buka Komunitas Telegram', 'Join Telegram Community': 'Gabung Komunitas Telegram',
             'Save profile': 'Simpan profil', 'Clone': 'Klon', 'Delete': 'Hapus', 'Profile saved': 'Profil disimpan',
             'System / preinstalled packages are included in this search.': 'Paket sistem / prainstal juga disertakan dalam pencarian ini.',
             'Built-in translations are local and require no network connection. English is the default unless you choose another language here.': 'Terjemahan bawaan tersedia secara lokal dan tidak memerlukan jaringan. Bahasa Inggris adalah default sampai Anda memilih bahasa lain di sini.',
@@ -277,7 +283,8 @@
             'Language': 'भाषा', 'Debug Logging': 'डीबग लॉगिंग', 'Effective State': 'प्रभावी स्थिति',
             'Resolved Configuration': 'निर्धारित कॉन्फ़िगरेशन', 'Inspect': 'जांचें', 'Select an app.': 'एक ऐप चुनें।',
             'Identity is currently disabled. You can enable it from Dashboard.': 'पहचान अभी बंद है। आप इसे डैशबोर्ड से चालू कर सकते हैं।',
-            'Open Telegram Community': 'Telegram समुदाय खोलें', 'Join Telegram Community': 'Telegram समुदाय से जुड़ें',
+            'CleveresTech Telegram community': 'CleveresTech Telegram समुदाय', 'CleveresTech Community': 'CleveresTech समुदाय', 'Join our Telegram group for mutual help, testing, discussion, and development of CleveresTricky.': 'आपसी सहायता, परीक्षण, चर्चा और CleveresTricky के विकास के लिए हमारे Telegram समूह से जुड़ें।',
+            'Upload Keybox or CBOX file': 'Keybox या CBOX फ़ाइल अपलोड करें', 'Open Telegram Community': 'Telegram समुदाय खोलें', 'Join Telegram Community': 'Telegram समुदाय से जुड़ें',
             'Save profile': 'प्रोफाइल सहेजें', 'Clone': 'क्लोन', 'Delete': 'हटाएं', 'Profile saved': 'प्रोफाइल सहेजा गया',
             'System / preinstalled packages are included in this search.': 'इस खोज में सिस्टम / पहले से इंस्टॉल पैकेज भी शामिल हैं।',
             'Built-in translations are local and require no network connection. English is the default unless you choose another language here.': 'अंतर्निहित अनुवाद स्थानीय हैं और नेटवर्क की आवश्यकता नहीं है। जब तक आप यहां दूसरी भाषा नहीं चुनते, अंग्रेज़ी डिफ़ॉल्ट रहती है।',
@@ -317,7 +324,8 @@
             'Language': 'اللغة', 'Debug Logging': 'سجل التصحيح', 'Effective State': 'الحالة الفعلية',
             'Resolved Configuration': 'الإعدادات المحسوبة', 'Inspect': 'فحص', 'Select an app.': 'اختر تطبيقا.',
             'Identity is currently disabled. You can enable it from Dashboard.': 'الهوية معطلة حاليا. يمكنك تفعيلها من لوحة التحكم.',
-            'Open Telegram Community': 'فتح مجتمع Telegram', 'Join Telegram Community': 'الانضمام إلى مجتمع Telegram',
+            'CleveresTech Telegram community': 'مجتمع CleveresTech على Telegram', 'CleveresTech Community': 'مجتمع CleveresTech', 'Join our Telegram group for mutual help, testing, discussion, and development of CleveresTricky.': 'انضم إلى مجموعة Telegram الخاصة بنا للمساعدة المتبادلة والاختبار والنقاش وتطوير CleveresTricky.',
+            'Upload Keybox or CBOX file': 'تحميل ملف Keybox أو CBOX', 'Open Telegram Community': 'فتح مجتمع Telegram', 'Join Telegram Community': 'الانضمام إلى مجتمع Telegram',
             'Save profile': 'حفظ الملف الشخصي', 'Clone': 'نسخ', 'Delete': 'حذف', 'Profile saved': 'تم حفظ الملف الشخصي',
             'System / preinstalled packages are included in this search.': 'تتضمن هذه عملية البحث أيضا حزم النظام والحزم المثبتة مسبقا.',
             'Built-in translations are local and require no network connection. English is the default unless you choose another language here.': 'الترجمات المدمجة محلية ولا تحتاج إلى اتصال بالشبكة. تبقى الإنجليزية هي الافتراضية ما لم تختر لغة أخرى هنا.',
@@ -1445,6 +1453,7 @@
     const originalText = new WeakMap();
     const originalAttrs = new WeakMap();
     let compatibilityConfig = null;
+    let compatibilityConfigController = null;
     let translationObserver = null;
 
     function readLocale() {
@@ -1595,7 +1604,7 @@
             #ct_keyboxhub_hint { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:12px; margin-top:12px; padding:10px 12px; border:1px solid var(--ct-soft-border); border-radius:8px; background:rgba(255,255,255,.025); }
             #ct_keyboxhub_hint strong { display:block; color:var(--fg); font-size:.86em; font-weight:600; margin-bottom:2px; }
             #ct_keyboxhub_hint p { margin:0; color:#888; font-size:.78em; line-height:1.4; }
-            #ct_keyboxhub_hint .ct-keyboxhub-action { display:inline-flex; align-items:center; justify-content:center; min-height:36px; padding:7px 11px; border:1px solid var(--border); border-radius:6px; color:var(--fg); text-decoration:none; font-size:.78em; font-weight:500; white-space:nowrap; background:rgba(255,255,255,.035); }
+            #ct_keyboxhub_hint .ct-keyboxhub-action { display:inline-flex; align-items:center; justify-content:center; min-height:44px; padding:7px 11px; border:1px solid var(--border); border-radius:6px; color:var(--fg); text-decoration:none; font-size:.78em; font-weight:500; white-space:nowrap; background:rgba(255,255,255,.035); }
             #ct_keyboxhub_hint .ct-keyboxhub-action:hover { background:rgba(255,255,255,.07); }
             html[dir="rtl"] body { direction: rtl; }
             html[dir="rtl"] input, html[dir="rtl"] select, html[dir="rtl"] textarea, html[dir="rtl"] pre, html[dir="rtl"] code, html[dir="rtl"] .mono { direction: ltr; text-align: left; }
@@ -1854,6 +1863,11 @@
         if (language && language.parentElement !== dashboard) dashboard.appendChild(language);
         if (card) {
             if (card.parentElement !== dashboard || card.nextElementSibling) dashboard.appendChild(card);
+            card.setAttribute('aria-label', tr('CleveresTech Telegram community'));
+            const title = card.querySelector('strong');
+            if (title) title.textContent = tr('CleveresTech Community');
+            const copy = card.querySelector('p');
+            if (copy) copy.textContent = tr('Join our Telegram group for mutual help, testing, discussion, and development of CleveresTricky.');
             const link = card.querySelector('a');
             if (link) {
                 link.href = 'https://t.me/cleverestech';
@@ -1904,10 +1918,22 @@
     }
 
     async function requestConfig() {
-        const response = await bridge.fetch('/api/config');
-        if (!response.ok) throw new Error(await response.text());
-        compatibilityConfig = await response.json();
-        return compatibilityConfig;
+        if (compatibilityConfigController) compatibilityConfigController.abort();
+        const controller = new AbortController();
+        compatibilityConfigController = controller;
+        try {
+            const response = await bridge.fetch('/api/config', { signal: controller.signal });
+            if (!response.ok) throw new Error(await response.text());
+            const data = await response.json();
+            if (controller.signal.aborted) return compatibilityConfig;
+            compatibilityConfig = data;
+            return compatibilityConfig;
+        } catch (error) {
+            if (controller.signal.aborted || (error && error.name === 'AbortError')) return compatibilityConfig;
+            throw error;
+        } finally {
+            if (compatibilityConfigController === controller) compatibilityConfigController = null;
+        }
     }
 
     function syncCompatibilityToggles(data) {
@@ -2156,6 +2182,8 @@
     const MAX_COMPRESSED_FILE_BYTES = MAX_CBOX_BYTES + 64 * 1024;
     const MAX_NAME_BYTES = 4096;
     const MAX_CENTRAL_DIRECTORY_BYTES = 64 * 1024 * 1024;
+    const INSTALL_RETRY_MS = 50;
+    const MAX_INSTALL_ATTEMPTS = 100;
     const STORAGE_KEY = 'cleverestricky.language.v1';
     const SUPPORTED_LOCALES = new Set(['en', 'tr', 'zh-CN', 'es', 'de', 'ru', 'id', 'hi', 'ar']);
 
@@ -2553,6 +2581,8 @@
     let ui = null;
     let originalLoadFileContent = null;
     let originalResetDropZone = null;
+    let installAttempts = 0;
+    let installRetryTimer = null;
 
     function clearPending() {
         pendingZip = null;
@@ -2697,7 +2727,7 @@
         summary.id = 'ct_zip_summary';
         summary.style.cssText = 'font-size:0.85em;color:#aaa;margin-bottom:10px;overflow-wrap:anywhere;';
         const row = document.createElement('label');
-        row.style.cssText = 'display:flex;gap:10px;align-items:flex-start;line-height:1.45;cursor:pointer;margin-bottom:10px;';
+        row.style.cssText = 'display:flex;gap:10px;align-items:flex-start;min-height:44px;line-height:1.45;cursor:pointer;margin-bottom:10px;';
         const confirm = document.createElement('input');
         confirm.type = 'checkbox';
         confirm.id = 'ct_zip_confirm';
@@ -2722,14 +2752,24 @@
         return { panel, summary, confirm, confirmLabel, button };
     }
 
+    function scheduleInstallRetry() {
+        if (installRetryTimer !== null || installAttempts >= MAX_INSTALL_ATTEMPTS) return;
+        installAttempts += 1;
+        installRetryTimer = global.setTimeout(() => {
+            installRetryTimer = null;
+            install();
+        }, INSTALL_RETRY_MS);
+    }
+
     function install() {
         if (ui || typeof document === 'undefined') return;
         const picker = document.getElementById('kbFilePicker');
         const dropZone = document.getElementById('dropZone');
         if (!picker || !dropZone || typeof global.loadFileContent !== 'function') {
-            global.setTimeout(install, 50);
+            scheduleInstallRetry();
             return;
         }
+        installAttempts = 0;
         originalLoadFileContent = global.loadFileContent;
         originalResetDropZone = typeof global.resetDropZone === 'function' ? global.resetDropZone : null;
         picker.accept = '.xml,.cbox,.zip';
@@ -2786,6 +2826,8 @@
     if (typeof document === 'undefined') return;
 
     const PAGE_SIZE = 5;
+    const INSTALL_RETRY_MS = 50;
+    const MAX_INSTALL_ATTEMPTS = 100;
     const COPY = {
         en: {
             selected: 'selected', deleteSelected: 'Delete selected', previous: 'Previous', next: 'Next', page: 'Page {page} / {pages}',
@@ -2879,6 +2921,13 @@
     let verificationItems = [];
     let verificationPage = 1;
     let verificationQuery = '';
+    let inventoryController = null;
+    let verificationController = null;
+    const deletingIds = new Set();
+    let bulkDeleteBusy = false;
+    let keyboxMutationQueue = Promise.resolve();
+    let installAttempts = 0;
+    let installRetryTimer = null;
 
     function locale() {
         try {
@@ -2973,7 +3022,7 @@
         if (count) count.textContent = selected.size + ' ' + t('selected');
         if (deleteButton) {
             deleteButton.textContent = t('deleteSelected');
-            deleteButton.disabled = selected.size === 0;
+            deleteButton.disabled = bulkDeleteBusy || selected.size === 0;
         }
         if (selectFilteredButton) {
             selectFilteredButton.textContent = allVisibleSelected ? t('clearFiltered') : t('selectFiltered');
@@ -3067,58 +3116,107 @@
         updateControls(pages);
     }
 
-    async function refreshInventory() {
-        if (typeof global.fetchAuth !== 'function') return;
+    async function refreshInventory(options = {}) {
+        if (typeof global.fetchAuth !== 'function' || (options.signal && options.signal.aborted)) return;
+        const previousController = inventoryController;
+        if (previousController) previousController.abort();
+        const controller = new AbortController();
+        inventoryController = controller;
+        const externalSignal = options.signal;
+        const abortFromExternal = () => controller.abort();
+        if (externalSignal) externalSignal.addEventListener('abort', abortFromExternal, { once: true });
+        const requestOptions = Object.assign({}, options, { signal: controller.signal });
         loading = true;
         render();
         try {
-            const response = await global.fetchAuth('/api/keybox_inventory');
+            const response = await global.fetchAuth('/api/keybox_inventory', requestOptions);
             if (!response.ok) throw new Error(await response.text());
             const data = await response.json();
-            inventory = Array.isArray(data) ? data : [];
+            if (controller.signal.aborted) return;
+            inventory = Array.isArray(data)
+                ? data.slice(0, 4096).map(item => ({
+                    id: String(item?.id ?? '').slice(0, 128),
+                    filename: String(item?.filename ?? '').slice(0, 256),
+                    scope: item?.scope === 'root' ? 'root' : 'managed',
+                    certificate_serial: String(item?.certificate_serial ?? '').slice(0, 256)
+                })).filter(item => item.id && item.filename)
+                : [];
             const ids = new Set(inventory.map(item => item.id));
             selected = new Set(Array.from(selected).filter(id => ids.has(id)));
         } catch (error) {
+            if (controller.signal.aborted || (error && error.name === 'AbortError')) return;
             if (typeof global.notify === 'function') global.notify('Error: ' + error.message, 'error');
         } finally {
+            if (externalSignal) externalSignal.removeEventListener('abort', abortFromExternal);
+            if (inventoryController !== controller) return;
+            inventoryController = null;
+            if (controller.signal.aborted) return;
             loading = false;
             render();
             statusLabel();
         }
     }
 
+    function enqueueKeyboxMutation(task) {
+        const operation = keyboxMutationQueue.catch(() => {}).then(task);
+        keyboxMutationQueue = operation.catch(() => {});
+        return operation;
+    }
+
     async function deleteOne(item) {
-        if (typeof global.confirm === 'function' && !global.confirm(t('deleteConfirm'))) return;
-        const body = new URLSearchParams();
-        body.set('filename', item.filename);
-        body.set('scope', item.scope);
-        const response = await global.fetchAuth('/api/delete_keybox', { method: 'POST', body });
-        if (!response.ok) {
-            if (typeof global.notify === 'function') global.notify('Error: ' + await response.text(), 'error');
-            return;
-        }
-        selected.delete(item.id);
-        await reloadAll();
+        if (!item || !item.id || deletingIds.has(item.id)) return;
+        deletingIds.add(item.id);
+        return enqueueKeyboxMutation(async () => {
+            try {
+                if (typeof global.confirm === 'function' && !global.confirm(t('deleteConfirm'))) return;
+                const body = new URLSearchParams();
+                body.set('filename', item.filename);
+                body.set('scope', item.scope);
+                const response = await global.fetchAuth('/api/delete_keybox', { method: 'POST', body });
+                if (!response.ok) {
+                    if (typeof global.notify === 'function') global.notify('Error: ' + await response.text(), 'error');
+                    return;
+                }
+                selected.delete(item.id);
+                await reloadAll();
+            } catch (error) {
+                if (typeof global.notify === 'function') global.notify('Error: ' + (error.message || error), 'error');
+            } finally {
+                deletingIds.delete(item.id);
+                render();
+            }
+        });
     }
 
     async function bulkDelete() {
-        const items = inventory.filter(item => selected.has(item.id));
-        if (!items.length) return;
-        if (typeof global.confirm === 'function' && !global.confirm(t('bulkConfirm', { count: items.length }))) return;
-        const body = new URLSearchParams();
-        body.set('items', JSON.stringify(items.map(item => ({ filename: item.filename, scope: item.scope }))));
-        const response = await global.fetchAuth('/api/delete_keyboxes', { method: 'POST', body });
-        let payload = null;
-        try { payload = await response.clone().json(); } catch (_) {}
-        if (!response.ok && !payload) {
-            if (typeof global.notify === 'function') global.notify('Error: ' + await response.text(), 'error');
-            return;
-        }
-        if (typeof global.notify === 'function') {
-            global.notify(t('bulkDone', { count: payload?.deleted ?? items.length }), payload?.failed ? 'error' : 'normal');
-        }
-        selected.clear();
-        await reloadAll();
+        if (bulkDeleteBusy) return;
+        bulkDeleteBusy = true;
+        return enqueueKeyboxMutation(async () => {
+            try {
+                const items = inventory.filter(item => selected.has(item.id));
+                if (!items.length) return;
+                if (typeof global.confirm === 'function' && !global.confirm(t('bulkConfirm', { count: items.length }))) return;
+                const body = new URLSearchParams();
+                body.set('items', JSON.stringify(items.map(item => ({ filename: item.filename, scope: item.scope }))));
+                const response = await global.fetchAuth('/api/delete_keyboxes', { method: 'POST', body });
+                let payload = null;
+                try { payload = await response.clone().json(); } catch (_) {}
+                if (!response.ok && !payload) {
+                    if (typeof global.notify === 'function') global.notify('Error: ' + await response.text(), 'error');
+                    return;
+                }
+                if (typeof global.notify === 'function') {
+                    global.notify(t('bulkDone', { count: payload?.deleted ?? items.length }), payload?.failed ? 'error' : 'normal');
+                }
+                selected.clear();
+                await reloadAll();
+            } catch (error) {
+                if (typeof global.notify === 'function') global.notify('Error: ' + (error.message || error), 'error');
+            } finally {
+                bulkDeleteBusy = false;
+                render();
+            }
+        });
     }
 
     async function reloadAll() {
@@ -3258,34 +3356,69 @@
     }
 
     async function verify() {
+        if (verificationController) verificationController.abort();
+        const controller = new AbortController();
+        verificationController = controller;
         const result = document.getElementById('verifyResult');
         ensureVerificationControls();
         if (result) result.textContent = t('verifying');
-        const response = await global.fetchAuth('/api/verify_keyboxes', { method: 'POST' });
-        if (!response.ok) throw new Error(await response.text());
-        const data = await response.json();
-        verificationItems = Array.isArray(data) ? data : [];
-        verificationPage = 1;
-        verificationQuery = '';
-        const input = document.getElementById('ct_verify_filter');
-        if (input) input.value = '';
-        renderVerification();
+        try {
+            const response = await global.fetchAuth('/api/verify_keyboxes', { method: 'POST', signal: controller.signal });
+            if (!response.ok) throw new Error(await response.text());
+            const data = await response.json();
+            if (controller.signal.aborted) return;
+            verificationItems = Array.isArray(data)
+                ? data.slice(0, 4096).map(item => ({
+                    filename: String(item?.filename ?? '').slice(0, 256),
+                    status: String(item?.status ?? 'UNKNOWN').slice(0, 128),
+                    certificate_serial: String(item?.certificate_serial ?? '').slice(0, 256),
+                    details: String(item?.details ?? '').slice(0, 2048)
+                })).filter(item => item.filename)
+                : [];
+            verificationPage = 1;
+            verificationQuery = '';
+            const input = document.getElementById('ct_verify_filter');
+            if (input) input.value = '';
+            renderVerification();
+        } catch (error) {
+            if (controller.signal.aborted || (error && error.name === 'AbortError')) return;
+            throw error;
+        } finally {
+            if (verificationController === controller) verificationController = null;
+        }
+    }
+
+    function cancelVerification() {
+        if (verificationController) verificationController.abort();
+    }
+
+    function scheduleInstallRetry() {
+        if (installRetryTimer !== null || installAttempts >= MAX_INSTALL_ATTEMPTS) return;
+        installAttempts += 1;
+        installRetryTimer = global.setTimeout(() => {
+            installRetryTimer = null;
+            install();
+        }, INSTALL_RETRY_MS);
     }
 
     function install() {
-        if (installed || !document.getElementById('storedKeyboxesList') || typeof global.loadKeyboxes !== 'function') {
-            global.setTimeout(install, 50);
+        if (installed) return;
+        if (!document.getElementById('storedKeyboxesList') || typeof global.loadKeyboxes !== 'function') {
+            scheduleInstallRetry();
             return;
         }
+        installAttempts = 0;
         installed = true;
         originalLoad = global.loadKeyboxes;
         global.renderKeyboxes = render;
-        global.loadKeyboxes = async function () {
+        global.loadKeyboxes = async function (options = {}) {
             const value = await originalLoad.apply(this, arguments);
-            await refreshInventory();
+            if (options.signal && options.signal.aborted) return value;
+            await refreshInventory(options);
             return value;
         };
         global.verifyKeyboxes = verify;
+        global.cancelKeyboxVerification = cancelVerification;
         const filter = document.getElementById('keyboxFilter');
         if (filter) filter.addEventListener('input', () => { page = 1; render(); });
         ensureControls();

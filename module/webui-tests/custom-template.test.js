@@ -5,7 +5,7 @@ const web = fs.readFileSync('service/src/main/java/cleveres/tricky/cleverestech/
 assert(policy.includes('id="ct_custom_template_details"'), 'custom template editor must be collapsible');
 assert(policy.includes("bridge.fetch('/api/file?filename=templates.json')"), 'builder must preserve complete template records');
 assert(policy.includes("body.set('filename','templates.json')"), 'builder must save validated template catalog');
-assert(policy.includes("fillSelect(document.getElementById('ct_profile_template'),templates"), 'Profiles must consume shared template catalog');
+assert(policy.includes("const templateValues = templates.map") && policy.includes("fillSelect(document.getElementById('ct_profile_template'),templateValues"), 'Profiles must consume shared template catalog');
 for (const field of ['id','manufacturer','model','fingerprint','brand','product','device','release','buildId','incremental','type','tags','securityPatch']) assert(policy.includes(`['${field}'`), `missing template field ${field}`);
 assert(web.includes('if (filename == "templates.json") {\n                            DeviceTemplateManager.initialize(configDir)'), 'saving templates must refresh runtime catalog');
 console.log('custom-template regression checks passed');

@@ -75,7 +75,7 @@ class WebServerKeyboxUXTest {
         )
         assertTrue(
             "loadKeyboxes function should exist",
-            html.contains("async function loadKeyboxes()"),
+            html.contains("async function loadKeyboxes(options = {})"),
         )
         assertTrue(
             "init function should call loadKeyboxes",

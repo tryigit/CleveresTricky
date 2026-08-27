@@ -24,6 +24,9 @@
     const nativeRuntimeLog = `${configRoot}/native_runtime.log`;
     const policyResponsePaths = new Set(['/api/policy_state', '/api/profile_v2']);
     let latestPolicyState = null;
+    let policyStateRequest = null;
+    let profileMutationQueue = Promise.resolve();
+    let logsReady = false;
     const profileEnabledByName = new Map();
     const profileEnabledBySignature = new Map();
     let identityWrapperInstallStarted = false;
@@ -887,14 +890,23 @@
     }
 
     async function readPolicyState() {
-        const response = await nativeFetch('/api/policy_state');
-        if (!response.ok) throw new Error(await response.text());
-        const state = await response.json();
-        rememberPolicyState(state);
-        return state;
+        if (policyStateRequest) return policyStateRequest;
+        const request = (async () => {
+            const response = await nativeFetch('/api/policy_state');
+            if (!response.ok) throw new Error(await response.text());
+            const state = await response.json();
+            rememberPolicyState(state);
+            return state;
+        })();
+        policyStateRequest = request;
+        try {
+            return await request;
+        } finally {
+            if (policyStateRequest === request) policyStateRequest = null;
+        }
     }
 
-    async function setProfileEnabled(profile, enabled) {
+    async function performProfileEnabledMutation(profile, enabled) {
         if (!profile || typeof profile !== 'object' || typeof profile.name !== 'string') throw new Error('Invalid profile');
         const nextProfile = JSON.parse(JSON.stringify(profile));
         nextProfile.enabled = Boolean(enabled);
@@ -906,6 +918,12 @@
         const state = await response.json();
         rememberPolicyState(state);
         return state;
+    }
+
+    function setProfileEnabled(profile, enabled) {
+        const operation = profileMutationQueue.catch(() => {}).then(() => performProfileEnabledMutation(profile, enabled));
+        profileMutationQueue = operation.catch(() => {});
+        return operation;
     }
 
     function decorateProfileEnablement() {

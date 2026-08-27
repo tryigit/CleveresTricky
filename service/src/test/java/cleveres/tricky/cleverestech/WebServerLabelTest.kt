@@ -79,7 +79,7 @@ class WebServerLabelTest {
 
         assertTrue(
             "Delete rule button should have a title attribute",
-            html.contains("title=\"Remove rule\"") && html.contains("aria-label=\"Remove rule for \${rule.package}\""),
+            html.contains("button.title = `${'$'}{label} rule`") && html.contains("button.setAttribute('aria-label', `${'$'}{label} rule for ${'$'}{packageName}`)"),
         )
     }
 }

@@ -54,8 +54,18 @@ let keyboxes = [];
 let templates = [];
 let selectedProfileIndex = -1;
 let saving = false;
+let legacyToggleQueue = Promise.resolve();
 let savedBuildIdentity = Object.freeze({});
+let patchInspectionController = null;
+let effectiveInspectionController = null;
+let referenceDataController = null;
 const REBOOT_POLICY_FEATURES = new Set(['buildIdentity', 'regionIdentity', 'identityRefresh']);
+const MAX_REFERENCE_PACKAGES = 10000;
+const MAX_REFERENCE_KEYBOXES = 4096;
+const MAX_REFERENCE_TEMPLATES = 256;
+const MAX_POLICY_PROFILES = 256;
+const MAX_PROFILE_APPLICATIONS = 64;
+const MAX_PROFILE_VALUE_LENGTH = 256;
 
 function onReady(fn) {
   // policy.js is loaded at the end of <body>, before the legacy inline bootstrap.
@@ -101,8 +111,20 @@ function safeClone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function normalizePolicyFeatures(value) {
+  const source = value && typeof value === 'object' ? value : {};
+  return {
+    buildIdentity: source.buildIdentity === true,
+    attestationIdentity: source.attestationIdentity === true,
+    telephonyIdentity: source.telephonyIdentity === true,
+    regionIdentity: source.regionIdentity === true,
+    identityRefresh: source.identityRefresh === true,
+    securityPatch: source.securityPatch === true
+  };
+}
+
 function normalizeProfile(profile) {
-  const source = profile || {};
+  const source = profile && typeof profile === 'object' ? profile : {};
   const features = {};
   if (source.features && typeof source.features === 'object') {
     PROFILE_FEATURES.forEach(([key]) => {
@@ -112,16 +134,21 @@ function normalizeProfile(profile) {
   const patch = {};
   PATCH_COMPONENTS.forEach(([key]) => {
     const value = source.securityPatch && source.securityPatch[key];
-    if (value && typeof value === 'object' && value.mode) {
+    if (value && typeof value === 'object' && PATCH_MODES.some(([mode]) => mode === value.mode)) {
       patch[key] = {mode:value.mode};
-      if (value.mode === 'manual' && value.value) patch[key].value = value.value;
+      if (value.mode === 'manual' && typeof value.value === 'string') patch[key].value = value.value.slice(0, 10);
     }
   });
+  const applications = Array.isArray(source.applications)
+    ? [...new Set(source.applications.map(value => String(value).trim()).filter(value => value && value.length <= MAX_PROFILE_VALUE_LENGTH))].slice(0, MAX_PROFILE_APPLICATIONS)
+    : [];
+  const template = typeof source.template === 'string' && source.template.length <= MAX_PROFILE_VALUE_LENGTH ? source.template : null;
+  const keybox = typeof source.keybox === 'string' && source.keybox.length <= MAX_PROFILE_VALUE_LENGTH ? source.keybox : null;
   return {
-    name: String(source.name || '').trim(),
-    applications: Array.isArray(source.applications) ? [...new Set(source.applications.map(String).map(value => value.trim()).filter(Boolean))] : [],
-    template: source.template || null,
-    keybox: source.keybox || null,
+    name: String(source.name || '').trim().slice(0, MAX_PROFILE_VALUE_LENGTH),
+    applications,
+    template,
+    keybox,
     privacy: ['inherit','isolate','redact'].includes(source.privacy) ? source.privacy : 'inherit',
     features,
     securityPatch: patch,
@@ -130,34 +157,38 @@ function normalizeProfile(profile) {
   };
 }
 
-function stateForSave(source) {
-  const features = source.features || {};
-  const patch = source.securityPatch || {};
-  const normalizedPatch = {};
+function normalizeSecurityPatch(value) {
+  const source = value && typeof value === 'object' ? value : {};
+  const normalized = {
+    automaticThresholdMonths: Math.min(24, Math.max(1, Number(source.automaticThresholdMonths) || 6))
+  };
   PATCH_COMPONENTS.forEach(([key]) => {
-    const value = patch[key] || {mode:'device_default'};
-    normalizedPatch[key] = {mode:value.mode || 'device_default'};
-    if (normalizedPatch[key].mode === 'manual' && value.value) normalizedPatch[key].value = value.value;
+    const item = source[key] && typeof source[key] === 'object' ? source[key] : {};
+    const mode = PATCH_MODES.some(([option]) => option === item.mode) ? item.mode : 'device_default';
+    normalized[key] = {mode};
+    if (mode === 'manual' && typeof item.value === 'string') normalized[key].value = item.value.slice(0, 10);
   });
+  return normalized;
+}
+
+function stateForSave(source) {
+  const normalizedPatch = normalizeSecurityPatch(source.securityPatch);
   return {
     version: Number(source.version) || 2,
-    features: {
-      buildIdentity: Boolean(features.buildIdentity),
-      attestationIdentity: Boolean(features.attestationIdentity),
-      telephonyIdentity: Boolean(features.telephonyIdentity),
-      regionIdentity: Boolean(features.regionIdentity),
-      identityRefresh: Boolean(features.identityRefresh),
-      securityPatch: Boolean(features.securityPatch)
-    },
-    securityPatch: {
-      automaticThresholdMonths: Math.min(24, Math.max(1, Number(patch.automaticThresholdMonths) || 6)),
-      system: normalizedPatch.system,
-      vendor: normalizedPatch.vendor,
-      boot: normalizedPatch.boot
-    },
-    profiles: Array.isArray(source.profiles) ? source.profiles.map(normalizeProfile) : [],
-    activeProfile: source.activeProfile || null
+    features: normalizePolicyFeatures(source.features),
+    securityPatch: normalizedPatch,
+    profiles: Array.isArray(source.profiles) ? source.profiles.slice(0, MAX_POLICY_PROFILES).map(normalizeProfile) : [],
+    activeProfile: typeof source.activeProfile === 'string' ? source.activeProfile.slice(0, MAX_PROFILE_VALUE_LENGTH) : null
   };
+}
+
+function normalizePolicyState(value) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? safeClone(value) : {};
+  source.features = normalizePolicyFeatures(source.features);
+  source.profiles = Array.isArray(source.profiles) ? source.profiles.slice(0, MAX_POLICY_PROFILES).map(normalizeProfile) : [];
+  source.securityPatch = normalizeSecurityPatch(source.securityPatch);
+  source.activeProfile = typeof source.activeProfile === 'string' ? source.activeProfile.slice(0, MAX_PROFILE_VALUE_LENGTH) : null;
+  return source;
 }
 
 function transitionRequiresReboot(transition, feature) {
@@ -192,7 +223,7 @@ async function savePolicy(mutator, successMessage) {
     mutator(next);
     const body = new URLSearchParams();
     body.set('data', JSON.stringify(stateForSave(next)));
-    policyState = await request('/api/policy_state', {method:'POST', body});
+    policyState = normalizePolicyState(await request('/api/policy_state', {method:'POST', body}));
     reconcilePolicyPendingReboot(previous, policyState);
     renderAll();
     notifyPolicyMutation(successMessage, policyState);
@@ -220,7 +251,7 @@ function injectStyles() {
     .ct-subcontrols .row{margin-bottom:10px}
     .ct-subcontrols .row:last-child{margin-bottom:0}
     .ct-help{margin-top:10px;border-top:1px dashed #333;padding-top:8px}
-    .ct-help summary{cursor:pointer;color:#bbb;font-size:.85em;min-height:34px;display:flex;align-items:center}
+    .ct-help summary{cursor:pointer;color:#bbb;font-size:.85em;min-height:44px;display:flex;align-items:center}
     .ct-help p{margin:5px 0 0!important}
     .ct-banner{border:1px solid #5c4b19;background:rgba(245,158,11,.09);border-radius:10px;padding:13px 14px;margin-bottom:16px;color:#f3d68a;line-height:1.45}
     .ct-action-grid{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px!important;width:100%}
@@ -229,8 +260,8 @@ function injectStyles() {
     .ct-choice-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
     .ct-inline-note{font-size:.82em;color:#999;line-height:1.45;margin:8px 0 0}
     .ct-chip-wrap{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}
-    .ct-chip{display:inline-flex;gap:7px;align-items:center;border:1px solid #3a3a3a;border-radius:999px;padding:6px 9px;font-size:.8em;background:#1c1c1c}
-    .ct-chip button{min-width:28px;min-height:28px;padding:0;border-radius:50%;font-size:16px}
+    .ct-chip{display:inline-flex;gap:7px;align-items:center;min-width:0;overflow-wrap:anywhere;border:1px solid #3a3a3a;border-radius:999px;padding:6px 9px;font-size:.8em;background:#1c1c1c}
+    .ct-chip button{flex:0 0 44px;min-width:44px;min-height:44px;padding:0;border-radius:50%;font-size:16px}
     .ct-profile-item{display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border);padding:10px 0}
     .ct-profile-item:last-child{border-bottom:0}.ct-profile-item .ct-profile-copy{flex:1;min-width:0}
     .ct-profile-item .ct-profile-copy small{display:block;color:#888;margin-top:3px;overflow-wrap:anywhere}
@@ -565,7 +596,7 @@ function bindFeatureCenter(panel, prefix) {
   panel.querySelectorAll('[data-open-tab]').forEach(button => { button.onclick = () => global.switchTab && global.switchTab(button.dataset.openTab); });
 }
 
-async function setLegacyToggle(setting, enabled) {
+async function performLegacyToggle(setting, enabled) {
   let updated = false;
   try {
     const body = new URLSearchParams();
@@ -582,6 +613,12 @@ async function setLegacyToggle(setting, enabled) {
   renderIdentityControls();
   refreshPresentation();
   return updated;
+}
+
+function setLegacyToggle(setting, enabled) {
+  const operation = legacyToggleQueue.catch(() => {}).then(() => performLegacyToggle(setting, enabled));
+  legacyToggleQueue = operation.catch(() => {});
+  return operation;
 }
 
 function installFeatureCenter() {
@@ -731,7 +768,13 @@ function installCustomTemplateBuilder() {
   }).join('');
   panel.innerHTML = `<details id="ct_custom_template_details"><summary><strong>Custom Templates</strong></summary><div class="scope-note" style="margin-top:12px">Create a reusable device identity template. The form stays collapsed until you open it.</div><div class="ct-choice-grid">${fields}</div><button id="ct_template_save" type="button" class="primary" style="width:100%;margin-top:14px">Save custom template</button></details>`;
   identityPanel.insertAdjacentElement('afterend',panel);
-  panel.querySelector('#ct_template_save').onclick = () => saveCustomTemplate().catch(error => notify(error.message || 'Could not save custom template','error'));
+  panel.querySelector('#ct_template_save').onclick = async function() {
+    if (this.disabled) return;
+    this.disabled = true;
+    try { await saveCustomTemplate(); }
+    catch (error) { notify(error.message || 'Could not save custom template','error'); }
+    finally { this.disabled = false; }
+  };
 }
 
 async function saveCustomTemplate() {
@@ -794,11 +837,20 @@ async function loadKernelIdentity() {
     const selected = (state.presets || []).find(item => item.id === preset.value);
     if (selected) { release.value = selected.release; version.value = selected.version; }
   };
-  document.getElementById('ct_kernel_save').onclick = async () => {
-    const payload = {enabled:enabled.checked,preset:preset.value,release:release.value.trim(),version:version.value.trim()};
-    const body = new URLSearchParams(); body.set('data',JSON.stringify(payload));
-    const result = await request('/api/kernel_identity',{method:'POST',body});
-    notify(result.applied ? 'Kernel identity applied' : 'Kernel identity saved for next native activation');
+  const saveButton = document.getElementById('ct_kernel_save');
+  saveButton.onclick = async () => {
+    if (saveButton.disabled) return;
+    saveButton.disabled = true;
+    try {
+      const payload = {enabled:enabled.checked,preset:preset.value,release:release.value.trim(),version:version.value.trim()};
+      const body = new URLSearchParams(); body.set('data',JSON.stringify(payload));
+      const result = await request('/api/kernel_identity',{method:'POST',body});
+      notify(result.applied ? 'Kernel identity applied' : 'Kernel identity saved for next native activation');
+    } catch (error) {
+      notify(error.message || 'Could not save kernel identity','error');
+    } finally {
+      saveButton.disabled = false;
+    }
   };
 }
 
@@ -836,7 +888,7 @@ function staticPages() {
 
   const patchPage = makePage('patch','spoof');
   if (patchPage && !document.getElementById('ct_patch_identity_state')) {
-    patchPage.innerHTML = `<div class="panel"><h3>Security Patch</h3><div id="ct_patch_identity_state" class="scope-note">Enable or disable Security Patch from its Dashboard switch.</div><div id="ct_patch_children"><div class="row"><label for="ct_patch_auto" style="flex:1;padding-right:12px"><strong style="color:#fff">Auto Security Patch</strong><span class="res-desc">Use automatic mode for System, Vendor and Boot.</span></label>${switchMarkup('ct_patch_auto',false)}</div><div style="margin:12px 0"><label for="ct_patch_threshold">Stale ROM threshold (months)</label><input id="ct_patch_threshold" type="number" min="1" max="24" inputmode="numeric"></div><div id="ct_patch_components"></div><button id="ct_patch_save" class="primary" type="button" style="width:100%">Save Security Patch</button></div></div><div class="panel"><h3>Resolve for an app</h3><div class="scope-note">Shows captured, configured and effective values from the runtime resolver.</div><input id="ct_patch_package" type="search" placeholder="com.example.app" autocomplete="off"><button id="ct_patch_inspect" type="button" style="width:100%;margin-top:10px">Resolve</button><div id="ct_patch_result" class="scope-note" style="margin-top:12px"></div></div>`;
+    patchPage.innerHTML = `<div class="panel"><h3>Security Patch</h3><div id="ct_patch_identity_state" class="scope-note">Enable or disable Security Patch from its Dashboard switch.</div><div id="ct_patch_children"><div class="row"><label for="ct_patch_auto" style="flex:1;padding-right:12px"><strong style="color:#fff">Auto Security Patch</strong><span class="res-desc">Use automatic mode for System, Vendor and Boot.</span></label>${switchMarkup('ct_patch_auto',false)}</div><div style="margin:12px 0"><label for="ct_patch_threshold">Stale ROM threshold (months)</label><input id="ct_patch_threshold" type="number" min="1" max="24" inputmode="numeric"></div><div id="ct_patch_components"></div><button id="ct_patch_save" class="primary" type="button" style="width:100%">Save Security Patch</button></div></div><div class="panel"><h3>Resolve for an app</h3><div class="scope-note">Shows captured, configured and effective values from the runtime resolver.</div><label for="ct_patch_package">Package to resolve</label><input id="ct_patch_package" type="search" placeholder="com.example.app" autocomplete="off"><button id="ct_patch_inspect" type="button" style="width:100%;margin-top:10px">Resolve</button><div id="ct_patch_result" class="scope-note" style="margin-top:12px"></div></div>`;
   }
 
   const profilesPage = makePage('profiles','patch');
@@ -851,7 +903,7 @@ function staticPages() {
     effective.id = 'ct_effective_apps_host';
     appsPage.appendChild(effective);
   }
-  if (effective) effective.innerHTML = '<div class="panel"><h3>Effective State</h3><div class="scope-note">Inspect the exact resolver output for an installed application without exposing private key material.</div><input id="ct_effective_package" type="search" placeholder="com.example.app" autocomplete="off"><button id="ct_effective_load" class="primary" type="button" style="width:100%;margin-top:10px">Inspect</button></div><div class="panel"><h3>Resolved Configuration</h3><div id="ct_effective_result" class="scope-note">Select an app.</div></div>';
+  if (effective) effective.innerHTML = '<div class="panel"><h3>Effective State</h3><div class="scope-note">Inspect the exact resolver output for an installed application without exposing private key material.</div><label for="ct_effective_package">Package to inspect</label><input id="ct_effective_package" type="search" placeholder="com.example.app" autocomplete="off"><button id="ct_effective_load" class="primary" type="button" style="width:100%;margin-top:10px">Inspect</button></div><div class="panel"><h3>Resolved Configuration</h3><div id="ct_effective_result" class="scope-note">Select an app.</div></div>';
 }
 
 function renderIdentityScopeBanner() {
@@ -936,14 +988,23 @@ async function inspectPatch() {
   const result = document.getElementById('ct_patch_result');
   const pkg = input ? input.value.trim() : '';
   if (!pkg || !result) return;
+  if (patchInspectionController) patchInspectionController.abort();
+  const controller = new AbortController();
+  patchInspectionController = controller;
   try {
-    const data = await request(`/api/effective_state?package=${encodeURIComponent(pkg)}`);
+    const data = await request(`/api/effective_state?package=${encodeURIComponent(pkg)}`, { signal: controller.signal });
+    if (controller.signal.aborted) return;
     const patch = data.securityPatch || {};
     result.innerHTML = PATCH_COMPONENTS.map(([key,title]) => {
       const item = patch[key] || {};
       return `<div class="ct-patch-component"><strong>${escapeHtml(title)}</strong><div class="ct-inline-note">Captured: ${escapeHtml(String(item.captured ?? '-'))}<br>Configured: ${escapeHtml(String(item.configured ?? '-'))}<br>Effective: ${escapeHtml(String(item.effective ?? '-'))}</div></div>`;
     }).join('');
-  } catch (error) { result.textContent = error.message || 'Could not resolve patch state'; }
+  } catch (error) {
+    if (controller.signal.aborted || (error && error.name === 'AbortError')) return;
+    if (patchInspectionController === controller) result.textContent = error.message || 'Could not resolve patch state';
+  } finally {
+    if (patchInspectionController === controller) patchInspectionController = null;
+  }
 }
 
 function renderProfiles() {
@@ -988,7 +1049,7 @@ function fillSelect(select, values, selected, emptyLabel) {
 
 function profileAppsFromEditor() {
   const source = document.getElementById('ct_profile_apps');
-  return source ? [...new Set(source.value.split(/\r?\n/).map(value => value.trim()).filter(Boolean))] : [];
+  return source ? [...new Set(source.value.split(/\r?\n/).map(value => value.trim()).filter(value => value && value.length <= MAX_PROFILE_VALUE_LENGTH))].slice(0, MAX_PROFILE_APPLICATIONS) : [];
 }
 
 function renderAppChips() {
@@ -1031,7 +1092,8 @@ function openProfile(index) {
   document.getElementById('ct_profile_name').value = profile.name;
   document.getElementById('ct_profile_privacy').value = profile.privacy;
   document.getElementById('ct_profile_apps').value = profile.applications.join('\n');
-  fillSelect(document.getElementById('ct_profile_template'),templates,profile.template || '','Inherit / none');
+  const templateValues = templates.map(value => typeof value === 'string' ? value : (value && value.id) || '').filter(Boolean);
+  fillSelect(document.getElementById('ct_profile_template'),templateValues,profile.template || '','Inherit / none');
   fillSelect(document.getElementById('ct_profile_keybox'),keyboxes,profile.keybox || '','Inherit / none');
   const featureHost = document.getElementById('ct_profile_features');
   featureHost.innerHTML = FEATURE_KEYS.map(([key,title,desc]) => {
@@ -1154,7 +1216,7 @@ async function importProfiles(event) {
     const parsed = JSON.parse(await file.text());
     const body = new URLSearchParams();
     body.set('data',JSON.stringify(stateForSave(parsed)));
-    policyState = await request('/api/policy_state',{method:'POST',body});
+    policyState = normalizePolicyState(await request('/api/policy_state',{method:'POST',body}));
     renderAll();
     notifyPolicyMutation('Profile policy imported', policyState);
   } catch (error) { notify(error.message || 'Could not import profile policy','error'); }
@@ -1165,13 +1227,22 @@ async function inspectEffective() {
   const host = document.getElementById('ct_effective_result');
   const pkg = input ? input.value.trim() : '';
   if (!pkg || !host) return;
+  if (effectiveInspectionController) effectiveInspectionController.abort();
+  const controller = new AbortController();
+  effectiveInspectionController = controller;
   try {
-    const data = await request(`/api/effective_state?package=${encodeURIComponent(pkg)}`);
+    const data = await request(`/api/effective_state?package=${encodeURIComponent(pkg)}`, { signal: controller.signal });
+    if (controller.signal.aborted) return;
     const rows = [
       ['Scope',data.scope],['Matched profile',data.matchedProfile],['Matched rule',data.matchedApplicationRule],['Identity template',data.identityTemplate],['Keybox',data.keyboxReference],['DRM privacy',data.privacy],['Build identity',data.buildIdentity],['Attestation identity',data.attestationIdentity],['Telephony identity',data.telephonyIdentity],['Region identity',data.regionIdentity],['Identity refresh',data.identityRefresh],['Security Patch',data.securityPatchOverride],['Keystore core',data.keystoreCore],['KeyMint',data.keyMint],['Reboot required',data.rebootRequired]
     ];
     host.innerHTML = rows.map(([key,value]) => `<div class="row"><span>${escapeHtml(key)}</span><span class="tag">${escapeHtml(String(value ?? '-'))}</span></div>`).join('');
-  } catch (error) { host.textContent = error.message || 'Could not inspect effective state'; }
+  } catch (error) {
+    if (controller.signal.aborted || (error && error.name === 'AbortError')) return;
+    if (effectiveInspectionController === controller) host.textContent = error.message || 'Could not inspect effective state';
+  } finally {
+    if (effectiveInspectionController === controller) effectiveInspectionController = null;
+  }
 }
 
 function parseSavedBuildIdentity(text) {
@@ -1401,7 +1472,9 @@ function sanitizeResourceTable() {
 }
 
 function normalizedPackageNames() {
-  return [...new Set(packages.map(value => typeof value === 'string' ? value : (value && (value.packageName || value.name)) || '').filter(Boolean))].sort();
+  return [...new Set(packages.map(value => typeof value === 'string' ? value : (value && (value.packageName || value.name)) || '')
+    .filter(value => typeof value === 'string' && value.length > 0 && value.length <= 255 && /^[A-Za-z0-9_.]+$/.test(value)))]
+    .slice(0, MAX_REFERENCE_PACKAGES).sort();
 }
 
 function installPackagePicker(inputId) {
@@ -1474,22 +1547,41 @@ async function loadLegacyConfig() {
 }
 
 async function loadReferenceData() {
+  if (referenceDataController) referenceDataController.abort();
+  const controller = new AbortController();
+  referenceDataController = controller;
+  const requestOptions = { signal: controller.signal };
   const tasks = [];
-  tasks.push(request('/api/packages').then(value => {
-    packages = Array.isArray(value) ? value : [];
+  tasks.push(request('/api/packages', requestOptions).then(value => {
+    if (controller.signal.aborted) return;
+    packages = Array.isArray(value) ? value.slice(0, MAX_REFERENCE_PACKAGES) : [];
     if (!packages.length && typeof bridge.listPackages === 'function') {
       const fallback = bridge.listPackages();
-      packages = Array.isArray(fallback) ? fallback : [];
+      packages = Array.isArray(fallback) ? fallback.slice(0, MAX_REFERENCE_PACKAGES) : [];
     }
   }).catch(() => {
+    if (controller.signal.aborted) return;
     if (typeof bridge.listPackages === 'function') {
       const fallback = bridge.listPackages();
-      packages = Array.isArray(fallback) ? fallback : [];
+      packages = Array.isArray(fallback) ? fallback.slice(0, MAX_REFERENCE_PACKAGES) : [];
     } else packages = [];
   }));
-  tasks.push(request('/api/keyboxes').then(value => { keyboxes = Array.isArray(value) ? value : []; }).catch(()=>{}));
-  tasks.push(request('/api/config').then(value => { legacyConfig = value || {}; if (Array.isArray(value.templates)) templates = value.templates; }).catch(()=>{}));
-  await Promise.all(tasks);
+  tasks.push(request('/api/keyboxes', requestOptions).then(value => {
+    if (controller.signal.aborted) return;
+    keyboxes = Array.isArray(value)
+      ? Array.from(new Set(value.filter(item => typeof item === 'string' && item.length > 0 && item.length <= 256))).slice(0, MAX_REFERENCE_KEYBOXES)
+      : [];
+  }).catch(()=>{}));
+  tasks.push(request('/api/config', requestOptions).then(value => {
+    if (controller.signal.aborted) return;
+    legacyConfig = value || {};
+    if (Array.isArray(value.templates)) templates = value.templates.slice(0, MAX_REFERENCE_TEMPLATES);
+  }).catch(()=>{}));
+  try {
+    await Promise.all(tasks);
+  } finally {
+    if (referenceDataController === controller) referenceDataController = null;
+  }
 }
 
 function renderAll() {
@@ -1511,7 +1603,7 @@ function renderAll() {
 function applyExternalPolicyState(event) {
   const state = event && event.detail;
   if (!state || typeof state !== 'object' || !state.features || !Array.isArray(state.profiles)) return;
-  policyState = safeClone(state);
+  policyState = normalizePolicyState(state);
   renderAll();
 }
 
@@ -1534,7 +1626,7 @@ async function initialize() {
   markIdentityActionGroups();
   installAutoIdentityOverride();
 
-  try { policyState = await request('/api/policy_state'); }
+  try { policyState = normalizePolicyState(await request('/api/policy_state')); }
   catch (error) { notify(`Policy controls unavailable: ${error.message}`,'error'); return; }
   await loadReferenceData();
   installIdentityManagerState();

@@ -339,8 +339,8 @@ input[type="text"], input[type="tel"], input[type="password"], input[type="searc
         <div><label for="srvRefreshHours">Refresh interval (hours)</label><input type="number" id="srvRefreshHours" value="24" min="1" max="720" inputmode="numeric"></div>
     </div>
     <div class="row" style="margin-top:8px;"><label for="srvAutoRefresh">Automatic refresh</label><input type="checkbox" class="ct-switch" id="srvAutoRefresh" checked></div>
-    <div class="pwd-wrapper"><input type="password" id="srvContentPassword" placeholder="CBOX content password (optional)" maxlength="1024" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"><button type="button" class="pwd-toggle" onclick="togglePassword(this)">Show</button></div>
-    <textarea id="srvContentPublicKey" placeholder="CBOX signature public key (optional)" maxlength="16384" style="height:90px; margin-bottom:5px;" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
+    <label for="srvContentPassword">CBOX content password (optional)</label><div class="pwd-wrapper"><input type="password" id="srvContentPassword" placeholder="CBOX content password (optional)" maxlength="1024" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"><button type="button" class="pwd-toggle" onclick="togglePassword(this)">Show</button></div>
+    <label for="srvContentPublicKey">CBOX signature public key (optional)</label><textarea id="srvContentPublicKey" placeholder="CBOX signature public key (optional)" maxlength="16384" style="height:90px; margin-bottom:5px;" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
     <div style="display: flex; gap: 10px; margin-top: 10px;">
         <button onclick="runWithState(this, 'Saving...', addServer)" class="primary" style="flex: 1;">Save Server</button>
         <button onclick="resetServerForm()" style="flex: 1;">Cancel</button>
@@ -351,7 +351,7 @@ input[type="text"], input[type="tel"], input[type="password"], input[type="searc
         <div class="panel">
 <h3>Upload Keybox / CBOX</h3>
 <div class="grid-2">
-    <div id="dropZone" role="button" tabindex="0" style="border: 2px dashed var(--border); border-radius: 6px; padding: 20px; text-align: center; margin-bottom: 10px; cursor: pointer;" onclick="document.getElementById('kbFilePicker').click()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault(); document.getElementById('kbFilePicker').click();}">
+    <div id="dropZone" role="button" tabindex="0" aria-label="Upload Keybox or CBOX file" style="border: 2px dashed var(--border); border-radius: 6px; padding: 20px; text-align: center; margin-bottom: 10px; cursor: pointer;" onclick="document.getElementById('kbFilePicker').click()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault(); document.getElementById('kbFilePicker').click();}">
         <label for="kbFilePicker" style="display:none">Keybox File</label>
         <input type="file" id="kbFilePicker" style="display:none" onchange="loadFileContent(this)" onclick="event.stopPropagation(); this.value = null" aria-label="Upload Keybox File" accept=".xml,.cbox,.zip">
         <div id="dropZoneContent"><div style="font-size: 1.5em; margin-bottom: 10px; color: #888;">[ Drag &amp; Drop ]</div><div style="font-size: 0.9em; color: #888;">Or click to select .xml, .cbox or .zip</div></div>
@@ -359,7 +359,7 @@ input[type="text"], input[type="tel"], input[type="password"], input[type="searc
     <div>
         <label for="kbContent" style="display:block; font-size:0.85em; color:#888; margin-bottom:4px;">Manual Paste (XML)</label>
         <textarea id="kbContent" placeholder="Paste Keybox XML Content Here" maxlength="5242880" style="height:100px; font-family:monospace; font-size:0.8em; margin-bottom:10px;" aria-label="Keybox XML Content" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
-        <input type="text" id="kbFilenameInput" placeholder="keybox.xml" maxlength="128" style="margin-bottom:10px;" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off">
+        <label for="kbFilenameInput">Keybox filename</label><input type="text" id="kbFilenameInput" placeholder="keybox.xml" maxlength="128" style="margin-bottom:10px;" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off">
         <button id="saveKeyboxBtn" class="primary" style="width:100%;" onclick="runWithState(this, 'Saving...', savePastedKeybox)">Save Pasted XML</button>
     </div>
 </div>
@@ -508,6 +508,11 @@ if (event.reason && event.reason.message && event.reason.message.includes('fetch
         let originalContent = '';
         let resourceUsageController = null;
         let logsRequestController = null;
+        let keyInfoController = null;
+        let appConfigController = null;
+        let editorFileController = null;
+        let serverListController = null;
+        let keyboxListController = null;
 
         function togglePassword(btn) {
 const input = btn.previousElementSibling;
@@ -869,6 +874,29 @@ if (id !== 'log' && logsRequestController) {
     logsRequestController.abort();
     logsRequestController = null;
 }
+if (id !== 'keys') {
+    if (typeof window.cancelKeyboxVerification === 'function') window.cancelKeyboxVerification();
+    if (keyInfoController) {
+        keyInfoController.abort();
+        keyInfoController = null;
+    }
+    if (serverListController) {
+        serverListController.abort();
+        serverListController = null;
+    }
+    if (keyboxListController) {
+        keyboxListController.abort();
+        keyboxListController = null;
+    }
+}
+if (id !== 'apps' && appConfigController) {
+    appConfigController.abort();
+    appConfigController = null;
+}
+if (id !== 'editor' && editorFileController) {
+    editorFileController.abort();
+    editorFileController = null;
+}
 if (id === 'apps') loadAppConfig();
 if (id === 'keys') loadKeyInfo();
 if (id === 'info') loadResourceUsage();
@@ -935,18 +963,25 @@ try {
         }
 
         async function loadKeyInfo() {
-const keyboxListPromise = loadKeyboxes();
-const serverListPromise = loadServers();
+const previousController = keyInfoController;
+if (previousController) previousController.abort();
+const controller = new AbortController();
+keyInfoController = controller;
+const options = { signal: controller.signal };
+const keyboxListPromise = loadKeyboxes(options);
+const serverListPromise = loadServers(options);
 try {
     const [configRes, statusRes] = await Promise.all([
-        fetchAuth('/api/config'),
-        fetchAuth('/api/cbox_status')
+        fetchAuth('/api/config', options),
+        fetchAuth('/api/cbox_status', options)
     ]);
     if (!configRes.ok) throw new Error(await configRes.text());
     if (!statusRes.ok) throw new Error(await statusRes.text());
     const configData = await configRes.json();
+    if (controller.signal.aborted) return;
     document.getElementById('keyboxStatus').innerText = `${configData.keybox_count} Keys Loaded`;
     const data = await statusRes.json();
+    if (controller.signal.aborted) return;
 
     const lockedList = document.getElementById('lockedList');
     lockedList.innerHTML = '';
@@ -991,8 +1026,11 @@ try {
 
     await Promise.allSettled([keyboxListPromise, serverListPromise]);
 } catch(e) {
+    if (controller.signal.aborted || (e && e.name === 'AbortError')) return;
     console.error(e);
     notify('Error: ' + e.message, 'error');
+} finally {
+    if (keyInfoController === controller) keyInfoController = null;
 }
         }
 
@@ -1009,13 +1047,33 @@ try {
 } catch(e) { notify('Error: ' + e.message, 'error'); return; }
         }
 
-        async function loadServers() {
+        async function loadServers(options = {}) {
+const previousController = serverListController;
+if (previousController) previousController.abort();
+const controller = new AbortController();
+serverListController = controller;
+const externalSignal = options.signal;
+const abortFromExternal = () => controller.abort();
+if (externalSignal) {
+    if (externalSignal.aborted) controller.abort();
+    else externalSignal.addEventListener('abort', abortFromExternal, { once: true });
+}
+const requestOptions = Object.assign({}, options, { signal: controller.signal });
 const list = document.getElementById('serverList');
 if (list) list.innerHTML = '<div style="padding:15px; text-align:center; color:#888;"><div class="inline-spinner"></div> Loading...</div>';
 try {
-    const res = await fetchAuth('/api/servers');
+    const res = await fetchAuth('/api/servers', requestOptions);
     if (!res.ok) throw new Error(await res.text());
-    const servers = await res.json();
+    const rawServers = await res.json();
+    if (controller.signal.aborted) return;
+    const servers = Array.isArray(rawServers)
+        ? rawServers.slice(0, 256).map(server => ({
+            id: String(server?.id ?? '').slice(0, 128),
+            name: String(server?.name ?? '').slice(0, 256),
+            url: String(server?.url ?? '').slice(0, 2048),
+            lastStatus: String(server?.lastStatus ?? 'UNKNOWN').slice(0, 128)
+        })).filter(server => server.id && server.url)
+        : [];
     if (list) list.innerHTML = '';
     if (servers.length === 0) {
         if (list) list.innerHTML = '<div style="text-align:center; padding:15px; color:#666;">No servers configured. Add one below to fetch keyboxes automatically.</div>';
@@ -1055,9 +1113,13 @@ try {
         list.appendChild(div);
     });
 } catch(e) {
+    if (controller.signal.aborted || (e && e.name === 'AbortError')) return;
     console.error(e);
     notify('Error: ' + e.message, 'error');
     if (list) list.innerHTML = '<div style="text-align:center; padding:15px; color:var(--danger);">Failed to load servers.</div>';
+} finally {
+    if (externalSignal) externalSignal.removeEventListener('abort', abortFromExternal);
+    if (serverListController === controller) serverListController = null;
 }
         }
 
@@ -1561,17 +1623,40 @@ try {
         }
 
         let cachedKeyboxes = [];
-        async function loadKeyboxes() {
+        async function loadKeyboxes(options = {}) {
+const previousController = keyboxListController;
+if (previousController) previousController.abort();
+const controller = new AbortController();
+keyboxListController = controller;
+const externalSignal = options.signal;
+const abortFromExternal = () => controller.abort();
+if (externalSignal) {
+    if (externalSignal.aborted) controller.abort();
+    else externalSignal.addEventListener('abort', abortFromExternal, { once: true });
+}
+const requestOptions = Object.assign({}, options, { signal: controller.signal });
 try {
     const list = document.getElementById('storedKeyboxesList');
     if (list) list.innerHTML = '<div style="padding:10px; text-align:center; color:#888;"><div class="inline-spinner"></div> Loading...</div>';
-    const res = await fetchAuth('/api/keyboxes');
+    const res = await fetchAuth('/api/keyboxes', requestOptions);
     if (res.ok) {
-        cachedKeyboxes = await res.json();
+        const data = await res.json();
+        if (controller.signal.aborted) return;
+        cachedKeyboxes = Array.isArray(data)
+            ? Array.from(new Set(data.filter(value => typeof value === 'string' && value.length <= 256).slice(0, 4096)))
+            : [];
         renderKeyboxes();
         setupAutocomplete('appKeybox', () => cachedKeyboxes);
     } else { throw new Error(await res.text()); }
-} catch(e) { console.error(e); notify('Error: ' + e.message, 'error'); return; }
+} catch(e) {
+    if (controller.signal.aborted || (e && e.name === 'AbortError')) return;
+    console.error(e);
+    notify('Error: ' + e.message, 'error');
+    return;
+} finally {
+    if (externalSignal) externalSignal.removeEventListener('abort', abortFromExternal);
+    if (keyboxListController === controller) keyboxListController = null;
+}
         }
 
         function renderKeyboxes() {
@@ -1696,14 +1781,26 @@ notify('Configuration Saved');
 
         let appRules = [];
         async function loadAppConfig() {
+const previousController = appConfigController;
+if (previousController) previousController.abort();
+const controller = new AbortController();
+appConfigController = controller;
+const options = { signal: controller.signal };
 const tbody = document.querySelector('#appTable tbody');
 if(tbody) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px; color:#888;"><div class="inline-spinner"></div> Loading...</td></tr>';
 try {
-    const res = await fetchAuth(getAuthUrl('/api/app_config_structured'));
+    const res = await fetchAuth(getAuthUrl('/api/app_config_structured'), options);
     if (!res.ok) throw new Error(await res.text());
-    appRules = await res.json();
+    const nextRules = await res.json();
+    if (controller.signal.aborted) return;
+    appRules = Array.isArray(nextRules) ? nextRules.slice(0, 4096) : [];
     renderAppTable();
-} catch(e) { notify('Error: ' + e.message, 'error'); return; }
+} catch(e) {
+    if (controller.signal.aborted || (e && e.name === 'AbortError')) return;
+    notify('Error: ' + e.message, 'error');
+} finally {
+    if (appConfigController === controller) appConfigController = null;
+}
         }
         function renderAppTable() {
 const filterInput = document.getElementById('appFilter');
@@ -1711,23 +1808,69 @@ const clearBtn = document.getElementById('clearAppFilterBtn');
 if (clearBtn) clearBtn.style.display = (filterInput && filterInput.value) ? 'flex' : 'none';
 const filter = filterInput ? filterInput.value.toLowerCase() : '';
 const tbody = document.querySelector('#appTable tbody');
-tbody.innerHTML = '';
+tbody.replaceChildren();
+const makeCell = (label, value) => {
+    const cell = document.createElement('td');
+    cell.setAttribute('data-label', label);
+    cell.textContent = value;
+    return cell;
+};
+const makeActionButton = (label, packageName, handler) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = label;
+    button.title = `${label} rule`;
+    button.setAttribute('aria-label', `${label} rule for ${packageName}`);
+    button.style.cssText = 'padding:8px 16px; min-height:44px;';
+    button.onclick = handler;
+    return button;
+};
 if (appRules.length === 0) {
-    const tr = document.createElement('tr'); tr.innerHTML = '<td colspan="5" style="text-align:center; padding:20px; color:#666;">No active rules.</td>'; tbody.appendChild(tr); return;
+    const tr = document.createElement('tr');
+    const empty = makeCell('', 'No active rules.');
+    empty.colSpan = 5;
+    empty.style.cssText = 'text-align:center; padding:20px; color:#666;';
+    tr.appendChild(empty);
+    tbody.appendChild(tr);
+    return;
 }
 let matchCount = 0;
 appRules.forEach((rule, idx) => {
-    if (filter && !rule.package.toLowerCase().includes(filter)) return;
+    const packageName = typeof rule?.package === 'string' ? rule.package : '';
+    const templateName = typeof rule?.template === 'string' ? rule.template : '';
+    const keyboxName = typeof rule?.keybox === 'string' ? rule.keybox : '';
+    const privacy = typeof rule?.privacy === 'string' ? rule.privacy : 'inherit';
+    if (filter && !packageName.toLowerCase().includes(filter)) return;
     matchCount++;
     const tr = document.createElement('tr');
-    const privacyLabel = rule.privacy === 'isolate' ? 'Isolated' : (rule.privacy === 'redact' ? 'Redacted' : 'Global');
-    tr.innerHTML = `<td data-label="Package">${rule.package}</td><td data-label="Profile">${rule.template && rule.template !== 'null' ? rule.template : 'Default'}</td><td data-label="Keybox">${rule.keybox && rule.keybox !== 'null' ? rule.keybox : ''}</td><td data-label="Privacy">${privacyLabel}</td><td style="text-align:right;"><button style="padding:8px 16px; margin-right:5px; min-height:44px;" onclick="editAppRule(${idx})" title="Edit rule" aria-label="Edit rule for ${rule.package}">Edit</button><button class="danger" style="padding:8px 16px; min-height:44px;" onclick="const btn = this; requireConfirm(btn, () => runWithState(btn, 'Removing...', () => removeAppRule(${idx})), 'Confirm Remove')" title="Remove rule" aria-label="Remove rule for ${rule.package}">Remove</button></td>`;
+    const privacyLabel = privacy === 'isolate' ? 'Isolated' : (privacy === 'redact' ? 'Redacted' : 'Global');
+    tr.appendChild(makeCell('Package', packageName));
+    tr.appendChild(makeCell('Profile', templateName && templateName !== 'null' ? templateName : 'Default'));
+    tr.appendChild(makeCell('Keybox', keyboxName && keyboxName !== 'null' ? keyboxName : ''));
+    tr.appendChild(makeCell('Privacy', privacyLabel));
+    const actions = document.createElement('td');
+    actions.style.textAlign = 'right';
+    const editButton = makeActionButton('Edit', packageName, () => editAppRule(idx));
+    editButton.style.marginRight = '5px';
+    const removeButton = makeActionButton('Remove', packageName, () => requireConfirm(removeButton, () => runWithState(removeButton, 'Removing...', () => removeAppRule(idx)), 'Confirm Remove'));
+    removeButton.className = 'danger';
+    actions.append(editButton, removeButton);
+    tr.appendChild(actions);
     tbody.appendChild(tr);
 });
 
 if (filter && matchCount === 0) {
     const tr = document.createElement('tr');
-    tr.innerHTML = '<td colspan="5" style="text-align:center; padding:20px; color:#666;">No rules match your filter. <button onclick="document.getElementById(\'appFilter\').value=\'\'; renderAppTable()" style="margin-left:10px; padding:8px 16px; font-size:0.85em; min-height:44px;">Clear Filter</button></td>';
+    const empty = makeCell('', 'No rules match your filter.');
+    empty.colSpan = 5;
+    empty.style.cssText = 'text-align:center; padding:20px; color:#666;';
+    const clear = document.createElement('button');
+    clear.type = 'button';
+    clear.textContent = 'Clear Filter';
+    clear.style.cssText = 'margin-left:10px; padding:8px 16px; font-size:0.85em; min-height:44px;';
+    clear.onclick = () => { filterInput.value = ''; renderAppTable(); };
+    empty.appendChild(clear);
+    tr.appendChild(empty);
     tbody.appendChild(tr);
 }
         }
@@ -1917,6 +2060,10 @@ if (input.files && input.files[0]) {
         async function loadFile() {
 const f = document.getElementById('fileSelector').value;
 const editor = document.getElementById('fileEditor');
+const previousController = editorFileController;
+if (previousController) previousController.abort();
+const controller = new AbortController();
+editorFileController = controller;
 if (currentFile && editor.value !== originalContent) {
     if (!editorUnsavedBypass) {
         notify('You have unsaved changes. Select file again to discard.', 'error');
@@ -1933,9 +2080,11 @@ editor.disabled = true;
 editor.value = 'Loading...';
 console.log('[CleveresTricky] loadFile: loading', f);
 try {
-    const res = await fetchAuth('/api/file?filename=' + f);
+    const res = await fetchAuth('/api/file?filename=' + encodeURIComponent(f), { signal: controller.signal });
     if(res.ok) {
-        originalContent = await res.text();
+        const nextContent = await res.text();
+        if (controller.signal.aborted) return;
+        originalContent = nextContent;
         editor.value = originalContent;
         console.log('[CleveresTricky] loadFile:', f, 'loaded (' + originalContent.length + ' bytes)');
         updateSaveButtonState();
@@ -1947,12 +2096,15 @@ try {
         return;
     }
 } catch(e){
+    if (controller.signal.aborted || (e && e.name === 'AbortError')) return;
     console.log('[CleveresTricky] loadFile:', f, 'error -', e.message);
     originalContent = '';
     editor.value = 'Error loading file.';
     notify('Error loading file', 'error');
     return;
 } finally {
+    if (editorFileController !== controller) return;
+    editorFileController = null;
     if (editor.value !== 'Error loading file.' && editor.value !== 'Failed to load file.') {
         editor.disabled = false;
     }
@@ -2001,19 +2153,29 @@ if (originalContent !== undefined) {
 
 
         let translations = {};
+        let languageController = null;
         async function loadLanguage() {
+const previousController = languageController;
+if (previousController) previousController.abort();
+const controller = new AbortController();
+languageController = controller;
 console.log('[CleveresTricky] loadLanguage: fetching /api/language...');
 try {
-    const res = await fetchAuth('/api/language');
+    const res = await fetchAuth('/api/language', { signal: controller.signal });
     if (res.ok) {
-        translations = await res.json();
+        const nextTranslations = await res.json();
+        if (controller.signal.aborted) return;
+        translations = nextTranslations;
         console.log('[CleveresTricky] loadLanguage: loaded', Object.keys(translations).length, 'keys');
         applyTranslations();
-    } else {
+    } else if (!controller.signal.aborted) {
         console.log('[CleveresTricky] loadLanguage: no language file (status=' + res.status + ')');
     }
 } catch(e) {
+    if (controller.signal.aborted || (e && e.name === 'AbortError')) return;
     console.log('[CleveresTricky] loadLanguage: failed -', e.message);
+} finally {
+    if (languageController === controller) languageController = null;
 }
         }
 

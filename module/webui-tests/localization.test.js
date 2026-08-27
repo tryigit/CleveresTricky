@@ -3,6 +3,7 @@ const fs = require('fs');
 const vm = require('vm');
 
 const uxSource = fs.readFileSync('module/template/webroot/ux.js', 'utf8');
+const indexSource = fs.readFileSync('module/template/webroot/index.html', 'utf8');
 const catalogMarker = '    let locale = readLocale();';
 const instrumentedSource = uxSource.replace(
     catalogMarker,
@@ -67,6 +68,7 @@ const completeSurfaces = [
     'Application Privacy Shield',
     'Remote Servers',
     'Upload Keybox / CBOX',
+    'Upload Keybox or CBOX file',
     'Stored Keyboxes',
     'Checking module state...',
     'The last native activation attempt failed before the Keystore interceptor became operational.',
@@ -89,9 +91,18 @@ const completeSurfaces = [
     'View recent logs from the module. You can also download them for sharing.',
     'Support the Development',
     'Thank you for your support!',
+    'CleveresTech Telegram community',
+    'CleveresTech Community',
+    'Join our Telegram group for mutual help, testing, discussion, and development of CleveresTricky.',
     'Restore Defaults',
     'Restores module settings using the built-in default profile. Stored keyboxes and encrypted backups are not deleted.'
 ];
+
+assert.match(uxSource, /card\.setAttribute\('aria-label', tr\('CleveresTech Telegram community'\)\)/, 'Telegram card aria-label must use the localization owner');
+assert.match(uxSource, /title\.textContent = tr\('CleveresTech Community'\)/, 'Telegram card title must use the localization owner');
+assert.match(uxSource, /copy\.textContent = tr\('Join our Telegram group for mutual help, testing, discussion, and development of CleveresTricky\.'\)/, 'Telegram card description must use the localization owner');
+assert.match(uxSource, /link\.textContent = tr\('Open Telegram Community'\)/, 'Telegram card action must use the localization owner');
+assert.match(indexSource, /id="dropZone"[^>]*aria-label="Upload Keybox or CBOX file"/, 'Keybox drop zone must expose a localized accessible name');
 
 const runtimeGlobal = 'Native runtime is active with 4 verified keyboxes. Global application scope is enabled. Core boot/TEE compatibility remains active independently of Identity Engine; hardware bootloader and root-of-trust state remain genuine.';
 const runtimeTargeted = 'Native runtime is active with 2 verified keyboxes. Targeted mode is enabled, so app rules determine scope. Core boot/TEE compatibility remains active independently of Identity Engine; hardware bootloader and root-of-trust state remain genuine.';
