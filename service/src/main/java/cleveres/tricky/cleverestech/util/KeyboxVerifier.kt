@@ -122,6 +122,17 @@ object KeyboxVerifier {
     }
 
     @androidx.annotation.VisibleForTesting
+    internal fun isDecimal(str: String): Boolean {
+        if (str.isEmpty()) return false
+        val start = if (str[0] == '-') 1 else 0
+        if (start >= str.length) return false
+        if (str.length - start > 1 && str[start] == '0') return false
+        for (i in start until str.length) {
+            if (str[i] !in '0'..'9') return false
+        }
+        return true
+    }
+
     internal fun isHex(str: String): Boolean {
         if (str.isEmpty()) return false
         for (i in 0 until str.length) {
