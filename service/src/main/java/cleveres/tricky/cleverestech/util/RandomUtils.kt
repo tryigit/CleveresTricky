@@ -10,11 +10,9 @@ object RandomUtils {
     private val secureRandom: SecureRandom
         get() = requireNotNull(threadLocalRandom.get()) { "ThreadLocal SecureRandom must not be null" }
     private val threadLocalRandom = ThreadLocal.withInitial { SecureRandom() }
-    private val visibleSimCounts = listOf("0", "1", "1", "1", "1", "2", "2")
-    private val activeVisibleSimCounts = listOf("1", "1", "1", "1", "2", "2")
 
     fun generateVisibleSimCount(allowZero: Boolean): String =
-        choose(if (allowZero) visibleSimCounts else activeVisibleSimCounts) ?: "1"
+        generateDigits(if (allowZero) 2 else 1)
 
     fun generateLuhn(
         length: Int,

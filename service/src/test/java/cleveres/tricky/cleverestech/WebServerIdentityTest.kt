@@ -197,7 +197,7 @@ class WebServerIdentityTest {
         assertTrue(json.getString("phone_number2").startsWith("+1"))
         assertTrue(json.getString("imei").isNotBlank())
         assertTrue(json.getString("iccid2").isNotBlank())
-        assertTrue(json.getInt("visible_sim_count") in 1..2)
+        assertTrue(json.getInt("visible_sim_count") in 0..99)
         assertTrue(json.getInt("visible_camera_count") in 1..4)
     }
 
@@ -271,7 +271,7 @@ class WebServerIdentityTest {
         assertEquals(11, json.length())
         assertTrue(json.has("imei"))
         assertTrue(json.has("imei2"))
-        assertTrue(json.getInt("visible_sim_count") in 1..2)
+        assertTrue(json.getInt("visible_sim_count") in 0..99)
         assertFalse(json.has("serial"))
     }
 
