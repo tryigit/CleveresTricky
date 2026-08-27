@@ -58,6 +58,20 @@ jobs:
         if: matrix.language == 'java-kotlin'
         uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
 
+      - name: Select CodeQL-supported Kotlin compiler
+        if: matrix.language == 'java-kotlin'
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected='kotlin = "2.4.20-RC"'
+          supported='kotlin = "2.4.10"'
+          if ! grep -Fxq "$expected" gradle/libs.versions.toml; then
+            echo "::error::Unexpected Kotlin version; update the CodeQL compatibility pin deliberately"
+            exit 1
+          fi
+          sed -i "s/^$expected$/$supported/" gradle/libs.versions.toml
+          grep -Fx "$supported" gradle/libs.versions.toml
+
       - name: Initialize CodeQL
         uses: github/codeql-action/init@fddeee1a7ece751b577e409a89057319e3172939 # v4
         with:
@@ -67,7 +81,8 @@ jobs:
       - name: Build Java and Kotlin sources for CodeQL
         if: matrix.language == 'java-kotlin'
         run: |
-          ./gradlew --no-daemon --max-workers=2 \
+          ./gradlew --no-daemon --max-workers=1 \
+            -Dorg.gradle.jvmargs='-Xmx1536m -XX:MaxMetaspaceSize=512m' \
             :module:compileDebugKotlin \
             :service:compileDebugKotlin \
             :stub:compileDebugKotlin \
