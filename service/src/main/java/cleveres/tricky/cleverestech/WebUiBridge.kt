@@ -198,10 +198,10 @@ class WebUiBridge(
             val array = parameterObject.get(key) as? JSONArray ?: throw IllegalArgumentException("Invalid parameter values")
             require(array.length() in 1..MAX_PARAMETER_VALUES)
             val values = ArrayList<String>(array.length())
-            val keyBytes = key.toByteArray(Charsets.UTF_8).size
+            val keyBytes = key.utf8ByteLength()
             for (index in 0 until array.length()) {
                 val value = array.get(index) as? String ?: throw IllegalArgumentException("Invalid parameter value")
-                parameterBytes += keyBytes + value.toByteArray(Charsets.UTF_8).size + 2L
+                parameterBytes += keyBytes + value.utf8ByteLength() + 2L
                 require(parameterBytes <= MAX_REQUEST_BYTES)
                 values += value
             }
@@ -474,6 +474,27 @@ class WebUiBridge(
         buffer[offset + 1] = (value ushr 16).toByte()
         buffer[offset + 2] = (value ushr 8).toByte()
         buffer[offset + 3] = value.toByte()
+    }
+
+    private fun String.utf8ByteLength(): Int {
+        var count = 0
+        var i = 0
+        val len = this.length
+        while (i < len) {
+            val ch = this[i]
+            if (ch.code <= 0x7F) {
+                count++
+            } else if (ch.code <= 0x7FF) {
+                count += 2
+            } else if (Character.isHighSurrogate(ch) && i + 1 < len && Character.isLowSurrogate(this[i + 1])) {
+                count += 4
+                i++
+            } else {
+                count += 3
+            }
+            i++
+        }
+        return count
     }
 
     @Suppress("DEPRECATION")
