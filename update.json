@@ -1,6 +1,6 @@
 {
-    "version": "V2.6.4 (3416-aedda9bf-release)",
-    "versionCode": 3416,
-    "zipUrl": "https://github.com/tryigit/CleveresTricky/releases/download/V2.6.4/CleveresTricky-V2.6.4-3416-aedda9bf-release.zip",
-    "changelog": "https://raw.githubusercontent.com/tryigit/CleveresTricky/refs/heads/master/CHANGELOG.md"
+  "version": "V2.6.5 (3424-608e1326-release)",
+  "versionCode": 3424,
+  "zipUrl": "https://github.com/tryigit/CleveresTricky/releases/download/V2.6.5/CleveresTricky-V2.6.5-3424-608e1326-release.zip",
+  "changelog": "https://raw.githubusercontent.com/tryigit/CleveresTricky/refs/heads/master/CHANGELOG.md"
 }
