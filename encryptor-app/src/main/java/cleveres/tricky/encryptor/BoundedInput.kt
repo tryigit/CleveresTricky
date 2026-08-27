@@ -2,6 +2,22 @@ package cleveres.tricky.encryptor
 
 import java.io.IOException
 import java.io.InputStream
+import kotlin.math.min
+
+class BoundedInput(private val input: InputStream, private val size: Long) : InputStream() {
+    private var read: Long = 0
+
+    override fun read(): Int =
+        if (read >= size) -1 else {
+            try {
+                val value = input.read()
+                if (value != -1) read++
+                value
+            } catch (e: Exception) {
+                -1
+            }
+        }
+}
 
 private const val MAX_XML_BYTES = 10 * 1024 * 1024
 
