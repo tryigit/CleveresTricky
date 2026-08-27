@@ -2,6 +2,13 @@ const assert = require('assert');
 const fs = require('fs');
 
 const root = 'module/template/webroot';
+const webRootFiles = fs.readdirSync(root).sort();
+assert.deepStrictEqual(
+  webRootFiles,
+  ['LOCALES.md', 'bridge.js', 'index.html', 'policy.js', 'ux.js'],
+  'WebUI source tree must contain only the canonical entrypoint, runtime owners, and localization documentation'
+);
+assert.strictEqual(fs.readdirSync(root).filter(name => /\.(php|phtml|html?|inc)$/i.test(name) && name !== 'index.html').length, 0, 'legacy PHP/HTML entrypoints must not be reintroduced');
 const runtimeScripts = fs.readdirSync(root).filter(name => name.endsWith('.js')).sort();
 assert.deepStrictEqual(runtimeScripts, ['bridge.js', 'policy.js', 'ux.js'], 'WebUI runtime JS layout must stay fixed');
 

@@ -34,7 +34,7 @@ A pseudonym is derived only when an isolated application reads exactly `deviceUn
 
 Package, application rule, DRM, RKP, certificate, patch, template, and keybox caches have fixed entry or byte limits. Policy updates replace state and related caches together. File changes use Android FileObserver and therefore do not wake a periodic polling thread during normal operation. Low frequency polling is enabled only as a fallback when FileObserver cannot be started on the target filesystem.
 
-The WebUI resource view reads bounded procfs lines only when opened. Its CPU parser avoids regular expressions and token collections, uses a monotonic sampling interval, and cancels an obsolete request when the user leaves or reopens the view.
+The WebUI resource view reads bounded procfs lines only when opened. Its CPU parser avoids regular expressions and token collections, uses a monotonic sampling interval, and cancels an obsolete request when the user leaves or reopens the view. WebUI staging cleanup enumerates at most 1024 directory entries lazily, so a stale-file burst cannot materialize an unbounded file array in the service heap.
 
 Encrypted and backup operations enforce expanded size before retaining input. Sensitive temporary byte arrays are cleared where the managed runtime permits.
 
@@ -58,4 +58,4 @@ Keep optional Identity Spoof Engine off when identity substitution and DRM ident
 
 Optional runtime work follows the resolved feature snapshot. Telephony interception is not retained when no global, active, or assigned profile requires telephony or privacy handling. DRM privacy interception follows the same scoped rule. Identity Refresh does not prepare a next boot snapshot while disabled. Region processing is skipped while disabled. Security Patch returns genuine authorization values without dynamic date resolution while disabled.
 
-Configuration uses immutable state replacement, bounded caches, event driven file observation, and targeted cache invalidation. The legacy periodic keybox file poller is no longer needed because keybox updates use the existing observer path. No new polling loop is introduced.
+Configuration uses immutable state replacement, bounded caches, event driven file observation, and targeted cache invalidation. Keybox updates use the existing observer path, so normal operation does not create a periodic polling worker.

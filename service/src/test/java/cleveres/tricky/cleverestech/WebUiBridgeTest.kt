@@ -128,6 +128,24 @@ class WebUiBridgeTest {
     }
 
     @Test
+    fun `stale staging cleanup remains bounded when the directory is oversized`() {
+        bridge = WebUiBridge(WebServer(0, configDir), configDir)
+        val staging = File(configDir, "webui_bridge/staging")
+        val staleAt = System.currentTimeMillis() - 11 * 60 * 1000L
+        repeat(1025) { index ->
+            val id = index.toString(16).padStart(32, '0')
+            val file = File(staging, "$id.upload")
+            file.writeText("stale")
+            assertTrue(file.setLastModified(staleAt - index))
+        }
+
+        bridge.cleanupStale()
+
+        val remaining = staging.listFiles()?.count { it.isFile } ?: 0
+        assertEquals(1, remaining)
+    }
+
+    @Test
     fun `rejected upload request removes its staging file`() {
         bridge = WebUiBridge(WebServer(0, configDir), configDir)
         val uploadId = "11111111111111111111111111111111"

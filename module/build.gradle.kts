@@ -157,16 +157,32 @@ private fun verifyRuntimePayloadContract(
         }
     }
 
+    val expectedWebUiFiles =
+        setOf(
+            "webroot/index.html",
+            "webroot/bridge.js",
+            "webroot/policy.js",
+            "webroot/ux.js",
+        )
+    val actualWebUiFiles =
+        fileTree(moduleRoot)
+            .matching { include("webroot/**") }
+            .files
+            .filter(File::isFile)
+            .map { it.relativeTo(moduleRoot).invariantSeparatorsPath }
+            .toSet()
+    if (actualWebUiFiles != expectedWebUiFiles) {
+        throw GradleException(
+            "Runtime WebUI file set is not canonical: ${actualWebUiFiles.sorted()}",
+        )
+    }
+
     abis.forEach { abi ->
         val runtimeBytes =
             nativeFloors.keys.sumOf { name -> File(moduleRoot, "lib/$abi/$name").length() } +
                 File(moduleRoot, "service.apk").length() +
-                File(moduleRoot, "webroot/index.html").length() +
-                File(moduleRoot, "webroot/bridge.js").length() +
-                File(moduleRoot, "webroot/policy.js").length() +
-                File(moduleRoot, "webroot/ux.js").length() +
-                File(moduleRoot, "webroot/ux-core.js").length() +
-                File(moduleRoot, "webroot/zip-import.js").length()
+                expectedWebUiFiles.sumOf { File(moduleRoot, it).length() }
+
         if (runtimeBytes < 2_500_000L) {
             throw GradleException(
                 "Runtime contract aggregate payload for $abi is unexpectedly small: $runtimeBytes bytes",
@@ -274,7 +290,7 @@ afterEvaluate {
                 into(moduleDir)
                 from(rootProject.layout.projectDirectory.file("README.md"))
                 from(layout.projectDirectory.file("template")) {
-                    exclude("module.prop", "customize.sh", "post-fs-data.sh", "service.sh", "daemon", "webroot/index.html")
+                    exclude("module.prop", "customize.sh", "post-fs-data.sh", "service.sh", "daemon", "webroot/**")
                     filter<FixCrLfFilter>("eol" to FixCrLfFilter.CrLf.newInstance("lf"))
                 }
                 from(layout.projectDirectory.file("template")) {
@@ -289,7 +305,16 @@ afterEvaluate {
                     )
                 }
                 from(layout.projectDirectory.file("template")) {
-                    include("customize.sh", "post-fs-data.sh", "service.sh", "daemon", "webroot/index.html")
+                    include(
+                        "customize.sh",
+                        "post-fs-data.sh",
+                        "service.sh",
+                        "daemon",
+                        "webroot/index.html",
+                        "webroot/bridge.js",
+                        "webroot/policy.js",
+                        "webroot/ux.js",
+                    )
                     val tokens =
                         mapOf(
                             "DEBUG" to if (buildTypeLowered == "debug") "true" else "false",

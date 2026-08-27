@@ -187,6 +187,10 @@ When changing WebUI behavior:
 5. Keep the runtime JS set fixed to `bridge.js`, `policy.js`, and `ux.js`; keep standalone runtime CSS count at zero unless this contract is intentionally redesigned in the same change.
 6. Do not reintroduce `ux-base.js`; its contents were consolidated into `ux.js`.
 
+## WebUI source-of-truth and local preview discipline
+
+The checked-in WebUI source of truth is `module/template/webroot/index.html` plus the three runtime owners `bridge.js`, `policy.js`, and `ux.js`. Do not add or retain `index.php`, `index.htm`, duplicate HTML entrypoints, copied release WebUI directories, or generated WebUI files anywhere in the shipped source tree. Local preview must use the canonical source tree or the real WebServer/package path; opening an extracted file from an old release is not evidence about the current repository. Before a release, the packaging contract and executable runtime-layout test must prove that the archive contains exactly the canonical WebUI files and no legacy entrypoint. Build outputs, extracted release folders, and temporary local preview copies must remain ignored and must never be committed as runtime assets.
+
 ## Documentation localization contract
 
 The built in user-facing language set is fixed to English, Türkçe, 简体中文, Español, Deutsch, Русский, Bahasa Indonesia, हिन्दी, and العربية unless the supported WebUI locale set is intentionally changed in the same work.

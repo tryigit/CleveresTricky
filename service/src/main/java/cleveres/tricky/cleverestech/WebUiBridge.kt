@@ -340,13 +340,25 @@ class WebUiBridge(
         SecureFile.mkdirs(stagingDir, DIRECTORY_MODE)
     }
 
-    private fun cleanupStale() {
+    internal fun cleanupStale() {
         val cutoff = System.currentTimeMillis() - STALE_AGE_MS
-        stagingDir.listFiles()
-            ?.asSequence()
-            ?.filter { it.lastModified() in 1 until cutoff }
-            ?.take(MAX_CLEANUP_FILES)
-            ?.forEach(::deleteRegularFile)
+        try {
+            Files.newDirectoryStream(stagingDir.toPath()).use { entries ->
+                var inspected = 0
+                for (path in entries) {
+                    if (inspected++ >= MAX_CLEANUP_FILES) break
+                    val lastModified =
+                        try {
+                            Files.getLastModifiedTime(path, LinkOption.NOFOLLOW_LINKS).toMillis()
+                        } catch (_: Exception) {
+                            continue
+                        }
+                    if (lastModified in 1 until cutoff) deleteRegularFile(path.toFile())
+                }
+            }
+        } catch (error: Exception) {
+            Logger.w("WebUI bridge could not inspect stale staging entries")
+        }
     }
 
     private fun requireRegularFile(
