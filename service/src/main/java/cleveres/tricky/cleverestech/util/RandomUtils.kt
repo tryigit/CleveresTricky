@@ -19,17 +19,21 @@ object RandomUtils {
     fun generateLuhn(
         length: Int,
         prefix: String = "",
+        postfix: String = "",
     ): String {
         require(length in 2..MAX_IDENTIFIER_LENGTH) { "Luhn length must be between 2 and $MAX_IDENTIFIER_LENGTH" }
-        require(prefix.length < length) { "Prefix must leave room for a check digit" }
+        val count = length - prefix.length - postfix.length - 1
+        require(count >= 0) { "Length too short" }
         require(prefix.all(Char::isDigit)) { "Prefix must contain only decimal digits" }
+        require(postfix.all(Char::isDigit)) { "Postfix must contain only decimal digits" }
 
-        val rng = secureRandom
         val sb = StringBuilder(length)
         sb.append(prefix)
-        while (sb.length < length - 1) {
-            sb.append(rng.nextInt(10))
+        val body = generateDigits(count)
+        if (body.isNotEmpty()) {
+            sb.append(body)
         }
+        sb.append(postfix)
 
         var sum = 0
         var isSecond = true

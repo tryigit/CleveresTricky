@@ -57,6 +57,56 @@ class RandomUtilsTest {
     }
 
     @Test
+    fun testGenerateLuhnWithPrefixAndPostfix() {
+        val prefix = "35"
+        val postfix = "123"
+        val length = 15
+        val luhn = RandomUtils.generateLuhn(length, prefix, postfix)
+        assertEquals(length, luhn.length)
+        assertTrue(luhn.startsWith(prefix))
+        assertTrue(luhn.substring(luhn.length - postfix.length - 1, luhn.length - 1) == postfix)
+
+        // Verify Luhn
+        val allDigits = luhn.map { it.toString().toInt() }.toIntArray()
+        var verifySum = 0
+        var doubleIt = false
+        for (i in allDigits.indices.reversed()) {
+            var d = allDigits[i]
+            if (doubleIt) {
+                d *= 2
+                if (d > 9) d -= 9
+            }
+            verifySum += d
+            doubleIt = !doubleIt
+        }
+        assertEquals("Luhn check failed for $luhn", 0, verifySum % 10)
+    }
+
+    @Test
+    fun testGenerateLuhnWithPostfixOnly() {
+        val postfix = "987"
+        val length = 15
+        val luhn = RandomUtils.generateLuhn(length, postfix = postfix)
+        assertEquals(length, luhn.length)
+        assertTrue(luhn.substring(luhn.length - postfix.length - 1, luhn.length - 1) == postfix)
+
+        // Verify Luhn
+        val allDigits = luhn.map { it.toString().toInt() }.toIntArray()
+        var verifySum = 0
+        var doubleIt = false
+        for (i in allDigits.indices.reversed()) {
+            var d = allDigits[i]
+            if (doubleIt) {
+                d *= 2
+                if (d > 9) d -= 9
+            }
+            verifySum += d
+            doubleIt = !doubleIt
+        }
+        assertEquals("Luhn check failed for $luhn", 0, verifySum % 10)
+    }
+
+    @Test
     fun testGenerateRandomSerial() {
         val length = 12
         val serial = RandomUtils.generateRandomSerial(length)
@@ -76,7 +126,9 @@ class RandomUtilsTest {
     fun testRejectsInvalidIdentifierArguments() {
         assertThrows(IllegalArgumentException::class.java) { RandomUtils.generateLuhn(1) }
         assertThrows(IllegalArgumentException::class.java) { RandomUtils.generateLuhn(15, "abc") }
+        assertThrows(IllegalArgumentException::class.java) { RandomUtils.generateLuhn(15, postfix = "abc") }
         assertThrows(IllegalArgumentException::class.java) { RandomUtils.generateLuhn(2, "12") }
+        assertThrows(IllegalArgumentException::class.java) { RandomUtils.generateLuhn(4, "12", "34") }
         assertThrows(IllegalArgumentException::class.java) { RandomUtils.generateDigits(3, "1234") }
         assertThrows(IllegalArgumentException::class.java) { RandomUtils.generateRandomSerial(0) }
     }
