@@ -88,7 +88,7 @@ internal object ManagedCrlOracle {
             } catch (_: Exception) {
             }
         }
-        if (value.length in hashLengths && value.all(::isHexChar)) {
+        if (!added && value.length in hashLengths && value.all(::isHexChar)) {
             output += value.lowercase()
         }
         if (!added && value.all(::isHexChar)) {

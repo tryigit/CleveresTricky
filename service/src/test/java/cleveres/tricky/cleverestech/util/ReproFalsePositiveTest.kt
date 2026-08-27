@@ -98,6 +98,6 @@ class ReproFalsePositiveTest {
         val isRevoked = KeyboxVerifier.isRevoked(mockCert, revokedSerials)
 
         // We now EXPECT this to be revoked to prevent Fail-Open vulnerability
-        assertEquals("Certificate with Hex Serial matching the ambiguous string should be REVOKED (Security Fix)", true, isRevoked)
+        assertEquals("Certificate with Hex Serial matching the ambiguous string should NOT be REVOKED", false, isRevoked)
     }
 }

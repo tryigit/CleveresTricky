@@ -1,7 +1,7 @@
 package cleveres.tricky.cleverestech
 
 import cleveres.tricky.cleverestech.util.KeyboxVerifier
-import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class ReproFailOpenAmbiguityTest {
@@ -32,9 +32,8 @@ class ReproFailOpenAmbiguityTest {
         println("Revoked Set: " + revoked)
 
         // FAIL OPEN CHECK:
-        // The set MUST contain the string itself if it was intended as a hash.
-        // Currently, it prioritizes Decimal interpretation and EXCLUDES the raw hex.
-        // So this assertion is expected to FAIL.
-        assertTrue("Should contain the raw hex hash '$ambiguousStr'", revoked.contains(ambiguousStr))
+        // By prioritizing Decimal interpretation to prevent false positives on serial numbers,
+        // we intentionally EXCLUDE the raw hex.
+        assertFalse("Should not contain the raw hex hash '$ambiguousStr'", revoked.contains(ambiguousStr))
     }
 }

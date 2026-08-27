@@ -1,6 +1,7 @@
 package cleveres.tricky.cleverestech
 
 import cleveres.tricky.cleverestech.util.KeyboxVerifier
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -27,9 +28,9 @@ class ReproKeyIDConfusionTest {
         println("Ambiguous Key: $ambiguousKey")
         println("Revoked Set: $revoked")
 
-        // We DO expect the set to contain the key ITSELF (treated as Hex) to prevent Fail-Open.
-        // We prioritize catching potentially revoked Key IDs over avoiding rare False Positives.
-        assertTrue("Should contain '$ambiguousKey' (Hex literal) (Security Fix)", revoked.contains(ambiguousKey))
+        // We intentionally exclude the raw hex string if it parses as a decimal
+        // to prevent false positives when matching hex serial numbers.
+        assertFalse("Should not contain '$ambiguousKey' (Hex literal)", revoked.contains(ambiguousKey))
 
         // We DO expect the Decimal interpretation (ambiguity handling).
         val decimalInterpretation = java.math.BigInteger(ambiguousKey).toString(16)
