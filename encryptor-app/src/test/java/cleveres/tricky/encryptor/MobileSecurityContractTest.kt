@@ -126,6 +126,10 @@ class MobileSecurityContractTest {
             "Root release version must use Vx.y.z format",
             Regex("val verName = \"V\\d+\\.\\d+\\.\\d+\"").matches(rootVersionLines.single()),
         )
+        val releaseVersion = Regex("val verName = \"(V\\d+\\.\\d+\\.\\d+)\"").matchEntire(rootVersionLines.single())!!.groupValues[1]
+        val changelog = File(root, "CHANGELOG.md").readText()
+        val firstChangelogHeading = changelog.lineSequence().firstOrNull { it.startsWith("## ") }
+        assertEquals("CHANGELOG must start with the current release version", releaseVersion, firstChangelogHeading?.removePrefix("## ")?.trim())
         assertTrue(appBuild.contains("versionCode = moduleVersionCode"))
         assertTrue(appBuild.contains("versionName = moduleVersionName"))
         assertTrue(appBuild.contains("rootProject.extra[\"verCode\"]"))

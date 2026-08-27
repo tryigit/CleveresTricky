@@ -246,11 +246,11 @@ pub fn parse_keybox_xml(input: &str) -> Result<KeyboxDocument, XmlError> {
         let event = reader.read_event().map_err(|_| XmlError::Malformed)?;
         match event {
             Event::Start(start) => {
-                let frame = begin_element(&reader, &start, &stack, &mut state)?;
+                let frame = begin_element(&start, &stack, &mut state)?;
                 stack.push(frame);
             }
             Event::Empty(start) => {
-                let mut frame = begin_element(&reader, &start, &stack, &mut state)?;
+                let mut frame = begin_element(&start, &stack, &mut state)?;
                 finish_element(&mut frame, &mut state)?;
             }
             Event::End(_) => {
@@ -258,13 +258,11 @@ pub fn parse_keybox_xml(input: &str) -> Result<KeyboxDocument, XmlError> {
                 finish_element(&mut frame, &mut state)?;
             }
             Event::Text(text) => {
-                let decoded = text.xml10_content().map_err(|_| XmlError::InvalidUtf8)?;
+                let decoded = text.xml10_content();
                 append_text(decoded.as_ref(), &mut stack, &mut state)?;
             }
             Event::GeneralRef(reference) => {
-                let reference = reference
-                    .xml10_content()
-                    .map_err(|_| XmlError::InvalidUtf8)?;
+                let reference = reference.xml10_content();
                 let resolved =
                     resolve_reference(reference.as_ref()).ok_or(XmlError::EntityRejected)?;
                 append_text(&resolved, &mut stack, &mut state)?;
@@ -303,7 +301,6 @@ pub fn parse_keybox_xml(input: &str) -> Result<KeyboxDocument, XmlError> {
 }
 
 fn begin_element(
-    reader: &Reader<&[u8]>,
     start: &BytesStart<'_>,
     stack: &[Frame],
     state: &mut ParseState,
@@ -318,7 +315,7 @@ fn begin_element(
         .ok_or(XmlError::ElementLimit)?;
 
     let raw_name = start.name();
-    let name = std::str::from_utf8(raw_name.as_ref()).map_err(|_| XmlError::InvalidUtf8)?;
+    let name = raw_name.as_ref();
     if name.is_empty() || utf16_units_bounded(name, MAX_NAME_UTF16_UNITS).is_none() {
         return Err(XmlError::NameLimit);
     }
@@ -329,7 +326,7 @@ fn begin_element(
             return Err(XmlError::MultipleRoots);
         }
         state.root_seen = true;
-        validate_attributes(reader, start, None)?;
+        validate_attributes(start, None)?;
         if name != "AndroidAttestation" {
             return Err(XmlError::InvalidRoot);
         }
@@ -339,7 +336,6 @@ fn begin_element(
     let mut algorithm = None;
     let is_direct_key = parent == Some(Role::Keybox) && name == "Key";
     validate_attributes(
-        reader,
         start,
         if is_direct_key {
             Some(&mut algorithm)
@@ -419,7 +415,6 @@ fn begin_element(
 }
 
 fn validate_attributes(
-    reader: &Reader<&[u8]>,
     start: &BytesStart<'_>,
     mut algorithm: Option<&mut Option<String>>,
 ) -> Result<(), XmlError> {
@@ -430,13 +425,12 @@ fn validate_attributes(
             return Err(XmlError::AttributeLimit);
         }
         let attribute = attribute.map_err(|_| XmlError::Malformed)?;
-        let name =
-            std::str::from_utf8(attribute.key.as_ref()).map_err(|_| XmlError::InvalidUtf8)?;
+        let name = attribute.key.as_ref();
         if name.is_empty() || utf16_units_bounded(name, MAX_NAME_UTF16_UNITS).is_none() {
             return Err(XmlError::NameLimit);
         }
         let value = attribute
-            .decoded_and_normalized_value(XmlVersion::Implicit1_0, reader.decoder())
+            .normalized_value(XmlVersion::Implicit1_0)
             .map_err(|_| XmlError::Malformed)?;
         if utf16_units_bounded(value.as_ref(), MAX_ATTRIBUTE_VALUE_UTF16_UNITS).is_none() {
             return Err(XmlError::AttributeValueLimit);
@@ -645,6 +639,14 @@ mod tests {
         assert_eq!(parsed.keys[0].algorithm, "ecdsa");
         assert_eq!(parsed.keys[0].private_key_pem, "PRIVATE");
         assert_eq!(parsed.keys[0].certificates_pem, ["LEAF", "ROOT"]);
+    }
+
+    #[test]
+    fn predefined_attribute_entities_are_decoded() {
+        let xml = one_key_xml("PRIVATE", &["CERT"])
+            .replace(" algorithm=\"ecdsa\"", " algorithm=\"ecdsa&amp;v1\"");
+        let parsed = parse_keybox_xml(&xml).unwrap();
+        assert_eq!(parsed.keys[0].algorithm, "ecdsa&v1");
     }
 
     #[test]
