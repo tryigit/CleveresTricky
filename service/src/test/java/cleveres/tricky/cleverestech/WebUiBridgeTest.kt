@@ -15,6 +15,7 @@ import org.junit.rules.TemporaryFolder
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.util.Base64
+import java.util.concurrent.CountDownLatch
 
 class WebUiBridgeTest {
     @get:Rule
@@ -46,6 +47,22 @@ class WebUiBridgeTest {
         assertTrue(JSONObject(body).has("files"))
         assertFalse(File(configDir, "webui_bridge/requests").exists())
         assertFalse(File(configDir, "webui_bridge/responses").exists())
+    }
+
+    @Test
+    fun `native request waits for bounded startup readiness and recovers`() {
+        val startupReady = CountDownLatch(1)
+        bridge = WebUiBridge(WebServer(0, configDir), configDir, startupReady, 100)
+        val startedAt = System.nanoTime()
+
+        val unavailable = submit("/api/config")
+
+        assertEquals(503, unavailable.getInt("status"))
+        assertTrue(System.nanoTime() - startedAt < 1_000_000_000L)
+
+        startupReady.countDown()
+        val ready = submit("/api/config")
+        assertEquals(200, ready.getInt("status"))
     }
 
     @Test

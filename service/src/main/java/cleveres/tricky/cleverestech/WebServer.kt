@@ -21,9 +21,15 @@ import java.nio.file.LinkOption
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.Base64
+import java.util.Collections
 import java.util.UUID
+import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.FutureTask
+import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
@@ -189,6 +195,81 @@ internal fun parseTotalCpuTicks(stat: CharSequence): Long? {
 }
 
 private const val LOOPBACK_TEST_HOST = "127.0.0.1"
+internal const val MAX_HTTP_WORKERS = 8
+internal const val MAX_HTTP_QUEUE_CAPACITY = 16
+
+/**
+ * NanoHTTPD 2.3.1's default runner creates one daemon thread per accepted socket.
+ * Keep both thread stacks and retained ClientHandlers bounded because the WebUI is
+ * loopback-only but still reachable by other apps on the same device.
+ */
+internal class BoundedHttpAsyncRunner(
+    workerCount: Int = MAX_HTTP_WORKERS,
+    queueCapacity: Int = MAX_HTTP_QUEUE_CAPACITY,
+) : NanoHTTPD.AsyncRunner {
+    private val stopped = AtomicBoolean(false)
+    private val nextThreadId = AtomicInteger(0)
+    private val running = Collections.synchronizedList(mutableListOf<NanoHTTPD.ClientHandler>())
+    private val executor =
+        ThreadPoolExecutor(
+            workerCount,
+            workerCount,
+            0L,
+            TimeUnit.MILLISECONDS,
+            ArrayBlockingQueue(queueCapacity),
+            { runnable ->
+                Thread(runnable, "CleveresTricky-HTTP-${nextThreadId.incrementAndGet()}").apply {
+                    isDaemon = true
+                }
+            },
+            ThreadPoolExecutor.AbortPolicy(),
+        )
+
+    init {
+        require(workerCount > 0) { "HTTP worker count must be positive" }
+        require(queueCapacity > 0) { "HTTP queue capacity must be positive" }
+    }
+
+    override fun exec(handler: NanoHTTPD.ClientHandler) {
+        val accepted =
+            synchronized(running) {
+                if (stopped.get()) {
+                    false
+                } else {
+                    running.add(handler)
+                    try {
+                        executor.execute(handler)
+                        true
+                    } catch (_: RejectedExecutionException) {
+                        running.remove(handler)
+                        false
+                    }
+                }
+            }
+        if (!accepted) handler.close()
+    }
+
+    override fun closed(handler: NanoHTTPD.ClientHandler) {
+        synchronized(running) { running.remove(handler) }
+    }
+
+    override fun closeAll() {
+        val snapshot =
+            synchronized(running) {
+                if (!stopped.compareAndSet(false, true)) return
+                running.toList()
+            }
+        snapshot.forEach { it.close() }
+        executor.shutdownNow()
+        synchronized(running) { running.clear() }
+    }
+
+    internal fun runningCountForTest(): Int = synchronized(running) { running.size }
+
+    internal fun workerCountForTest(): Int = executor.maximumPoolSize
+
+    internal fun queueCapacityForTest(): Int = executor.queue.size + executor.queue.remainingCapacity()
+}
 
 class WebServer(
     requestedPort: Int,
@@ -206,6 +287,7 @@ class WebServer(
     },
 ) : NanoHTTPD(LOOPBACK_TEST_HOST, requestedPort) {
     init {
+        setAsyncRunner(BoundedHttpAsyncRunner())
         cleveres.tricky.cleverestech.util.LoggerConfig.disableNanoHttpdLogging()
     }
 

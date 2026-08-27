@@ -50,7 +50,7 @@ internal object CronAutoIdentity {
             if (configDir?.absoluteFile != root.absoluteFile) {
                 observer?.stopWatching()
                 observer = null
-                stopExecutorLocked()
+                stopWorkerLocked()
                 configDir = root
             }
             if (observer == null) {
@@ -83,7 +83,7 @@ internal object CronAutoIdentity {
         synchronized(lock) {
             observer?.stopWatching()
             observer = null
-            stopExecutorLocked()
+            shutdownExecutorLocked()
             configDir = null
         }
     }
@@ -93,7 +93,7 @@ internal object CronAutoIdentity {
             val root = configDir ?: return
             val decision = currentDecision(root)
             if (!decision.shouldRun) {
-                stopExecutorLocked()
+                stopWorkerLocked()
                 return
             }
             ensureExecutorLocked()
@@ -144,14 +144,18 @@ internal object CronAutoIdentity {
         scheduled = current.schedule({ runCheck(root, generation) }, boundedDelay, TimeUnit.MILLISECONDS)
     }
 
-    private fun stopExecutorLocked() {
+    private fun stopWorkerLocked() {
         workerGeneration++
         scheduled?.cancel(true)
         scheduled = null
-        executor?.shutdownNow()
-        executor = null
         inFlight = false
         nextRunMs = 0L
+    }
+
+    private fun shutdownExecutorLocked() {
+        stopWorkerLocked()
+        executor?.shutdownNow()
+        executor = null
     }
 
     private fun ownsWork(
@@ -174,7 +178,7 @@ internal object CronAutoIdentity {
                 scheduled = null
                 val current = currentDecision(root)
                 if (!current.shouldRun) {
-                    stopExecutorLocked()
+                    stopWorkerLocked()
                     return
                 }
                 inFlight = true
@@ -196,7 +200,7 @@ internal object CronAutoIdentity {
             inFlight = false
             val current = currentDecision(root)
             if (!current.shouldRun) {
-                stopExecutorLocked()
+                stopWorkerLocked()
                 return
             }
             if (result.isSuccess) {
@@ -231,12 +235,14 @@ internal object CronAutoIdentity {
         synchronized(lock) {
             observer?.stopWatching()
             observer = null
-            stopExecutorLocked()
+            shutdownExecutorLocked()
             configDir = root
         }
     }
 
     @VisibleForTesting
     internal fun isRunningForTesting(): Boolean =
-        synchronized(lock) { executor?.let { !it.isShutdown } == true }
+        synchronized(lock) {
+            executor?.let { !it.isShutdown && (scheduled != null || inFlight) } == true
+        }
 }

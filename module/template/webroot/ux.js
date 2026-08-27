@@ -3120,6 +3120,12 @@
         updateControls(pages);
     }
 
+    function normalizeKeyboxScope(value) {
+        if (value === 'root') return 'root';
+        if (value === 'keyboxes' || value === 'managed') return 'keyboxes';
+        return '';
+    }
+
     async function refreshInventory(options = {}) {
         if (typeof global.fetchAuth !== 'function' || (options.signal && options.signal.aborted)) return;
         const previousController = inventoryController;
@@ -3141,9 +3147,9 @@
                 ? data.slice(0, 4096).map(item => ({
                     id: String(item?.id ?? '').slice(0, 128),
                     filename: String(item?.filename ?? '').slice(0, 256),
-                    scope: item?.scope === 'root' ? 'root' : 'managed',
+                    scope: item?.scope === 'root' || item?.scope === 'keyboxes' || item?.scope === 'managed' ? item.scope : '',
                     certificate_serial: String(item?.certificate_serial ?? '').slice(0, 256)
-                })).filter(item => item.id && item.filename)
+                })).filter(item => item.id && item.filename && item.scope)
                 : [];
             const ids = new Set(inventory.map(item => item.id));
             selected = new Set(Array.from(selected).filter(id => ids.has(id)));
@@ -3173,9 +3179,11 @@
         return enqueueKeyboxMutation(async () => {
             try {
                 if (typeof global.confirm === 'function' && !global.confirm(t('deleteConfirm'))) return;
+                const scope = normalizeKeyboxScope(item.scope);
+                if (!scope) return;
                 const body = new URLSearchParams();
                 body.set('filename', item.filename);
-                body.set('scope', item.scope);
+                body.set('scope', scope);
                 const response = await global.fetchAuth('/api/delete_keybox', { method: 'POST', body });
                 if (!response.ok) {
                     if (typeof global.notify === 'function') global.notify('Error: ' + await response.text(), 'error');
@@ -3197,11 +3205,14 @@
         bulkDeleteBusy = true;
         return enqueueKeyboxMutation(async () => {
             try {
-                const items = inventory.filter(item => selected.has(item.id));
+                const items = inventory
+                    .filter(item => selected.has(item.id))
+                    .map(item => ({ item, scope: normalizeKeyboxScope(item.scope) }))
+                    .filter(entry => entry.scope);
                 if (!items.length) return;
                 if (typeof global.confirm === 'function' && !global.confirm(t('bulkConfirm', { count: items.length }))) return;
                 const body = new URLSearchParams();
-                body.set('items', JSON.stringify(items.map(item => ({ filename: item.filename, scope: item.scope }))));
+                body.set('items', JSON.stringify(items.map(({ item, scope }) => ({ filename: item.filename, scope }))));
                 const response = await global.fetchAuth('/api/delete_keyboxes', { method: 'POST', body });
                 let payload = null;
                 try { payload = await response.clone().json(); } catch (_) {}

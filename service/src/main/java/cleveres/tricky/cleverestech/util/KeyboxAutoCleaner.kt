@@ -9,8 +9,10 @@ import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.StandardCopyOption
-import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.ScheduledThreadPoolExecutor
+import java.util.concurrent.ThreadFactory
 import java.util.concurrent.TimeUnit
 
 object KeyboxAutoCleaner {
@@ -23,6 +25,7 @@ object KeyboxAutoCleaner {
 
     @Volatile
     private var executor: ScheduledExecutorService? = null
+    private var scheduledCheck: ScheduledFuture<*>? = null
     private val configDir = File("/data/adb/cleverestricky")
     private val toggleFile = File(configDir, "auto_keybox_check")
     private val spoofEnabledFile = File(configDir, "spoof_enabled")
@@ -35,20 +38,14 @@ object KeyboxAutoCleaner {
         synchronized(executorLock) {
             val current = executor
             if (!enabled) {
-                current?.shutdownNow()
-                executor = null
+                scheduledCheck?.cancel(true)
+                scheduledCheck = null
                 return
             }
-            if (current != null && !current.isShutdown) return
+            val activeExecutor = current?.takeUnless { it.isShutdown } ?: createExecutor().also { executor = it }
+            if (scheduledCheck?.isDone == false) return
 
-            val created =
-                Executors.newSingleThreadScheduledExecutor { runnable ->
-                    Thread(runnable, "CleveresTricky-KeyboxCheck").apply {
-                        isDaemon = true
-                        priority = Thread.MIN_PRIORITY
-                    }
-                }
-            created.scheduleWithFixedDelay(
+            scheduledCheck = activeExecutor.scheduleWithFixedDelay(
                 {
                     try {
                         runCheck()
@@ -60,9 +57,23 @@ object KeyboxAutoCleaner {
                 1440,
                 TimeUnit.MINUTES,
             )
-            executor = created
         }
     }
+
+    private fun createExecutor(): ScheduledExecutorService =
+        ScheduledThreadPoolExecutor(
+            1,
+            ThreadFactory { runnable ->
+                Thread(runnable, "CleveresTricky-KeyboxCheck").apply {
+                    isDaemon = true
+                    priority = Thread.MIN_PRIORITY
+                }
+            },
+        ).apply {
+            setKeepAliveTime(30, TimeUnit.SECONDS)
+            allowCoreThreadTimeOut(true)
+            setRemoveOnCancelPolicy(true)
+        }
 
     private fun isEnabledNow(): Boolean = Config.isSpoofEnabled && isRegularFile(spoofEnabledFile) && isRegularFile(toggleFile)
 

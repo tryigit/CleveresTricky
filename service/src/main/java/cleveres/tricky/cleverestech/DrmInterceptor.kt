@@ -6,8 +6,49 @@ import android.os.ServiceManager
 import android.os.SystemClock
 import cleveres.tricky.cleverestech.binder.BinderInterceptor
 import java.io.File
-import java.util.concurrent.ConcurrentHashMap
+import java.util.LinkedHashMap
 import java.util.concurrent.TimeUnit
+
+/**
+ * Small insertion-ordered PID history used only while the DRM reconciliation lock is held.
+ * Failed injection attempts can observe a new service PID on every restart, so this state must not
+ * grow with the lifetime of the Android service process.
+ */
+internal class BoundedPidHistory<V>(
+    private val capacity: Int,
+) {
+    private val entries = LinkedHashMap<Int, V>()
+
+    init {
+        require(capacity > 0) { "PID history capacity must be positive" }
+    }
+
+    val size: Int
+        get() = entries.size
+
+    operator fun get(pid: Int): V? = entries[pid]
+
+    fun containsKey(pid: Int): Boolean = entries.containsKey(pid)
+
+    fun put(pid: Int, value: V) {
+        entries.remove(pid)
+        entries[pid] = value
+        if (entries.size > capacity) {
+            entries.entries.iterator().let { iterator ->
+                iterator.next()
+                iterator.remove()
+            }
+        }
+    }
+
+    fun remove(pid: Int) {
+        entries.remove(pid)
+    }
+
+    fun clear() {
+        entries.clear()
+    }
+}
 
 /**
  * Privacy-only hook for the modern stable-AIDL DRM HAL.
@@ -47,6 +88,7 @@ object DrmInterceptor {
     private const val MAX_PID_OUTPUT_BYTES = 32
     private const val MAX_FACTORY_SERVICES = 16
     private const val MAX_PLUGIN_BINDERS = 256
+    private const val MAX_TRACKED_INJECTION_PIDS = 64
 
     private data class FactoryRegistration(
         val name: String,
@@ -65,8 +107,8 @@ object DrmInterceptor {
 
     private val factories = LinkedHashMap<String, FactoryRegistration>()
     private val plugins = LinkedHashMap<IBinder, PluginRegistration>()
-    private val injectedPids = HashSet<Int>()
-    private val lastInjectionAttempt = ConcurrentHashMap<Int, Long>()
+    private val injectedPids = BoundedPidHistory<Unit>(MAX_TRACKED_INJECTION_PIDS)
+    private val lastInjectionAttempt = BoundedPidHistory<Long>(MAX_TRACKED_INJECTION_PIDS)
     private val pluginInterceptor = PluginInterceptor()
 
     @Volatile
@@ -289,9 +331,9 @@ object DrmInterceptor {
         if (previous != null && now - previous in 0 until INJECTION_RETRY_INTERVAL_MS) {
             return InjectionResult.DEFERRED
         }
-        lastInjectionAttempt[pid] = now
+        lastInjectionAttempt.put(pid, now)
 
-        val symbol = if (injectedPids.contains(pid)) "resume" else "entry"
+        val symbol = if (injectedPids.containsKey(pid)) "resume" else "entry"
         val modulePath = getModuleDir()
         return try {
             val process =
@@ -312,7 +354,7 @@ object DrmInterceptor {
                 Logger.w("DRM privacy: injector failed for pid=$pid (exit=${process.exitValue()})")
                 InjectionResult.FAILED
             } else {
-                injectedPids.add(pid)
+                injectedPids.put(pid, Unit)
                 Logger.i("DRM privacy: native Binder hook activated for DRM HAL pid=$pid")
                 InjectionResult.SUCCESS
             }

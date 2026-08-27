@@ -653,7 +653,35 @@ return element.innerHTML;
         }
         async function fetchAuth(url, options = {}) {
 if (!window.CleveresBridge) throw new Error('Native WebUI bridge is unavailable');
-return window.CleveresBridge.fetch(url, options);
+const startupRetryDelaysMs = [250, 500, 1000, 2000, 4000, 8000, 16000];
+for (let attempt = 0; ; attempt++) {
+    const response = await window.CleveresBridge.fetch(url, options);
+    if (response.status !== 503 || attempt >= startupRetryDelaysMs.length || typeof response.clone !== 'function') return response;
+    let message = '';
+    try { message = (await response.clone().text()).trim(); } catch (_) { return response; }
+    if (message !== 'Native WebUI runtime is starting; retry shortly') return response;
+    if (options.signal && options.signal.aborted) throw new DOMException('The request was aborted', 'AbortError');
+    await new Promise((resolve, reject) => {
+        let settled = false;
+        const onAbort = () => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            if (options.signal) options.signal.removeEventListener('abort', onAbort);
+            reject(new DOMException('The request was aborted', 'AbortError'));
+        };
+        const timer = setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            if (options.signal) options.signal.removeEventListener('abort', onAbort);
+            resolve();
+        }, startupRetryDelaysMs[attempt]);
+        if (options.signal) {
+            options.signal.addEventListener('abort', onAbort, { once: true });
+            if (options.signal.aborted) onAbort();
+        }
+    });
+}
         }
         async function downloadBlob(blob, filename) {
 if (!window.CleveresBridge) throw new Error('Native WebUI bridge is unavailable');

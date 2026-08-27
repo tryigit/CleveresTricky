@@ -21,11 +21,15 @@ import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.security.SecureRandom
 import java.util.Base64
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlin.system.exitProcess
 
 class WebUiBridge(
     private val server: WebServer,
     configDir: File,
+    private val startupReady: CountDownLatch = CountDownLatch(0),
+    private val startupWaitMs: Long = STARTUP_WAIT_MS,
 ) {
     private val bridgeDir = File(configDir, "webui_bridge")
     private val stagingDir = File(bridgeDir, "staging")
@@ -130,6 +134,12 @@ class WebUiBridge(
 
     internal fun processRequestBytes(requestBytes: ByteArray): ByteArray {
         require(requestBytes.size in 1..MAX_REQUEST_BYTES)
+        if (!awaitStartupReady()) {
+            return encodeErrorResponse(
+                NanoHTTPD.Response.Status.SERVICE_UNAVAILABLE,
+                "Native WebUI runtime is starting; retry shortly",
+            )
+        }
         var uploadFile: File? = null
         return try {
             val request = JSONObject(decodeUtf8Strict(requestBytes))
@@ -153,6 +163,14 @@ class WebUiBridge(
             uploadFile?.let(::deleteRegularFile)
         }
     }
+
+    private fun awaitStartupReady(): Boolean =
+        try {
+            startupReady.await(startupWaitMs, TimeUnit.MILLISECONDS)
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+            false
+        }
 
     private fun decodeUtf8Strict(requestBytes: ByteArray): String =
         Charsets.UTF_8
@@ -530,7 +548,7 @@ class WebUiBridge(
         private const val MAX_CLEANUP_FILES = 1024
         private const val MAX_EMPTY_READS = 16
         private const val STALE_AGE_MS = 10 * 60 * 1000L
-
+        private const val STARTUP_WAIT_MS = 5_000L
         private const val SOCKET_NAME = "cleverestrickyd.v1"
         private const val IPC_VERSION = 1
         private const val HEADER_BYTES = 16

@@ -25,6 +25,23 @@ class KeyboxAutoCleanerTest {
     }
 
     @Test
+    fun `rapid toggle reuses one executor instead of accumulating workers`() {
+        val field = KeyboxAutoCleaner::class.java.getDeclaredField("executor").apply { isAccessible = true }
+        try {
+            KeyboxAutoCleaner.setEnabled(false)
+            KeyboxAutoCleaner.setEnabled(true)
+            val first = field.get(KeyboxAutoCleaner)
+            KeyboxAutoCleaner.setEnabled(false)
+            KeyboxAutoCleaner.setEnabled(true)
+            val second = field.get(KeyboxAutoCleaner)
+
+            assertSame(first, second)
+        } finally {
+            KeyboxAutoCleaner.setEnabled(false)
+        }
+    }
+
+    @Test
     fun `replacement after verification is not quarantined`() {
         val root = temp.newFolder("replacement")
         val source = File(File(root, "keyboxes").apply { mkdirs() }, "candidate.xml")

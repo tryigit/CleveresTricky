@@ -96,12 +96,15 @@ class RuntimeWiringContractTest {
         val root = locateRoot()
         val source = mainSource(root)
         val entry = source.indexOf("fun main(args: Array<String>)")
-        val registration = source.indexOf("startWebUiBridge(configDir, isTampered)", entry)
+        val registration = source.indexOf("startWebUiBridge(configDir, isTampered, webUiReady)", entry)
         val backendWait = source.indexOf("NativeBackend.awaitReady(BACKEND_STARTUP_TIMEOUT_MS)", entry)
 
         assertTrue(entry >= 0)
         assertTrue(registration > entry)
         assertTrue(backendWait > registration)
+        assertTrue(source.contains("val webUiReady = CountDownLatch(1)"))
+        assertTrue(source.contains("startWebUiBridge(configDir, isTampered, webUiReady)"))
+        assertTrue(source.contains("webUiReady.countDown()"))
     }
 
     @Test

@@ -73,6 +73,8 @@ class WebServerRateLimitTest {
                 } catch (e: Exception) {
                     fail("Request $i failed with exception: ${e.message}")
                     return
+                } finally {
+                    conn.disconnect()
                 }
 
             if (i <= limit) {

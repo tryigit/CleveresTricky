@@ -3,14 +3,15 @@ package cleveres.tricky.cleverestech
 import cleveres.tricky.cleverestech.keystore.CertHack
 import cleveres.tricky.cleverestech.util.KeyboxAutoCleaner
 import cleveres.tricky.cleverestech.util.SecureFile
+import java.io.File
+import java.nio.file.Files
+import java.nio.file.LinkOption
+import java.util.concurrent.CountDownLatch
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import java.io.File
-import java.nio.file.Files
-import java.nio.file.LinkOption
 
 private const val CONFIG_DIR_MODE = 448
 private const val BACKEND_STARTUP_TIMEOUT_MS = 30_000L
@@ -22,8 +23,9 @@ private val DEFERRED_KEYBOX_REFRESH_DELAYS_MS = longArrayOf(1_000L, 5_000L, 15_0
 private fun startWebUiBridge(
     configDir: File,
     isTampered: Boolean,
+    startupReady: CountDownLatch,
 ): WebUiBridge? {
-    val bridge = WebUiBridge(WebServer(0, configDir, isTampered), configDir)
+    val bridge = WebUiBridge(WebServer(0, configDir, isTampered), configDir, startupReady)
     var retryDelayMs = WEB_UI_START_INITIAL_DELAY_MS
     repeat(WEB_UI_START_ATTEMPTS) { attempt ->
         try {
@@ -124,7 +126,8 @@ fun main(args: Array<String>) {
             return@runBlocking
         }
 
-        val webUiBridge = startWebUiBridge(configDir, isTampered)
+        val webUiReady = CountDownLatch(1)
+        val webUiBridge = startWebUiBridge(configDir, isTampered, webUiReady)
         if (webUiBridge == null) {
             Logger.e("Main: Native WebUI adapter could not register; exiting for supervisor retry")
             return@runBlocking
@@ -197,6 +200,10 @@ fun main(args: Array<String>) {
             Logger.e("Main: Exiting so the module supervisor can retry initialization")
             return@runBlocking
         }
+
+        // The transport may register early so the host WebUI can connect during boot, but API
+        // requests must wait until backend, configuration, and required watchers are operational.
+        webUiReady.countDown()
 
         val startupRetryJobs =
             RuntimeStartupPolicy.retryableFailures(startupResults).map { result ->

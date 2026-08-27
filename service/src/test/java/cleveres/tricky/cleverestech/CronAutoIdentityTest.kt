@@ -4,6 +4,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -26,6 +27,29 @@ class CronAutoIdentityTest {
         CronAutoIdentity.stop()
         root.deleteRecursively()
         Config.reset()
+    }
+
+    @Test
+    fun `rapid disable and reenable reuses one scheduler`() {
+        val executorField = CronAutoIdentity::class.java.getDeclaredField("executor").apply { isAccessible = true }
+        File(root, CronAutoIdentity.TOGGLE_FILE).writeText("")
+        PolicyState.installStateForTesting(state(buildIdentity = true).toString())
+
+        try {
+            CronAutoIdentity.refreshEnabled()
+            val first = executorField.get(CronAutoIdentity)
+
+            Files.delete(File(root, CronAutoIdentity.TOGGLE_FILE).toPath())
+            CronAutoIdentity.refreshEnabled()
+            assertFalse(CronAutoIdentity.isRunningForTesting())
+
+            File(root, CronAutoIdentity.TOGGLE_FILE).writeText("")
+            CronAutoIdentity.refreshEnabled()
+            val second = executorField.get(CronAutoIdentity)
+            assertSame(first, second)
+        } finally {
+            CronAutoIdentity.stop()
+        }
     }
 
     @Test

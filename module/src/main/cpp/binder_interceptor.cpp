@@ -228,6 +228,18 @@ private:
   using RwLock = std::shared_mutex;
   using WriteGuard = std::unique_lock<RwLock>;
   using ReadGuard = std::shared_lock<RwLock>;
+  static constexpr size_t kMaxInterceptorRegistrations = 512;
+
+  void pruneDeadItemsLocked() {
+    for (auto it = items.begin(); it != items.end();) {
+      if (it->first.promote() == nullptr) {
+        it = items.erase(it);
+      } else {
+        ++it;
+      }
+    }
+  }
+
   RwLock lock;
   std::unordered_map<wp<IBinder>, InterceptItem, WpIBinderHash, WpIBinderEqual>
       items{};
@@ -770,9 +782,15 @@ status_t BinderInterceptor::onTransact(uint32_t code,
     sp<IBinder> replaced_interceptor;
     {
       WriteGuard wg{lock};
+      pruneDeadItemsLocked();
       wp<IBinder> t = target;
-      auto [it, inserted] = items.try_emplace(t);
-      if (inserted) {
+      auto it = items.find(t);
+      if (it == items.end()) {
+        if (items.size() >= kMaxInterceptorRegistrations) {
+          LOGW("Interceptor registration limit reached");
+          return BAD_VALUE;
+        }
+        it = items.emplace(t, InterceptItem{}).first;
         it->second.target = t;
       } else if (it->second.interceptor != nullptr &&
                  it->second.interceptor != interceptor) {

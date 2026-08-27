@@ -145,11 +145,13 @@ class MainStartupContractTest {
         val root = locateRoot()
         val source = File(root, "service/src/main/java/cleveres/tricky/cleverestech/Main.kt").readText()
         val entry = source.indexOf("fun main(args: Array<String>)")
-        val registration = source.indexOf("startWebUiBridge(configDir, isTampered)", entry)
+        val registration = source.indexOf("startWebUiBridge(configDir, isTampered, webUiReady)", entry)
         val backendWait = source.indexOf("NativeBackend.awaitReady(BACKEND_STARTUP_TIMEOUT_MS)", entry)
+        val gateRelease = source.indexOf("webUiReady.countDown()", backendWait)
         assertTrue(entry >= 0)
         assertTrue(registration > entry)
         assertTrue(backendWait > registration)
+        assertTrue(gateRelease > backendWait)
     }
 
     private fun locateRoot(): File {
