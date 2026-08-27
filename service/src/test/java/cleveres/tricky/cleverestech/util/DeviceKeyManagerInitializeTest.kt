@@ -16,7 +16,6 @@ import org.mockito.Mockito.mock
 import org.mockito.Mockito.mockStatic
 import org.mockito.Mockito.`when`
 import java.io.File
-import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.security.KeyStore
