@@ -16,8 +16,6 @@ import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
-import java.nio.ByteBuffer
-import java.nio.charset.CodingErrorAction
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.security.MessageDigest
