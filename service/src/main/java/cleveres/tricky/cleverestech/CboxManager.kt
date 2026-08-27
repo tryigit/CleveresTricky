@@ -169,12 +169,18 @@ object CboxManager {
                 return false
             }
 
-            val parsed = KeyboxJcaAdapter.materialize(payload.document, filename)
-            val crl = KeyboxVerifier.fetchCrl() ?: return false
-            val verified = parsed.filter { KeyboxVerifier.verifyKeybox(it, crl) == KeyboxVerifier.Status.VALID }
-            if (verified.isEmpty() || verified.size != parsed.size) {
-                Logger.e("CBOX contains an invalid or revoked keybox: $filename")
-                return false
+            val cachedEntry = unlockedCache[filename]
+            val verified = if (cachedEntry != null && MessageDigest.isEqual(cachedEntry.sourceDigest, sourceDigest)) {
+                cachedEntry.keyboxes
+            } else {
+                val parsed = KeyboxJcaAdapter.materialize(payload.document, filename)
+                val crl = KeyboxVerifier.fetchCrl() ?: return false
+                val v = parsed.filter { KeyboxVerifier.verifyKeybox(it, crl) == KeyboxVerifier.Status.VALID }
+                if (v.isEmpty() || v.size != parsed.size) {
+                    Logger.e("CBOX contains an invalid or revoked keybox: $filename")
+                    return false
+                }
+                v
             }
 
             val beforeModified = file.lastModified()
