@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
     <style>
-        :root { --bg: #000000; --fg: #FFFFFF; --accent: #0A84FF; --panel: #1C1C1E; --border: #38383A; --input-bg: #FFFFFF; --success: #32D74B; --danger: #FF453A; }
+        :root { --bg: #0B0B0C; --fg: #E5E7EB; --accent: #D1D5DB; --panel: #161616; --border: #333; --input-bg: #1A1A1A; --success: #34D399; --danger: #EF4444; }
         html { color-scheme: dark; background: var(--bg); }
         body { background-color: var(--bg); color: var(--fg); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; min-height: 100dvh; overscroll-behavior-y: contain; -webkit-tap-highlight-color: transparent; }
         .island-container { display: flex; justify-content: center; position: fixed; top: calc(env(safe-area-inset-top) + 10px); left: 0; right: 0; padding: 0 max(12px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left)); box-sizing: border-box; z-index: 1000; pointer-events: none; }
@@ -25,7 +25,7 @@
         .island-close:hover { color: #fff; }
         #islandText { flex: 1; min-width: 0; line-height: 1.4; }
         @keyframes spin { to { transform: rotate(360deg); } }
-        h1 { text-align: center; font-weight: 200; letter-spacing: 2px; margin: 0; padding: calc(env(safe-area-inset-top) + 18px) max(20px, env(safe-area-inset-right)) 18px max(20px, env(safe-area-inset-left)); color: var(--fg); font-size: 1.5em; line-height: 1.2; box-sizing: border-box; }
+        h1 { text-align: center; font-weight: 200; letter-spacing: 2px; margin: 0; padding: calc(env(safe-area-inset-top) + 18px) max(20px, env(safe-area-inset-right)) 18px max(20px, env(safe-area-inset-left)); color: var(--accent); font-size: 1.5em; line-height: 1.2; text-transform: uppercase; box-sizing: border-box; }
         .tabs { display: flex; justify-content: flex-start; border-bottom: 1px solid var(--border); background: var(--panel); overflow-x: auto; position: sticky; top: env(safe-area-inset-top); z-index: 100; -webkit-overflow-scrolling: touch; scrollbar-width: none; scroll-snap-type: x proximity; touch-action: pan-x; padding-top: 0; }
         .tabs::-webkit-scrollbar { display: none; }
         .tab { padding: 15px 20px; cursor: pointer; border-bottom: 2px solid transparent; opacity: 0.6; transition: all 0.2s; white-space: nowrap; font-size: 0.9em; letter-spacing: 1px; min-height: 48px; min-width: 48px; align-items: center; justify-content: center; box-sizing: border-box; display: inline-flex; flex-shrink: 0; }
@@ -39,7 +39,7 @@
         .row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; min-height: 48px; }
         .row.wrap { flex-wrap: wrap; }
         label { font-size: 0.95em; color: #BBB; cursor: pointer; }
-        input[type="text"], input[type="tel"], input[type="password"], input[type="search"], input[type="number"], textarea, select { background: var(--input-bg); border: 1px solid var(--border); color: #000; padding: 12px 14px; border-radius: 6px; width: 100%; box-sizing: border-box; font-family: inherit; transition: border-color 0.2s; font-size: 0.95em; min-height: 44px; min-width: 44px; }
+        input[type="text"], input[type="tel"], input[type="password"], input[type="search"], input[type="number"], textarea, select { background: var(--input-bg); border: 1px solid var(--border); color: #fff; padding: 12px 14px; border-radius: 6px; width: 100%; box-sizing: border-box; font-family: inherit; transition: border-color 0.2s; font-size: 0.95em; min-height: 44px; min-width: 44px; }
         input[type="text"]:focus, input[type="tel"]:focus, input[type="password"]:focus, input[type="search"]:focus, input[type="number"]:focus, textarea:focus, select:focus { border-color: var(--accent); outline: none; }
         button { background: var(--border); border: none; color: var(--fg); padding: 12px 24px; border-radius: 6px; cursor: pointer; font-family: inherit; font-weight: 500; font-size: 0.95em; transition: all 0.2s; text-transform: uppercase; letter-spacing: 0.5px; min-height: 44px; min-width: 44px; touch-action: manipulation; }
         button:hover { background: #444; }
@@ -65,7 +65,7 @@
         .identity-input-slot input, .identity-input-slot select { width: 100%; }
         .identity-random-btn { min-width: 84px; padding: 10px 12px; text-transform: none; letter-spacing: 0; }
         .scope-note { font-size: 0.85em; color: #999; line-height: 1.5; margin-bottom: 15px; }
-        .master-panel { border-color: var(--accent); background: var(--panel); }
+        .master-panel { border-color: var(--accent); background: linear-gradient(135deg, var(--panel), #18202d); }
         .master-copy { flex: 1; min-width: 0; padding-right: 16px; }
         .master-copy strong { display: block; color: #fff; font-size: 1.1em; margin-bottom: 5px; }
         .section-header { font-size: 0.8em; color: #666; text-transform: uppercase; letter-spacing: 1px; margin: 15px 0 5px 0; }
@@ -173,7 +173,7 @@ input[type="text"], input[type="tel"], input[type="password"], input[type="searc
 #info .responsive-table td input[type="checkbox"].toggle { margin-left: auto; }
         }
         @media screen and (max-width: 700px) {
-.tabs { position: fixed; top: auto; bottom: max(16px, env(safe-area-inset-bottom)); left: 16px; right: 16px; z-index: 1000; border: 1px solid var(--border); border-radius: 20px; padding: 6px; background: rgba(28, 28, 30, 0.95); backdrop-filter: blur(10px); display: flex; justify-content: space-around; }
+.tabs { position: fixed; top: auto; bottom: 0; left: 0; right: 0; z-index: 1000; border-top: 1px solid var(--border); border-bottom: 0; padding-bottom: env(safe-area-inset-bottom); background: var(--panel); }
 .content { padding-bottom: calc(104px + env(safe-area-inset-bottom)); }
 .tab { min-height: 54px; padding: 12px 16px; }
 .log-toolbar { grid-template-columns: 1fr; }
@@ -219,11 +219,43 @@ input[type="text"], input[type="tel"], input[type="password"], input[type="searc
             grid-template-rows: auto 1fr;
             max-width: var(--content-width);
             margin: 0 auto;
-            background: var(--bg);
+            background:
+                radial-gradient(circle at 74% -12%, rgba(14, 165, 233, 0.18), transparent 38rem),
+                radial-gradient(circle at 7% 100%, rgba(45, 212, 191, 0.08), transparent 34rem),
+                var(--bg);
             color: var(--fg);
         }
-        h1 { grid-column: 1; grid-row: 1; text-align: center; margin: 0; padding: 32px 26px 24px; color: var(--fg); font-size: 1.25rem; font-weight: bold; letter-spacing: 0.1em; }
-
+        h1 {
+            grid-column: 1;
+            grid-row: 1;
+            text-align: left;
+            margin: 0;
+            padding: 32px 26px 24px;
+            color: var(--fg);
+            font-size: 1.08rem;
+            line-height: 1.25;
+            letter-spacing: 0.16em;
+            font-weight: 750;
+            text-transform: none;
+            position: relative;
+        }
+        h1::before {
+            content: 'CT';
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            margin-right: 10px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, var(--accent-strong), #2dd4bf);
+            color: #031221;
+            font-size: 0.72rem;
+            font-weight: 900;
+            letter-spacing: 0;
+            vertical-align: -10px;
+            box-shadow: 0 8px 24px rgba(14, 165, 233, 0.24);
+        }
         .tabs {
             grid-column: 1;
             grid-row: 2;
@@ -264,7 +296,7 @@ input[type="text"], input[type="tel"], input[type="password"], input[type="searc
         .tab:hover { color: var(--fg); background: rgba(148, 163, 184, 0.08); }
         .tab.active {
             color: var(--accent);
-            background: var(--panel);
+            background: linear-gradient(90deg, var(--accent-soft), rgba(56, 189, 248, 0.03));
             border-color: rgba(56, 189, 248, 0.24);
             box-shadow: inset 3px 0 0 var(--accent-strong);
         }
@@ -281,7 +313,7 @@ input[type="text"], input[type="tel"], input[type="password"], input[type="searc
         .content.active { animation: contentIn 0.24s ease both; }
         @keyframes contentIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
         .panel {
-            background: var(--panel);
+            background: linear-gradient(145deg, rgba(14, 29, 49, 0.94), rgba(10, 24, 41, 0.88));
             border-color: var(--border);
             border-radius: 18px;
             padding: 24px;
@@ -293,7 +325,7 @@ input[type="text"], input[type="tel"], input[type="password"], input[type="searc
             position: relative;
             overflow: hidden;
             border-color: var(--border-strong);
-            background: var(--panel);
+            background: linear-gradient(135deg, rgba(14, 52, 77, 0.94), rgba(12, 30, 51, 0.95) 58%, rgba(15, 51, 56, 0.9));
         }
         .panel-hero::after {
             content: '';
@@ -328,7 +360,7 @@ input[type="text"], input[type="tel"], input[type="password"], input[type="searc
             padding: 16px;
             border: 1px solid var(--border);
             border-radius: 16px;
-            background: var(--panel);
+            background: linear-gradient(160deg, rgba(14, 29, 49, 0.95), rgba(8, 21, 37, 0.92));
             box-shadow: 0 10px 28px rgba(0, 0, 0, 0.14);
         }
         .status-label {
@@ -354,19 +386,19 @@ input[type="text"], input[type="tel"], input[type="password"], input[type="searc
         #status_rkp.status-value { color: var(--success) !important; background: rgba(45, 212, 191, 0.12) !important; border-color: rgba(45, 212, 191, 0.28); }
         #status_global.status-value, #status_drm.status-value { color: #fda4af !important; background: rgba(251, 113, 133, 0.1) !important; }
         input[type='text'], input[type='tel'], input[type='password'], input[type='search'], input[type='number'], textarea, select {
-            background: var(--input-bg);
+            background: rgba(6, 18, 32, 0.9);
             border-color: var(--border);
             border-radius: 10px;
-            color: #000;
+            color: var(--fg);
         }
         input[type='text']:focus, input[type='tel']:focus, input[type='password']:focus, input[type='search']:focus, input[type='number']:focus, textarea:focus, select:focus { border-color: var(--accent-strong); box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.12); }
         button { border: 1px solid var(--border); border-radius: 10px; background: rgba(148, 163, 184, 0.11); color: var(--fg); }
         button:hover { background: rgba(148, 163, 184, 0.18); border-color: rgba(125, 211, 252, 0.34); }
-        button.primary { border-color: transparent; background: var(--panel); color: #032238; box-shadow: 0 8px 20px rgba(14, 165, 233, 0.18); }
-        button.primary:hover { background: var(--panel); box-shadow: 0 10px 24px rgba(14, 165, 233, 0.26); }
+        button.primary { border-color: transparent; background: linear-gradient(135deg, var(--accent-strong), #2dd4bf); color: #032238; box-shadow: 0 8px 20px rgba(14, 165, 233, 0.18); }
+        button.primary:hover { background: linear-gradient(135deg, #7dd3fc, #5eead4); box-shadow: 0 10px 24px rgba(14, 165, 233, 0.26); }
         button.danger { color: #fda4af; border-color: rgba(251, 113, 133, 0.45); background: rgba(251, 113, 133, 0.09); }
         .tag { background: rgba(148, 163, 184, 0.12); color: #cbd5e1; }
-        .master-panel { border-color: rgba(45, 212, 191, 0.38); background: var(--panel); }
+        .master-panel { border-color: rgba(45, 212, 191, 0.38); background: linear-gradient(135deg, rgba(15, 53, 57, 0.94), rgba(14, 29, 49, 0.94)); }
         .resource-summary, .info-health, .server-item { background: rgba(10, 25, 43, 0.82); border-color: var(--border); }
         .resource-stat { background: rgba(148, 163, 184, 0.06); }
         .section-header { color: #6f88a2; }
@@ -378,9 +410,28 @@ input[type="text"], input[type="tel"], input[type="password"], input[type="searc
         }
         @media screen and (max-width: 700px) {
             body { display: block; max-width: none; }
-            h1 { padding: 22px 18px 16px; font-size: 1.1rem; text-align: center; }
-
-            .tabs { position: fixed; top: auto; bottom: max(16px, env(safe-area-inset-bottom)); left: 16px; right: 16px; width: auto; height: auto; min-height: 60px; flex-direction: row; align-items: stretch; gap: 4px; z-index: 1000; padding: 6px; border-radius: 20px; border: 1px solid var(--border); overflow-x: auto; overflow-y: hidden; background: rgba(28, 28, 30, 0.95); backdrop-filter: blur(10px); }
+            h1 { padding: 22px 18px 16px; font-size: 1rem; }
+            h1::before { width: 30px; height: 30px; }
+            .tabs {
+                position: fixed;
+                top: auto;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                width: 100%;
+                height: auto;
+                min-height: 68px;
+                flex-direction: row;
+                align-items: stretch;
+                gap: 2px;
+                z-index: 1000;
+                padding: 7px max(8px, env(safe-area-inset-right)) max(7px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+                border-radius: 18px 18px 0 0;
+                border-bottom: 0;
+                overflow-x: auto;
+                overflow-y: hidden;
+                background: rgba(7, 17, 31, 0.94);
+            }
             .tab { width: auto; min-width: 68px; min-height: 52px; flex: 0 0 auto; justify-content: center; padding: 9px 11px; border-radius: 11px; font-size: 0.72rem; }
             .tab.active { box-shadow: inset 0 -3px 0 var(--accent-strong); }
             #tab_donate { margin-top: 0 !important; }
@@ -403,7 +454,7 @@ input[type="text"], input[type="tel"], input[type="password"], input[type="searc
         <div class="tab" id="tab_spoof" onclick="switchTab('spoof')" role="tab" tabindex="-1" aria-selected="false" aria-controls="spoof" onkeydown="handleTabNavigation(event, 'spoof')">Identity</div>
         <div class="tab" id="tab_apps" onclick="switchTab('apps')" role="tab" tabindex="-1" aria-selected="false" aria-controls="apps" onkeydown="handleTabNavigation(event, 'apps')">Apps</div>
         <div class="tab" id="tab_keys" onclick="switchTab('keys')" role="tab" tabindex="-1" aria-selected="false" aria-controls="keys" onkeydown="handleTabNavigation(event, 'keys')">Keyboxes</div>
-        <div class="tab" id="tab_info" onclick="switchTab('info')" role="tab" tabindex="-1" aria-selected="false" aria-controls="info" onkeydown="handleTabNavigation(event, 'info')">Info &amp; Resources</div>
+        <div class="tab" id="tab_info" onclick="switchTab('info')" role="tab" tabindex="-1" aria-selected="false" aria-controls="info" onkeydown="handleTabNavigation(event, 'info')">Info &amp; Resources</div> <div class="tab" id="tab_guide" onclick="switchTab('guide')" role="tab" tabindex="-1" aria-selected="false" aria-controls="guide" onkeydown="handleTabNavigation(event, 'guide')">Guide</div>
         <div class="tab" id="tab_log" onclick="switchTab('log')" role="tab" tabindex="-1" aria-selected="false" aria-controls="log" onkeydown="handleTabNavigation(event, 'log')">Logs</div>
         <div class="tab" id="tab_editor" onclick="switchTab('editor')" role="tab" tabindex="-1" aria-selected="false" aria-controls="editor" onkeydown="handleTabNavigation(event, 'editor')">Editor</div>
         <div class="tab" id="tab_donate" onclick="switchTab('donate')" role="tab" tabindex="-1" aria-selected="false" aria-controls="donate" onkeydown="handleTabNavigation(event, 'donate')" style="margin-left:auto; color:var(--accent);">Donate</div>
@@ -606,6 +657,40 @@ input[type="text"], input[type="tel"], input[type="password"], input[type="searc
 </div>
         </div>
     </div>
+    <div id="guide" class="content" role="tabpanel" aria-labelledby="tab_guide">
+        <div class="panel">
+<h3>Quick Start &amp; Keybox Guide</h3>
+<p>Welcome! CleveresTricky provides attestation compatibility controls and secure keybox management for supported rooted Android devices.</p>
+
+<h4>1. Using Standard Keybox.xml</h4>
+<p>If you have an authorized <code>keybox.xml</code>, upload it in the Keyboxes tab or place it in <code>/data/adb/cleverestricky/</code> with mode <code>0600</code>, then reboot. The module validates it before use. A keybox cannot replace a device's hardware root of trust or guarantee a Play Integrity verdict.</p>
+
+<h4>2. Encrypted .cbox Files</h4>
+<p>For better at-rest protection, you can use <code>.cbox</code> files. These authenticated encrypted containers require a password; device caches use AndroidKeyStore when available and otherwise a root-only device key.</p>
+
+<h4>3. Remote Keybox Servers</h4>
+<p>You can fetch keyboxes from HTTPS servers that you trust. Head to the Keybox tab and enter the server details. Token and custom-header authentication are supported; signed sources fail closed when verification fails.</p>
+
+<h4>4. Creating .cbox Files</h4>
+<p>If you distribute authorized key material and need encrypted delivery, use the <b>Encryptor App</b>:</p>
+<ul>
+    <li>Generate a signing key in the app.</li>
+    <li>Select your <code>keybox.xml</code>.</li>
+    <li>Set a secure password and add your author name.</li>
+    <li>Share the <code>.cbox</code> file along with the Public Key so users can verify it's from you.</li>
+</ul>
+        </div>
+        <div class="panel">
+<h3>Language Support</h3>
+<p>The module is English-first, but fully supports community translations.</p>
+<p>To add a language, download the template below, translate the values, and place the resulting <code>lang.json</code> file in <code>/data/adb/cleverestricky/</code>. Then click Reload.</p>
+<div class="grid-2">
+    <button onclick="runWithState(this, 'Downloading...', downloadLangTemplate)">Download Template</button>
+    <button onclick="runWithState(this, 'Loading...', () => { notify('Loading...', 'working'); return loadLanguage().then(() => notify('Language Loaded')); })">Reload Language File</button>
+</div>
+        </div>
+    </div>
+
     <div id="log" class="content" role="tabpanel" aria-labelledby="tab_log">
         <div class="panel">
 <h3>Module Logs</h3>
@@ -2387,6 +2472,7 @@ if(translations['tab_spoof']) document.getElementById('tab_spoof').innerText = t
 if(translations['tab_apps']) document.getElementById('tab_apps').innerText = translations['tab_apps'];
 if(translations['tab_keys']) document.getElementById('tab_keys').innerText = translations['tab_keys'];
 if(translations['tab_info']) document.getElementById('tab_info').innerText = translations['tab_info'];
+if(translations['tab_guide']) document.getElementById('tab_guide').innerText = translations['tab_guide'];
 if(translations['tab_editor']) document.getElementById('tab_editor').innerText = translations['tab_editor'];
 if(translations['tab_donate']) document.getElementById('tab_donate').innerText = translations['tab_donate'];
 if(translations['tab_log']) document.getElementById('tab_log').innerText = translations['tab_log'];
@@ -2533,6 +2619,7 @@ const template = {
     "tab_apps": "Apps",
     "tab_keys": "Keyboxes",
     "tab_info": "Info & Resources",
+    "tab_guide": "Guide",
     "tab_editor": "Editor",
     "tab_donate": "Donate",
     "tab_log": "Logs"
