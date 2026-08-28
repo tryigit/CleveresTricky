@@ -609,6 +609,19 @@ fn is_remote_integer_error(value: usize) -> bool {
     value == usize::MAX || value == u32::MAX as usize
 }
 
+const fn cmsg_align(length: usize) -> usize {
+    let alignment = mem::size_of::<usize>();
+    (length + alignment - 1) & !(alignment - 1)
+}
+
+const fn cmsg_data_offset() -> usize {
+    cmsg_align(mem::size_of::<CmsgHeader>())
+}
+
+const fn cmsg_space(length: usize) -> usize {
+    cmsg_data_offset() + cmsg_align(length)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -628,17 +641,4 @@ mod tests {
         let oversized = vec![b'x'; MAXIMUM_SELINUX_CONTEXT_BYTES + 1_024];
         assert!(read_context_bounded(Cursor::new(oversized)).is_none());
     }
-}
-
-const fn cmsg_align(length: usize) -> usize {
-    let alignment = mem::size_of::<usize>();
-    (length + alignment - 1) & !(alignment - 1)
-}
-
-const fn cmsg_data_offset() -> usize {
-    cmsg_align(mem::size_of::<CmsgHeader>())
-}
-
-const fn cmsg_space(length: usize) -> usize {
-    cmsg_data_offset() + cmsg_align(length)
 }
