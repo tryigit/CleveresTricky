@@ -1780,7 +1780,7 @@
             panel = document.createElement('div');
             panel.id = 'ct_language_panel';
             panel.className = 'panel';
-            panel.innerHTML = `<h3>Language</h3><div class="row"><label for="ct_language_selector" style="flex:1">Language</label><select id="ct_language_selector" aria-label="Language">${SUPPORTED.map(([id,name]) => `<option value="${escapeHtml(id)}">${escapeHtml(name)}</option>`).join('')}</select></div><div class="ct-compat-note">Built-in translations are local and require no network connection. English is the default unless you choose another language here.</div>`;
+            panel.innerHTML = `<h3>Language</h3><div class="row"><select id="ct_language_selector" aria-label="Language" style="width:100%;">${SUPPORTED.map(([id,name]) => `<option value="${escapeHtml(id)}">${escapeHtml(name)}</option>`).join('')}</select></div><div class="ct-compat-note">Built-in translations are local and require no network connection. English is the default unless you choose another language here.</div>`;
             panel.querySelector('select').addEventListener('change', event => {
                 saveLocale(event.target.value);
                 applyTranslations();

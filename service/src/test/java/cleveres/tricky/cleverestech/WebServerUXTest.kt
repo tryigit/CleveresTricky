@@ -141,7 +141,7 @@ class WebServerUXTest {
         assertFalse(html.contains("data-setting=\"tee_broken_mode\""))
         assertFalse(html.contains("data-setting=\"hide_sensitive_props\""))
         assertFalse(html.contains("data-setting=\"rkp_passthrough\""))
-        assertTrue(html.contains(".tabs { position: fixed; top: auto; bottom: max(16px, env(safe-area-inset-bottom)); left: 16px; right: 16px; border-radius: 20px;"))
+        assertTrue(html.contains(".tabs {\n                position: fixed;\n                top: auto;\n                bottom: max(16px, env(safe-area-inset-bottom));\n                left: 16px;\n                right: 16px;\n                width: calc(100% - 32px);"))
         assertTrue(html.contains("<option value=\"templates.json\">templates.json</option>"))
 
         retiredIdentitySettings.forEach { setting ->

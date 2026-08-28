@@ -201,7 +201,7 @@ class WebServerHtmlTest {
         assertFalse("Core protection must not expose a safe-mode switch", html.contains("Disable Certificate Substitution (Safe Mode)"))
         assertFalse("Core property hiding must not expose a toggle", html.contains("id=\"hide_sensitive_props\""))
         assertTrue("Missing always-active core notice", html.contains("Bootloader/verified-boot property compatibility"))
-        assertTrue("Missing mobile bottom navigation", html.contains(".tabs { position: fixed; top: auto; bottom: max(16px, env(safe-area-inset-bottom)); left: 16px; right: 16px; border-radius: 20px;"))
+        assertTrue("Missing mobile bottom navigation", html.contains(".tabs {\n                position: fixed;\n                top: auto;\n                bottom: max(16px, env(safe-area-inset-bottom));\n                left: 16px;\n                right: 16px;\n                width: calc(100% - 32px);"))
     }
 
     @Test
