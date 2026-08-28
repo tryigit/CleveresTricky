@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
     <style>
-        :root { --bg: #0B0B0C; --fg: #E5E7EB; --accent: #D1D5DB; --panel: #161616; --border: #333; --input-bg: #1A1A1A; --success: #34D399; --danger: #EF4444; }
+        :root { --bg: #000000; --fg: #FFFFFF; --accent: #0A84FF; --panel: #1C1C1E; --border: #38383A; --input-bg: #1C1C1E; --success: #32D74B; --danger: #FF453A; }
         html { color-scheme: dark; background: var(--bg); }
         body { background-color: var(--bg); color: var(--fg); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; min-height: 100dvh; overscroll-behavior-y: contain; -webkit-tap-highlight-color: transparent; }
         .island-container { display: flex; justify-content: center; position: fixed; top: calc(env(safe-area-inset-top) + 10px); left: 0; right: 0; padding: 0 max(12px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left)); box-sizing: border-box; z-index: 1000; pointer-events: none; }
@@ -173,8 +173,8 @@ input[type="text"], input[type="tel"], input[type="password"], input[type="searc
 #info .responsive-table td input[type="checkbox"].toggle { margin-left: auto; }
         }
         @media screen and (max-width: 700px) {
-.tabs { position: fixed; top: auto; bottom: 0; left: 0; right: 0; z-index: 1000; border-top: 1px solid var(--border); border-bottom: 0; padding-bottom: env(safe-area-inset-bottom); background: var(--panel); }
-.content { padding-bottom: calc(104px + env(safe-area-inset-bottom)); }
+.tabs { position: fixed; top: auto; bottom: max(16px, env(safe-area-inset-bottom)); left: 16px; right: 16px; border-radius: 20px; z-index: 1000; border-top: 1px solid var(--border); border-bottom: 0; padding-bottom: 0; background: var(--panel); box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+.content { padding-bottom: calc(110px + env(safe-area-inset-bottom)); }
 .tab { min-height: 54px; padding: 12px 16px; }
 .log-toolbar { grid-template-columns: 1fr; }
         }
@@ -239,23 +239,7 @@ input[type="text"], input[type="tel"], input[type="password"], input[type="searc
             text-transform: none;
             position: relative;
         }
-        h1::before {
-            content: 'CT';
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 32px;
-            height: 32px;
-            margin-right: 10px;
-            border-radius: 10px;
-            background: linear-gradient(135deg, var(--accent-strong), #2dd4bf);
-            color: #031221;
-            font-size: 0.72rem;
-            font-weight: 900;
-            letter-spacing: 0;
-            vertical-align: -10px;
-            box-shadow: 0 8px 24px rgba(14, 165, 233, 0.24);
-        }
+
         .tabs {
             grid-column: 1;
             grid-row: 2;
@@ -405,20 +389,21 @@ input[type="text"], input[type="tel"], input[type="password"], input[type="searc
         .log-toolbar select, .log-toolbar button { min-height: 46px; }
         @media screen and (max-width: 900px) {
             body { grid-template-columns: minmax(190px, 216px) minmax(0, 1fr); }
-            .content { padding-left: 24px; padding-right: 24px; }
+            .content { padding-left: 24px; padding-right: 24px; padding-bottom: calc(90px + env(safe-area-inset-bottom)); }
             .status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         }
         @media screen and (max-width: 700px) {
             body { display: block; max-width: none; }
-            h1 { padding: 22px 18px 16px; font-size: 1rem; }
-            h1::before { width: 30px; height: 30px; }
+            h1 { padding: 22px 18px 16px; font-size: 1rem; text-align: center; justify-content: center; }
+
             .tabs {
                 position: fixed;
                 top: auto;
-                bottom: 0;
-                left: 0;
-                right: 0;
-                width: 100%;
+                bottom: max(16px, env(safe-area-inset-bottom));
+                left: 16px;
+                right: 16px;
+                width: calc(100% - 32px);
+                border-radius: 20px;
                 height: auto;
                 min-height: 68px;
                 flex-direction: row;
@@ -454,7 +439,7 @@ input[type="text"], input[type="tel"], input[type="password"], input[type="searc
         <div class="tab" id="tab_spoof" onclick="switchTab('spoof')" role="tab" tabindex="-1" aria-selected="false" aria-controls="spoof" onkeydown="handleTabNavigation(event, 'spoof')">Identity</div>
         <div class="tab" id="tab_apps" onclick="switchTab('apps')" role="tab" tabindex="-1" aria-selected="false" aria-controls="apps" onkeydown="handleTabNavigation(event, 'apps')">Apps</div>
         <div class="tab" id="tab_keys" onclick="switchTab('keys')" role="tab" tabindex="-1" aria-selected="false" aria-controls="keys" onkeydown="handleTabNavigation(event, 'keys')">Keyboxes</div>
-        <div class="tab" id="tab_info" onclick="switchTab('info')" role="tab" tabindex="-1" aria-selected="false" aria-controls="info" onkeydown="handleTabNavigation(event, 'info')">Info &amp; Resources</div> <div class="tab" id="tab_guide" onclick="switchTab('guide')" role="tab" tabindex="-1" aria-selected="false" aria-controls="guide" onkeydown="handleTabNavigation(event, 'guide')">Guide</div>
+        <div class="tab" id="tab_info" onclick="switchTab('info')" role="tab" tabindex="-1" aria-selected="false" aria-controls="info" onkeydown="handleTabNavigation(event, 'info')">Info &amp; Resources</div>
         <div class="tab" id="tab_log" onclick="switchTab('log')" role="tab" tabindex="-1" aria-selected="false" aria-controls="log" onkeydown="handleTabNavigation(event, 'log')">Logs</div>
         <div class="tab" id="tab_editor" onclick="switchTab('editor')" role="tab" tabindex="-1" aria-selected="false" aria-controls="editor" onkeydown="handleTabNavigation(event, 'editor')">Editor</div>
         <div class="tab" id="tab_donate" onclick="switchTab('donate')" role="tab" tabindex="-1" aria-selected="false" aria-controls="donate" onkeydown="handleTabNavigation(event, 'donate')" style="margin-left:auto; color:var(--accent);">Donate</div>
@@ -657,40 +642,6 @@ input[type="text"], input[type="tel"], input[type="password"], input[type="searc
 </div>
         </div>
     </div>
-    <div id="guide" class="content" role="tabpanel" aria-labelledby="tab_guide">
-        <div class="panel">
-<h3>Quick Start &amp; Keybox Guide</h3>
-<p>Welcome! CleveresTricky provides attestation compatibility controls and secure keybox management for supported rooted Android devices.</p>
-
-<h4>1. Using Standard Keybox.xml</h4>
-<p>If you have an authorized <code>keybox.xml</code>, upload it in the Keyboxes tab or place it in <code>/data/adb/cleverestricky/</code> with mode <code>0600</code>, then reboot. The module validates it before use. A keybox cannot replace a device's hardware root of trust or guarantee a Play Integrity verdict.</p>
-
-<h4>2. Encrypted .cbox Files</h4>
-<p>For better at-rest protection, you can use <code>.cbox</code> files. These authenticated encrypted containers require a password; device caches use AndroidKeyStore when available and otherwise a root-only device key.</p>
-
-<h4>3. Remote Keybox Servers</h4>
-<p>You can fetch keyboxes from HTTPS servers that you trust. Head to the Keybox tab and enter the server details. Token and custom-header authentication are supported; signed sources fail closed when verification fails.</p>
-
-<h4>4. Creating .cbox Files</h4>
-<p>If you distribute authorized key material and need encrypted delivery, use the <b>Encryptor App</b>:</p>
-<ul>
-    <li>Generate a signing key in the app.</li>
-    <li>Select your <code>keybox.xml</code>.</li>
-    <li>Set a secure password and add your author name.</li>
-    <li>Share the <code>.cbox</code> file along with the Public Key so users can verify it's from you.</li>
-</ul>
-        </div>
-        <div class="panel">
-<h3>Language Support</h3>
-<p>The module is English-first, but fully supports community translations.</p>
-<p>To add a language, download the template below, translate the values, and place the resulting <code>lang.json</code> file in <code>/data/adb/cleverestricky/</code>. Then click Reload.</p>
-<div class="grid-2">
-    <button onclick="runWithState(this, 'Downloading...', downloadLangTemplate)">Download Template</button>
-    <button onclick="runWithState(this, 'Loading...', () => { notify('Loading...', 'working'); return loadLanguage().then(() => notify('Language Loaded')); })">Reload Language File</button>
-</div>
-        </div>
-    </div>
-
     <div id="log" class="content" role="tabpanel" aria-labelledby="tab_log">
         <div class="panel">
 <h3>Module Logs</h3>
@@ -1190,7 +1141,7 @@ window.scrollTo({ top: 0, behavior: reducedMotion ? 'auto' : 'smooth' });
         function handleTabNavigation(e, id) {
 if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
     e.preventDefault();
-    const tabs = ['dashboard', 'spoof', 'apps', 'keys', 'info', 'guide', 'log', 'editor', 'donate'];
+    const tabs = ['dashboard', 'spoof', 'apps', 'keys', 'info', 'log', 'editor', 'donate'];
     let idx = tabs.indexOf(id);
     if (e.key === 'ArrowRight') idx = (idx + 1) % tabs.length;
     else idx = (idx - 1 + tabs.length) % tabs.length;
