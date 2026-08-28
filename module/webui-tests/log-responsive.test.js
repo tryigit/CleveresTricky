@@ -47,7 +47,7 @@ assert.match(
 );
 assert.match(
   indexSource,
-  /#logViewer\s*\{[^}]*background:\s*var\(--input-bg\);[^}]*color:\s*var\(--fg\);/s,
+  /#logViewer\s*\{[^}]*background:\s*var\(--input-bg\);[^}]*color:\s*var\(--text\);/s,
   'Log viewer must use defined theme variables',
 );
 assert.match(
