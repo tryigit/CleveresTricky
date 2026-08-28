@@ -158,7 +158,7 @@ internal object KeyboxLoader {
     }
 
     private const val OP_KEYBOX_PARSE = 23
-    private const val MAX_ACTIVE_KEYS = 256
+    internal const val MAX_ACTIVE_KEYS = 256
     private const val KEY_ID_BYTES = 16
     private const val STORE_CONTROL_HEADER_BYTES = 8
     private const val STORE_CONTROL_VERSION = 1

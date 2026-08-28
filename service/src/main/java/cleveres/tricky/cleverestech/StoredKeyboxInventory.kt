@@ -1,6 +1,7 @@
 package cleveres.tricky.cleverestech
 
 import java.io.File
+import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.util.Locale
@@ -32,6 +33,7 @@ internal object StoredKeyboxInventory {
     const val MAX_STORED_SOURCES = 256
     const val MAX_FILENAME_BYTES = 255
     const val MAX_XML_BYTES = 10L * 1024 * 1024
+    const val MAX_SCANNED_ENTRIES_PER_DIRECTORY = 4_096
 
     fun list(configDir: File): List<Source> {
         val output = ArrayList<Source>()
@@ -75,7 +77,11 @@ internal object StoredKeyboxInventory {
     ) {
         if (!Files.isDirectory(directory.toPath(), LinkOption.NOFOLLOW_LINKS)) return
         Files.newDirectoryStream(directory.toPath()).use { entries ->
+            var scanned = 0
             for (entry in entries) {
+                if (++scanned > MAX_SCANNED_ENTRIES_PER_DIRECTORY) {
+                    throw IOException("Keybox directory contains too many entries")
+                }
                 val filename = entry.fileName.toString()
                 if (!isSafeStoredName(filename, allowCbox)) continue
                 if (!Files.isRegularFile(entry, LinkOption.NOFOLLOW_LINKS)) continue

@@ -16,6 +16,7 @@ import kotlin.system.exitProcess
 @SuppressLint("BlockedPrivateApi")
 object KeystoreInterceptor : BinderInterceptor() {
     private const val FIRST_APPLICATION_UID = 10_000
+    private const val MAX_PROC_SCAN_ENTRIES = 4_096
     private const val INJECTION_RETRY_INTERVAL_MS = 15_000L
 
     private val getKeyEntryTransaction =
@@ -172,7 +173,9 @@ object KeystoreInterceptor : BinderInterceptor() {
         val buf = ByteArray(1024)
         try {
             java.nio.file.Files.newDirectoryStream(proc.toPath()).use { entries ->
+                var scanned = 0
                 for (entry in entries) {
+                    if (++scanned > MAX_PROC_SCAN_ENTRIES) break
                     val pidStr = entry.fileName.toString()
                     if (pidStr.isEmpty() || pidStr[0] !in '1'..'9') continue
                     try {

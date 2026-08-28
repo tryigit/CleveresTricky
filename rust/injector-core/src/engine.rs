@@ -11,7 +11,7 @@ use cleverestricky_native_core::injector_support::{
 };
 use std::ffi::{c_int, c_void, CStr, CString, OsString};
 use std::fs::{self, File, OpenOptions};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::mem;
 use std::os::fd::AsRawFd;
 use std::os::unix::ffi::OsStrExt;
@@ -39,6 +39,7 @@ const RTLD_NOW: usize = 2;
 const ANDROID_DLEXT_USE_LIBRARY_FD: u64 = 0x10;
 const CONTROL_BUFFER_SIZE: usize = 4_096;
 const MAXIMUM_REMOTE_ERROR_BYTES: usize = 1_024;
+const MAXIMUM_SELINUX_CONTEXT_BYTES: usize = 255;
 
 type EngineResult<T> = Result<T, String>;
 
@@ -290,8 +291,8 @@ fn inject_library(
 
 fn create_local_socket_for_target(pid: i32) -> EngineResult<OwnedFd> {
     let context_path = format!("/proc/{pid}/attr/current");
-    if let Ok(mut context) = fs::read(context_path) {
-        if context.len() <= 255 {
+    if let Ok(file) = File::open(context_path) {
+        if let Some(mut context) = read_context_bounded(file) {
             while matches!(context.last(), Some(b'\n' | 0)) {
                 context.pop();
             }
@@ -303,8 +304,8 @@ fn create_local_socket_for_target(pid: i32) -> EngineResult<OwnedFd> {
                     );
                 }
             }
+            wipe_bytes(&mut context);
         }
-        wipe_bytes(&mut context);
     }
     let descriptor = unsafe { socket(AF_UNIX, SOCK_DGRAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0) };
     if let Err(error) = set_socket_creation_context(&[]) {
@@ -314,6 +315,20 @@ fn create_local_socket_for_target(pid: i32) -> EngineResult<OwnedFd> {
         );
     }
     OwnedFd::new(descriptor)
+}
+
+fn read_context_bounded(mut input: impl Read) -> Option<Vec<u8>> {
+    let mut context = Vec::with_capacity(MAXIMUM_SELINUX_CONTEXT_BYTES);
+    let result = input
+        .by_ref()
+        .take((MAXIMUM_SELINUX_CONTEXT_BYTES + 1) as u64)
+        .read_to_end(&mut context);
+    if result.is_ok() && context.len() <= MAXIMUM_SELINUX_CONTEXT_BYTES {
+        Some(context)
+    } else {
+        wipe_bytes(&mut context);
+        None
+    }
 }
 
 fn set_socket_creation_context(context: &[u8]) -> std::io::Result<()> {
@@ -592,6 +607,27 @@ fn close_remote_fd(session: &mut RemoteSession, symbols: &InjectorSymbols, descr
 
 fn is_remote_integer_error(value: usize) -> bool {
     value == usize::MAX || value == u32::MAX as usize
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+
+    #[test]
+    fn bounded_context_reader_preserves_valid_context() {
+        let context = b"u:r:su:s0\n\0";
+        assert_eq!(
+            read_context_bounded(Cursor::new(context)),
+            Some(context.to_vec())
+        );
+    }
+
+    #[test]
+    fn bounded_context_reader_rejects_oversized_context_without_unbounded_read() {
+        let oversized = vec![b'x'; MAXIMUM_SELINUX_CONTEXT_BYTES + 1_024];
+        assert!(read_context_bounded(Cursor::new(oversized)).is_none());
+    }
 }
 
 const fn cmsg_align(length: usize) -> usize {

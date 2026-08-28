@@ -1,6 +1,7 @@
 package cleveres.tricky.cleverestech
 
 import cleveres.tricky.cleverestech.util.SecureFile
+import cleveres.tricky.cleverestech.util.readUtf8FileSnapshotBounded
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -79,7 +80,7 @@ object KernelIdentityManager {
             return state.copy(enabled = false)
         }
         return runCatching {
-            val obj = JSONObject(target.readText(Charsets.UTF_8))
+            val obj = JSONObject(readUtf8FileSnapshotBounded(target, 1, MAX_BYTES))
             val preset = obj.optString("preset", "custom").trim()
             require(preset == "custom" || preset in presetIds)
             val selected = presets.firstOrNull { it.id == preset }

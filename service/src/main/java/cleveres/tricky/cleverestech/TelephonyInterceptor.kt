@@ -12,6 +12,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 object TelephonyInterceptor : BinderInterceptor() {
     private const val PHONE_SUB_INFO_DESCRIPTOR = "com.android.internal.telephony.IPhoneSubInfo"
+    private const val MAX_PROC_SCAN_ENTRIES = 4_096
     private const val INJECTION_RETRY_INTERVAL_MS = 30_000L
     private const val MALFORMED_REQUEST_LOG_INTERVAL_MS = 60_000L
 
@@ -271,7 +272,9 @@ object TelephonyInterceptor : BinderInterceptor() {
         val buf = ByteArray(1024)
         try {
             java.nio.file.Files.newDirectoryStream(proc.toPath()).use { entries ->
+                var scanned = 0
                 for (entry in entries) {
+                    if (++scanned > MAX_PROC_SCAN_ENTRIES) break
                     val pidStr = entry.fileName.toString()
                     if (pidStr.isEmpty() || pidStr[0] !in '1'..'9') continue
                     try {

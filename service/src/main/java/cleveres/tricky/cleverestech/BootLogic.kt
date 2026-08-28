@@ -12,6 +12,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 object BootLogic {
     private const val CONFIG_PATH = "/data/adb/cleverestricky"
     private const val COMMAND_TIMEOUT_SECONDS = 10L
+    private const val MAX_CONFLICT_SCAN_ENTRIES = 4_096
     private const val ANDROID_16_SDK = 36
     private const val OEM_UNLOCK_ALLOWED_PROPERTY = "sys.oem_unlock_allowed"
     private val nullDevice = File("/dev/null")
@@ -84,25 +85,40 @@ object BootLogic {
                 "/data/adb/modules",
                 "/data/adb/ksu/modules",
                 "/data/adb/ap/modules",
-            ).any { path ->
-                val directory = File(path)
-                if (!isDirectory(directory)) return@any false
-                runCatching {
-                    Files.newDirectoryStream(directory.toPath()).use { entries ->
-                        entries.any { entry ->
-                            val candidate = entry.toFile()
-                            isDirectory(candidate) &&
-                                !isRegularFile(File(candidate, "disable")) &&
-                                isBuildIdentityProviderModuleId(candidate.name)
-                        }
-                    }
-                }.getOrDefault(false)
-            }
+            ).any { path -> hasConflictingBuildIdentityModule(File(path)) }
         if (conflicts) {
             Logger.i("Another build-identity provider was detected; template properties remain untouched in auto mode")
             return false
         }
         return true
+    }
+
+    @androidx.annotation.VisibleForTesting
+    internal fun hasConflictingBuildIdentityModule(directory: File): Boolean {
+        if (!isDirectory(directory)) return false
+        return runCatching {
+            Files.newDirectoryStream(directory.toPath()).use { entries ->
+                var scanned = 0
+                for (entry in entries) {
+                    if (++scanned > MAX_CONFLICT_SCAN_ENTRIES) {
+                        Logger.w("Could not fully inspect ${directory.absolutePath}; keeping identity compatibility disabled")
+                        return@use true
+                    }
+                    val candidate = entry.toFile()
+                    if (
+                        isDirectory(candidate) &&
+                        !isRegularFile(File(candidate, "disable")) &&
+                        isBuildIdentityProviderModuleId(candidate.name)
+                    ) {
+                        return@use true
+                    }
+                }
+                false
+            }
+        }.getOrElse { error ->
+            Logger.w("Could not inspect ${directory.absolutePath}; keeping identity compatibility disabled: ${error.message}")
+            true
+        }
     }
 
     @androidx.annotation.VisibleForTesting

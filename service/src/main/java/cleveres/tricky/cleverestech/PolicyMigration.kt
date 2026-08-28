@@ -1,6 +1,7 @@
 package cleveres.tricky.cleverestech
 
 import cleveres.tricky.cleverestech.util.SecureFile
+import cleveres.tricky.cleverestech.util.readUtf8FileSnapshotBounded
 import org.json.JSONObject
 import java.io.File
 import java.nio.file.Files
@@ -88,7 +89,7 @@ object PolicyMigration {
         }
 
         val originalText =
-            runCatching { stateFile.readText(Charsets.UTF_8) }
+            runCatching { readUtf8FileSnapshotBounded(stateFile, 1, MAX_STATE_BYTES) }
                 .getOrElse {
                     Logger.w("Could not read persisted policy state during migration: ${stateFile.name}")
                     return Outcome(Status.MALFORMED)

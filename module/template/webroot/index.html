@@ -193,6 +193,257 @@ input[type="text"], input[type="tel"], input[type="password"], input[type="searc
         @media (prefers-reduced-motion: reduce) {
 *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
         }
+        /* Canonical product surface: keep the four-file runtime contract, but make the direct-open page feel like the real app. */
+        :root {
+            --bg: #07111f;
+            --bg-raised: #0b1728;
+            --fg: #e8f0fb;
+            --muted: #8fa3bb;
+            --accent: #7dd3fc;
+            --accent-strong: #38bdf8;
+            --accent-soft: rgba(56, 189, 248, 0.14);
+            --panel: rgba(14, 29, 49, 0.88);
+            --panel-solid: #0e1d31;
+            --border: rgba(148, 163, 184, 0.18);
+            --border-strong: rgba(125, 211, 252, 0.38);
+            --input-bg: #091729;
+            --success: #5eead4;
+            --danger: #fb7185;
+            --warning: #fbbf24;
+            --content-width: 1180px;
+        }
+        html { background: var(--bg); }
+        body {
+            display: grid;
+            grid-template-columns: minmax(214px, 252px) minmax(0, 1fr);
+            grid-template-rows: auto 1fr;
+            max-width: var(--content-width);
+            margin: 0 auto;
+            background:
+                radial-gradient(circle at 74% -12%, rgba(14, 165, 233, 0.18), transparent 38rem),
+                radial-gradient(circle at 7% 100%, rgba(45, 212, 191, 0.08), transparent 34rem),
+                var(--bg);
+            color: var(--fg);
+        }
+        h1 {
+            grid-column: 1;
+            grid-row: 1;
+            text-align: left;
+            margin: 0;
+            padding: 32px 26px 24px;
+            color: var(--fg);
+            font-size: 1.08rem;
+            line-height: 1.25;
+            letter-spacing: 0.16em;
+            font-weight: 750;
+            text-transform: none;
+            position: relative;
+        }
+        h1::before {
+            content: 'CT';
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            margin-right: 10px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, var(--accent-strong), #2dd4bf);
+            color: #031221;
+            font-size: 0.72rem;
+            font-weight: 900;
+            letter-spacing: 0;
+            vertical-align: -10px;
+            box-shadow: 0 8px 24px rgba(14, 165, 233, 0.24);
+        }
+        .tabs {
+            grid-column: 1;
+            grid-row: 2;
+            position: sticky;
+            top: 24px;
+            align-self: start;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            gap: 5px;
+            height: calc(100dvh - 48px);
+            box-sizing: border-box;
+            padding: 12px 14px 20px;
+            overflow-x: hidden;
+            overflow-y: auto;
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            background: rgba(9, 23, 41, 0.72);
+            box-shadow: 0 22px 60px rgba(0, 0, 0, 0.22);
+            backdrop-filter: blur(18px);
+            scrollbar-width: thin;
+        }
+        .tab {
+            width: 100%;
+            min-height: 44px;
+            justify-content: flex-start;
+            padding: 11px 13px;
+            border: 1px solid transparent;
+            border-radius: 12px;
+            color: var(--muted);
+            opacity: 1;
+            font-size: 0.84rem;
+            font-weight: 650;
+            letter-spacing: 0.01em;
+            text-transform: none;
+            transition: background-color 0.18s ease, color 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+        }
+        .tab:hover { color: var(--fg); background: rgba(148, 163, 184, 0.08); }
+        .tab.active {
+            color: var(--accent);
+            background: linear-gradient(90deg, var(--accent-soft), rgba(56, 189, 248, 0.03));
+            border-color: rgba(56, 189, 248, 0.24);
+            box-shadow: inset 3px 0 0 var(--accent-strong);
+        }
+        #tab_donate { margin-left: 0 !important; margin-top: auto; color: #a7f3d0 !important; }
+        .content {
+            grid-column: 2;
+            grid-row: 1 / span 2;
+            width: 100%;
+            max-width: none;
+            box-sizing: border-box;
+            padding: 42px 34px 56px;
+            margin: 0;
+        }
+        .content.active { animation: contentIn 0.24s ease both; }
+        @keyframes contentIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+        .panel {
+            background: linear-gradient(145deg, rgba(14, 29, 49, 0.94), rgba(10, 24, 41, 0.88));
+            border-color: var(--border);
+            border-radius: 18px;
+            padding: 24px;
+            margin-bottom: 18px;
+            box-shadow: 0 16px 42px rgba(0, 0, 0, 0.18);
+        }
+        .panel:hover { border-color: rgba(125, 211, 252, 0.28); }
+        .panel-hero {
+            position: relative;
+            overflow: hidden;
+            border-color: var(--border-strong);
+            background: linear-gradient(135deg, rgba(14, 52, 77, 0.94), rgba(12, 30, 51, 0.95) 58%, rgba(15, 51, 56, 0.9));
+        }
+        .panel-hero::after {
+            content: '';
+            position: absolute;
+            width: 190px;
+            height: 190px;
+            right: -76px;
+            top: -84px;
+            border-radius: 50%;
+            background: rgba(56, 189, 248, 0.12);
+            pointer-events: none;
+        }
+        h3 {
+            color: var(--fg);
+            font-size: 1.02rem;
+            font-weight: 750;
+            letter-spacing: -0.01em;
+            border-bottom-color: var(--border);
+            padding-bottom: 14px;
+            margin-bottom: 16px;
+        }
+        label { color: #b7c5d7; }
+        .scope-note, .res-desc, .info-section-copy { color: var(--muted); }
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 12px;
+            margin-bottom: 18px;
+        }
+        .status-card {
+            min-width: 0;
+            padding: 16px;
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            background: linear-gradient(160deg, rgba(14, 29, 49, 0.95), rgba(8, 21, 37, 0.92));
+            box-shadow: 0 10px 28px rgba(0, 0, 0, 0.14);
+        }
+        .status-label {
+            color: var(--muted);
+            font-size: 0.7rem;
+            font-weight: 750;
+            letter-spacing: 0.08em;
+            line-height: 1.35;
+            text-transform: uppercase;
+        }
+        .status-value {
+            display: inline-block;
+            margin-top: 11px;
+            padding: 6px 9px;
+            border: 1px solid rgba(148, 163, 184, 0.18);
+            border-radius: 8px;
+            color: var(--fg) !important;
+            background: rgba(148, 163, 184, 0.08) !important;
+            font-size: 0.76rem;
+            font-weight: 800;
+            letter-spacing: 0.05em;
+        }
+        #status_rkp.status-value { color: var(--success) !important; background: rgba(45, 212, 191, 0.12) !important; border-color: rgba(45, 212, 191, 0.28); }
+        #status_global.status-value, #status_drm.status-value { color: #fda4af !important; background: rgba(251, 113, 133, 0.1) !important; }
+        input[type='text'], input[type='tel'], input[type='password'], input[type='search'], input[type='number'], textarea, select {
+            background: rgba(6, 18, 32, 0.9);
+            border-color: var(--border);
+            border-radius: 10px;
+            color: var(--fg);
+        }
+        input[type='text']:focus, input[type='tel']:focus, input[type='password']:focus, input[type='search']:focus, input[type='number']:focus, textarea:focus, select:focus { border-color: var(--accent-strong); box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.12); }
+        button { border: 1px solid var(--border); border-radius: 10px; background: rgba(148, 163, 184, 0.11); color: var(--fg); }
+        button:hover { background: rgba(148, 163, 184, 0.18); border-color: rgba(125, 211, 252, 0.34); }
+        button.primary { border-color: transparent; background: linear-gradient(135deg, var(--accent-strong), #2dd4bf); color: #032238; box-shadow: 0 8px 20px rgba(14, 165, 233, 0.18); }
+        button.primary:hover { background: linear-gradient(135deg, #7dd3fc, #5eead4); box-shadow: 0 10px 24px rgba(14, 165, 233, 0.26); }
+        button.danger { color: #fda4af; border-color: rgba(251, 113, 133, 0.45); background: rgba(251, 113, 133, 0.09); }
+        .tag { background: rgba(148, 163, 184, 0.12); color: #cbd5e1; }
+        .master-panel { border-color: rgba(45, 212, 191, 0.38); background: linear-gradient(135deg, rgba(15, 53, 57, 0.94), rgba(14, 29, 49, 0.94)); }
+        .resource-summary, .info-health, .server-item { background: rgba(10, 25, 43, 0.82); border-color: var(--border); }
+        .resource-stat { background: rgba(148, 163, 184, 0.06); }
+        .section-header { color: #6f88a2; }
+        .log-toolbar select, .log-toolbar button { min-height: 46px; }
+        @media screen and (max-width: 900px) {
+            body { grid-template-columns: minmax(190px, 216px) minmax(0, 1fr); }
+            .content { padding-left: 24px; padding-right: 24px; }
+            .status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        }
+        @media screen and (max-width: 700px) {
+            body { display: block; max-width: none; }
+            h1 { padding: 22px 18px 16px; font-size: 1rem; }
+            h1::before { width: 30px; height: 30px; }
+            .tabs {
+                position: fixed;
+                top: auto;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                width: 100%;
+                height: auto;
+                min-height: 68px;
+                flex-direction: row;
+                align-items: stretch;
+                gap: 2px;
+                z-index: 1000;
+                padding: 7px max(8px, env(safe-area-inset-right)) max(7px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+                border-radius: 18px 18px 0 0;
+                border-bottom: 0;
+                overflow-x: auto;
+                overflow-y: hidden;
+                background: rgba(7, 17, 31, 0.94);
+            }
+            .tab { width: auto; min-width: 68px; min-height: 52px; flex: 0 0 auto; justify-content: center; padding: 9px 11px; border-radius: 11px; font-size: 0.72rem; }
+            .tab.active { box-shadow: inset 0 -3px 0 var(--accent-strong); }
+            #tab_donate { margin-top: 0 !important; }
+            .content { padding: 10px 14px 118px; }
+            .panel { padding: 18px; border-radius: 16px; }
+            .status-grid { gap: 10px; }
+            .status-card { padding: 14px; }
+            .status-label { font-size: 0.66rem; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .content.active { animation: none; }
+        }
     </style>
 </head>
 <body>
@@ -210,30 +461,30 @@ input[type="text"], input[type="tel"], input[type="password"], input[type="searc
     </div>
 
     <div id="dashboard" class="content active" role="tabpanel" aria-labelledby="tab_dashboard">
-        <div class="panel">
+        <div class="panel panel-hero">
 <h3>Core Protection</h3>
 <div class="scope-note" style="margin:0;"><strong style="color:var(--success);">Always active.</strong> Bootloader/verified-boot property compatibility and Keystore/TEE certificate protection are core module behavior. They have no on/off switch and continue working when Identity Engine is disabled. Hardware bootloader and root-of-trust state are not physically changed.</div>
         </div>
-        <div style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
-<div style="flex: 1; min-width: 120px; padding: 15px; border-radius: 8px; background: #1a1a1a; border: 1px solid var(--border); text-align: center;">
-    <div style="font-size: 0.8em; color: #888; text-transform: uppercase;">Identity Engine</div>
-    <div id="status_engine" style="font-weight: bold; color: #888; margin-top: 5px; background: rgba(255, 255, 255, 0.05); padding: 5px; border-radius: 4px;">OFF</div>
-</div>
-<div style="flex: 1; min-width: 120px; padding: 15px; border-radius: 8px; background: #1a1a1a; border: 1px solid var(--border); text-align: center;">
-    <div style="font-size: 0.8em; color: #888; text-transform: uppercase;">Global Mode</div>
-    <div id="status_global" style="font-weight: bold; color: var(--danger); margin-top: 5px; background: rgba(239, 68, 68, 0.1); padding: 5px; border-radius: 4px;">INACTIVE</div>
-</div>
-<div style="flex: 1; min-width: 120px; padding: 15px; border-radius: 8px; background: #1a1a1a; border: 1px solid var(--border); text-align: center;">
-    <div style="font-size: 0.8em; color: #888; text-transform: uppercase;">RKP Protection</div>
-    <div id="status_rkp" style="font-weight: bold; color: var(--success); margin-top: 5px; background: rgba(74, 222, 128, 0.1); padding: 5px; border-radius: 4px;">ALWAYS ON</div>
-</div>
-<div style="flex: 1; min-width: 120px; padding: 15px; border-radius: 8px; background: #1a1a1a; border: 1px solid var(--border); text-align: center;">
-    <div style="font-size: 0.8em; color: #888; text-transform: uppercase;">DRM Fix</div>
-    <div id="status_drm" style="font-weight: bold; color: var(--danger); margin-top: 5px; background: rgba(239, 68, 68, 0.1); padding: 5px; border-radius: 4px;">INACTIVE</div>
-</div>
+        <div class="status-grid" aria-label="Protection status">
+            <div class="status-card">
+                <div class="status-label">Identity Engine</div>
+                <div id="status_engine" class="status-value">OFF</div>
+            </div>
+            <div class="status-card">
+                <div class="status-label">Global Mode</div>
+                <div id="status_global" class="status-value">INACTIVE</div>
+            </div>
+            <div class="status-card">
+                <div class="status-label">RKP Protection</div>
+                <div id="status_rkp" class="status-value">ALWAYS ON</div>
+            </div>
+            <div class="status-card">
+                <div class="status-label">DRM Fix</div>
+                <div id="status_drm" class="status-value">INACTIVE</div>
+            </div>
         </div>
 
-        <div class="panel"><h3>Configuration Management</h3><div style="margin-bottom:10px;"><label for="backupPw">Backup Password (required, at least 12 characters)</label><div class="pwd-wrapper"><input type="password" id="backupPw" placeholder="Enter a strong backup password" minlength="12" maxlength="1024" spellcheck="false" autocomplete="new-password" autocorrect="off" autocapitalize="off"><button type="button" class="pwd-toggle" onclick="togglePassword(this)">Show</button></div></div><div class="grid-2"><button onclick="runWithState(this, 'Exporting...', backupConfig)">Export Encrypted Settings</button><button onclick="document.getElementById('restoreInput').click()">Import Encrypted Settings</button><input type="file" id="restoreInput" style="display:none" onchange="restoreConfig(this)" accept=".ctsb"></div><div style="margin-top:10px;"><button id="runtimeSyncBtn" onclick="runWithState(this, 'Synchronizing...', synchronizeRuntimeSettings)" class="primary" style="width:100%;">Synchronize Runtime</button></div></div>
+        <div class="panel panel-config"><h3>Configuration Management</h3><div style="margin-bottom:10px;"><label for="backupPw">Backup Password (required, at least 12 characters)</label><div class="pwd-wrapper"><input type="password" id="backupPw" placeholder="Enter a strong backup password" minlength="12" maxlength="1024" spellcheck="false" autocomplete="new-password" autocorrect="off" autocapitalize="off"><button type="button" class="pwd-toggle" onclick="togglePassword(this)">Show</button></div></div><div class="grid-2"><button onclick="runWithState(this, 'Exporting...', backupConfig)">Export Encrypted Settings</button><button onclick="document.getElementById('restoreInput').click()">Import Encrypted Settings</button><input type="file" id="restoreInput" style="display:none" onchange="restoreConfig(this)" accept=".ctsb"></div><div style="margin-top:10px;"><button id="runtimeSyncBtn" onclick="runWithState(this, 'Synchronizing...', synchronizeRuntimeSettings)" class="primary" style="width:100%;">Synchronize Runtime</button></div></div>
     </div>
 
     <div id="spoof" class="content" role="tabpanel" aria-labelledby="tab_spoof">
@@ -2088,11 +2339,7 @@ if (input.files && input.files[0]) {
         async function loadFile() {
 const f = document.getElementById('fileSelector').value;
 const editor = document.getElementById('fileEditor');
-const previousController = editorFileController;
-if (previousController) previousController.abort();
-const controller = new AbortController();
-editorFileController = controller;
-if (currentFile && editor.value !== originalContent) {
+if (currentFile && editor.value !== originalContent && !editorFileController) {
     if (!editorUnsavedBypass) {
         notify('You have unsaved changes. Select file again to discard.', 'error');
         editorUnsavedBypass = true;
@@ -2102,8 +2349,11 @@ if (currentFile && editor.value !== originalContent) {
     editor.value = originalContent;
     updateSaveButtonState();
 }
+const previousController = editorFileController;
+if (previousController) previousController.abort();
+const controller = new AbortController();
+editorFileController = controller;
 editorUnsavedBypass = false;
-currentFile = f;
 editor.disabled = true;
 editor.value = 'Loading...';
 console.log('[CleveresTricky] loadFile: loading', f);
@@ -2112,30 +2362,31 @@ try {
     if(res.ok) {
         const nextContent = await res.text();
         if (controller.signal.aborted) return;
+        currentFile = f;
         originalContent = nextContent;
         editor.value = originalContent;
         console.log('[CleveresTricky] loadFile:', f, 'loaded (' + originalContent.length + ' bytes)');
         updateSaveButtonState();
     } else {
         console.log('[CleveresTricky] loadFile:', f, 'failed (status=' + res.status + ')');
+        currentFile = '';
         originalContent = '';
-        editor.value = 'Failed to load file.';
+        editor.value = '';
         notify('Failed to load file', 'error');
         return;
     }
 } catch(e){
     if (controller.signal.aborted || (e && e.name === 'AbortError')) return;
     console.log('[CleveresTricky] loadFile:', f, 'error -', e.message);
+    currentFile = '';
     originalContent = '';
-    editor.value = 'Error loading file.';
+    editor.value = '';
     notify('Error loading file', 'error');
     return;
 } finally {
     if (editorFileController !== controller) return;
     editorFileController = null;
-    if (editor.value !== 'Error loading file.' && editor.value !== 'Failed to load file.') {
-        editor.disabled = false;
-    }
+    editor.disabled = currentFile !== f;
 }
         }
         async function handleSave(btn) {

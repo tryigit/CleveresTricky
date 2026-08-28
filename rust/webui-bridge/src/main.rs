@@ -1,7 +1,7 @@
 use cleverestricky_service_core::ipc::{
     read_header, write_header, FrameHeader, FLAG_ERROR, MAX_FRAME_BYTES, OP_WEB_REQUEST,
 };
-use cleverestricky_service_core::secure_fs::{chown_file, TrustedDir};
+use cleverestricky_service_core::secure_fs::{chown_file, lock_exclusive_file, TrustedDir};
 use cleverestricky_service_core::unix_socket::{connect_abstract, DAEMON_SOCKET_NAME};
 use std::env;
 use std::fs::{self, File};
@@ -31,6 +31,10 @@ const MAX_REPORT_PATH_COMPONENTS: usize = 64;
 const MAX_RESPONSE_ENVELOPE_BYTES: usize = 512 * 1024;
 const MAX_CHUNK_BYTES: usize = 64 * 1024;
 const MAX_REPORT_DIRECTORY_ENTRIES: usize = 1024;
+const MAX_STAGING_FILES: usize = 32;
+const MAX_STAGING_BYTES: usize = 64 * 1024 * 1024;
+const MAX_STAGING_SCAN_ENTRIES: usize = 1024;
+const STAGING_LOCK_NAME: &str = ".staging.lock";
 const STALE_AGE: Duration = Duration::from_secs(10 * 60);
 
 fn main() {
@@ -42,7 +46,10 @@ fn main() {
 
 fn run() -> Result<(), String> {
     let staging = ensure_layout()?;
-    cleanup_stale(&staging);
+    with_staging_lock(&staging, || {
+        cleanup_stale(&staging);
+        Ok(())
+    })?;
     let args: Vec<String> = env::args().skip(1).collect();
     let command = args.first().map(String::as_str).ok_or("Missing command")?;
     match command {
@@ -52,11 +59,13 @@ fn run() -> Result<(), String> {
         }
         "call-file" if args.len() == 3 => {
             let name = stage_name(&args[1], "request")?;
-            let request_result = staging
-                .read_bounded(&name, MAX_REQUEST_BYTES)
-                .map_err(|error| format!("Could not read staged request: {error}"));
-            let _ = staging.unlink_file(&name);
-            let request = request_result?;
+            let request = with_staging_lock(&staging, || {
+                let request_result = staging
+                    .read_bounded(&name, MAX_REQUEST_BYTES)
+                    .map_err(|error| format!("Could not read staged request: {error}"));
+                let _ = staging.unlink_file(&name);
+                request_result
+            })?;
             call(request, parse_timeout(&args[2])?)
         }
         "stage-create" if args.len() == 2 => stage_create(&staging, &args[1]),
@@ -216,20 +225,24 @@ fn stage_create(staging: &TrustedDir, kind: &str) -> Result<(), String> {
     if extension == "download" {
         return Err("Download stages are service-owned".to_string());
     }
-    for _ in 0..8 {
-        let id = random_id()?;
-        let name = stage_name(&id, extension)?;
-        match staging.create_new_file(&name, 0o600) {
-            Ok(file) => {
-                drop(file);
-                println!("{id}");
-                return Ok(());
+    with_staging_lock(staging, || {
+        let (existing_files, existing_bytes) = staging_usage_bounded(staging)?;
+        ensure_staging_capacity(existing_files, existing_bytes, 1, 0)?;
+        for _ in 0..8 {
+            let id = random_id()?;
+            let name = stage_name(&id, extension)?;
+            match staging.create_new_file(&name, 0o600) {
+                Ok(file) => {
+                    drop(file);
+                    println!("{id}");
+                    return Ok(());
+                }
+                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+                Err(error) => return Err(format!("Could not create staging file: {error}")),
             }
-            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
-            Err(error) => return Err(format!("Could not create staging file: {error}")),
         }
-    }
-    Err("Could not allocate staging identifier".to_string())
+        Err("Could not allocate staging identifier".to_string())
+    })
 }
 
 fn stage_append(staging: &TrustedDir, kind: &str, id: &str, encoded: &str) -> Result<(), String> {
@@ -242,10 +255,14 @@ fn stage_append(staging: &TrustedDir, kind: &str, id: &str, encoded: &str) -> Re
         return Err("Empty staging chunk".to_string());
     }
     let name = stage_name(validate_id(id)?, kind)?;
-    let result = staging
-        .append_bounded(&name, &chunk, limit)
-        .map(|_| ())
-        .map_err(|error| format!("Could not append staging data: {error}"));
+    let result = with_staging_lock(staging, || {
+        let (existing_files, existing_bytes) = staging_usage_bounded(staging)?;
+        ensure_staging_capacity(existing_files, existing_bytes, 0, chunk.len())?;
+        staging
+            .append_bounded(&name, &chunk, limit)
+            .map(|_| ())
+            .map_err(|error| format!("Could not append staging data: {error}"))
+    });
     chunk.fill(0);
     result
 }
@@ -282,13 +299,26 @@ fn stage_read(
 fn stage_drop(staging: &TrustedDir, kind: &str, id: &str) -> Result<(), String> {
     validate_kind(kind)?;
     let name = stage_name(validate_id(id)?, kind)?;
-    staging
-        .unlink_file(&name)
-        .map(|_| ())
-        .map_err(|error| format!("Could not remove staging file: {error}"))
+    with_staging_lock(staging, || {
+        staging
+            .unlink_file(&name)
+            .map(|_| ())
+            .map_err(|error| format!("Could not remove staging file: {error}"))
+    })
 }
 
 fn export_file(
+    staging: &TrustedDir,
+    kind: &str,
+    id: &str,
+    encoded_name: &str,
+) -> Result<(), String> {
+    with_staging_lock(staging, || {
+        export_file_locked(staging, kind, id, encoded_name)
+    })
+}
+
+fn export_file_locked(
     staging: &TrustedDir,
     kind: &str,
     id: &str,
@@ -663,14 +693,83 @@ fn remove_if_same_file(directory: &TrustedDir, name: &str, expected: &fs::Metada
     }
 }
 
+fn with_staging_lock<T, F>(staging: &TrustedDir, action: F) -> Result<T, String>
+where
+    F: FnOnce() -> Result<T, String>,
+{
+    let lock = staging
+        .open_or_create_file(STAGING_LOCK_NAME, 0o600)
+        .map_err(|error| format!("Could not open WebUI staging lock: {error}"))?;
+    lock_exclusive_file(&lock).map_err(|error| format!("Could not lock WebUI staging: {error}"))?;
+    action()
+}
+
+fn staging_usage_bounded(staging: &TrustedDir) -> Result<(usize, usize), String> {
+    let names = staging
+        .entry_names_bounded(MAX_STAGING_SCAN_ENTRIES)
+        .map_err(|error| format!("Could not inspect WebUI staging: {error}"))?;
+    let mut files = 0usize;
+    let mut bytes = 0usize;
+    for name in names {
+        let Some((id, kind)) = name.split_once('.') else {
+            continue;
+        };
+        if name.matches('.').count() != 1
+            || validate_id(id).is_err()
+            || !matches!(kind, "request" | "upload" | "download" | "export")
+        {
+            continue;
+        }
+        let (_, limit) = validate_kind(kind)?;
+        let (_, size) = staging
+            .open_file_bounded(&name, limit)
+            .map_err(|error| format!("Could not inspect WebUI staging file: {error}"))?;
+        files = files
+            .checked_add(1)
+            .ok_or_else(|| "WebUI staging file count overflow".to_string())?;
+        bytes = bytes
+            .checked_add(size)
+            .ok_or_else(|| "WebUI staging byte count overflow".to_string())?;
+    }
+    Ok((files, bytes))
+}
+
+fn ensure_staging_capacity(
+    existing_files: usize,
+    existing_bytes: usize,
+    additional_files: usize,
+    additional_bytes: usize,
+) -> Result<(), String> {
+    let files = existing_files
+        .checked_add(additional_files)
+        .ok_or_else(|| "WebUI staging file count overflow".to_string())?;
+    if files > MAX_STAGING_FILES {
+        return Err("WebUI staging file quota exceeded".to_string());
+    }
+    let bytes = existing_bytes
+        .checked_add(additional_bytes)
+        .ok_or_else(|| "WebUI staging byte quota overflow".to_string())?;
+    if bytes > MAX_STAGING_BYTES {
+        return Err("WebUI staging byte quota exceeded".to_string());
+    }
+    Ok(())
+}
+
 fn cleanup_stale(staging: &TrustedDir) {
-    let Ok(entries) = fs::read_dir(STAGING_DIR) else {
+    cleanup_stale_from(staging, Path::new(STAGING_DIR));
+}
+
+fn cleanup_stale_from(staging: &TrustedDir, directory: &Path) {
+    let Ok(entries) = fs::read_dir(directory) else {
         return;
     };
-    for entry in entries.flatten().take(1024) {
+    for entry in entries.flatten().take(MAX_STAGING_SCAN_ENTRIES) {
         let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
             continue;
         };
+        if name == STAGING_LOCK_NAME {
+            continue;
+        }
         let Some((id, kind)) = name.split_once('.') else {
             continue;
         };
@@ -790,6 +889,77 @@ mod tests {
         assert!(decode_base64url("AB", 32).is_err());
         assert!(decode_base64url("Zm9v=", 32).is_err());
         assert!(decode_base64url("Zm9v+", 32).is_err());
+    }
+
+    #[test]
+    fn staging_quota_rejects_file_and_byte_overflow_and_ignores_unmanaged_entries() {
+        static COUNTER: AtomicU64 = AtomicU64::new(1);
+        let base = env::temp_dir().join(format!(
+            "ct-webui-staging-quota-{}-{}",
+            process::id(),
+            COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir_all(&base).unwrap();
+        let staging = TrustedDir::open(&base).unwrap();
+        fs::write(base.join("unmanaged.tmp"), b"ignored").unwrap();
+        for index in 0..MAX_STAGING_FILES {
+            let id = format!("{index:032x}");
+            fs::write(base.join(format!("{id}.upload")), [index as u8]).unwrap();
+        }
+
+        let (files, bytes) = staging_usage_bounded(&staging).unwrap();
+        assert_eq!(files, MAX_STAGING_FILES);
+        assert_eq!(bytes, MAX_STAGING_FILES);
+        assert!(ensure_staging_capacity(files, bytes, 1, 0).is_err());
+        assert!(ensure_staging_capacity(1, MAX_STAGING_BYTES, 0, 1).is_err());
+        assert!(
+            ensure_staging_capacity(MAX_STAGING_FILES - 1, MAX_STAGING_BYTES - 1, 1, 1).is_ok()
+        );
+
+        drop(staging);
+        fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[test]
+    fn stale_cleanup_preserves_the_staging_lock_file() {
+        static COUNTER: AtomicU64 = AtomicU64::new(1);
+        let base = env::temp_dir().join(format!(
+            "ct-webui-staging-lock-cleanup-{}-{}",
+            process::id(),
+            COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir_all(&base).unwrap();
+        let staging = TrustedDir::open(&base).unwrap();
+        let lock_path = base.join(STAGING_LOCK_NAME);
+        let lock_file = File::create(&lock_path).unwrap();
+        lock_file
+            .set_modified(SystemTime::now() - STALE_AGE - Duration::from_secs(1))
+            .unwrap();
+        drop(lock_file);
+
+        cleanup_stale_from(&staging, &base);
+
+        assert!(lock_path.exists());
+        drop(staging);
+        fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[test]
+    fn staging_inventory_rejects_more_than_the_scan_bound() {
+        static COUNTER: AtomicU64 = AtomicU64::new(1);
+        let base = env::temp_dir().join(format!(
+            "ct-webui-staging-scan-{}-{}",
+            process::id(),
+            COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir_all(&base).unwrap();
+        for index in 0..=MAX_STAGING_SCAN_ENTRIES {
+            fs::write(base.join(format!("noise-{index}")), [0x5a]).unwrap();
+        }
+        let staging = TrustedDir::open(&base).unwrap();
+        assert!(staging_usage_bounded(&staging).is_err());
+        drop(staging);
+        fs::remove_dir_all(&base).unwrap();
     }
 
     #[test]

@@ -12,6 +12,8 @@ class KeystoreCoreLifecycleTest {
 
         assertTrue(source.contains("fun tryRunKeystoreInterceptor(): Boolean"))
         assertTrue(source.contains("registerBinderInterceptor"))
+        assertTrue(source.contains("MAX_PROC_SCAN_ENTRIES = 4_096"))
+        assertTrue(source.contains("if (++scanned > MAX_PROC_SCAN_ENTRIES) break"))
         assertFalse(
             "Identity Spoof Engine must not stop, park, or skip the core Keystore interceptor",
             source.contains("Config.isSpoofEnabled"),

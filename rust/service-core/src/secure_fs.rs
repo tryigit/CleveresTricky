@@ -139,6 +139,13 @@ impl TrustedDir {
         Ok(File::from(fd))
     }
 
+    pub fn open_or_create_file(&self, name: &str, mode: u32) -> io::Result<File> {
+        let name = component(name)?;
+        let mode = checked_mode(mode)?;
+        let fd = self.open_regular(&name, libc::O_RDWR | libc::O_CREAT, mode)?;
+        Ok(File::from(fd))
+    }
+
     pub fn chown(&self, owner: u32, group: u32) -> io::Result<()> {
         // SAFETY: `self.fd` is a live owned descriptor. `fchown` retains no pointer or FD.
         if unsafe { libc::fchown(self.fd.as_raw_fd(), owner, group) } == 0 {
@@ -444,6 +451,27 @@ impl TrustedDir {
         // SAFETY: `name` is a live C string for a single component and `self.fd` is a live trusted
         // directory descriptor. Failure is intentionally ignored during best-effort cleanup.
         let _ = unsafe { libc::unlinkat(self.fd.as_raw_fd(), name.as_ptr(), 0) };
+    }
+}
+
+pub fn lock_exclusive_file(file: &File) -> io::Result<()> {
+    let mut lock = libc::flock {
+        l_type: libc::F_WRLCK as libc::c_short,
+        l_whence: libc::SEEK_SET as libc::c_short,
+        l_start: 0,
+        l_len: 0,
+        l_pid: 0,
+    };
+    loop {
+        // SAFETY: `file` owns a live descriptor, `lock` is initialized for F_SETLKW, and fcntl
+        // retains neither pointer after returning nor ownership of the descriptor.
+        if unsafe { libc::fcntl(file.as_raw_fd(), libc::F_SETLKW, &mut lock) } == 0 {
+            return Ok(());
+        }
+        let error = io::Error::last_os_error();
+        if error.kind() != io::ErrorKind::Interrupted {
+            return Err(error);
+        }
     }
 }
 

@@ -7,6 +7,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
+import java.io.IOException
 import java.io.RandomAccessFile
 
 class StoredKeyboxInventoryTest {
@@ -57,5 +58,15 @@ class StoredKeyboxInventoryTest {
             RandomAccessFile(file, "rw").use { it.setLength(StoredKeyboxInventory.MAX_XML_BYTES + 1) }
         }
         assertThrows(IllegalArgumentException::class.java) { StoredKeyboxInventory.runtimeXmlSources(root) }
+    }
+
+    @Test
+    fun `directory scan rejects an irrelevant-entry flood instead of scanning without a bound`() {
+        val root = temp.newFolder("entry-flood")
+        repeat(StoredKeyboxInventory.MAX_SCANNED_ENTRIES_PER_DIRECTORY + 1) { index ->
+            File(root, "ignored-$index.txt").writeText("ignored")
+        }
+
+        assertThrows(IOException::class.java) { StoredKeyboxInventory.list(root) }
     }
 }

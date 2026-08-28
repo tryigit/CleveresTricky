@@ -4,8 +4,6 @@ import cleveres.tricky.cleverestech.keystore.CertHack
 import cleveres.tricky.cleverestech.util.KeyboxAutoCleaner
 import cleveres.tricky.cleverestech.util.SecureFile
 import java.io.File
-import java.nio.file.Files
-import java.nio.file.LinkOption
 import java.util.concurrent.CountDownLatch
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -86,24 +84,10 @@ internal suspend fun retryDeferredKeyboxRefresh(
     return isActive()
 }
 
-private fun directoryHasConfiguredKeyboxSource(
-    root: File,
-    allowCbox: Boolean,
-): Boolean {
-    if (!Files.isDirectory(root.toPath(), LinkOption.NOFOLLOW_LINKS)) return false
-    return Files.newDirectoryStream(root.toPath()).use { entries ->
-        entries.any { entry ->
-            if (!Files.isRegularFile(entry, LinkOption.NOFOLLOW_LINKS)) return@any false
-            val filename = entry.fileName.toString()
-            filename.endsWith(".xml", ignoreCase = true) ||
-                (allowCbox && filename.endsWith(".cbox", ignoreCase = true))
-        }
-    }
-}
-
 internal fun hasConfiguredKeyboxSource(configDir: File): Boolean =
-    directoryHasConfiguredKeyboxSource(configDir, allowCbox = false) ||
-        directoryHasConfiguredKeyboxSource(File(configDir, "keyboxes"), allowCbox = true)
+    runCatching { StoredKeyboxInventory.list(configDir).isNotEmpty() }
+        .onFailure { Logger.w("Could not inspect configured keybox sources: ${it.message}") }
+        .getOrDefault(false)
 
 fun main(args: Array<String>) {
     Logger.i("Welcome to Service!")

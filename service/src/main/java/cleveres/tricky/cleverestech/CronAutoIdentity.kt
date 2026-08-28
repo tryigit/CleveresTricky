@@ -50,7 +50,7 @@ internal object CronAutoIdentity {
             if (configDir?.absoluteFile != root.absoluteFile) {
                 observer?.stopWatching()
                 observer = null
-                stopWorkerLocked()
+                shutdownExecutorLocked()
                 configDir = root
             }
             if (observer == null) {
@@ -93,7 +93,7 @@ internal object CronAutoIdentity {
             val root = configDir ?: return
             val decision = currentDecision(root)
             if (!decision.shouldRun) {
-                stopWorkerLocked()
+                shutdownExecutorLocked()
                 return
             }
             ensureExecutorLocked()

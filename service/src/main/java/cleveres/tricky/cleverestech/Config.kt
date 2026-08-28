@@ -14,6 +14,7 @@ import cleveres.tricky.cleverestech.util.readFileSnapshotBounded
 import cleveres.tricky.cleverestech.util.readUtf8FileSnapshotBounded
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.launch
@@ -444,13 +445,17 @@ object Config {
         val keyboxes: List<CertHack.KeyBox>,
     )
 
+    private class KeyboxAggregateLimitException(message: String) : Exception(message)
+
     private val storedKeyboxCache = ConcurrentHashMap<String, KeyboxFileCache>()
     private val fullSha256Pattern = Regex("[0-9a-f]{64}")
-
-    fun updateKeyBoxes() =
-        scope.launch {
+    private const val KEYBOX_REFRESH_DEBOUNCE_MS = 250L
+    private val keyboxRefreshScheduler =
+        ConflatedRefreshScheduler(scope, KEYBOX_REFRESH_DEBOUNCE_MS) {
             updateKeyBoxesSync()
         }
+
+    fun updateKeyBoxes(): Job = keyboxRefreshScheduler.submit()
 
     fun updateKeyBoxesSync(): Boolean =
         updateKeyBoxesSyncWith(
@@ -469,6 +474,18 @@ object Config {
         revokedSerials: Set<String>?,
         verifier: (CertHack.KeyBox, Set<String>) -> KeyboxVerifier.Status,
     ): Boolean = updateKeyBoxesSyncWith({ revokedSerials }, verifier)
+
+    @androidx.annotation.VisibleForTesting
+    internal fun updateKeyBoxesSyncWithoutExternalSourcesForTesting(
+        revokedSerials: Set<String>?,
+        verifier: (CertHack.KeyBox, Set<String>) -> KeyboxVerifier.Status,
+    ): Boolean =
+        updateKeyBoxesSyncWith(
+            revocationProvider = { revokedSerials },
+            verifier = verifier,
+            allowRecovery = false,
+            refreshExternalSources = false,
+        )
 
     internal fun rebuildBackendKeyboxesAfterRestart(crl: CrlWire.Handle): Boolean {
         storedKeyboxCache.clear()
@@ -490,7 +507,15 @@ object Config {
             val refreshTicket = KeyboxActivation.beginRefresh()
             runCatching {
                 Logger.d("updateKeyBoxes: starting keybox scan (root=${root.absolutePath})")
-                val allKeyboxes = ArrayList<CertHack.KeyBox>()
+                val allKeyboxes = ArrayList<CertHack.KeyBox>(KeyboxLoader.MAX_ACTIVE_KEYS)
+                fun appendBounded(source: List<CertHack.KeyBox>, owner: String) {
+                    if (source.size > KeyboxLoader.MAX_ACTIVE_KEYS - allKeyboxes.size) {
+                        throw KeyboxAggregateLimitException(
+                            "Keybox aggregate exceeds ${KeyboxLoader.MAX_ACTIVE_KEYS} entries at $owner",
+                        )
+                    }
+                    allKeyboxes.addAll(source)
+                }
 
                 val storedSources = StoredKeyboxInventory.runtimeXmlSources(root)
                 Logger.d("updateKeyBoxes: scanning ${storedSources.size} stored XML sources")
@@ -510,17 +535,15 @@ object Config {
                             return@forEach
                         }
                         val cached = storedKeyboxCache[source.id]
-                        val selected =
-                            if (cached != null && cached.snapshotSha256 == snapshotSha256) {
-                                cached.keyboxes
-                            } else {
-                                parsed.keyboxes.also { keyboxes ->
-                                    storedKeyboxCache[source.id] = KeyboxFileCache(snapshotSha256, keyboxes)
-                                    Logger.i("Reloaded keybox source: ${source.id}")
-                                }
-                            }
-                        allKeyboxes.addAll(selected)
+                        val selected = if (cached != null && cached.snapshotSha256 == snapshotSha256) cached.keyboxes else parsed.keyboxes
+                        appendBounded(selected, source.id)
+                        if (cached == null || cached.snapshotSha256 != snapshotSha256) {
+                            storedKeyboxCache[source.id] = KeyboxFileCache(snapshotSha256, selected)
+                            Logger.i("Reloaded keybox source: ${source.id}")
+                        }
                     } catch (error: RustBackendUnavailableException) {
+                        throw error
+                    } catch (error: KeyboxAggregateLimitException) {
                         throw error
                     } catch (error: Exception) {
                         storedKeyboxCache.remove(source.id)
@@ -533,8 +556,8 @@ object Config {
                 }
 
                 if (refreshExternalSources) CboxManager.refresh()
-                allKeyboxes.addAll(CboxManager.getUnlockedKeyboxes())
-                allKeyboxes.addAll(ServerManager.getLoadedKeyboxes())
+                appendBounded(CboxManager.getUnlockedKeyboxes(), "CBOX sources")
+                appendBounded(ServerManager.getLoadedKeyboxes(), "server sources")
 
                 val verifiedKeyboxes: List<CertHack.KeyBox> =
                     if (allKeyboxes.isEmpty()) {
@@ -577,6 +600,10 @@ object Config {
                     }
                 }
             }.getOrElse { error ->
+                if (error is KeyboxAggregateLimitException) {
+                    storedKeyboxCache.clear()
+                    KeyboxActivation.commitAndPublish(emptyList())
+                }
                 Logger.e("failed to update keyboxes", error)
                 if (allowRecovery &&
                     (error is RustBackendUnavailableException || error is RustBackendStateException || NativeBackend.consumeBackendStateReset())
@@ -2130,7 +2157,9 @@ object Config {
     @androidx.annotation.VisibleForTesting
     fun reset() {
         ConfigObserver.stopWatching()
+        KeyboxDirectoryRefreshWatcher.stop()
         KeyboxDirObserver.stopWatching()
+        keyboxRefreshScheduler.cancel()
         KeyboxAutoCleaner.setEnabled(false)
         scope.coroutineContext.cancelChildren()
         root = File(CONFIG_PATH)

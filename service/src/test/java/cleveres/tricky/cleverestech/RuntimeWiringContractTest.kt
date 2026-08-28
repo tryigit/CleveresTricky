@@ -57,7 +57,9 @@ class RuntimeWiringContractTest {
 
         assertTrue(webUiBridge.contains("SecureFile.mkdirs(bridgeDir, DIRECTORY_MODE)"))
         assertTrue(webUiBridge.contains("SecureFile.mkdirs(stagingDir, DIRECTORY_MODE)"))
-        assertTrue(webUiBridge.contains("SecureFile.writeStream(stagedFile, combined, MAX_RESPONSE_BYTES.toLong())"))
+        assertTrue(webUiBridge.contains("QuotaInputStream(combined, remainingBytes)"))
+        assertTrue(webUiBridge.contains("SecureFile.writeStream("))
+        assertTrue(webUiBridge.contains("MAX_STAGING_BYTES"))
 
         assertTrue(secureFile.contains("ACTION_STAGE_CREATE = 4"))
         assertTrue(secureFile.contains("ACTION_STAGE_APPEND = 5"))
@@ -89,6 +91,19 @@ class RuntimeWiringContractTest {
         assertTrue(backendServer.contains("setuid(ANDROID_AID_NOBODY)"))
         assertTrue(backendInstance.contains("BACKEND_AUTH_ENV"))
         assertTrue(backendInstance.contains("backend handshake request rejected"))
+    }
+
+    @Test
+    fun `proc based interceptor discovery is bounded`() {
+        val root = locateRoot()
+        val keystore = File(root, "service/src/main/java/cleveres/tricky/cleverestech/KeystoreInterceptor.kt").readText()
+        val telephony = File(root, "service/src/main/java/cleveres/tricky/cleverestech/TelephonyInterceptor.kt").readText()
+        val camera = File(root, "service/src/main/java/cleveres/tricky/cleverestech/CameraVisibilityInterceptor.kt").readText()
+
+        listOf(keystore, telephony, camera).forEach { source ->
+            assertTrue(source.contains("MAX_PROC_SCAN_ENTRIES = 4_096"))
+            assertTrue(source.contains("if (++scanned > MAX_PROC_SCAN_ENTRIES) break"))
+        }
     }
 
     @Test

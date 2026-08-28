@@ -351,7 +351,7 @@ function removeLegacySurfaces() {
     const statusGlobal = document.getElementById('status_global');
     if (statusEngine && statusGlobal) {
       const strip = statusEngine.parentElement && statusEngine.parentElement.parentElement;
-      if (strip && strip.contains(statusGlobal) && strip.parentElement === dashboard) strip.remove();
+      if (strip && !strip.classList.contains('status-grid') && strip.contains(statusGlobal) && strip.parentElement === dashboard) strip.remove();
     }
     [...dashboard.querySelectorAll('.panel')].forEach(panel => {
       const title = (panel.querySelector('h3')?.textContent || '').trim();

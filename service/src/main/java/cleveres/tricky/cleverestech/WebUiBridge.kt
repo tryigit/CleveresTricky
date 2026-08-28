@@ -15,6 +15,8 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.io.SequenceInputStream
 import java.nio.ByteBuffer
+import java.nio.channels.FileChannel
+import java.nio.file.StandardOpenOption
 import java.nio.charset.CharacterCodingException
 import java.nio.charset.CodingErrorAction
 import java.nio.file.Files
@@ -33,6 +35,7 @@ class WebUiBridge(
 ) {
     private val bridgeDir = File(configDir, "webui_bridge")
     private val stagingDir = File(bridgeDir, "staging")
+    private val stagingLockFile = File(stagingDir, STAGING_LOCK_NAME)
     private val secureRandom = SecureRandom()
 
     @Volatile
@@ -44,7 +47,7 @@ class WebUiBridge(
     fun start() {
         if (started) return
         ensureLayout()
-        cleanupStale()
+        withStagingLock { cleanupStale() }
 
         val connected = LocalSocket()
         try {
@@ -160,7 +163,7 @@ class WebUiBridge(
             Logger.e("WebUI bridge request failed", error)
             encodeErrorResponse(NanoHTTPD.Response.Status.INTERNAL_ERROR, "Native WebUI request failed")
         } finally {
-            uploadFile?.let(::deleteRegularFile)
+            uploadFile?.let { file -> withStagingLock { deleteRegularFile(file) } }
         }
     }
 
@@ -275,12 +278,24 @@ class WebUiBridge(
                     val downloadId = randomId()
                     val stagedFile = File(stagingDir, "$downloadId.download")
                     downloadFile = stagedFile
-                    SequenceInputStream(ByteArrayInputStream(prefix), input).use { combined ->
-                        SecureFile.writeStream(stagedFile, combined, MAX_RESPONSE_BYTES.toLong())
+                    val stagedSize = withStagingLock {
+                        val (existingFiles, existingBytes) = stagingUsage()
+                        ensureStagingCapacity(existingFiles, existingBytes, 1, 1)
+                        val remainingBytes = MAX_STAGING_BYTES - existingBytes
+                        SequenceInputStream(ByteArrayInputStream(prefix), input).use { combined ->
+                            QuotaInputStream(combined, remainingBytes).use { bounded ->
+                                SecureFile.writeStream(
+                                    stagedFile,
+                                    bounded,
+                                    minOf(MAX_RESPONSE_BYTES.toLong(), remainingBytes),
+                                )
+                            }
+                        }
+                        requireRegularFile(stagedFile, 1, MAX_RESPONSE_BYTES.toLong())
+                        stagedFile.length()
                     }
-                    requireRegularFile(stagedFile, 1, MAX_RESPONSE_BYTES.toLong())
                     envelope
-                        .put("size", stagedFile.length())
+                        .put("size", stagedSize)
                         .put("downloadId", downloadId)
                 }
                 return encodeEnvelope(envelope)
@@ -340,6 +355,58 @@ class WebUiBridge(
         SecureFile.mkdirs(stagingDir, DIRECTORY_MODE)
     }
 
+    private fun <T> withStagingLock(action: () -> T): T = synchronized(STAGING_LOCK_MONITOR) {
+        FileChannel.open(
+            stagingLockFile.toPath(),
+            StandardOpenOption.CREATE,
+            StandardOpenOption.READ,
+            StandardOpenOption.WRITE,
+            LinkOption.NOFOLLOW_LINKS,
+        ).use { lockFile ->
+            lockFile.lock().use { action() }
+        }
+    }
+
+    private fun stagingUsage(): Pair<Int, Long> {
+        var files = 0
+        var bytes = 0L
+        Files.newDirectoryStream(stagingDir.toPath()).use { entries ->
+            var scanned = 0
+            for (path in entries) {
+                if (++scanned > MAX_STAGING_SCAN_ENTRIES) {
+                    throw IOException("WebUI staging directory contains too many entries")
+                }
+                val name = path.fileName.toString()
+                if (!STAGING_FILE_PATTERN.matches(name)) continue
+                val size =
+                    Files.newByteChannel(
+                        path,
+                        StandardOpenOption.READ,
+                        LinkOption.NOFOLLOW_LINKS,
+                    ).use { channel -> channel.size() }
+                files = Math.addExact(files, 1)
+                bytes = Math.addExact(bytes, size)
+            }
+        }
+        return files to bytes
+    }
+
+    private fun ensureStagingCapacity(
+        existingFiles: Int,
+        existingBytes: Long,
+        additionalFiles: Int,
+        additionalBytes: Long,
+    ) {
+        require(existingFiles >= 0 && existingBytes >= 0L)
+        require(additionalFiles >= 0 && additionalBytes >= 0L)
+        require(Math.addExact(existingFiles, additionalFiles) <= MAX_STAGING_FILES) {
+            "WebUI staging file quota exceeded"
+        }
+        require(Math.addExact(existingBytes, additionalBytes) <= MAX_STAGING_BYTES) {
+            "WebUI staging byte quota exceeded"
+        }
+    }
+
     internal fun cleanupStale() {
         val cutoff = System.currentTimeMillis() - STALE_AGE_MS
         try {
@@ -347,6 +414,7 @@ class WebUiBridge(
                 var inspected = 0
                 for (path in entries) {
                     if (inspected++ >= MAX_CLEANUP_FILES) break
+                    if (path.fileName.toString() == STAGING_LOCK_NAME) continue
                     val lastModified =
                         try {
                             Files.getLastModifiedTime(path, LinkOption.NOFOLLOW_LINKS).toMillis()
@@ -357,7 +425,10 @@ class WebUiBridge(
                 }
             }
         } catch (error: Exception) {
-            Logger.w("WebUI bridge could not inspect stale staging entries")
+            Logger.w(
+                "WebUI bridge could not inspect stale staging entries: " +
+                    "${error.javaClass.simpleName}: ${error.message}",
+            )
         }
     }
 
@@ -368,6 +439,40 @@ class WebUiBridge(
     ) {
         require(Files.isRegularFile(file.toPath(), LinkOption.NOFOLLOW_LINKS))
         require(file.length() in minimumBytes..maximumBytes)
+    }
+
+    private class QuotaInputStream(
+        private val delegate: InputStream,
+        private var remaining: Long,
+    ) : InputStream() {
+        override fun read(): Int {
+            if (remaining == 0L) {
+                if (delegate.read() >= 0) throw IOException("WebUI staging byte quota exceeded")
+                return -1
+            }
+            val value = delegate.read()
+            if (value >= 0) remaining--
+            return value
+        }
+
+        override fun read(
+            buffer: ByteArray,
+            offset: Int,
+            length: Int,
+        ): Int {
+            if (length == 0) return 0
+            if (remaining == 0L) {
+                if (delegate.read() >= 0) throw IOException("WebUI staging byte quota exceeded")
+                return -1
+            }
+            val count = delegate.read(buffer, offset, minOf(length.toLong(), remaining).toInt())
+            if (count > 0) remaining -= count.toLong()
+            return count
+        }
+
+        override fun close() {
+            delegate.close()
+        }
     }
 
     private fun readPrefix(
@@ -558,7 +663,14 @@ class WebUiBridge(
         private const val MAX_PARAMETER_KEYS = 128
         private const val MAX_PARAMETER_VALUES = 32
         private const val MAX_CLEANUP_FILES = 1024
+        private const val MAX_STAGING_FILES = 32
+        private const val MAX_STAGING_BYTES = 64L * 1024 * 1024
+        private const val MAX_STAGING_SCAN_ENTRIES = 1024
+        private const val STAGING_LOCK_NAME = ".staging.lock"
+        private val STAGING_LOCK_MONITOR = Any()
+        private val STAGING_FILE_PATTERN = Regex("[0-9a-f]{32}\\.(request|upload|download|export)")
         private const val MAX_EMPTY_READS = 16
+
         private const val STALE_AGE_MS = 10 * 60 * 1000L
         private const val STARTUP_WAIT_MS = 5_000L
         private const val SOCKET_NAME = "cleverestrickyd.v1"

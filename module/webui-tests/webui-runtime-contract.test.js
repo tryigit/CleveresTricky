@@ -76,6 +76,7 @@ function loadPolicyRuntime(fetchImpl = async () => makeResponse()) {
         refreshSavedBuildIdentityBestEffort,
         installIdentityManagerState,
         installAutoIdentityOverride,
+        removeLegacySurfaces,
         normalizePolicyState,
         normalizeProfile,
         normalizeSecurityPatch
@@ -239,6 +240,66 @@ async function testPolicyNormalizationRejectsMalformedAndOversizedState() {
     assert.strictEqual(saved.features.securityPatch, false, 'malformed feature values must not become truthy after readback normalization');
 }
 
+function makeCleanupSurface(classNames = [], textContent = '') {
+    return {
+        classList: { contains(name) { return classNames.includes(name); } },
+        textContent,
+        parentElement: null,
+        removed: false,
+        remove() { this.removed = true; },
+        contains(node) { return this.containsNode === node || this.children?.includes(node); },
+        children: [],
+        querySelector() { return null; },
+        querySelectorAll() { return []; }
+    };
+}
+
+async function testLegacyCleanupPreservesCanonicalStatusGrid() {
+    const canonical = loadPolicyRuntime();
+    const dashboard = makeCleanupSurface();
+    const statusGrid = makeCleanupSurface(['status-grid']);
+    const engineCard = makeCleanupSurface();
+    const globalCard = makeCleanupSurface();
+    const statusEngine = makeCleanupSurface();
+    const statusGlobal = makeCleanupSurface();
+    statusGrid.parentElement = dashboard;
+    statusGrid.children = [engineCard, globalCard];
+    statusGrid.containsNode = statusGlobal;
+    engineCard.parentElement = statusGrid;
+    globalCard.parentElement = statusGrid;
+    statusEngine.parentElement = engineCard;
+    statusGlobal.parentElement = globalCard;
+    canonical.document.getElementById = id => ({
+        dashboard,
+        status_engine: statusEngine,
+        status_global: statusGlobal
+    }[id] || null);
+    canonical.hooks.removeLegacySurfaces();
+    assert.strictEqual(statusGrid.removed, false, 'legacy cleanup must preserve the canonical status-grid');
+
+    const legacy = loadPolicyRuntime();
+    const legacyDashboard = makeCleanupSurface();
+    const legacyStrip = makeCleanupSurface();
+    const legacyEngineCard = makeCleanupSurface();
+    const legacyGlobalCard = makeCleanupSurface();
+    const legacyEngine = makeCleanupSurface();
+    const legacyGlobal = makeCleanupSurface();
+    legacyStrip.parentElement = legacyDashboard;
+    legacyStrip.children = [legacyEngineCard, legacyGlobalCard];
+    legacyStrip.containsNode = legacyGlobal;
+    legacyEngineCard.parentElement = legacyStrip;
+    legacyGlobalCard.parentElement = legacyStrip;
+    legacyEngine.parentElement = legacyEngineCard;
+    legacyGlobal.parentElement = legacyGlobalCard;
+    legacy.document.getElementById = id => ({
+        dashboard: legacyDashboard,
+        status_engine: legacyEngine,
+        status_global: legacyGlobal
+    }[id] || null);
+    legacy.hooks.removeLegacySurfaces();
+    assert.strictEqual(legacyStrip.removed, true, 'legacy cleanup must still remove an unclassified old status strip');
+}
+
 async function testApplyIdentitySurvivesPresentationRefreshFailure() {
     const runtime = loadPolicyRuntime(async () => makeResponse({
         ok: false,
@@ -321,6 +382,7 @@ async function testAutoIdentityBackendFailureStillFails() {
     await testCanonicalSaveWarningIsNotReportedAsFailure();
     await testSaveUsesCanonicalReadbackInsteadOfStaleUiState();
     await testPolicyNormalizationRejectsMalformedAndOversizedState();
+    await testLegacyCleanupPreservesCanonicalStatusGrid();
     await testApplyIdentitySurvivesPresentationRefreshFailure();
     await testAutoIdentitySurvivesPresentationRefreshFailure();
     await testAutoIdentityBackendFailureStillFails();

@@ -82,6 +82,22 @@ class WebServerZipBombTest {
     }
 
     @Test
+    fun existingKeyboxDirectoryEntryFloodIsRejectedBeforeWrite() {
+        val keyboxDir = File(configDir, "keyboxes")
+        assertTrue(keyboxDir.mkdirs())
+        repeat(4_097) { index ->
+            File(keyboxDir, "ignored-$index.tmp").writeText("x")
+        }
+        val zip = zipOf("target.txt", "com.example.app".toByteArray())
+
+        assertThrows(IOException::class.java) {
+            WebServer.restoreBackupZip(configDir, ByteArrayInputStream(zip))
+        }
+
+        assertFalse(writeBytesCalled)
+    }
+
+    @Test
     fun malformedCboxBackupEntryIsRejectedBeforeWrite() {
         val zip = zipOf("keyboxes/bad.cbox", "not-a-cbox".toByteArray())
 

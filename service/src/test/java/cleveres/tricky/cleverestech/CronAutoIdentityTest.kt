@@ -4,7 +4,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertSame
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -30,23 +30,24 @@ class CronAutoIdentityTest {
     }
 
     @Test
-    fun `rapid disable and reenable reuses one scheduler`() {
+    fun `rapid disable and reenable shuts down stale scheduler before creating a new one`() {
         val executorField = CronAutoIdentity::class.java.getDeclaredField("executor").apply { isAccessible = true }
         File(root, CronAutoIdentity.TOGGLE_FILE).writeText("")
         PolicyState.installStateForTesting(state(buildIdentity = true).toString())
 
         try {
             CronAutoIdentity.refreshEnabled()
-            val first = executorField.get(CronAutoIdentity)
+            val first = executorField.get(CronAutoIdentity) as java.util.concurrent.ScheduledExecutorService
 
             Files.delete(File(root, CronAutoIdentity.TOGGLE_FILE).toPath())
             CronAutoIdentity.refreshEnabled()
             assertFalse(CronAutoIdentity.isRunningForTesting())
+            assertTrue("Disabled Auto Identity must shut down its executor", first.isShutdown)
 
             File(root, CronAutoIdentity.TOGGLE_FILE).writeText("")
             CronAutoIdentity.refreshEnabled()
             val second = executorField.get(CronAutoIdentity)
-            assertSame(first, second)
+            assertNotSame("Re-enable must not reuse a shutdown executor", first, second)
         } finally {
             CronAutoIdentity.stop()
         }

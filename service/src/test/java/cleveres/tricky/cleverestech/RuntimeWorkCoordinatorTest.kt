@@ -134,6 +134,51 @@ class RuntimeWorkCoordinatorTest {
     }
 
     @Test
+    fun refreshSchedulerDoesNotLetCancelledWorkerRunAfterRestartWithNoDebounce() {
+        val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+        val firstStarted = CountDownLatch(1)
+        val releaseFirst = CountDownLatch(1)
+        val secondStarted = CountDownLatch(1)
+        val secondFinished = CountDownLatch(1)
+        val releaseSecond = CountDownLatch(1)
+        val count = AtomicInteger(0)
+        val scheduler =
+            ConflatedRefreshScheduler(scope, debounceMs = 0L) {
+                when (count.incrementAndGet()) {
+                    1 -> {
+                        firstStarted.countDown()
+                        // Deliberately ignore coroutine cancellation to model blocking I/O.
+                        releaseFirst.await(2, TimeUnit.SECONDS)
+                    }
+                    else -> {
+                        secondStarted.countDown()
+                        releaseSecond.await(2, TimeUnit.SECONDS)
+                        secondFinished.countDown()
+                    }
+                }
+            }
+
+        try {
+            scheduler.submit()
+            assertTrue("Initial refresh did not start", firstStarted.await(2, TimeUnit.SECONDS))
+            scheduler.cancel()
+            val replacement = scheduler.submit()
+            releaseFirst.countDown()
+            assertTrue("Restarted refresh did not run", secondStarted.await(2, TimeUnit.SECONDS))
+            assertTrue("Replacement worker unexpectedly completed while its refresh was blocked", replacement.isActive)
+            releaseSecond.countDown()
+            assertTrue("Replacement refresh did not finish", secondFinished.await(2, TimeUnit.SECONDS))
+            Thread.sleep(100)
+            assertEquals("Cancelled worker must not execute a duplicate refresh", 2, count.get())
+        } finally {
+            releaseFirst.countDown()
+            releaseSecond.countDown()
+            scheduler.cancel()
+            scope.cancel()
+        }
+    }
+
+    @Test
     fun refreshSchedulerKeepsRefreshesSerializedAcrossCancelAndRestart() {
         val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
         val firstStarted = CountDownLatch(1)

@@ -31,6 +31,7 @@ class StreamingBatchContractTest {
         assertTrue(crypto.contains("val signer = Signature.getInstance"))
         assertTrue(crypto.contains("rollbackBatch"))
         assertTrue(vault.contains("MAX_FILES = 10_000"))
+        assertTrue(vault.contains("if (++scanned > MAX_FILES) throw IOException"))
         assertTrue(vault.contains("class BatchNameAllocator"))
     }
 

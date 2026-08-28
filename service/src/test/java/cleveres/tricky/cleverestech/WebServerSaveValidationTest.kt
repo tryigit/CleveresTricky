@@ -239,6 +239,27 @@ class WebServerSaveValidationTest {
     }
 
     @Test
+    fun testResetEnvironmentRejectsOversizedExistingConfigBeforeRewrite() {
+        val spoofFile = File(configDir, "spoof_build_vars")
+        val oversized = "MODEL=" + "x".repeat(1024 * 1024)
+        spoofFile.writeText(oversized)
+        val originalLength = spoofFile.length()
+
+        val response = webServer.serve(
+            MockIHTTPSession(
+                uri = "/api/reset_environment",
+                method = NanoHTTPD.Method.POST,
+                headers = mapOf("content-length" to "0", "host" to "localhost"),
+                parms = mapOf("token" to webServer.token),
+            )
+        )
+
+        assertEquals(NanoHTTPD.Response.Status.BAD_REQUEST, response.status)
+        assertEquals(originalLength, spoofFile.length())
+        assertEquals(oversized, spoofFile.readText())
+    }
+
+    @Test
     fun testDegeneratePrivacySeedValidation() {
         listOf("00", "ff").forEach { byteHex ->
             assertFalse(WebServer.validateContent("privacy_seed", byteHex.repeat(32)))

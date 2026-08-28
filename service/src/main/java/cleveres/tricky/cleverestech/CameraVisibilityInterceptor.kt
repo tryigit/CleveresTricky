@@ -20,6 +20,7 @@ object CameraVisibilityInterceptor : BinderInterceptor() {
     private const val CAMERA_LISTENER_DESCRIPTOR = "android.hardware.ICameraServiceListener"
     private const val CAMERA_SERVICE_NAME = "media.camera"
     private const val CAMERA_SERVER_PROCESS = "cameraserver"
+    private const val MAX_PROC_SCAN_ENTRIES = 4_096
     private const val MAX_LISTENER_PROXIES = 256
     private const val MAX_BUFFERED_CALLBACKS = 64
     private const val MAX_BUFFERED_CALLBACK_BYTES = 256 * 1024
@@ -875,7 +876,9 @@ object CameraVisibilityInterceptor : BinderInterceptor() {
         if (!proc.exists() || !proc.isDirectory) return null
         try {
             java.nio.file.Files.newDirectoryStream(proc.toPath()).use { entries ->
+                var scanned = 0
                 for (entry in entries) {
+                    if (++scanned > MAX_PROC_SCAN_ENTRIES) break
                     val pidString = entry.fileName.toString()
                     if (pidString.isEmpty() || pidString[0] !in '1'..'9') continue
                     val pid = pidString.toIntOrNull() ?: continue

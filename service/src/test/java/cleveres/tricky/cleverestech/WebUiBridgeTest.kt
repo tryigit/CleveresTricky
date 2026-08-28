@@ -14,8 +14,11 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.ByteArrayInputStream
 import java.io.File
+import java.io.RandomAccessFile
+import java.nio.file.Files
 import java.util.Base64
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
 
 class WebUiBridgeTest {
     @get:Rule
@@ -128,6 +131,139 @@ class WebUiBridgeTest {
     }
 
     @Test
+    fun `staging lock refuses symbolic link`() {
+        bridge = WebUiBridge(WebServer(0, configDir), configDir)
+        val staging = File(configDir, "webui_bridge/staging")
+        val outside = tempFolder.newFile("outside-lock")
+        Files.createSymbolicLink(File(staging, ".staging.lock").toPath(), outside.toPath())
+        val body = ByteArray(300 * 1024) { 0x44 }
+        val response =
+            NanoHTTPD.newFixedLengthResponse(
+                NanoHTTPD.Response.Status.OK,
+                "application/octet-stream",
+                ByteArrayInputStream(body),
+                body.size.toLong(),
+            )
+
+        try {
+            bridge.encodeResponse(response)
+            throw AssertionError("symbolic-link staging lock was accepted")
+        } catch (_: Exception) {
+            // A staging lock must never follow a symbolic link outside the staging directory.
+        }
+        assertEquals(0L, outside.length())
+        body.fill(0)
+    }
+
+    @Test
+    fun `large response rejects when staging file quota is exhausted`() {
+        bridge = WebUiBridge(WebServer(0, configDir), configDir)
+        val staging = File(configDir, "webui_bridge/staging")
+        repeat(32) { index ->
+            val id = index.toString(16).padStart(32, '0')
+            File(staging, "$id.upload").writeBytes(byteArrayOf(index.toByte()))
+        }
+        val body = ByteArray(300 * 1024) { 0x41 }
+        val response =
+            NanoHTTPD.newFixedLengthResponse(
+                NanoHTTPD.Response.Status.OK,
+                "application/octet-stream",
+                ByteArrayInputStream(body),
+                body.size.toLong(),
+            )
+
+        try {
+            bridge.encodeResponse(response)
+            throw AssertionError("staging file quota was not enforced")
+        } catch (_: IllegalArgumentException) {
+            // A bounded staging directory must fail closed before allocating another artifact.
+        }
+        assertEquals(32, staging.listFiles()?.count { it.isFile && it.name.endsWith(".upload") })
+
+        body.fill(0)
+    }
+
+    @Test
+    fun `concurrent bridge instances serialize staging writes`() {
+        val first = WebUiBridge(WebServer(0, configDir), configDir)
+        val second = WebUiBridge(WebServer(0, configDir), configDir)
+        val executor = Executors.newFixedThreadPool(2)
+        try {
+            val futures =
+                listOf(first, second).map { instance ->
+                    executor.submit<JSONObject> {
+                        val body = ByteArray(300 * 1024) { 0x43 }
+                        val response =
+                            NanoHTTPD.newFixedLengthResponse(
+                                NanoHTTPD.Response.Status.OK,
+                                "application/octet-stream",
+                                ByteArrayInputStream(body),
+                                body.size.toLong(),
+                            )
+                        try {
+                            JSONObject(String(instance.encodeResponse(response), Charsets.UTF_8))
+                        } finally {
+                            body.fill(0)
+                        }
+                    }
+                }
+            futures.forEach { assertTrue(it.get().has("downloadId")) }
+        } finally {
+            executor.shutdownNow()
+            first.stop()
+            second.stop()
+        }
+        assertEquals(2, File(configDir, "webui_bridge/staging").listFiles()?.count { it.name.endsWith(".download") })
+    }
+
+    @Test
+    fun `large response rejects when staging byte quota is exhausted`() {
+        bridge = WebUiBridge(WebServer(0, configDir), configDir)
+        val stagingFile = File(configDir, "webui_bridge/staging/00000000000000000000000000000000.upload")
+        RandomAccessFile(stagingFile, "rw").use { it.setLength(64L * 1024 * 1024) }
+        val body = ByteArray(300 * 1024) { 0x42 }
+        val response =
+            NanoHTTPD.newFixedLengthResponse(
+                NanoHTTPD.Response.Status.OK,
+                "application/octet-stream",
+                ByteArrayInputStream(body),
+                body.size.toLong(),
+            )
+
+        try {
+            bridge.encodeResponse(response)
+            throw AssertionError("staging byte quota was not enforced")
+        } catch (_: IllegalArgumentException) {
+            // A bounded staging directory must fail closed before writing another artifact.
+        }
+        assertEquals(64L * 1024 * 1024, stagingFile.length())
+        body.fill(0)
+    }
+
+    @Test
+    fun `large response rejects when staging scan bound is exceeded`() {
+        bridge = WebUiBridge(WebServer(0, configDir), configDir)
+        val staging = File(configDir, "webui_bridge/staging")
+        repeat(1025) { index -> File(staging, "noise-$index").writeText("ignored") }
+        val body = ByteArray(300 * 1024) { 0x45 }
+        val response =
+            NanoHTTPD.newFixedLengthResponse(
+                NanoHTTPD.Response.Status.OK,
+                "application/octet-stream",
+                ByteArrayInputStream(body),
+                body.size.toLong(),
+            )
+
+        try {
+            bridge.encodeResponse(response)
+            throw AssertionError("oversized staging scan was accepted")
+        } catch (_: Exception) {
+            // Staging inventory must fail closed before it allocates another artifact.
+        }
+        body.fill(0)
+    }
+
+    @Test
     fun `stale staging cleanup remains bounded when the directory is oversized`() {
         bridge = WebUiBridge(WebServer(0, configDir), configDir)
         val staging = File(configDir, "webui_bridge/staging")
@@ -143,6 +279,41 @@ class WebUiBridgeTest {
 
         val remaining = staging.listFiles()?.count { it.isFile } ?: 0
         assertEquals(1, remaining)
+    }
+
+    @Test
+    fun `stale cleanup preserves the staging lock file`() {
+        bridge = WebUiBridge(WebServer(0, configDir), configDir)
+        val lockFile = File(configDir, "webui_bridge/staging/.staging.lock")
+        lockFile.writeText("")
+        assertTrue(lockFile.setLastModified(System.currentTimeMillis() - 11 * 60 * 1000L))
+
+        bridge.cleanupStale()
+
+        assertTrue("stale cleanup must not delete the coordination lock", lockFile.exists())
+    }
+
+    @Test
+    fun `stale cleanup never follows symlinks or deletes directories`() {
+        bridge = WebUiBridge(WebServer(0, configDir), configDir)
+        val staging = File(configDir, "webui_bridge/staging")
+        val staleAt = System.currentTimeMillis() - 11 * 60 * 1000L
+        val outside = tempFolder.newFile("outside-payload")
+        outside.writeText("keep")
+        val link = File(staging, "11111111111111111111111111111111.upload")
+        Files.createSymbolicLink(link.toPath(), outside.toPath())
+        val directory = File(staging, "22222222222222222222222222222222.upload")
+        assertTrue(directory.mkdirs())
+        assertTrue(directory.setLastModified(staleAt))
+        val fresh = File(staging, "33333333333333333333333333333333.upload")
+        fresh.writeText("fresh")
+
+        bridge.cleanupStale()
+
+        assertTrue("symlink must remain", Files.isSymbolicLink(link.toPath()))
+        assertTrue("symlink target must remain", outside.exists())
+        assertTrue("directory must remain", directory.isDirectory)
+        assertTrue("fresh regular file must remain", fresh.exists())
     }
 
     @Test

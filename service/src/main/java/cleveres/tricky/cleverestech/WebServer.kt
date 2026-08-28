@@ -543,6 +543,11 @@ class WebServer(
         return updates
     }
 
+    private fun readIdentityLinesBounded(file: File): MutableList<String> =
+        readUtf8FileSnapshotBounded(file, 0, MAX_CONFIG_FILE_SIZE)
+            .lineSequence()
+            .toMutableList()
+
     private fun saveIdentityUpdates(updates: Map<String, String?>): Boolean {
         synchronized(fileLock) {
             val file = File(configDir, "spoof_build_vars")
@@ -574,7 +579,15 @@ class WebServer(
                 }
                 val lines =
                     if (Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
-                        file.readLines().toMutableList()
+                        try {
+                            readIdentityLinesBounded(file)
+                        } catch (error: IOException) {
+                            Logger.w(
+                                "Refusing oversized or unstable identity configuration: " +
+                                    (error.message ?: error::class.simpleName),
+                            )
+                            return false
+                        }
                     } else {
                         mutableListOf()
                     }
@@ -1987,9 +2000,26 @@ class WebServer(
                             "VISIBLE_CAMERA_COUNT" to
                                 (RandomUtils.choose(listOf("1", "2", "2", "3", "3", "3", "4", "4", "4", "4")) ?: "2"),
                         )
+                    val spoofPath = spoofFile.toPath()
+                    if (Files.exists(spoofPath, LinkOption.NOFOLLOW_LINKS) &&
+                        !Files.isRegularFile(spoofPath, LinkOption.NOFOLLOW_LINKS)
+                    ) {
+                        return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid identity configuration")
+                    }
                     val lines =
-                        if (Files.isRegularFile(spoofFile.toPath(), LinkOption.NOFOLLOW_LINKS)) {
-                            spoofFile.readLines().toMutableList()
+                        if (Files.isRegularFile(spoofPath, LinkOption.NOFOLLOW_LINKS)) {
+                            try {
+                                readIdentityLinesBounded(spoofFile)
+                            } catch (error: IOException) {
+                                Logger.w(
+                                    "Refusing oversized or unstable identity configuration: ${error.message ?: error::class.simpleName}",
+                                )
+                                return secureResponse(
+                                    Response.Status.BAD_REQUEST,
+                                    "text/plain",
+                                    "Identity configuration is too large or changed during read",
+                                )
+                            }
                         } else {
                             mutableListOf()
                         }
@@ -2281,6 +2311,7 @@ class WebServer(
         private val MAX_CBOX_UPLOAD_SIZE = CboxWireLimits.MAX_BYTES.toLong()
         private const val MAX_BODY_SIZE = 5 * 1024 * 1024L
         private const val MAX_CONFIG_FILE_SIZE = 1024 * 1024L
+        private const val MAX_SCANNED_DIRECTORY_ENTRIES = 4_096
         private const val MAX_IDENTITY_REQUEST_BYTES = 8 * 1024
         private const val MAX_LOG_BYTES = 2 * 1024 * 1024
         private const val MAX_WEB_UI_HTML_BYTES = 512 * 1024L
@@ -2727,7 +2758,11 @@ class WebServer(
         ): List<File> {
             val files = ArrayList<File>(maxFiles)
             Files.newDirectoryStream(directory.toPath()).use { entries ->
+                var scanned = 0
                 for (entry in entries) {
+                    if (++scanned > MAX_SCANNED_DIRECTORY_ENTRIES) {
+                        throw IOException("Too many entries in keybox directory")
+                    }
                     val file = entry.toFile()
                     if (!isValidKeyboxFilename(file.name) ||
                         !Files.isRegularFile(entry, LinkOption.NOFOLLOW_LINKS) ||
@@ -2893,8 +2928,12 @@ class WebServer(
                         throw SecurityException("Refusing non-directory keybox destination")
                     }
                     Files.newDirectoryStream(keyboxDir.toPath()).use { entries ->
+                        var scanned = 0
                         var existingKeyboxCount = 0
                         for (entry in entries) {
+                            if (++scanned > MAX_SCANNED_DIRECTORY_ENTRIES) {
+                                throw IOException("Too many entries in keybox directory")
+                            }
                             val name = entry.fileName.toString()
                             val backupPath = "keyboxes/$name"
                             if (!isValidKeyboxBackupPath(backupPath)) continue

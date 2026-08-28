@@ -70,6 +70,7 @@ object CboxManager {
             }
         val currentFiles = files.mapTo(HashSet()) { it.file.name }
         val crl = if (files.isEmpty()) null else KeyboxVerifier.fetchCrl()
+        var retainedKeyboxCount = 0
 
         for (cbox in files) {
             val file = cbox.file
@@ -97,6 +98,13 @@ object CboxManager {
                     KeyboxVerifier.verifyKeybox(it, crl) == KeyboxVerifier.Status.VALID
                 }
             ) {
+                if (retainedKeyboxCount > KeyboxLoader.MAX_ACTIVE_KEYS - current.keyboxes.size) {
+                    unlockedCache.remove(name)
+                    lockedFiles.add(name)
+                    Logger.w("CBOX keybox cache exceeds the active keybox limit; keeping $name locked")
+                    continue
+                }
+                retainedKeyboxCount += current.keyboxes.size
                 lockedFiles.remove(name)
                 continue
             }
@@ -105,7 +113,13 @@ object CboxManager {
             if (crl != null) {
                 val loaded = loadCached(file, crl)
                 if (loaded != null) {
+                    if (retainedKeyboxCount > KeyboxLoader.MAX_ACTIVE_KEYS - loaded.keyboxes.size) {
+                        lockedFiles.add(name)
+                        Logger.w("CBOX keybox cache exceeds the active keybox limit; keeping $name locked")
+                        continue
+                    }
                     unlockedCache[name] = loaded
+                    retainedKeyboxCount += loaded.keyboxes.size
                     lockedFiles.remove(name)
                     continue
                 }
@@ -190,6 +204,10 @@ object CboxManager {
                 return false
             }
 
+            if (totalCachedKeyboxes(excluding = filename) > KeyboxLoader.MAX_ACTIVE_KEYS - verified.size) {
+                Logger.w("CBOX keybox cache would exceed the active keybox limit; keeping $filename locked")
+                return false
+            }
             writeCredentialCache(file, unlockPayload.recoveryKey, verificationKey, sourceDigest)
             unlockedCache[filename] =
                 UnlockedEntry(afterModified, afterSize, sourceDigest.copyOf(), verified.toList())
@@ -206,6 +224,12 @@ object CboxManager {
         }
     }
 
+    private fun totalCachedKeyboxes(excluding: String? = null): Int =
+        unlockedCache.entries
+            .asSequence()
+            .filter { excluding == null || it.key != excluding }
+            .sumOf { it.value.keyboxes.size }
+
     fun getUnlockedKeyboxes(): List<CertHack.KeyBox> =
         unlockedCache.entries.sortedBy { it.key }.flatMap { it.value.keyboxes }
 
@@ -217,10 +241,18 @@ object CboxManager {
     internal fun isUnlockPasswordWithinLimit(password: String): Boolean = password.length <= MAX_PASSWORD_CHARS
 
     @Throws(IOException::class)
+    @androidx.annotation.VisibleForTesting
+    internal fun listCboxFilesForTesting(directory: File): List<String> =
+        listCboxFiles(directory).map { it.file.name }
+
     private fun listCboxFiles(directory: File): List<CboxFile> {
         val files = PriorityQueue<CboxFile>(MAX_CBOX_FILES, compareByDescending { it.file.name })
         Files.newDirectoryStream(directory.toPath()).use { entries ->
+            var scanned = 0
             for (path in entries) {
+                if (++scanned > MAX_SCANNED_ENTRIES_PER_DIRECTORY) {
+                    throw IOException("CBOX directory contains too many entries")
+                }
                 val file = path.toFile()
                 if (!validFilename.matches(file.name) || !isSafeCbox(file)) continue
                 val cboxFile = CboxFile(file, file.lastModified(), file.length())
@@ -402,14 +434,18 @@ object CboxManager {
             Files.newDirectoryStream(directory.toPath()) { path ->
                 path.fileName.toString().endsWith(".cbox.cache", ignoreCase = true)
             }.use { entries ->
+                var scanned = 0
                 for (path in entries) {
+                    if (++scanned > MAX_SCANNED_ENTRIES_PER_DIRECTORY) {
+                        throw IOException("CBOX cache directory contains too many entries")
+                    }
                     val cache = path.toFile()
                     val sourceName = cache.name.removeSuffix(".cache")
                     if (sourceName !in currentFiles) deleteCacheSafely(cache)
                 }
             }
-        } catch (_: IOException) {
-            Logger.w("Could not scan orphaned CBOX caches")
+        } catch (error: IOException) {
+            Logger.w("Could not scan orphaned CBOX caches: ${error.message}")
         }
     }
 
@@ -436,6 +472,7 @@ object CboxManager {
     private val MAX_CBOX_BYTES = CboxWireLimits.MAX_BYTES.toLong()
     private const val MAX_CACHE_BYTES = 64L * 1024
     private const val MAX_CBOX_FILES = 64
+    internal const val MAX_SCANNED_ENTRIES_PER_DIRECTORY = 4_096
     private const val MAX_PASSWORD_CHARS = 1024
     private const val MAX_PUBLIC_KEY_BYTES = 16 * 1024
     private val CACHE_MAGIC = byteArrayOf('C'.code.toByte(), 'T'.code.toByte(), 'C'.code.toByte(), 'B'.code.toByte(), '3'.code.toByte())

@@ -5,6 +5,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
@@ -48,17 +49,19 @@ internal class ConflatedRefreshScheduler(
         require(debounceMs >= 0) { "debounceMs must not be negative" }
     }
 
-    fun submit() {
+    fun submit(): Job =
         synchronized(stateLock) {
             requestedGeneration++
-            if (workerJob?.isActive == true) return
-            workerJob = scope.launch { drainRequests() }
+            if (workerJob?.isActive != true) {
+                workerJob = scope.launch { drainRequests() }
+            }
+            requireNotNull(workerJob)
         }
-    }
 
     private suspend fun drainRequests() {
         val currentWorker = currentCoroutineContext()[Job]
         while (true) {
+            currentCoroutineContext().ensureActive()
             val generation = synchronized(stateLock) { requestedGeneration }
             if (debounceMs > 0) delay(debounceMs)
 
@@ -67,7 +70,12 @@ internal class ConflatedRefreshScheduler(
             }
 
             try {
-                executionMutex.withLock { refresh() }
+                currentCoroutineContext().ensureActive()
+                executionMutex.withLock {
+                    currentCoroutineContext().ensureActive()
+                    refresh()
+                }
+                currentCoroutineContext().ensureActive()
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
@@ -99,6 +107,7 @@ internal class ConflatedRefreshScheduler(
 
     fun cancel() {
         synchronized(stateLock) {
+            requestedGeneration++
             workerJob?.cancel()
             workerJob = null
         }

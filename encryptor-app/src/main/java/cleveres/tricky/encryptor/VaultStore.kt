@@ -116,7 +116,9 @@ internal object VaultStore {
         val vault = directory(context)
         val files = ArrayList<File>()
         Files.newDirectoryStream(vault.toPath()).use { entries ->
+            var scanned = 0
             for (entry in entries) {
+                if (++scanned > MAX_FILES) throw IOException("Vault directory contains too many entries")
                 if (files.size == MAX_FILES) break
                 val name = entry.fileName.toString()
                 if (!validName(name)) continue
