@@ -90,6 +90,6 @@ jobs:
             --warning-mode=fail --console=plain
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@fddeee1a7ece751b577e409a89057319e3172939 # v4
+        uses: github/codeql-action/analyze@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4
         with:
           category: "/language:${{ matrix.language }}"
