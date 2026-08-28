@@ -403,7 +403,7 @@ input[type="text"], input[type="tel"], input[type="password"], input[type="searc
         <div class="tab" id="tab_spoof" onclick="switchTab('spoof')" role="tab" tabindex="-1" aria-selected="false" aria-controls="spoof" onkeydown="handleTabNavigation(event, 'spoof')">Identity</div>
         <div class="tab" id="tab_apps" onclick="switchTab('apps')" role="tab" tabindex="-1" aria-selected="false" aria-controls="apps" onkeydown="handleTabNavigation(event, 'apps')">Apps</div>
         <div class="tab" id="tab_keys" onclick="switchTab('keys')" role="tab" tabindex="-1" aria-selected="false" aria-controls="keys" onkeydown="handleTabNavigation(event, 'keys')">Keyboxes</div>
-        <div class="tab" id="tab_info" onclick="switchTab('info')" role="tab" tabindex="-1" aria-selected="false" aria-controls="info" onkeydown="handleTabNavigation(event, 'info')">Info &amp; Resources</div> <div class="tab" id="tab_guide" onclick="switchTab('guide')" role="tab" tabindex="-1" aria-selected="false" aria-controls="guide" onkeydown="handleTabNavigation(event, 'guide')">Guide</div>
+        <div class="tab" id="tab_info" onclick="switchTab('info')" role="tab" tabindex="-1" aria-selected="false" aria-controls="info" onkeydown="handleTabNavigation(event, 'info')">Info &amp; Resources</div>
         <div class="tab" id="tab_log" onclick="switchTab('log')" role="tab" tabindex="-1" aria-selected="false" aria-controls="log" onkeydown="handleTabNavigation(event, 'log')">Logs</div>
         <div class="tab" id="tab_editor" onclick="switchTab('editor')" role="tab" tabindex="-1" aria-selected="false" aria-controls="editor" onkeydown="handleTabNavigation(event, 'editor')">Editor</div>
         <div class="tab" id="tab_donate" onclick="switchTab('donate')" role="tab" tabindex="-1" aria-selected="false" aria-controls="donate" onkeydown="handleTabNavigation(event, 'donate')" style="margin-left:auto; color:var(--accent);">Donate</div>
@@ -606,40 +606,6 @@ input[type="text"], input[type="tel"], input[type="password"], input[type="searc
 </div>
         </div>
     </div>
-    <div id="guide" class="content" role="tabpanel" aria-labelledby="tab_guide">
-        <div class="panel">
-<h3>Quick Start &amp; Keybox Guide</h3>
-<p>Welcome! CleveresTricky provides attestation compatibility controls and secure keybox management for supported rooted Android devices.</p>
-
-<h4>1. Using Standard Keybox.xml</h4>
-<p>If you have an authorized <code>keybox.xml</code>, upload it in the Keyboxes tab or place it in <code>/data/adb/cleverestricky/</code> with mode <code>0600</code>, then reboot. The module validates it before use. A keybox cannot replace a device's hardware root of trust or guarantee a Play Integrity verdict.</p>
-
-<h4>2. Encrypted .cbox Files</h4>
-<p>For better at-rest protection, you can use <code>.cbox</code> files. These authenticated encrypted containers require a password; device caches use AndroidKeyStore when available and otherwise a root-only device key.</p>
-
-<h4>3. Remote Keybox Servers</h4>
-<p>You can fetch keyboxes from HTTPS servers that you trust. Head to the Keybox tab and enter the server details. Token and custom-header authentication are supported; signed sources fail closed when verification fails.</p>
-
-<h4>4. Creating .cbox Files</h4>
-<p>If you distribute authorized key material and need encrypted delivery, use the <b>Encryptor App</b>:</p>
-<ul>
-    <li>Generate a signing key in the app.</li>
-    <li>Select your <code>keybox.xml</code>.</li>
-    <li>Set a secure password and add your author name.</li>
-    <li>Share the <code>.cbox</code> file along with the Public Key so users can verify it's from you.</li>
-</ul>
-        </div>
-        <div class="panel">
-<h3>Language Support</h3>
-<p>The module is English-first, but fully supports community translations.</p>
-<p>To add a language, download the template below, translate the values, and place the resulting <code>lang.json</code> file in <code>/data/adb/cleverestricky/</code>. Then click Reload.</p>
-<div class="grid-2">
-    <button onclick="runWithState(this, 'Downloading...', downloadLangTemplate)">Download Template</button>
-    <button onclick="runWithState(this, 'Loading...', () => { notify('Loading...', 'working'); return loadLanguage().then(() => notify('Language Loaded')); })">Reload Language File</button>
-</div>
-        </div>
-    </div>
-
     <div id="log" class="content" role="tabpanel" aria-labelledby="tab_log">
         <div class="panel">
 <h3>Module Logs</h3>
@@ -2421,7 +2387,6 @@ if(translations['tab_spoof']) document.getElementById('tab_spoof').innerText = t
 if(translations['tab_apps']) document.getElementById('tab_apps').innerText = translations['tab_apps'];
 if(translations['tab_keys']) document.getElementById('tab_keys').innerText = translations['tab_keys'];
 if(translations['tab_info']) document.getElementById('tab_info').innerText = translations['tab_info'];
-if(translations['tab_guide']) document.getElementById('tab_guide').innerText = translations['tab_guide'];
 if(translations['tab_editor']) document.getElementById('tab_editor').innerText = translations['tab_editor'];
 if(translations['tab_donate']) document.getElementById('tab_donate').innerText = translations['tab_donate'];
 if(translations['tab_log']) document.getElementById('tab_log').innerText = translations['tab_log'];
@@ -2568,7 +2533,6 @@ const template = {
     "tab_apps": "Apps",
     "tab_keys": "Keyboxes",
     "tab_info": "Info & Resources",
-    "tab_guide": "Guide",
     "tab_editor": "Editor",
     "tab_donate": "Donate",
     "tab_log": "Logs"

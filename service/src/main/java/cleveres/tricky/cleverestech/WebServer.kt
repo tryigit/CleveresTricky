@@ -858,7 +858,7 @@ class WebServer(
     @Suppress("DEPRECATION")
     private fun getEnvironmentInfo(): String {
         if (File("/data/adb/ksu").exists() || File("/data/adb/ksud").exists()) return "KernelSU"
-        if (File("/data/adb/apatch").exists()) return "APatch"
+        if (File("/data/adb/apatch").exists() || File("/data/adb/ap").exists()) return "APatch"
         if (File("/sbin/magisk").exists() || File("/data/adb/magisk").exists()) return "Unsupported (Magisk)"
         return "Unknown Root"
     }
