@@ -446,9 +446,11 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn refuses_a_regular_file_named_binder() {
         use std::fs::{self, OpenOptions};
-        use std::os::fd::AsRawFd;
+        #[cfg(unix)]
+        use std::os::unix::io::AsRawFd;
         use std::time::{SystemTime, UNIX_EPOCH};
 
         let nonce = SystemTime::now()
