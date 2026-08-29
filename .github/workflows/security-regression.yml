@@ -91,7 +91,12 @@ jobs:
 
       - name: Validate installer extraction security
         shell: bash
-        run: bash module/install-tests/verify_extract_security.test.sh
+        run: |
+          set -euo pipefail
+          bash module/install-tests/verify_extract_security.test.sh
+          bash module/install-tests/customize_bootstrap_security.test.sh
+          bash module/install-tests/action_bugreport_security.test.sh
+          bash module/install-tests/service_lifecycle_security.test.sh
 
       - name: Validate all WebUI syntax and behavior
         shell: bash

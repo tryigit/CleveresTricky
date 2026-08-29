@@ -1,10 +1,13 @@
 package cleveres.tricky.cleverestech
 
+import android.system.Os
 import cleveres.tricky.cleverestech.keystore.CertHack
 import cleveres.tricky.cleverestech.util.KeyboxAutoCleaner
 import cleveres.tricky.cleverestech.util.SecureFile
 import java.io.File
 import java.util.concurrent.CountDownLatch
+import kotlin.concurrent.thread
+import kotlin.system.exitProcess
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -91,6 +94,29 @@ internal fun hasConfiguredKeyboxSource(configDir: File): Boolean =
 
 fun main(args: Array<String>) {
     Logger.i("Welcome to Service!")
+    val initialParentPid = runCatching { Os.getppid() }.getOrDefault(0)
+    if (initialParentPid <= 1) {
+        Logger.e("Main: Parent daemon is unavailable (ppid=$initialParentPid); refusing orphaned adapter startup")
+        exitProcess(1)
+    }
+
+    thread(isDaemon = true, name = "ParentDaemonWatchdog", priority = Thread.MIN_PRIORITY) {
+        while (!Thread.currentThread().isInterrupted) {
+            try {
+                Thread.sleep(1000)
+                val currentPpid = runCatching { Os.getppid() }.getOrDefault(1)
+                if (currentPpid != initialParentPid || currentPpid <= 1) {
+                    Logger.w("Main: Parent daemon (pid=$initialParentPid) died (current=$currentPpid); exiting adapter cleanly")
+                    exitProcess(0)
+                }
+            } catch (_: InterruptedException) {
+                break
+            } catch (_: Throwable) {
+                // Ignore unexpected proc lookup failure and recheck next cycle
+            }
+        }
+    }
+
     val isTampered =
         try {
             !Verification.check()
@@ -107,14 +133,14 @@ fun main(args: Array<String>) {
             SecureFile.mkdirs(configDir, CONFIG_DIR_MODE)
         } catch (e: Exception) {
             Logger.e("Failed to prepare configuration directory", e)
-            return@runBlocking
+            exitProcess(1)
         }
 
         val webUiReady = CountDownLatch(1)
         val webUiBridge = startWebUiBridge(configDir, isTampered, webUiReady)
         if (webUiBridge == null) {
             Logger.e("Main: Native WebUI adapter could not register; exiting for supervisor retry")
-            return@runBlocking
+            exitProcess(1)
         }
 
         if (isTampered) {

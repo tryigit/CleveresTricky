@@ -430,7 +430,7 @@ object KeystoreInterceptor : BinderInterceptor() {
     object Killer : IBinder.DeathRecipient {
         override fun binderDied() {
             Logger.d("keystore exit, daemon restart")
-            exitProcess(0)
+            exitProcess(1)
         }
     }
 }

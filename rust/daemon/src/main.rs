@@ -123,6 +123,7 @@ fn run() -> io::Result<()> {
     validate_module_directory(&module_dir)?;
 
     let config_root = Arc::new(config_file_broker::prepare_root()?);
+    let _ = config_root.atomic_write("daemon.pid", process::id().to_string().as_bytes(), 0o600);
     let web_listener = bind_abstract(DAEMON_SOCKET_NAME)?;
     let file_listener = bind_abstract(FILE_SOCKET_NAME)?;
     let adapter_identity = Arc::new(AdapterIdentity::default());
