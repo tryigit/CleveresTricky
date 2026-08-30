@@ -75,5 +75,20 @@ assert.match(
   /<div class="panel">\s*<h3>Verification<\/h3>\s*<div class="row ct-verify-header"/s,
   'Verification panel header must be a direct child of panel',
 );
+assert.match(
+  indexSource,
+  /<div class="success-icon">&#10003;<\/div>/,
+  'Dynamic island success icon must use a checkmark symbol',
+);
+assert.doesNotMatch(
+  indexSource,
+  /<div class="success-icon">OK<\/div>/,
+  'Dynamic island success icon must not use text OK',
+);
+assert.doesNotMatch(
+  indexSource,
+  /#tab_donate\s*\{[^}]*background:\s*transparent\s*!important/s,
+  'Donate tab must not force transparent background',
+);
 
 console.log('All-pages responsive and accessible-control regression checks passed');

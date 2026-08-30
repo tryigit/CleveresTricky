@@ -67,7 +67,7 @@
         .inline-spinner { width: 18px; height: 18px; border: 2.5px solid var(--accent); border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; display: inline-block; vertical-align: middle; margin-right: 10px; }
         .error-icon { display: none; margin-right: 12px; color: #ffffff; background: var(--danger); border-radius: 50%; width: 20px; height: 20px; font-size: 0.75rem; font-weight: 800; align-items: center; justify-content: center; flex-shrink: 0; line-height: 1; text-align: center; }
         .island.error .error-icon { display: flex; }
-        .success-icon { display: none; margin-right: 12px; color: #ffffff; background: var(--success); border-radius: 50%; width: 20px; height: 20px; font-size: 0.75rem; font-weight: 800; align-items: center; justify-content: center; flex-shrink: 0; line-height: 1; text-align: center; }
+        .success-icon { display: none; margin-right: 12px; color: #ffffff; background: var(--success); border-radius: 50%; width: 20px; height: 20px; font-size: 0.82rem; font-weight: 800; align-items: center; justify-content: center; flex-shrink: 0; line-height: 1; text-align: center; }
         .island.normal .success-icon { display: flex; }
         .island-close { background: rgba(255, 255, 255, 0.1); border: none; color: var(--text-muted); font-size: 1.1rem; padding: 0; margin-left: 14px; cursor: pointer; min-height: 28px; min-width: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; touch-action: manipulation; pointer-events: auto; transition: background 0.15s, color 0.15s; flex-shrink: 0; }
         .island-close:hover { color: #ffffff; background: rgba(255, 255, 255, 0.2); }
@@ -136,21 +136,13 @@
             box-shadow: inset 3.5px 0 0 var(--accent);
         }
         #tab_donate {
-            margin-left: 0 !important;
-            margin-top: auto;
-            padding-top: 10px;
-            border-top: 1px solid rgba(255, 255, 255, 0.08);
-            color: var(--accent) !important;
-            justify-content: center;
-            text-align: center;
-            box-shadow: none !important;
-            background: transparent !important;
+            color: var(--accent);
         }
-        #tab_donate:hover, #tab_donate.active {
-            color: var(--accent) !important;
-            background: transparent !important;
-            border-color: transparent !important;
-            box-shadow: none !important;
+        #tab_donate:hover {
+            color: var(--accent-strong);
+        }
+        #tab_donate.active {
+            color: var(--accent);
         }
         .content {
             grid-column: 2;
@@ -501,7 +493,7 @@
         <div style="margin-top:20px; color:var(--text-muted); font-size:0.9em;">Loading...</div>
     </div>
 
-    <div class="island-container"><div id="island" class="island" role="status" aria-live="polite"><div class="spinner"></div><div class="error-icon">!</div><div class="success-icon">OK</div><span id="islandText">Notification</span><button class="island-close" onclick="document.getElementById('island').classList.remove('active')" aria-label="Close notification">&times;</button></div></div>
+    <div class="island-container"><div id="island" class="island" role="status" aria-live="polite"><div class="spinner"></div><div class="error-icon">!</div><div class="success-icon">&#10003;</div><span id="islandText">Notification</span><button class="island-close" onclick="document.getElementById('island').classList.remove('active')" aria-label="Close notification">&times;</button></div></div>
     <h1>CleveresTricky</h1>
     <div class="tabs" role="tablist">
         <div class="tab active" id="tab_dashboard" onclick="switchTab('dashboard')" role="tab" tabindex="0" aria-selected="true" aria-controls="dashboard" onkeydown="handleTabNavigation(event, 'dashboard')">Dashboard</div>
