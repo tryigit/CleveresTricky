@@ -110,7 +110,6 @@ object CameraVisibilityInterceptor : BinderInterceptor() {
                 deathRecipientLinked = false
                 injected = false
                 injectedPid = null
-                injectionInFlight = false
                 binderBackdoor = null
                 cachedCameraServerPid = null
                 lastInjectionAttemptMs = 0L
