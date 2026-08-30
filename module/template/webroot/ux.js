@@ -2987,10 +2987,14 @@
         const toolbar = document.createElement('div');
         toolbar.id = 'ct_keybox_bulk';
         toolbar.style.cssText = 'display:flex;gap:8px;align-items:center;justify-content:space-between;margin:8px 0;flex-wrap:wrap;flex-direction:column;align-items:stretch;';
-        const mq = window.matchMedia('(min-width: 600px)');
-        const updateLayout = (e) => { toolbar.style.flexDirection = e.matches ? 'row' : 'column'; toolbar.style.alignItems = e.matches ? 'center' : 'stretch'; };
-        mq.addListener(updateLayout);
-        updateLayout(mq);
+
+        if (typeof window.matchMedia === 'function') {
+            const mq = window.matchMedia('(min-width: 600px)');
+            const updateLayout = (e) => { toolbar.style.flexDirection = e.matches ? 'row' : 'column'; toolbar.style.alignItems = e.matches ? 'center' : 'stretch'; };
+            mq.addListener(updateLayout);
+            updateLayout(mq);
+        }
+
 
         const left = document.createElement('div');
         left.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;';
