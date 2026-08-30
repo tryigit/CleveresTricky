@@ -132,14 +132,23 @@ jobs:
           fi
 
           release_json=$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets)
-          zip_name=$(jq -r --arg prefix "CleveresTricky-${RELEASE_TAG}-" '
-            [.assets[] | select(.name | startswith($prefix) and endswith(".zip")) | .name]
-            | if length == 1 then .[0] elif length == 0 then empty else error("expected exactly one module release ZIP") end
+
+          mapfile -t matching_zips < <(jq -r --arg prefix "CleveresTricky-${RELEASE_TAG}-" '
+            [.assets[] | select(.name | startswith($prefix) and endswith(".zip"))]
+            | sort_by(.createdAt) | reverse | .[].name
           ' <<<"$release_json")
-          if [[ -z "$zip_name" ]]; then
+
+          if [[ ${#matching_zips[@]} -eq 0 ]]; then
             echo "No module release ZIP found for $RELEASE_TAG. Skipping metadata update."
             exit 0
           fi
+
+          zip_name="${matching_zips[0]}"
+
+          for remnant in "${matching_zips[@]:1}"; do
+            echo "Deleting remnant asset: $remnant"
+            gh release delete-asset "$RELEASE_TAG" "$remnant" --repo "$GITHUB_REPOSITORY" --yes || true
+          done
           expected_digest=$(jq -r --arg name "$zip_name" '
             [.assets[] | select(.name == $name) | .digest]
             | if length == 1 then .[0] else error("module release ZIP digest is missing") end
