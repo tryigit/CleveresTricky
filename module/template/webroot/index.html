@@ -132,6 +132,7 @@
             cursor: pointer;
             display: inline-flex;
             align-items: center;
+            gap: 10px;
             box-sizing: border-box;
             white-space: nowrap;
             transition: all 0.16s cubic-bezier(0.16, 1, 0.3, 1);
@@ -142,6 +143,27 @@
             background: rgba(255, 255, 255, 0.14);
             border-color: rgba(255, 255, 255, 0.12);
             box-shadow: inset 3.5px 0 0 var(--accent);
+        }
+        .tab-icon {
+            width: 18px;
+            height: 18px;
+            min-width: 18px;
+            flex-shrink: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            stroke: currentColor;
+            fill: none;
+            pointer-events: none;
+            transition: stroke 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .tab-label {
+            flex: 1 1 auto;
+            text-align: left;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            pointer-events: none;
         }
         #tab_donate {
             color: var(--accent);
@@ -399,7 +421,10 @@
                 min-width: 58px;
                 min-height: 44px;
                 flex: 0 0 auto;
+                display: inline-flex;
+                align-items: center;
                 justify-content: center;
+                gap: 6px;
                 padding: 8px 12px;
                 border-radius: 18px;
                 font-size: 0.75rem;
@@ -412,6 +437,14 @@
                 color: #ffffff;
                 background: rgba(255, 255, 255, 0.16);
                 box-shadow: none;
+            }
+            .tab-icon {
+                width: 16px;
+                height: 16px;
+                min-width: 16px;
+            }
+            .tab-label {
+                flex: 0 1 auto;
             }
             #tab_donate { margin-top: 0 !important; border-top: none !important; }
             .content {
@@ -488,14 +521,15 @@
     <div class="island-container"><div id="island" class="island" role="status" aria-live="polite"><div class="spinner"></div><div class="error-icon">!</div><div class="success-icon">&#10003;</div><span id="islandText">Notification</span><button class="island-close" onclick="document.getElementById('island').classList.remove('active')" aria-label="Close notification">&times;</button></div></div>
     <h1>CleveresTricky</h1>
     <div class="tabs" role="tablist">
-        <div class="tab active" id="tab_dashboard" onclick="switchTab('dashboard')" role="tab" tabindex="0" aria-selected="true" aria-controls="dashboard" onkeydown="handleTabNavigation(event, 'dashboard')">Dashboard</div>
-        <div class="tab" id="tab_spoof" onclick="switchTab('spoof')" role="tab" tabindex="-1" aria-selected="false" aria-controls="spoof" onkeydown="handleTabNavigation(event, 'spoof')">Identity</div>
-        <div class="tab" id="tab_apps" onclick="switchTab('apps')" role="tab" tabindex="-1" aria-selected="false" aria-controls="apps" onkeydown="handleTabNavigation(event, 'apps')">Apps</div>
-        <div class="tab" id="tab_keys" onclick="switchTab('keys')" role="tab" tabindex="-1" aria-selected="false" aria-controls="keys" onkeydown="handleTabNavigation(event, 'keys')">Keyboxes</div>
-        <div class="tab" id="tab_info" onclick="switchTab('info')" role="tab" tabindex="-1" aria-selected="false" aria-controls="info" onkeydown="handleTabNavigation(event, 'info')">Info &amp; Resources</div> <div class="tab" id="tab_guide" onclick="switchTab('guide')" role="tab" tabindex="-1" aria-selected="false" aria-controls="guide" onkeydown="handleTabNavigation(event, 'guide')">Guide</div>
-        <div class="tab" id="tab_log" onclick="switchTab('log')" role="tab" tabindex="-1" aria-selected="false" aria-controls="log" onkeydown="handleTabNavigation(event, 'log')">Logs</div>
-        <div class="tab" id="tab_editor" onclick="switchTab('editor')" role="tab" tabindex="-1" aria-selected="false" aria-controls="editor" onkeydown="handleTabNavigation(event, 'editor')">Editor</div>
-        <div class="tab" id="tab_donate" onclick="switchTab('donate')" role="tab" tabindex="-1" aria-selected="false" aria-controls="donate" onkeydown="handleTabNavigation(event, 'donate')">Donate</div>
+        <div class="tab active" id="tab_dashboard" onclick="switchTab('dashboard')" role="tab" tabindex="0" aria-selected="true" aria-controls="dashboard" onkeydown="handleTabNavigation(event, 'dashboard')"><svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="2"/><rect x="14" y="3" width="7" height="5" rx="2"/><rect x="14" y="12" width="7" height="9" rx="2"/><rect x="3" y="16" width="7" height="5" rx="2"/></svg><span class="tab-label">Dashboard</span></div>
+        <div class="tab" id="tab_spoof" onclick="switchTab('spoof')" role="tab" tabindex="-1" aria-selected="false" aria-controls="spoof" onkeydown="handleTabNavigation(event, 'spoof')"><svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><circle cx="12" cy="11" r="3"/><path d="M7 17.5c1.3-1.5 3.1-2.5 5-2.5s3.7 1 5 2.5"/></svg><span class="tab-label">Identity</span></div>
+        <div class="tab" id="tab_apps" onclick="switchTab('apps')" role="tab" tabindex="-1" aria-selected="false" aria-controls="apps" onkeydown="handleTabNavigation(event, 'apps')"><svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="6" height="6" rx="2"/><rect x="14" y="4" width="6" height="6" rx="2"/><rect x="4" y="14" width="6" height="6" rx="2"/><rect x="14" y="14" width="6" height="6" rx="2"/></svg><span class="tab-label">Apps</span></div>
+        <div class="tab" id="tab_keys" onclick="switchTab('keys')" role="tab" tabindex="-1" aria-selected="false" aria-controls="keys" onkeydown="handleTabNavigation(event, 'keys')"><svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-1.5 1.5L13 10m2.5-4.5L18 8m-4 1l-2 2m-2-1a5 5 0 1 0-7 7 5 5 0 0 0 7-7l8-8z"/></svg><span class="tab-label">Keyboxes</span></div>
+        <div class="tab" id="tab_info" onclick="switchTab('info')" role="tab" tabindex="-1" aria-selected="false" aria-controls="info" onkeydown="handleTabNavigation(event, 'info')"><svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg><span class="tab-label">Info &amp; Resources</span></div>
+        <div class="tab" id="tab_guide" onclick="switchTab('guide')" role="tab" tabindex="-1" aria-selected="false" aria-controls="guide" onkeydown="handleTabNavigation(event, 'guide')"><svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg><span class="tab-label">Guide</span></div>
+        <div class="tab" id="tab_log" onclick="switchTab('log')" role="tab" tabindex="-1" aria-selected="false" aria-controls="log" onkeydown="handleTabNavigation(event, 'log')"><svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg><span class="tab-label">Logs</span></div>
+        <div class="tab" id="tab_editor" onclick="switchTab('editor')" role="tab" tabindex="-1" aria-selected="false" aria-controls="editor" onkeydown="handleTabNavigation(event, 'editor')"><svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg><span class="tab-label">Editor</span></div>
+        <div class="tab" id="tab_donate" onclick="switchTab('donate')" role="tab" tabindex="-1" aria-selected="false" aria-controls="donate" onkeydown="handleTabNavigation(event, 'donate')"><svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg><span class="tab-label">Donate</span></div>
     </div>
 
     <div id="dashboard" class="content active" role="tabpanel" aria-labelledby="tab_dashboard">
@@ -2543,15 +2577,24 @@ document.querySelectorAll('[data-i18n]').forEach(el => {
     const key = el.getAttribute('data-i18n');
     if (translations[key]) el.innerText = translations[key];
 });
-if(translations['tab_dashboard']) document.getElementById('tab_dashboard').innerText = translations['tab_dashboard'];
-if(translations['tab_spoof']) document.getElementById('tab_spoof').innerText = translations['tab_spoof'];
-if(translations['tab_apps']) document.getElementById('tab_apps').innerText = translations['tab_apps'];
-if(translations['tab_keys']) document.getElementById('tab_keys').innerText = translations['tab_keys'];
-if(translations['tab_info']) document.getElementById('tab_info').innerText = translations['tab_info'];
-if(translations['tab_guide']) document.getElementById('tab_guide').innerText = translations['tab_guide'];
-if(translations['tab_editor']) document.getElementById('tab_editor').innerText = translations['tab_editor'];
-if(translations['tab_donate']) document.getElementById('tab_donate').innerText = translations['tab_donate'];
-if(translations['tab_log']) document.getElementById('tab_log').innerText = translations['tab_log'];
+const setTabLabel = (id, text) => {
+    const tab = document.getElementById(id);
+    if (!tab) return;
+    const label = tab.querySelector('.tab-label');
+    if (label) label.innerText = text;
+    else tab.innerText = text;
+};
+if(translations['tab_dashboard']) setTabLabel('tab_dashboard', translations['tab_dashboard']);
+if(translations['tab_spoof']) setTabLabel('tab_spoof', translations['tab_spoof']);
+if(translations['tab_apps']) setTabLabel('tab_apps', translations['tab_apps']);
+if(translations['tab_keys']) setTabLabel('tab_keys', translations['tab_keys']);
+if(translations['tab_info']) setTabLabel('tab_info', translations['tab_info']);
+if(translations['tab_guide']) setTabLabel('tab_guide', translations['tab_guide']);
+if(translations['tab_editor']) setTabLabel('tab_editor', translations['tab_editor']);
+if(translations['tab_donate']) setTabLabel('tab_donate', translations['tab_donate']);
+if(translations['tab_log']) setTabLabel('tab_log', translations['tab_log']);
+if(translations['tab_patch']) setTabLabel('tab_patch', translations['tab_patch']);
+if(translations['tab_profiles']) setTabLabel('tab_profiles', translations['tab_profiles']);
         }
 
         async function loadResourceUsage() {
