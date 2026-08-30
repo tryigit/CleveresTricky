@@ -817,3 +817,31 @@ jobs:
           name: "Release V${{ steps.release_version.outputs.version }}"
           generate_release_notes: true
           files: "release-assets/*"
+
+      - name: Replace existing release assets
+        if: steps.release_version.outputs.create == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: "V${{ steps.release_version.outputs.version }}"
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Upload first so a failed replacement does not leave the release without assets.
+          gh release upload "$RELEASE_TAG" release-assets/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber
+
+          current_zip=$(basename release-assets/*-release.zip)
+          mapfile -t stale_assets < <(
+            gh release view "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --json assets \
+              --jq '.assets[].name' \
+              | jq -r --arg current_zip "$current_zip" \
+                'select((endswith(".zip") and . != $current_zip) or . == "encryptor-app-release.apk" or . == "SHA256SUMS")'
+          )
+          for asset in "${stale_assets[@]}"; do
+            gh release delete-asset "$RELEASE_TAG" "$asset" \
+              --repo "$GITHUB_REPOSITORY" \
+              --yes
+          done
