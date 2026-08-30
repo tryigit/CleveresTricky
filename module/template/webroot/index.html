@@ -191,6 +191,8 @@
         }
         .row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; min-height: 48px; width: 100%; box-sizing: border-box; }
         .row.wrap { flex-wrap: wrap; }
+
+
         label { font-size: 0.84rem; font-weight: 600; color: var(--text-muted); margin-bottom: 7px; cursor: pointer; display: block; letter-spacing: -0.01em; }
         .row > label { display: inline; margin-bottom: 0; font-size: 0.95em; color: var(--text); }
         input[type="text"], input[type="tel"], input[type="password"], input[type="search"], input[type="number"], textarea, select {
@@ -795,9 +797,9 @@
         <div class="panel">
 <h3>Platforms</h3>
 <div style="display:flex; flex-direction:column; gap:12px;">
-    <div class="row" style="flex-wrap:wrap; gap:10px; justify-content:space-between;"><span style="font-weight:bold; flex:1 1 auto; min-width:max-content;">Binance User ID</span><div style="display:flex; align-items:center; justify-content:flex-end; gap:8px; flex:1 1 max-content;"><span style="font-family:monospace;">114574830</span><button onclick="copyToClipboard('114574830','Copied Binance ID',this)" style="padding:8px 16px; font-size:0.85em; min-height:44px;">Copy</button></div></div>
-    <div class="row" style="flex-wrap:wrap; gap:10px; justify-content:space-between;"><span style="font-weight:bold; flex:1 1 auto; min-width:max-content;">PayPal</span><div style="display:flex; align-items:center; justify-content:flex-end; flex:1 1 max-content;"><a href="https://www.paypal.me/tryigitx" target="_blank" rel="noopener noreferrer" style="display:inline-flex; align-items:center; justify-content:flex-end; min-height:44px; min-width:44px; color:var(--accent); text-decoration:none; text-align:right;">paypal.me/tryigitx</a></div></div>
-    <div class="row" style="flex-wrap:wrap; gap:10px; justify-content:space-between;"><span style="font-weight:bold; flex:1 1 auto; min-width:max-content;">BuyMeACoffee</span><div style="display:flex; align-items:center; justify-content:flex-end; flex:1 1 max-content;"><a href="https://buymeacoffee.com/yigitx" target="_blank" rel="noopener noreferrer" style="display:inline-flex; align-items:center; justify-content:flex-end; min-height:44px; min-width:44px; color:var(--accent); text-decoration:none; text-align:right;">buymeacoffee.com/yigitx</a></div></div>
+    <div class="platform-container" style="display:flex; flex-direction:column; gap:8px; margin-bottom:16px; padding:12px; background:var(--input-bg); border-radius:10px; border:1px solid var(--border);"><span style="font-weight:bold; font-size:0.95em;">Binance User ID</span><div style="display:flex; align-items:center; justify-content:space-between; gap:8px;"><span style="font-family:monospace; font-size:1.1em; color:var(--text);">114574830</span><button onclick="copyToClipboard('114574830','Copied Binance ID',this)" style="padding:8px 16px; font-size:0.85em; min-height:44px; margin:0;">Copy</button></div></div>
+    <div class="platform-container" style="display:flex; flex-direction:column; gap:8px; margin-bottom:16px; padding:12px; background:var(--input-bg); border-radius:10px; border:1px solid var(--border);"><span style="font-weight:bold; font-size:0.95em;">PayPal</span><div style="display:flex; align-items:center; justify-content:flex-end; gap:8px;"><a href="https://www.paypal.me/tryigitx" target="_blank" rel="noopener noreferrer" style="display:inline-flex; align-items:center; min-height:44px; color:var(--accent); text-decoration:none; font-size:1.05em;">paypal.me/tryigitx</a></div></div>
+    <div class="platform-container" style="display:flex; flex-direction:column; gap:8px; margin-bottom:16px; padding:12px; background:var(--input-bg); border-radius:10px; border:1px solid var(--border);"><span style="font-weight:bold; font-size:0.95em;">BuyMeACoffee</span><div style="display:flex; align-items:center; justify-content:flex-end; gap:8px;"><a href="https://buymeacoffee.com/yigitx" target="_blank" rel="noopener noreferrer" style="display:inline-flex; align-items:center; min-height:44px; color:var(--accent); text-decoration:none; font-size:1.05em;">buymeacoffee.com/yigitx</a></div></div>
 </div>
         </div>
         <div class="panel" style="text-align:center;">
