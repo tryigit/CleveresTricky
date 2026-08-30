@@ -2064,7 +2064,7 @@ object Config {
     internal data class CachedPackage(val value: Array<String>, val timestamp: Long)
 
     private val packageCache = ConcurrentHashMap<Int, CachedPackage>()
-    private val uidLocks = Array(64) { Any() }
+    private val uidLocks = Array(1024) { Any() }
 
     internal var clockSource: () -> Long = { System.currentTimeMillis() }
     private const val CACHE_TTL_MS = 5 * 1000L
@@ -2077,12 +2077,12 @@ object Config {
         val now = clockSource()
         val cached = packageCache[uid]
         val cachedAge = cached?.let { now - it.timestamp }
-        if (cached != null && cachedAge != null && cachedAge >= 0 && cachedAge < CACHE_TTL_MS) return cached.value
+        if (cached != null && cachedAge != null && cachedAge >= 0 && cachedAge < CACHE_TTL_MS) return cached.value.clone()
         val lock = uidLocks[(uid and Int.MAX_VALUE) % uidLocks.size]
         synchronized(lock) {
             val current = packageCache[uid]
             val currentAge = current?.let { now - it.timestamp }
-            if (current != null && currentAge != null && currentAge >= 0 && currentAge < CACHE_TTL_MS) return current.value
+            if (current != null && currentAge != null && currentAge >= 0 && currentAge < CACHE_TTL_MS) return current.value.clone()
             val pm = getPm()
             return if (pm == null) emptyArray() else {
                 try {
@@ -2092,7 +2092,7 @@ object Config {
                     val packages = normalized.take(MAX_PACKAGES_PER_UID).sorted().toTypedArray()
                     if (current == null || !current.value.contentEquals(packages)) invalidateUidPolicyCaches(uid)
                     putBoundedUidCache(packageCache, uid, CachedPackage(packages, now))
-                    packages
+                    packages.clone()
                 } catch (error: Exception) {
                     if (iPm === pm) iPm = null
                     Logger.e("Failed to resolve packages for uid=$uid", error)
