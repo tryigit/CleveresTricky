@@ -105,5 +105,20 @@ assert.doesNotMatch(
   /<div class="status-grid"/,
   'Dashboard must not contain obsolete status-grid',
 );
+assert.match(
+  indexSource,
+  /::selection\s*\{[^}]*background-color:\s*rgba\(10,\s*132,\s*255/s,
+  'theme selection styling must use accent color',
+);
+assert.match(
+  indexSource,
+  /button\s*\{[^}]*text-align:\s*center/s,
+  'buttons must center text alignment',
+);
+assert.match(
+  uxSource,
+  /#ct_diagnostics_copy\s*\{[^}]*text-align:\s*center/s,
+  'diagnostics copy button must explicitly center text',
+);
 
 console.log('All-pages responsive and accessible-control regression checks passed');

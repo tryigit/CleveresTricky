@@ -32,6 +32,14 @@
             --content-width: 1240px;
         }
         * { box-sizing: border-box; }
+        ::selection {
+            background-color: rgba(10, 132, 255, 0.4);
+            color: #ffffff;
+        }
+        ::-moz-selection {
+            background-color: rgba(10, 132, 255, 0.4);
+            color: #ffffff;
+        }
         html {
             color-scheme: dark;
             background: var(--bg);
@@ -237,6 +245,10 @@
             font-family: inherit;
             font-weight: 600;
             font-size: 0.92rem;
+            text-align: center;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
             transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
             text-transform: none;
             letter-spacing: -0.01em;

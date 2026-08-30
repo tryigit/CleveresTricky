@@ -1594,6 +1594,7 @@
             #ct_debug_panel .row > label { flex: 1 1 auto !important; min-width: 0 !important; padding-right: 14px !important; }
             #ct_debug_panel .row > input[type="checkbox"] { flex: 0 0 48px !important; width: 48px !important; min-width: 48px !important; max-width: 48px !important; height: 28px !important; min-height: 28px !important; max-height: 28px !important; margin: 0 !important; }
             #ct_diagnostics_panel .row, #ct_drm_dashboard_panel .row { margin-bottom: 0; }
+            #ct_diagnostics_copy { white-space: nowrap !important; text-align: center !important; justify-content: center !important; }
             #ct_effective_apps_host > .panel { margin-top: 0; }
             #ct_effective_apps_host { margin-top: 20px; }
             #cleveresCommunityCard { box-sizing: border-box; margin: 20px 0 24px !important; width: 100%; }
@@ -2100,7 +2101,7 @@
         const panel = document.createElement('div');
         panel.id = 'ct_diagnostics_panel';
         panel.className = 'panel';
-        panel.innerHTML = '<h3>Support Diagnostics</h3><div class="row ct-diagnostics-header"><div id="ct_diagnostics_hint" class="res-desc" style="flex:1;padding-right:14px">Copy a bounded support snapshot without logs, package names, keybox names, identity values, credentials, or key material.</div><button id="ct_diagnostics_copy" type="button" aria-label="Copy Diagnostics">Copy Diagnostics</button></div>';
+        panel.innerHTML = '<h3>Support Diagnostics</h3><div class="row ct-diagnostics-header"><div id="ct_diagnostics_hint" class="res-desc" style="flex:1;padding-right:14px">Copy a bounded support snapshot without logs, package names, keybox names, identity values, credentials, or key material.</div><button id="ct_diagnostics_copy" type="button" aria-label="Copy Diagnostics" style="text-align:center;justify-content:center;white-space:nowrap;">Copy Diagnostics</button></div>';
         info.appendChild(panel);
         panel.querySelector('button').addEventListener('click', event => copyDiagnosticsSnapshot(event.currentTarget));
     }
