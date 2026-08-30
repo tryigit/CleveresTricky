@@ -201,11 +201,23 @@ jobs:
           fi
           mv "$tmp" update.json
 
-          git config user.name "cleverestricky-release-bot"
-          git config user.email "cleverestricky-release-bot@users.noreply.github.com"
-          git add update.json
-          git commit -m "docs(release): sync $RELEASE_TAG update metadata [skip ci]"
+          file_sha=$(git rev-parse HEAD:update.json)
+          b64_content=$(base64 -w 0 update.json)
+          commit_msg="docs(release): sync $RELEASE_TAG update metadata [skip ci]"
 
-          # The Build head was verified above. Publish metadata directly as a fast-forward to
-          # master so release bookkeeping does not create an extra automation branch or PR.
-          git push origin "HEAD:refs/heads/master"
+          payload_file="$RUNNER_TEMP/commit_payload.json"
+          jq -n \
+            --arg msg "$commit_msg" \
+            --arg content "$b64_content" \
+            --arg sha "$file_sha" \
+            --arg branch "master" \
+            '{ message: $msg, content: $content, sha: $sha, branch: $branch }' > "$payload_file"
+
+          # Publish metadata directly to master via GitHub API to ensure the commit is
+          # signed and accepted by branch protection rules.
+          gh api \
+            --method PUT \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            /repos/"$GITHUB_REPOSITORY"/contents/update.json \
+            --input "$payload_file"
