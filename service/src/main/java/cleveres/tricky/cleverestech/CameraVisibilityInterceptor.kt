@@ -396,15 +396,18 @@ object CameraVisibilityInterceptor : BinderInterceptor() {
     private val uidVisibilityCache = java.util.concurrent.ConcurrentHashMap<Int, Set<CameraVisibilityKey>?>()
 
     private fun rebuildUidVisibilityCache(uid: Int) {
-        val keys = synchronized(listenerLock) {
+        synchronized(listenerLock) {
             val matching = listenerProxies.values.filter { proxy -> proxy.ownerUid == uid && !proxy.isDead() }
-            if (matching.isEmpty() || matching.any { !it.canFilterVisibility() }) return@synchronized null
-            matching.flatMapTo(linkedSetOf()) { it.visibleCameraKeysSnapshot() }
-        }
-        if (keys == null) {
-            uidVisibilityCache.remove(uid)
-        } else {
-            uidVisibilityCache[uid] = keys
+            val keys = if (matching.isEmpty() || matching.any { !it.canFilterVisibility() }) {
+                null
+            } else {
+                matching.flatMapTo(linkedSetOf()) { it.visibleCameraKeysSnapshot() }
+            }
+            if (keys == null) {
+                uidVisibilityCache.remove(uid)
+            } else {
+                uidVisibilityCache[uid] = keys
+            }
         }
     }
 

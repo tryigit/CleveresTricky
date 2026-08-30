@@ -467,6 +467,7 @@ object Config {
         if (!keyboxInventoryFingerprintDirty && cachedKeyboxInventoryFingerprint != null) {
             return cachedKeyboxInventoryFingerprint!!
         }
+        keyboxInventoryFingerprintDirty = false
         val result = try {
             if (!root.exists() || !root.isDirectory) {
                 0L
@@ -489,7 +490,6 @@ object Config {
             0L
         }
         cachedKeyboxInventoryFingerprint = result
-        keyboxInventoryFingerprintDirty = false
         return result
     }
 

@@ -288,18 +288,23 @@ object KeyboxVerifier {
             }
         }
 
-        val result = fetchNetworkCrl(requestedUrl, now)
-
-        cacheLock.lock()
-        try {
-            if (inFlightFetch === future) {
-                inFlightFetch = null
-            }
+        val result = try {
+            val fetched = fetchNetworkCrl(requestedUrl, now)
+            future.complete(fetched)
+            fetched
+        } catch (e: Exception) {
+            future.completeExceptionally(e)
+            null
         } finally {
-            cacheLock.unlock()
+            cacheLock.lock()
+            try {
+                if (inFlightFetch === future) {
+                    inFlightFetch = null
+                }
+            } finally {
+                cacheLock.unlock()
+            }
         }
-
-        future.complete(result)
         return result
     }
 
