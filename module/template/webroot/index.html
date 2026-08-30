@@ -783,19 +783,23 @@
 <script src="policy.js?revision=5"></script>
 
     <script>
+        function dismissLoadingOverlay() {
+            const loader = document.getElementById('loadingOverlay');
+            if (loader && loader.style.display !== 'none') {
+                loader.style.opacity = '0';
+                loader.style.pointerEvents = 'none';
+                setTimeout(() => {
+                    if (loader) loader.style.display = 'none';
+                }, 300);
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
-            const checkData = setInterval(() => {
-                if (typeof loadKeyInfo === 'function' && document.getElementById('status_global')) {
-                    clearInterval(checkData);
-                    setTimeout(() => {
-                        const loader = document.getElementById('loadingOverlay');
-                        if (loader) {
-                            loader.style.opacity = '0';
-                            setTimeout(() => loader.style.display = 'none', 300);
-                        }
-                    }, 500);
-                }
-            }, 100);
+            setTimeout(dismissLoadingOverlay, 1500);
+        });
+
+        window.addEventListener('load', () => {
+            setTimeout(dismissLoadingOverlay, 300);
         });
 
         window.addEventListener('unhandledrejection', function(event) {
@@ -1666,84 +1670,56 @@ try {
 
         const WEB_UI_SETTINGS = ['spoof_enabled', 'spoof_build_identity', 'global_mode', 'auto_keybox_check', 'random_on_boot', 'spoof_region_cn', 'telephony', 'drm_passthrough'];
 
-        function updateEngineStatus(enabled) {
-const status = document.getElementById('status_engine');
-if (!status) return;
-status.innerText = enabled ? 'IDENTITY ON' : 'OFF';
-status.style.color = enabled ? 'var(--success)' : '#888';
-enabled ? status.classList.add('active') : status.classList.remove('active');
-status.style.background = enabled ? 'rgba(74, 222, 128, 0.1)' : 'rgba(255, 255, 255, 0.05)';
-        }
-
-        function updateGlobalStatus(enabled) {
-const status = document.getElementById('status_global');
-if (!status) return;
-status.innerText = enabled ? 'ACTIVE' : 'INACTIVE';
-status.style.color = enabled ? 'var(--success)' : 'var(--danger)';
-status.style.background = enabled ? 'rgba(74, 222, 128, 0.1)' : 'rgba(239, 68, 68, 0.1)';
-enabled ? status.classList.add('active') : status.classList.remove('active');
-        }
-
-        function updateDrmStatus(enabled) {
-const status = document.getElementById('status_drm');
-if (!status) return;
-status.innerText = enabled ? 'ACTIVE' : 'INACTIVE';
-status.style.color = enabled ? 'var(--success)' : 'var(--danger)';
-status.style.background = enabled ? 'rgba(74, 222, 128, 0.1)' : 'rgba(239, 68, 68, 0.1)';
-enabled ? status.classList.add('active') : status.classList.remove('active');
-        }
-
-
         function syncSettingControls(setting, enabled, disabled = false) {
 document.querySelectorAll('[data-setting="' + setting + '"]').forEach(control => {
     control.checked = Boolean(enabled);
     control.disabled = disabled;
 });
-if (setting === 'spoof_enabled') updateEngineStatus(Boolean(enabled));
-if (setting === 'global_mode') updateGlobalStatus(Boolean(enabled));
-if (setting === 'drm_passthrough') updateDrmStatus(Boolean(enabled));
         }
 
         async function init() {
-console.log('[CleveresTricky] init: loading config...');
-try {
-    const res = await fetchAuth(getAuthUrl('/api/config'));
-        if (!res.ok) throw new Error(await res.text());
-    const data = await res.json();
-    console.log('[CleveresTricky] configuration loaded');
-    WEB_UI_SETTINGS.forEach(k => syncSettingControls(k, Boolean(data[k])));
-    document.getElementById('keyboxStatus').innerText = `${data.keybox_count} Keys Loaded`;
-} catch(e) { console.error(e); notify('Error: ' + e.message, 'error'); }
+            try {
+                console.log('[CleveresTricky] init: loading config...');
+                try {
+                    const res = await fetchAuth(getAuthUrl('/api/config'));
+                    if (!res.ok) throw new Error(await res.text());
+                    const data = await res.json();
+                    console.log('[CleveresTricky] configuration loaded');
+                    WEB_UI_SETTINGS.forEach(k => syncSettingControls(k, Boolean(data[k])));
+                    document.getElementById('keyboxStatus').innerText = `${data.keybox_count} Keys Loaded`;
+                } catch(e) { console.error(e); notify('Error: ' + e.message, 'error'); }
 
-try {
-    const tRes = await fetchAuth(getAuthUrl('/api/templates'));
-    if (!tRes.ok) throw new Error(await tRes.text());
-    const templates = await tRes.json();
-    const sel = document.getElementById('templateSelect');
-    const appSel = document.getElementById('appTemplate');
-    templates.forEach(t => {
-        const opt = document.createElement('option');
-        opt.value = t.id; opt.text = `${t.model} (${t.manufacturer})`; opt.dataset.json = JSON.stringify(t);
-        sel.appendChild(opt.cloneNode(true)); appSel.appendChild(opt);
-    });
-    await loadIdentity();
-} catch(e) { console.error(e); notify('Error loading templates: ' + e.message, 'error'); }
-try {
-    const packageResponse = await fetchAuth(getAuthUrl('/api/packages'));
-    if (!packageResponse.ok) throw new Error(await packageResponse.text());
-    const servicePackages = await packageResponse.json();
-    installedPackages = Array.isArray(servicePackages) ? servicePackages : [];
-} catch (error) {
-    console.error(error);
-    installedPackages = [];
-}
-if (installedPackages.length === 0 && window.CleveresBridge) installedPackages = window.CleveresBridge.listPackages();
-setupAutocomplete('appPkg', () => installedPackages);
-if (installedPackages.length === 0) notify('Installed package list is unavailable', 'error');
-loadKeyboxes();
-currentFile = document.getElementById('fileSelector').value;
-await Promise.all([loadFile(), loadBootPropsMode()]);
-
+                try {
+                    const tRes = await fetchAuth(getAuthUrl('/api/templates'));
+                    if (!tRes.ok) throw new Error(await tRes.text());
+                    const templates = await tRes.json();
+                    const sel = document.getElementById('templateSelect');
+                    const appSel = document.getElementById('appTemplate');
+                    templates.forEach(t => {
+                        const opt = document.createElement('option');
+                        opt.value = t.id; opt.text = `${t.model} (${t.manufacturer})`; opt.dataset.json = JSON.stringify(t);
+                        sel.appendChild(opt.cloneNode(true)); appSel.appendChild(opt);
+                    });
+                    await loadIdentity();
+                } catch(e) { console.error(e); notify('Error loading templates: ' + e.message, 'error'); }
+                try {
+                    const packageResponse = await fetchAuth(getAuthUrl('/api/packages'));
+                    if (!packageResponse.ok) throw new Error(await packageResponse.text());
+                    const servicePackages = await packageResponse.json();
+                    installedPackages = Array.isArray(servicePackages) ? servicePackages : [];
+                } catch (error) {
+                    console.error(error);
+                    installedPackages = [];
+                }
+                if (installedPackages.length === 0 && window.CleveresBridge) installedPackages = window.CleveresBridge.listPackages();
+                setupAutocomplete('appPkg', () => installedPackages);
+                if (installedPackages.length === 0) notify('Installed package list is unavailable', 'error');
+                loadKeyboxes();
+                currentFile = document.getElementById('fileSelector').value;
+                await Promise.all([loadFile(), loadBootPropsMode()]);
+            } finally {
+                dismissLoadingOverlay();
+            }
         }
 
         async function loadBootPropsMode() {

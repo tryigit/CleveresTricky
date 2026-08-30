@@ -120,5 +120,15 @@ assert.match(
   /#ct_diagnostics_copy\s*\{[^}]*text-align:\s*center/s,
   'diagnostics copy button must explicitly center text',
 );
+assert.match(
+  indexSource,
+  /function dismissLoadingOverlay\(\)/,
+  'index.html must define dismissLoadingOverlay helper',
+);
+assert.doesNotMatch(
+  indexSource,
+  /document\.getElementById\(['"]status_global['"]\)/,
+  'loading screen must not poll on obsolete status_global element',
+);
 
 console.log('All-pages responsive and accessible-control regression checks passed');
