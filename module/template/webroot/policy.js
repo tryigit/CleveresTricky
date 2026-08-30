@@ -347,11 +347,13 @@ function makePage(id, afterId) {
 function removeLegacySurfaces() {
   const dashboard = document.getElementById('dashboard');
   if (dashboard) {
+    const statusGrid = dashboard.querySelector('.status-grid');
+    if (statusGrid) statusGrid.remove();
     const statusEngine = document.getElementById('status_engine');
     const statusGlobal = document.getElementById('status_global');
     if (statusEngine && statusGlobal) {
       const strip = statusEngine.parentElement && statusEngine.parentElement.parentElement;
-      if (strip && !strip.classList.contains('status-grid') && strip.contains(statusGlobal) && strip.parentElement === dashboard) strip.remove();
+      if (strip && strip.contains(statusGlobal) && strip.parentElement === dashboard) strip.remove();
     }
     [...dashboard.querySelectorAll('.panel')].forEach(panel => {
       const title = (panel.querySelector('h3')?.textContent || '').trim();

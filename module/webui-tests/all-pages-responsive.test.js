@@ -90,5 +90,20 @@ assert.doesNotMatch(
   /#tab_donate\s*\{[^}]*background:\s*transparent\s*!important/s,
   'Donate tab must not force transparent background',
 );
+assert.match(
+  indexSource,
+  /select\s*\{[^}]*appearance:\s*none/s,
+  'select elements must use appearance: none with custom chevron arrow',
+);
+assert.match(
+  indexSource,
+  /select\s*\{[^}]*background-position:\s*right 14px center/s,
+  'select elements must position down chevron with right margin',
+);
+assert.doesNotMatch(
+  indexSource,
+  /<div class="status-grid"/,
+  'Dashboard must not contain obsolete status-grid',
+);
 
 console.log('All-pages responsive and accessible-control regression checks passed');

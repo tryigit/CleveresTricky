@@ -1615,6 +1615,7 @@
             #ct_keyboxhub_hint .ct-keyboxhub-action:hover { background:rgba(255,255,255,.07); }
             html[dir="rtl"] body { direction: rtl; }
             html[dir="rtl"] input, html[dir="rtl"] select, html[dir="rtl"] textarea, html[dir="rtl"] pre, html[dir="rtl"] code, html[dir="rtl"] .mono { direction: ltr; text-align: left; }
+            html[dir="rtl"] select { background-position: left 14px center !important; padding-left: 40px !important; padding-right: 14px !important; }
             html[dir="rtl"] input[type="checkbox"].toggle { direction: ltr; }
             @media (max-width: 520px) {
                 .ct-verify-header, .ct-diagnostics-header { flex-direction: column; align-items: stretch; gap: 10px; margin-bottom: 10px !important; }

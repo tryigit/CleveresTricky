@@ -7,7 +7,7 @@ const html = fs.readFileSync(path.join(__dirname, '../template/webroot/index.htm
 
 test('retired RKP passthrough is presented as always-on protection', () => {
   assert.match(html, /RKP Protection/);
-  assert.match(html, /ALWAYS ON/);
+  assert.match(html, /Always on/i);
   assert.doesNotMatch(html, /RKP Bypass/);
 
   const settings = html.match(/const WEB_UI_SETTINGS = \[([^\]]+)\]/)?.[1] || '';

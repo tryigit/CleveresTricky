@@ -254,28 +254,18 @@ function makeCleanupSurface(classNames = [], textContent = '') {
     };
 }
 
-async function testLegacyCleanupPreservesCanonicalStatusGrid() {
+async function testLegacyCleanupRemovesStatusGrid() {
     const canonical = loadPolicyRuntime();
     const dashboard = makeCleanupSurface();
     const statusGrid = makeCleanupSurface(['status-grid']);
-    const engineCard = makeCleanupSurface();
-    const globalCard = makeCleanupSurface();
-    const statusEngine = makeCleanupSurface();
-    const statusGlobal = makeCleanupSurface();
     statusGrid.parentElement = dashboard;
-    statusGrid.children = [engineCard, globalCard];
-    statusGrid.containsNode = statusGlobal;
-    engineCard.parentElement = statusGrid;
-    globalCard.parentElement = statusGrid;
-    statusEngine.parentElement = engineCard;
-    statusGlobal.parentElement = globalCard;
+    dashboard.querySelector = sel => (sel === '.status-grid' ? statusGrid : null);
+    dashboard.querySelectorAll = () => [];
     canonical.document.getElementById = id => ({
-        dashboard,
-        status_engine: statusEngine,
-        status_global: statusGlobal
+        dashboard
     }[id] || null);
     canonical.hooks.removeLegacySurfaces();
-    assert.strictEqual(statusGrid.removed, false, 'legacy cleanup must preserve the canonical status-grid');
+    assert.strictEqual(statusGrid.removed, true, 'legacy cleanup must remove status-grid if present');
 
     const legacy = loadPolicyRuntime();
     const legacyDashboard = makeCleanupSurface();
@@ -382,7 +372,7 @@ async function testAutoIdentityBackendFailureStillFails() {
     await testCanonicalSaveWarningIsNotReportedAsFailure();
     await testSaveUsesCanonicalReadbackInsteadOfStaleUiState();
     await testPolicyNormalizationRejectsMalformedAndOversizedState();
-    await testLegacyCleanupPreservesCanonicalStatusGrid();
+    await testLegacyCleanupRemovesStatusGrid();
     await testApplyIdentitySurvivesPresentationRefreshFailure();
     await testAutoIdentitySurvivesPresentationRefreshFailure();
     await testAutoIdentityBackendFailureStillFails();

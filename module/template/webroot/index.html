@@ -201,11 +201,31 @@
             min-height: 44px;
             min-width: 44px;
         }
-        input[type="text"]:focus, input[type="tel"]:focus, input[type="password"]:focus, input[type="search"]:focus, input[type="number"]:focus, textarea:focus, select:focus {
+        select {
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            background-color: var(--input-bg);
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 14px center;
+            background-size: 16px 16px;
+            padding-right: 40px !important;
+            cursor: pointer;
+        }
+        select::-ms-expand { display: none; }
+        input[type="text"]:focus, input[type="tel"]:focus, input[type="password"]:focus, input[type="search"]:focus, input[type="number"]:focus, textarea:focus {
             border-color: var(--accent);
             outline: none;
             box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.3);
             background: #323236;
+        }
+        select:focus {
+            border-color: var(--accent);
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.3);
+            background-color: #323236;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%230a84ff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
         }
         button {
             background: var(--panel-elevated);
@@ -304,46 +324,6 @@
         #info { overflow-x: hidden; }
         #info .responsive-table { table-layout: fixed; }
         #info .responsive-table td { overflow-wrap: anywhere; }
-        .status-grid {
-            display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 12px;
-            margin-bottom: 18px;
-            width: 100%;
-            box-sizing: border-box;
-        }
-        .status-card {
-            min-width: 0;
-            padding: 16px;
-            border: 1px solid var(--border);
-            border-radius: 14px;
-            background: var(--panel);
-            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
-            box-sizing: border-box;
-        }
-        .status-label {
-            color: var(--text-muted);
-            font-size: 0.7rem;
-            font-weight: 600;
-            letter-spacing: 0.06em;
-            line-height: 1.35;
-            text-transform: uppercase;
-        }
-        .status-value {
-            display: inline-block;
-            margin-top: 10px;
-            padding: 5px 8px;
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            color: var(--text) !important;
-            background: var(--panel-elevated) !important;
-            font-size: 0.76rem;
-            font-weight: 700;
-            letter-spacing: 0.03em;
-        }
-        #status_rkp.status-value { color: var(--success) !important; background: var(--success-soft) !important; border-color: rgba(48, 209, 88, 0.3); }
-        #status_global.status-value, #status_drm.status-value { border-color: rgba(255, 69, 58, 0.3); }
-        #status_global.status-value.active, #status_drm.status-value.active { border-color: rgba(48, 209, 88, 0.3); }
         .log-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) repeat(3, minmax(124px, auto)); gap: 10px; align-items: stretch; margin-bottom: 10px; width: 100%; box-sizing: border-box; }
         .log-toolbar > * { min-width: 0; }
         .log-toolbar select, .log-toolbar button { width: 100%; min-width: 0; margin: 0; min-height: 44px; }
@@ -353,7 +333,6 @@
         @media screen and (max-width: 900px) {
             body { grid-template-columns: minmax(180px, 210px) minmax(0, 1fr); }
             .content { padding-left: 14px; padding-right: 14px; }
-            .status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         }
         @media screen and (max-width: 700px) {
             body {
@@ -431,9 +410,6 @@
                 overflow-x: hidden;
             }
             .panel { padding: 18px 16px; border-radius: 14px; margin-bottom: 16px; }
-            .status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-            .status-card { padding: 12px; }
-            .status-label { font-size: 0.66rem; }
             .grid-2 { grid-template-columns: 1fr; gap: 14px; }
             .row { flex-wrap: wrap; gap: 10px; }
             .row > label, .row > span, .row > h3 { flex: 1 1 100%; min-width: 0; line-height: 1.4; }
@@ -510,24 +486,6 @@
         <div class="panel panel-hero">
 <h3>Core Protection</h3>
 <div class="scope-note" style="margin-top:10px;"><strong style="color:var(--success);">Always active.</strong> Bootloader/verified-boot property compatibility and Keystore/TEE certificate protection are core module behavior. They have no on/off switch and continue working when Identity Engine is disabled. Hardware bootloader and root-of-trust state are not physically changed.</div>
-        </div>
-        <div class="status-grid" aria-label="Protection status">
-            <div class="status-card">
-                <div class="status-label">Identity Engine</div>
-                <div id="status_engine" class="status-value">OFF</div>
-            </div>
-            <div class="status-card">
-                <div class="status-label">Global Mode</div>
-                <div id="status_global" class="status-value">INACTIVE</div>
-            </div>
-            <div class="status-card">
-                <div class="status-label">RKP Protection</div>
-                <div id="status_rkp" class="status-value">ALWAYS ON</div>
-            </div>
-            <div class="status-card">
-                <div class="status-label">DRM Fix</div>
-                <div id="status_drm" class="status-value">INACTIVE</div>
-            </div>
         </div>
 
         <div class="panel panel-config">

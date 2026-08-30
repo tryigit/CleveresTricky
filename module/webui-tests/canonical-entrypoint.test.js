@@ -104,7 +104,7 @@ function testCanonicalInitialStateAndRuntimeSurface() {
     assert.doesNotMatch(bridgeSource, /(?:ux-core|zip-import|ux-base|ux-patch)\.js/i, 'bridge must not load retired UX bundles');
 
     assert.match(html, /\.panel-hero\s*\{/i, 'direct-open dashboard must expose the modern hero surface');
-    assert.match(html, /\.status-grid\s*\{/i, 'direct-open dashboard must expose the modern status grid');
+    assert.doesNotMatch(html, /class=["'][^"']*\bstatus-grid\b/i, 'direct-open dashboard must not contain obsolete status-grid');
     const mobileStart = html.lastIndexOf('@media screen and (max-width: 700px)');
     assert.ok(mobileStart >= 0, 'canonical index must keep a mobile-specific layout contract');
     const mobileBlock = html.slice(mobileStart);
