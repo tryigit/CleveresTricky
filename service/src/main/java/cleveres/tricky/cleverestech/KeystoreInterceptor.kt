@@ -19,6 +19,9 @@ object KeystoreInterceptor : BinderInterceptor() {
     private const val MAX_PROC_SCAN_ENTRIES = 4_096
     private const val INJECTION_RETRY_INTERVAL_MS = 15_000L
 
+    private val getSecurityLevelTransaction =
+        getTransactCode(IKeystoreService.Stub::class.java, "getSecurityLevel") // 1
+
     private val getKeyEntryTransaction =
         getTransactCode(IKeystoreService.Stub::class.java, "getKeyEntry") // 2
 
@@ -44,11 +47,17 @@ object KeystoreInterceptor : BinderInterceptor() {
         callingPid: Int,
         data: Parcel,
     ): Result {
-        if (target != keystore || code != getKeyEntryTransaction || !CertHack.canHack()) return Skip
-        val targeted = Config.needHack(callingUid)
-        val mayReadGrantedChain =
-            callingUid >= FIRST_APPLICATION_UID && CertHack.hasCachedCertificateChains()
-        return if (targeted || mayReadGrantedChain) Continue else Skip
+        if (target != keystore || !CertHack.canHack()) return Skip
+        if (code == getSecurityLevelTransaction) {
+            return if (Config.needHack(callingUid) && teeTarget != null) Continue else Skip
+        }
+        if (code == getKeyEntryTransaction) {
+            val targeted = Config.needHack(callingUid)
+            val mayReadGrantedChain =
+                callingUid >= FIRST_APPLICATION_UID && CertHack.hasCachedCertificateChains()
+            return if (targeted || mayReadGrantedChain) Continue else Skip
+        }
+        return Skip
     }
 
     override fun onPostTransact(
@@ -63,13 +72,33 @@ object KeystoreInterceptor : BinderInterceptor() {
     ): Result {
         if (
             target != keystore ||
-            code != getKeyEntryTransaction ||
             reply == null ||
             resultCode != 0 ||
             !CertHack.canHack()
         ) {
             return Skip
         }
+
+        if (code == getSecurityLevelTransaction) {
+            if (!Config.needHack(callingUid)) return Skip
+            val currentTeeTarget = teeTarget ?: return Skip
+            try {
+                reply.readException()
+                val returned = reply.readStrongBinder()
+                if (returned != null && strongBoxTarget != null && returned == strongBoxTarget) {
+                    val p = Parcel.obtain()
+                    p.writeNoException()
+                    p.writeStrongBinder(currentTeeTarget)
+                    return OverrideReply(0, p)
+                }
+            } catch (_: Throwable) {
+                return Skip
+            }
+            return Skip
+        }
+
+        if (code != getKeyEntryTransaction) return Skip
+
         try {
             reply.readException()
         } catch (e: Exception) {
@@ -292,7 +321,8 @@ object KeystoreInterceptor : BinderInterceptor() {
             } catch (e: Exception) {
                 null
             }
-        val interceptedCodes = validTransactCodes(getKeyEntryTransaction)
+        val interceptedCodes =
+            validTransactCodes(getSecurityLevelTransaction, getKeyEntryTransaction)
         keystore = b
         binderBackdoor = bd
         if (!registerBinderInterceptor(bd, b, this, interceptedCodes)) {

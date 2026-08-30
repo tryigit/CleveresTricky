@@ -18,6 +18,7 @@ const VENDOR_PATCH_TAG: u32 = 718;
 const BOOT_PATCH_TAG: u32 = 719;
 const MODULE_HASH_TAG: u32 = 724;
 const ATTESTATION_ID_TAGS: [u32; 9] = [710, 711, 712, 713, 714, 715, 716, 717, 723];
+const ENUMERATED_TRUSTED_ENVIRONMENT: &[u8] = &[0x0a, 0x01, 0x01];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PatchDisposition {
@@ -264,6 +265,8 @@ pub fn rewrite_extension(request: &RewriteRequest<'_>) -> Result<RewriteResult, 
     tee.sort_by_key(|field| field.tag);
     software.sort_by_key(|field| field.tag);
 
+    fields[1] = ENUMERATED_TRUSTED_ENVIRONMENT.to_vec();
+    fields[3] = ENUMERATED_TRUSTED_ENVIRONMENT.to_vec();
     fields[tee_index] = encode_sequence(tee.iter().map(|field| field.encoded.as_slice()))?;
     fields[software_index] =
         encode_sequence(software.iter().map(|field| field.encoded.as_slice()))?;
@@ -645,6 +648,57 @@ mod tests {
         assert_eq!(decode_tagged_i32(&tee, VENDOR_PATCH_TAG), Some(20240101));
         assert_eq!(decode_tagged_octets(&tee, 713), None);
         assert_eq!(decode_tagged_octets(&software, MODULE_HASH_TAG), None);
+    }
+
+    #[test]
+    fn rewrites_strongbox_security_levels_to_trusted_environment() {
+        let tee = auth_list([
+            explicit_tag_raw(ROOT_OF_TRUST_TAG, &root_of_trust([7; 32], [8; 32])),
+            explicit_integer_raw(VENDOR_PATCH_TAG, 20240101),
+        ]);
+        let software = auth_list([explicit_integer_raw(SYSTEM_PATCH_TAG, 202402)]);
+        let extension = encode_sequence([
+            300i32.to_der().unwrap().as_slice(),
+            Any::new(Tag::Enumerated, vec![2])
+                .unwrap()
+                .to_der()
+                .unwrap()
+                .as_slice(),
+            300i32.to_der().unwrap().as_slice(),
+            Any::new(Tag::Enumerated, vec![2])
+                .unwrap()
+                .to_der()
+                .unwrap()
+                .as_slice(),
+            Any::new(Tag::OctetString, Vec::<u8>::new())
+                .unwrap()
+                .to_der()
+                .unwrap()
+                .as_slice(),
+            Any::new(Tag::OctetString, Vec::<u8>::new())
+                .unwrap()
+                .to_der()
+                .unwrap()
+                .as_slice(),
+            software.as_slice(),
+            tee.as_slice(),
+        ])
+        .unwrap();
+
+        let request = RewriteRequest {
+            extension_der: &extension,
+            patch_levels: PatchLevels::default(),
+            id_overrides: &[],
+            module_hash: None,
+            verified_boot_key: &BOOT_KEY,
+            verified_boot_hash: &BOOT_HASH,
+        };
+
+        let rewritten = rewrite_extension(&request).unwrap();
+        let outer = parse_any(&rewritten.extension_der).unwrap();
+        let fields = split_tlvs(outer.value(), MAX_KEY_DESCRIPTION_FIELDS).unwrap();
+        assert_eq!(fields[1], ENUMERATED_TRUSTED_ENVIRONMENT);
+        assert_eq!(fields[3], ENUMERATED_TRUSTED_ENVIRONMENT);
     }
 
     #[test]
