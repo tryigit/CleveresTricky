@@ -2002,7 +2002,7 @@
         const panel = document.createElement('div');
         panel.id = 'ct_debug_panel';
         panel.className = 'panel';
-        panel.innerHTML = `<h3>Debug Logging</h3><div class="row"><label for="ct_debug_logging_toggle" style="flex:1;padding-right:14px"><strong style="color:#fff">Debug Logging</strong><span class="res-desc">Enable additional runtime diagnostics without installing a debug build. Turn it off after collecting logs.</span></label><input id="ct_debug_logging_toggle" class="ct-switch" type="checkbox"></div>`;
+        panel.innerHTML = `<h3>Debug Logging</h3><div class="row"><label for="ct_debug_logging_toggle" style="flex:1;padding-right:14px"><strong style="color:#fff">Debug Logging</strong><span class="res-desc">Enable additional runtime diagnostics without installing a debug build. Turn it off after collecting logs.</span></label><input id="ct_debug_logging_toggle" class="toggle" type="checkbox"></div>`;
         log.insertBefore(panel, log.firstChild);
         const checkbox = panel.querySelector('input');
         bridge.getDebugLogging().then(enabled => { checkbox.checked = Boolean(enabled); }).catch(()=>{});
@@ -3296,7 +3296,6 @@
             verificationQuery = '';
             verificationPage = 1;
             renderVerification();
-            input.focus();
         });
         controls.append(input, searchButton, clearButton);
         result.parentNode.insertBefore(controls, result);
@@ -3366,9 +3365,9 @@
             return;
         }
 
-        items.slice((verificationPage - 1) * PAGE_SIZE, verificationPage * PAGE_SIZE).forEach(item => {
+        items.slice((verificationPage - 1) * PAGE_SIZE, verificationPage * PAGE_SIZE).forEach((item, index, array) => {
             const row = document.createElement('div');
-            row.style.cssText = 'padding:8px 0;border-bottom:1px solid var(--border);overflow-wrap:anywhere';
+            row.style.cssText = 'padding:8px 0;overflow-wrap:anywhere' + (index !== array.length - 1 ? ';border-bottom:1px solid var(--border)' : '');
             const title = document.createElement('div');
             title.style.fontWeight = '600';
             title.textContent = String(item.filename || '') + ' - ' + String(item.status || '');
