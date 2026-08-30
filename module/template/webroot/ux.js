@@ -1594,7 +1594,11 @@
             #ct_debug_panel .row > label { flex: 1 1 auto !important; min-width: 0 !important; padding-right: 14px !important; }
             #ct_debug_panel .row > input[type="checkbox"] { flex: 0 0 48px !important; width: 48px !important; min-width: 48px !important; max-width: 48px !important; height: 28px !important; min-height: 28px !important; max-height: 28px !important; margin: 0 !important; }
             #ct_diagnostics_panel .row, #ct_drm_dashboard_panel .row { margin-bottom: 0; }
-            #ct_diagnostics_copy { white-space: nowrap !important; text-align: center !important; justify-content: center !important; }
+            #ct_diagnostics_copy { display: inline-flex !important; align-items: center !important; justify-content: center !important; text-align: center !important; white-space: nowrap !important; box-sizing: border-box !important; }
+            #storedKeyboxesList .ct-keybox-item, #storedKeyboxesList .row { display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important; align-items: center !important; justify-content: space-between !important; gap: 12px !important; width: 100% !important; box-sizing: border-box !important; }
+            #storedKeyboxesList .ct-keybox-item > input[type="checkbox"], #storedKeyboxesList .row > input[type="checkbox"] { flex: 0 0 20px !important; width: 20px !important; height: 20px !important; margin: 0 !important; }
+            #storedKeyboxesList .ct-keybox-item > div, #storedKeyboxesList .row > div { flex: 1 1 auto !important; min-width: 0 !important; }
+            #storedKeyboxesList .ct-keybox-item > button, #storedKeyboxesList .row > button { flex: 0 0 auto !important; width: auto !important; min-width: 0 !important; max-width: max-content !important; margin: 0 !important; white-space: nowrap !important; }
             #ct_effective_apps_host > .panel { margin-top: 0; }
             #ct_effective_apps_host { margin-top: 20px; }
             #cleveresCommunityCard { box-sizing: border-box; margin: 20px 0 24px !important; width: 100%; }
@@ -1619,13 +1623,15 @@
             html[dir="rtl"] select { background-position: left 14px center !important; padding-left: 40px !important; padding-right: 14px !important; }
             html[dir="rtl"] input[type="checkbox"].toggle { direction: ltr; }
             @media (max-width: 520px) {
-                .ct-verify-header, .ct-diagnostics-header { flex-direction: column; align-items: stretch; gap: 10px; margin-bottom: 10px !important; }
-                .ct-verify-header button, .ct-diagnostics-header button { width: 100%; margin: 0 !important; }
+                .ct-verify-header, .ct-diagnostics-header { flex-direction: column !important; align-items: stretch !important; gap: 10px !important; margin-bottom: 10px !important; }
+                .ct-verify-header button, .ct-diagnostics-header button, #ct_diagnostics_copy { width: 100% !important; padding: 12px 20px !important; text-align: center !important; justify-content: center !important; margin: 0 !important; }
                 .row { gap: 12px; align-items: flex-start; }
                 .row:has(input[type="checkbox"]) { flex-direction: row !important; align-items: center !important; justify-content: space-between !important; }
                 .row > input[type="checkbox"].toggle, .row > input[type="checkbox"].ct-switch { margin-top: 0 !important; }
                 #ct_language_panel .row, #ct_diagnostics_panel .row, #ct_drm_dashboard_panel .row { flex-direction: column; align-items: stretch; gap: 12px; }
-                #ct_language_panel .row > *, #ct_diagnostics_panel .row > *, #ct_drm_dashboard_panel .row > *, #ct_diagnostics_hint { width: 100%; padding-right: 0 !important; margin: 0 !important; }
+                #ct_language_panel select { width: 100% !important; max-width: 100% !important; }
+                #ct_diagnostics_hint { width: 100% !important; padding-right: 0 !important; margin: 0 !important; }
+                #ct_drm_dashboard_panel .row > * { width: 100%; padding-right: 0 !important; margin: 0 !important; }
                 #ct_config_management .ct-config-actions { grid-template-columns:1fr; }
                 #ct_config_management .ct-config-actions #runtimeSyncBtn { grid-column:auto; }
                 .ct-verify-controls { display: flex; gap: 8px; align-items: stretch; flex-wrap: wrap; margin: 8px 0 12px; }
@@ -3104,12 +3110,13 @@
 
         items.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).forEach(item => {
             const row = document.createElement('div');
-            row.className = 'row';
-            row.style.cssText = 'padding:10px;border-bottom:1px solid var(--border);gap:10px;align-items:center;';
+            row.className = 'ct-keybox-item row';
+            row.style.cssText = 'padding:10px;border-bottom:1px solid var(--border);display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:12px;width:100%;box-sizing:border-box;flex-wrap:nowrap;';
             const box = document.createElement('input');
             box.type = 'checkbox';
             box.checked = selected.has(item.id);
             box.setAttribute('aria-label', 'Select ' + item.filename);
+            box.style.cssText = 'flex:0 0 20px;width:20px;height:20px;margin:0;cursor:pointer;';
             box.addEventListener('change', () => {
                 if (box.checked) selected.add(item.id);
                 else selected.delete(item.id);
@@ -3117,12 +3124,12 @@
             });
 
             const body = document.createElement('div');
-            body.style.cssText = 'flex:1;min-width:0;';
+            body.style.cssText = 'flex:1 1 auto;min-width:0;line-height:1.4;';
             const name = document.createElement('div');
-            name.style.cssText = 'overflow-wrap:anywhere;font-weight:500';
+            name.style.cssText = 'overflow-wrap:anywhere;word-break:break-word;font-weight:500;';
             name.textContent = String(item.filename || '');
             const meta = document.createElement('div');
-            meta.style.cssText = 'font-size:.78em;color:#888;margin-top:3px;overflow-wrap:anywhere';
+            meta.style.cssText = 'font-size:.78em;color:#888;margin-top:3px;overflow-wrap:anywhere;word-break:break-word;';
             const scope = item.scope === 'root' ? t('root') : t('managed');
             const cert = item.certificate_serial ? t('cert') + ': ' + item.certificate_serial : t('certMissing');
             meta.textContent = scope + ' | ' + cert;
@@ -3131,7 +3138,7 @@
             const remove = document.createElement('button');
             remove.type = 'button';
             remove.className = 'danger';
-            remove.style.cssText = 'padding:8px 12px;font-size:.82em;';
+            remove.style.cssText = 'padding:8px 12px;font-size:.82em;flex:0 0 auto;width:auto;margin:0;white-space:nowrap;';
             remove.textContent = t('delete');
             remove.addEventListener('click', () => deleteOne(item));
             row.append(box, body, remove);

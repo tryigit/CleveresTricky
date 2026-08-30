@@ -121,6 +121,26 @@ assert.match(
   'diagnostics copy button must explicitly center text',
 );
 assert.match(
+  uxSource,
+  /#storedKeyboxesList\s+\.ct-keybox-item[^}]*flex-wrap:\s*nowrap/s,
+  'stored keyboxes rows must prevent vertical wrap squeezing',
+);
+assert.match(
+  uxSource,
+  /#storedKeyboxesList\s+\.ct-keybox-item\s*>\s*button[^}]*width:\s*auto/s,
+  'stored keyboxes delete button must not expand to full width',
+);
+assert.match(
+  uxSource,
+  /#ct_diagnostics_copy\s*\{[^}]*justify-content:\s*center/s,
+  'diagnostics copy button must justify-content center',
+);
+assert.doesNotMatch(
+  uxSource,
+  /#ct_diagnostics_panel \.row > \*,/s,
+  'diagnostics row children must not have padding-right stripped',
+);
+assert.match(
   indexSource,
   /function dismissLoadingOverlay\(\)/,
   'index.html must define dismissLoadingOverlay helper',

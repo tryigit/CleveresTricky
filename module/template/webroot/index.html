@@ -429,6 +429,10 @@
             .row:has(input[type="checkbox"]) > label { flex: 1 1 auto; min-width: 0; }
             .row > button { width: 100%; margin-top: 4px; }
             .row > input[type="checkbox"].toggle, .row > input[type="checkbox"].ct-switch { flex: 0 0 48px; width: 48px; min-width: 48px; height: 28px; min-height: 28px; }
+            #storedKeyboxesList .ct-keybox-item, #storedKeyboxesList .row { display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important; align-items: center !important; justify-content: space-between !important; gap: 12px !important; width: 100% !important; box-sizing: border-box !important; }
+            #storedKeyboxesList .ct-keybox-item > input[type="checkbox"], #storedKeyboxesList .row > input[type="checkbox"] { flex: 0 0 20px !important; width: 20px !important; height: 20px !important; margin: 0 !important; }
+            #storedKeyboxesList .ct-keybox-item > div, #storedKeyboxesList .row > div { flex: 1 1 auto !important; min-width: 0 !important; }
+            #storedKeyboxesList .ct-keybox-item > button, #storedKeyboxesList .row > button { flex: 0 0 auto !important; width: auto !important; min-width: 0 !important; max-width: max-content !important; margin: 0 !important; white-space: nowrap !important; }
             .responsive-table thead { display: none; }
             .responsive-table tr { display: flex; flex-direction: column; border: 1px solid var(--border); margin-bottom: 14px; border-radius: 12px; background: var(--panel); overflow: hidden; }
             .responsive-table td { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding: 14px; min-height: 48px; }
@@ -2023,18 +2027,18 @@ let matchCount = 0;
 cachedKeyboxes.forEach(k => {
     if (filterText && !k.toLowerCase().includes(filterText)) return;
     matchCount++;
-    const div = document.createElement('div'); div.className = 'row'; div.style.padding = '10px'; div.style.borderBottom = '1px solid var(--border)';
+    const div = document.createElement('div'); div.className = 'ct-keybox-item row'; div.style.cssText = 'padding:10px;border-bottom:1px solid var(--border);display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:12px;width:100%;box-sizing:border-box;flex-wrap:nowrap;';
     const filename = document.createElement('div');
-    filename.style.cssText = 'word-break:break-all;margin-right:10px;flex:1';
+    filename.style.cssText = 'word-break:break-all;overflow-wrap:anywhere;margin-right:10px;flex:1 1 auto;min-width:0;';
     filename.textContent = String(k);
     const actions = document.createElement('div');
-    actions.style.flexShrink = '0';
+    actions.style.cssText = 'flex:0 0 auto;display:flex;align-items:center;gap:10px;';
     const stored = document.createElement('span');
-    stored.style.cssText = 'font-size:0.8em;color:#666;margin-right:15px';
+    stored.style.cssText = 'font-size:0.8em;color:#666;';
     stored.textContent = 'Stored';
     const remove = document.createElement('button');
     remove.className = 'danger';
-    remove.style.cssText = 'padding:8px 16px;font-size:0.85em;min-height:44px';
+    remove.style.cssText = 'padding:8px 16px;font-size:0.85em;min-height:44px;flex:0 0 auto;width:auto;margin:0;';
     remove.textContent = 'Delete';
     remove.title = 'Delete Keybox';
     remove.setAttribute('aria-label', 'Delete ' + String(k));
