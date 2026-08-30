@@ -283,7 +283,7 @@ object KeyboxVerifier {
         if (!isLeader) {
             return try {
                 future.join()
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 null
             }
         }
@@ -292,7 +292,7 @@ object KeyboxVerifier {
             val fetched = fetchNetworkCrl(requestedUrl, now)
             future.complete(fetched)
             fetched
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             future.completeExceptionally(e)
             null
         } finally {

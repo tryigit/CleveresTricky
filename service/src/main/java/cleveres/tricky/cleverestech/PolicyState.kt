@@ -347,7 +347,12 @@ object PolicyState {
             require(active.enabled) { "Disabled profile cannot be active" }
         }
         if (validateReferences) validateAssignedProfileReferences(profiles.values)
-        val exactAssignments = assignments.filter { '*' !in it.pattern }.associateBy { it.pattern }
+        val exactAssignments = HashMap<String, Assignment>()
+        for (assignment in assignments) {
+            if ('*' !in assignment.pattern) {
+                exactAssignments.putIfAbsent(assignment.pattern, assignment)
+            }
+        }
         val wildcardAssignments = assignments.filter { '*' in it.pattern }
         return Snapshot(
             explicit = true,
@@ -1208,7 +1213,12 @@ object PolicyState {
             require(active != null) { "Active profile does not exist" }
             require(active.enabled) { "Disabled profile cannot be active" }
         }
-        val exactAssignments = assignments.filter { '*' !in it.pattern }.associateBy { it.pattern }
+        val exactAssignments = HashMap<String, Assignment>()
+        for (assignment in assignments) {
+            if ('*' !in assignment.pattern) {
+                exactAssignments.putIfAbsent(assignment.pattern, assignment)
+            }
+        }
         val wildcardAssignments = assignments.filter { '*' in it.pattern }
         return current.copy(
             explicit = true,

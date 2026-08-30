@@ -111,8 +111,9 @@ object AutoIdentityManager {
         if (!inFlightFetch.compareAndSet(null, future)) {
             return try {
                 inFlightFetch.get()?.join() ?: throw IOException("In-flight auto identity fetch failed")
-            } catch (e: Exception) {
-                fallbackOrThrow(now, if (e is IOException) e else IOException("In-flight auto identity fetch failed", e))
+            } catch (e: Throwable) {
+                val cause = (e as? java.util.concurrent.CompletionException)?.cause ?: e
+                fallbackOrThrow(now, if (cause is IOException) cause else IOException("In-flight auto identity fetch failed", cause))
             }
         }
 
@@ -120,13 +121,17 @@ object AutoIdentityManager {
             val deadlineNanos = System.nanoTime() + FETCH_BUDGET_MS * 1_000_000L
             val resolved = fetchLatest(NetworkFetcher(deadlineNanos))
             cachedResult = CachedResult(resolved, System.currentTimeMillis())
-            inFlightFetch.compareAndSet(future, null)
             future.complete(resolved)
             return resolved
-        } catch (error: IOException) {
-            inFlightFetch.compareAndSet(future, null)
+        } catch (error: Throwable) {
             future.completeExceptionally(error)
-            return fallbackOrThrow(now, error)
+            if (error is IOException) {
+                return fallbackOrThrow(now, error)
+            } else {
+                throw error
+            }
+        } finally {
+            inFlightFetch.compareAndSet(future, null)
         }
     }
 
