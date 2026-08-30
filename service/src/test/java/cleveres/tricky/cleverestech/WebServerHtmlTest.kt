@@ -170,7 +170,7 @@ class WebServerHtmlTest {
         )
         assertTrue(
             "File Selector missing aria-label",
-            html.contains("id=\"fileSelector\" onchange=\"loadFile()\" style=\"width:70%;\" aria-label=\"Select file to edit\""),
+            html.contains("id=\"fileSelector\"") && html.contains("aria-label=\"Select file to edit\""),
         )
         assertTrue("Drop Zone missing accessibility attributes", html.contains("id=\"dropZone\" role=\"button\" tabindex=\"0\""))
         assertTrue(

@@ -197,8 +197,8 @@ class WebServerPaletteTest {
         )
         assertTrue("Copy Logs button should exist", html.contains("Copy Logs</button>"))
         assertTrue(
-            "Dashboard should have RKP and DRM status indicators",
-            html.contains("id=\"status_rkp\"") && html.contains("id=\"status_drm\""),
+            "Dashboard should have Core Protection panel",
+            html.contains("Core Protection") && html.contains("Always active"),
         )
     }
 }
