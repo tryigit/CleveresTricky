@@ -61,9 +61,19 @@ assert.match(
   'ZIP confirmation label row must provide a full-size clickable target',
 );
 assert.match(
+  uxSource,
+  /#ct_debug_panel \.row \{[^}]*flex-direction:\s*row\s*!important/s,
+  'Debug logging panel row must retain horizontal flex layout',
+);
+assert.match(
+  uxSource,
+  /#ct_debug_panel \.row > input\[type="checkbox"\]\s*\{[^}]*flex:\s*0 0 48px\s*!important/s,
+  'Debug logging switch must retain fixed width dimensions',
+);
+assert.match(
   indexSource,
-  /\.row \{[^}]*min-height: 48px/s,
-  'switch rows must provide a mobile-sized activation lane around the visual switch',
+  /<div class="panel">\s*<h3>Verification<\/h3>\s*<div class="row ct-verify-header"/s,
+  'Verification panel header must be a direct child of panel',
 );
 
 console.log('All-pages responsive and accessible-control regression checks passed');

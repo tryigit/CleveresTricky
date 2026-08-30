@@ -445,8 +445,10 @@
             .grid-2 { grid-template-columns: 1fr; gap: 14px; }
             .row { flex-wrap: wrap; gap: 10px; }
             .row > label, .row > span, .row > h3 { flex: 1 1 100%; min-width: 0; line-height: 1.4; }
+            .row:has(input[type="checkbox"]) { flex-wrap: nowrap; align-items: center; justify-content: space-between; }
+            .row:has(input[type="checkbox"]) > label { flex: 1 1 auto; min-width: 0; }
             .row > button { width: 100%; margin-top: 4px; }
-            .row > input[type="checkbox"].toggle { flex: 0 0 auto; }
+            .row > input[type="checkbox"].toggle, .row > input[type="checkbox"].ct-switch { flex: 0 0 48px; width: 48px; min-width: 48px; height: 28px; min-height: 28px; }
             .responsive-table thead { display: none; }
             .responsive-table tr { display: flex; flex-direction: column; border: 1px solid var(--border); margin-bottom: 14px; border-radius: 12px; background: var(--panel); overflow: hidden; }
             .responsive-table td { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding: 14px; min-height: 48px; }
@@ -690,7 +692,8 @@
 <div id="storedKeyboxesList" style="max-height: 200px; overflow-y: auto;"></div>
         </div>
         <div class="panel">
-<div class="row ct-verify-header"><h3>Verification</h3><button onclick="runWithState(this, 'Verifying...', verifyKeyboxes)">Check All</button></div>
+<h3>Verification</h3>
+<div class="row ct-verify-header" style="margin-bottom:10px;"><button onclick="runWithState(this, 'Verifying...', verifyKeyboxes)" style="width:100%;">Check All</button></div>
 <div id="verifyResult" style="font-family:monospace; font-size:0.85em;"></div>
         </div>
     </div>
@@ -780,7 +783,7 @@
 
     <div id="editor" class="content" role="tabpanel" aria-labelledby="tab_editor">
         <div class="panel">
-<div class="row"><select id="fileSelector" onchange="loadFile()" style="width:70%;" aria-label="Select file to edit"><option value="target.txt">target.txt</option><option value="identity_target.txt">identity_target.txt</option><option value="security_patch.txt">security_patch.txt</option><option value="spoof_build_vars">spoof_build_vars</option><option value="app_config">app_config</option><option value="templates.json">templates.json</option><option value="drm_packages.txt">drm_packages.txt</option><option value="boot_props_mode">boot_props_mode</option></select><button id="revertBtn" class="danger" onclick="const btn = this; requireConfirm(btn, () => revertEditor(), 'Confirm Revert')" style="display:none; margin-right:10px;" title="Revert Changes">Revert</button><button id="saveBtn" onclick="handleSave(this)" title="Ctrl+S">Save</button></div>
+<div class="row"><select id="fileSelector" onchange="loadFile()" style="flex:1; min-width:180px;" aria-label="Select file to edit"><option value="target.txt">target.txt</option><option value="identity_target.txt">identity_target.txt</option><option value="security_patch.txt">security_patch.txt</option><option value="spoof_build_vars">spoof_build_vars</option><option value="app_config">app_config</option><option value="templates.json">templates.json</option><option value="drm_packages.txt">drm_packages.txt</option><option value="boot_props_mode">boot_props_mode</option></select><button id="revertBtn" class="danger" onclick="const btn = this; requireConfirm(btn, () => revertEditor(), 'Confirm Revert')" style="display:none; margin-right:10px;" title="Revert Changes">Revert</button><button id="saveBtn" onclick="handleSave(this)" title="Ctrl+S">Save</button></div>
 <textarea id="fileEditor" style="height:500px; font-family:monospace; margin-top:10px; line-height:1.4;" aria-label="File Content" onclick="editorUnsavedBypass = false;" oninput="editorUnsavedBypass = false; updateSaveButtonState()" onkeydown="if((event.ctrlKey||event.metaKey)&amp;&amp;event.key.toLowerCase()==='s'){event.preventDefault();handleSave(document.getElementById('saveBtn'));}" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
         </div>
     </div>

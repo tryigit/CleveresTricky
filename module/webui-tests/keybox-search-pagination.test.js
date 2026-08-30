@@ -26,6 +26,9 @@ test('stored keyboxes and Check All expose filtered selection, search and five-i
     assert.match(source, /ct_verify_search/);
     assert.match(source, /ct_verify_clear/);
     assert.match(source, /ct_verify_pager/);
+    assert.match(source, /input\.addEventListener\('input', applySearch\)/);
+    assert.match(source, /input\.addEventListener\('search', applySearch\)/);
+    assert.match(source, /if \(pages <= 1\)\s*\{\s*pager\.style\.display = 'none';/);
     assert.match(source, /filteredVerification/);
     assert.match(source, /\[item\.filename, item\.status, item\.certificate_serial, item\.details\]/);
     assert.match(source, /items\.slice\(\(verificationPage - 1\) \* PAGE_SIZE, verificationPage \* PAGE_SIZE\)/);

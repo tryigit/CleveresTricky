@@ -1590,7 +1590,10 @@
             .autocomplete-items div { white-space: normal !important; overflow-wrap: anywhere !important; line-height: 1.25 !important; }
             #ct_package_search_note { margin-top: -3px; margin-bottom: 12px; }
             #ct_language_panel select { max-width: 260px; }
-            #ct_debug_panel .row, #ct_diagnostics_panel .row, #ct_drm_dashboard_panel .row { margin-bottom: 0; }
+            #ct_debug_panel .row { display: flex !important; flex-direction: row !important; align-items: center !important; justify-content: space-between !important; margin-bottom: 0 !important; }
+            #ct_debug_panel .row > label { flex: 1 1 auto !important; min-width: 0 !important; padding-right: 14px !important; }
+            #ct_debug_panel .row > input[type="checkbox"] { flex: 0 0 48px !important; width: 48px !important; min-width: 48px !important; max-width: 48px !important; height: 28px !important; min-height: 28px !important; max-height: 28px !important; margin: 0 !important; }
+            #ct_diagnostics_panel .row, #ct_drm_dashboard_panel .row { margin-bottom: 0; }
             #ct_effective_apps_host > .panel { margin-top: 0; }
             #ct_effective_apps_host { margin-top: 20px; }
             #cleveresCommunityCard { box-sizing: border-box; margin: 20px 0 24px !important; width: 100%; }
@@ -1614,16 +1617,18 @@
             html[dir="rtl"] input, html[dir="rtl"] select, html[dir="rtl"] textarea, html[dir="rtl"] pre, html[dir="rtl"] code, html[dir="rtl"] .mono { direction: ltr; text-align: left; }
             html[dir="rtl"] input[type="checkbox"].toggle { direction: ltr; }
             @media (max-width: 520px) {
-                .ct-verify-header, .ct-diagnostics-header { flex-direction: column; align-items: stretch; gap: 12px; }
-                .ct-verify-header button, .ct-diagnostics-header button { width: 100%; margin-top: 8px; margin-left: 0; }
+                .ct-verify-header, .ct-diagnostics-header { flex-direction: column; align-items: stretch; gap: 10px; margin-bottom: 10px !important; }
+                .ct-verify-header button, .ct-diagnostics-header button { width: 100%; margin: 0 !important; }
                 .row { gap: 12px; align-items: flex-start; }
-                .row > input[type="checkbox"].toggle { margin-top: 2px !important; }
-                #ct_language_panel .row, #ct_debug_panel .row, #ct_diagnostics_panel .row, #ct_drm_dashboard_panel .row { flex-direction: column; align-items: stretch; gap: 12px; }
-                #ct_language_panel .row > *, #ct_debug_panel .row > *, #ct_diagnostics_panel .row > *, #ct_drm_dashboard_panel .row > *, #ct_diagnostics_hint { width: 100%; padding-right: 0 !important; margin: 0 !important; }
+                .row:has(input[type="checkbox"]) { flex-direction: row !important; align-items: center !important; justify-content: space-between !important; }
+                .row > input[type="checkbox"].toggle, .row > input[type="checkbox"].ct-switch { margin-top: 0 !important; }
+                #ct_language_panel .row, #ct_diagnostics_panel .row, #ct_drm_dashboard_panel .row { flex-direction: column; align-items: stretch; gap: 12px; }
+                #ct_language_panel .row > *, #ct_diagnostics_panel .row > *, #ct_drm_dashboard_panel .row > *, #ct_diagnostics_hint { width: 100%; padding-right: 0 !important; margin: 0 !important; }
                 #ct_config_management .ct-config-actions { grid-template-columns:1fr; }
                 #ct_config_management .ct-config-actions #runtimeSyncBtn { grid-column:auto; }
-                .ct-verify-controls { flex-direction: column; align-items: stretch !important; }
-                .ct-verify-controls > * { width: 100%; margin: 0 !important; }
+                .ct-verify-controls { display: flex; gap: 8px; align-items: stretch; flex-wrap: wrap; margin: 8px 0 12px; }
+                .ct-verify-controls input { width: 100%; min-width: 0; }
+                .ct-verify-controls button { flex: 1 1 calc(50% - 4px); min-width: 0; }
             }
             @media (max-width: 390px) {
                 #ct_keyboxhub_hint { grid-template-columns:1fr; }
@@ -2002,7 +2007,7 @@
         const panel = document.createElement('div');
         panel.id = 'ct_debug_panel';
         panel.className = 'panel';
-        panel.innerHTML = `<h3>Debug Logging</h3><div class="row"><label for="ct_debug_logging_toggle" style="flex:1;padding-right:14px"><strong style="color:#fff">Debug Logging</strong><span class="res-desc">Enable additional runtime diagnostics without installing a debug build. Turn it off after collecting logs.</span></label><input id="ct_debug_logging_toggle" class="toggle" type="checkbox"></div>`;
+        panel.innerHTML = `<h3>Debug Logging</h3><div class="row" style="display:flex;align-items:center;justify-content:space-between;"><label for="ct_debug_logging_toggle" style="flex:1;min-width:0;padding-right:14px"><strong style="color:#fff">Debug Logging</strong><span class="res-desc">Enable additional runtime diagnostics without installing a debug build. Turn it off after collecting logs.</span></label><input id="ct_debug_logging_toggle" class="toggle" type="checkbox" style="flex:0 0 48px;width:48px;height:28px;"></div>`;
         log.insertBefore(panel, log.firstChild);
         const checkbox = panel.querySelector('input');
         bridge.getDebugLogging().then(enabled => { checkbox.checked = Boolean(enabled); }).catch(()=>{});
@@ -3280,6 +3285,8 @@
             renderVerification();
         };
         searchButton.addEventListener('click', applySearch);
+        input.addEventListener('input', applySearch);
+        input.addEventListener('search', applySearch);
         input.addEventListener('keydown', event => {
             if (event.key === 'Enter') {
                 event.preventDefault();
@@ -3292,10 +3299,18 @@
         clearButton.type = 'button';
         clearButton.textContent = t('clear');
         clearButton.addEventListener('click', () => {
-            input.value = '';
-            verificationQuery = '';
-            verificationPage = 1;
-            renderVerification();
+            if (input.value || verificationQuery) {
+                input.value = '';
+                verificationQuery = '';
+                verificationPage = 1;
+                renderVerification();
+            } else if (verificationItems.length > 0) {
+                verificationItems = [];
+                verificationQuery = '';
+                verificationPage = 1;
+                input.value = '';
+                renderVerification();
+            }
         });
         controls.append(input, searchButton, clearButton);
         result.parentNode.insertBefore(controls, result);
@@ -3321,6 +3336,12 @@
         ensureVerificationControls();
         const pager = document.getElementById('ct_verify_pager');
         if (!pager) return;
+        if (pages <= 1) {
+            pager.style.display = 'none';
+            pager.innerHTML = '';
+            return;
+        }
+        pager.style.display = 'flex';
         pager.innerHTML = '';
         const prev = document.createElement('button');
         prev.type = 'button';
