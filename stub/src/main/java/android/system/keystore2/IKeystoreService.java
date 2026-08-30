@@ -8,6 +8,9 @@ public interface IKeystoreService {
     IKeystoreSecurityLevel getSecurityLevel(int securityLevel);
 
     class Stub {
+        public static final int TRANSACTION_getSecurityLevel = 1;
+        public static final int TRANSACTION_getKeyEntry = 2;
+
         public static IKeystoreService asInterface(IBinder b) {
             throw new RuntimeException("");
         }
