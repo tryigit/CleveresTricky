@@ -350,7 +350,7 @@
             letter-spacing: 0.03em;
         }
         #status_rkp.status-value { color: var(--success) !important; background: var(--success-soft) !important; border-color: rgba(48, 209, 88, 0.3); }
-        #status_global.status-value, #status_drm.status-value { color: var(--danger) !important; background: var(--danger-soft) !important; border-color: rgba(255, 69, 58, 0.3); }
+        #status_global.status-value, #status_drm.status-value { border-color: rgba(255, 69, 58, 0.3); }
         .log-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) repeat(3, minmax(124px, auto)); gap: 10px; align-items: stretch; margin-bottom: 10px; width: 100%; box-sizing: border-box; }
         .log-toolbar > * { min-width: 0; }
         .log-toolbar select, .log-toolbar button { width: 100%; min-width: 0; margin: 0; min-height: 44px; }
@@ -492,6 +492,11 @@
     </style>
 </head>
 <body>
+    <div id="loadingOverlay" style="position:fixed; top:0; left:0; width:100%; height:100%; background:var(--bg); z-index:9999; display:flex; flex-direction:column; justify-content:center; align-items:center; transition:opacity 0.3s ease;">
+        <div class="spinner"></div>
+        <div style="margin-top:20px; color:var(--text-muted); font-size:0.9em;">Loading...</div>
+    </div>
+
     <div class="island-container"><div id="island" class="island" role="status" aria-live="polite"><div class="spinner"></div><div class="error-icon">!</div><div class="success-icon">OK</div><span id="islandText">Notification</span><button class="island-close" onclick="document.getElementById('island').classList.remove('active')" aria-label="Close notification">&times;</button></div></div>
     <h1>CleveresTricky</h1>
     <div class="tabs" role="tablist">
@@ -508,7 +513,7 @@
     <div id="dashboard" class="content active" role="tabpanel" aria-labelledby="tab_dashboard">
         <div class="panel panel-hero">
 <h3>Core Protection</h3>
-<div class="scope-note" style="margin:0;"><strong style="color:var(--success);">Always active.</strong> Bootloader/verified-boot property compatibility and Keystore/TEE certificate protection are core module behavior. They have no on/off switch and continue working when Identity Engine is disabled. Hardware bootloader and root-of-trust state are not physically changed.</div>
+<div class="scope-note" style="margin-top:10px;"><strong style="color:var(--success);">Always active.</strong> Bootloader/verified-boot property compatibility and Keystore/TEE certificate protection are core module behavior. They have no on/off switch and continue working when Identity Engine is disabled. Hardware bootloader and root-of-trust state are not physically changed.</div>
         </div>
         <div class="status-grid" aria-label="Protection status">
             <div class="status-card">
@@ -605,8 +610,8 @@
         </div>
         <div class="panel">
 <h3>New Rule</h3>
-<div style="margin-bottom:14px;"><label for="appPkg">Package Name</label><div class="search-container"><input type="text" id="appPkg" placeholder="Type to search packages..." oninput="toggleAddButton(); document.getElementById('clearPkgBtn').style.display=this.value?'flex':'none';" onkeydown="if(event.key==='Enter') addAppRule()" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off" style="padding-right:44px;"><button id="clearPkgBtn" class="clear-btn" onclick="document.getElementById('appPkg').value=''; this.style.display='none'; toggleAddButton(); document.getElementById('appPkg').focus();" >&times;</button></div></div>
-<div class="grid-2"><div><label for="appTemplate">Attestation Identity Profile</label><select id="appTemplate"><option value="null">No identity override</option></select></div><div><label for="appKeybox">Custom Keybox</label><div class="search-container"><input type="text" id="appKeybox" placeholder="Custom Keybox" oninput="document.getElementById('clearKbBtn').style.display=this.value?'flex':'none';" onkeydown="if(event.key==='Enter') addAppRule()" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off" style="padding-right:44px;"><button id="clearKbBtn" class="clear-btn" onclick="document.getElementById('appKeybox').value=''; this.style.display='none'; document.getElementById('appKeybox').focus();" >&times;</button></div></div></div>
+<div style="margin-bottom:14px;"><label for="appPkg">Package Name</label><input type="text" id="appPkg" placeholder="Type to search packages..." oninput="toggleAddButton();" onkeydown="if(event.key==='Enter') addAppRule()" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></div>
+<div class="grid-2"><div><label for="appTemplate">Attestation Identity Profile</label><select id="appTemplate"><option value="null">No identity override</option></select></div><div><label for="appKeybox">Custom Keybox</label><input type="text" id="appKeybox" placeholder="Custom Keybox" onkeydown="if(event.key==='Enter') addAppRule()" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></div></div>
 <div style="margin-bottom:18px;"><label for="appPrivacy">Privacy Policy</label><select id="appPrivacy"><option value="inherit">Use global identity</option><option value="isolate">Stable isolated identity</option><option value="redact">Blank supported identifiers</option></select></div>
 <button id="btnAddRule" class="primary" style="width:100%" onclick="addAppRule()" disabled>Add Rule</button>
         </div>
@@ -809,7 +814,23 @@
 
 <script src="bridge.js?revision=14"></script>
 <script src="policy.js?revision=5"></script>
+
     <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const checkData = setInterval(() => {
+                if (typeof loadKeyInfo === 'function' && document.getElementById('status_global')) {
+                    clearInterval(checkData);
+                    setTimeout(() => {
+                        const loader = document.getElementById('loadingOverlay');
+                        if (loader) {
+                            loader.style.opacity = '0';
+                            setTimeout(() => loader.style.display = 'none', 300);
+                        }
+                    }, 500);
+                }
+            }, 100);
+        });
+
         window.addEventListener('unhandledrejection', function(event) {
 if (event.reason && event.reason.message && event.reason.message.includes('fetch')) {
     notify('Network error: Failed to reach the server. Is the module running?', 'error');
@@ -928,9 +949,9 @@ inp.addEventListener("input", function(e) {
                 closeAllLists();
                 if(inputId === 'appPkg') {
                     toggleAddButton();
-                    document.getElementById('clearPkgBtn').style.display = 'block';
+
                 } else if (inputId === 'appKeybox') {
-                    document.getElementById('clearKbBtn').style.display = 'block';
+
                 }
             });
             a.appendChild(b);
@@ -2276,7 +2297,7 @@ if (existingIdx !== -1) {
     appRules.push({ package: pkg, template: tmpl === 'null' ? '' : tmpl, keybox: kb, privacy });
 }
 
-renderAppTable(); pkgInput.value = ''; document.getElementById('appKeybox').value = ''; document.getElementById('appPrivacy').value = 'inherit'; if(document.getElementById('clearPkgBtn')) document.getElementById('clearPkgBtn').style.display='none'; if(document.getElementById('clearKbBtn')) document.getElementById('clearKbBtn').style.display='none';
+renderAppTable(); pkgInput.value = ''; document.getElementById('appKeybox').value = ''; document.getElementById('appPrivacy').value = 'inherit';
 toggleAddButton(); pkgInput.focus();
 notify(existingIdx !== -1 ? 'Rule Updated' : 'Rule Added');
         }
@@ -2291,8 +2312,8 @@ document.getElementById('appKeybox').value = rule.keybox || '';
 document.getElementById('appPrivacy').value = rule.privacy || 'inherit';
 document.getElementById('appPkg').focus();
 toggleAddButton();
-document.getElementById('clearPkgBtn').style.display = 'block';
-document.getElementById('clearKbBtn').style.display = rule.keybox ? 'block' : 'none';
+
+
         }
 
         function removeAppRule(idx) {
