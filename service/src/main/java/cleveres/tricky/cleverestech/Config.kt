@@ -359,7 +359,7 @@ object Config {
         uid: Int,
         packages: Array<String>,
     ) {
-        putBoundedUidCache(packageCache, uid, CachedPackage(packages.clone(), System.currentTimeMillis()))
+        putBoundedUidCache(packageCache, uid, CachedPackage(packages, System.currentTimeMillis()))
         PolicyState.invalidateUid(uid)
     }
 
@@ -458,25 +458,39 @@ object Config {
     @Volatile
     private var lastKeyboxInventoryFingerprint: Long = 0L
 
+    @Volatile
+    private var cachedKeyboxInventoryFingerprint: Long? = null
+    @Volatile
+    internal var keyboxInventoryFingerprintDirty = true
+
     internal fun computeKeyboxInventoryFingerprint(): Long {
-        return try {
-            if (!root.exists() || !root.isDirectory) return 0L
-            var fp = root.lastModified() xor (File(root, KEYBOX_FILE).lastModified() shl 1) xor (File(root, "keybox.cbox").lastModified() shl 2)
-            val dir = keyboxDir
-            if (dir.exists() && dir.isDirectory) {
-                fp = fp xor (dir.lastModified() shl 3)
-                val files = dir.listFiles()
-                if (files != null) {
-                    fp = fp xor (files.size.toLong() shl 4)
-                    for (f in files) {
-                        fp = fp xor (f.lastModified() shl 5) xor f.name.hashCode().toLong() xor (f.length() shl 6)
+        if (!keyboxInventoryFingerprintDirty && cachedKeyboxInventoryFingerprint != null) {
+            return cachedKeyboxInventoryFingerprint!!
+        }
+        val result = try {
+            if (!root.exists() || !root.isDirectory) {
+                0L
+            } else {
+                var fp = root.lastModified() xor (File(root, KEYBOX_FILE).lastModified() shl 1) xor (File(root, "keybox.cbox").lastModified() shl 2)
+                val dir = keyboxDir
+                if (dir.exists() && dir.isDirectory) {
+                    fp = fp xor (dir.lastModified() shl 3)
+                    val files = dir.listFiles()
+                    if (files != null) {
+                        fp = fp xor (files.size.toLong() shl 4)
+                        for (f in files) {
+                            fp = fp xor (f.lastModified() shl 5) xor f.name.hashCode().toLong() xor (f.length() shl 6)
+                        }
                     }
                 }
+                fp
             }
-            fp
         } catch (_: Exception) {
             0L
         }
+        cachedKeyboxInventoryFingerprint = result
+        keyboxInventoryFingerprintDirty = false
+        return result
     }
 
     fun ensureFreshKeyboxes(): Boolean =
@@ -1987,6 +2001,7 @@ object Config {
 
     object KeyboxDirObserver : FileObserver(keyboxDir, CREATE or CLOSE_WRITE or DELETE or MOVED_FROM or MOVED_TO or MODIFY or ATTRIB) {
         override fun onEvent(event: Int, path: String?) {
+            keyboxInventoryFingerprintDirty = true
             Logger.i("Keybox directory event: $path")
             updateKeyBoxes()
         }
@@ -2064,7 +2079,7 @@ object Config {
     internal data class CachedPackage(val value: Array<String>, val timestamp: Long)
 
     private val packageCache = ConcurrentHashMap<Int, CachedPackage>()
-    private val uidLocks = Array(1024) { Any() }
+    private val uidLocks = Array(64) { Any() }
 
     internal var clockSource: () -> Long = { System.currentTimeMillis() }
     private const val CACHE_TTL_MS = 5 * 1000L
@@ -2077,12 +2092,12 @@ object Config {
         val now = clockSource()
         val cached = packageCache[uid]
         val cachedAge = cached?.let { now - it.timestamp }
-        if (cached != null && cachedAge != null && cachedAge >= 0 && cachedAge < CACHE_TTL_MS) return cached.value.clone()
+        if (cached != null && cachedAge != null && cachedAge >= 0 && cachedAge < CACHE_TTL_MS) return cached.value
         val lock = uidLocks[(uid and Int.MAX_VALUE) % uidLocks.size]
         synchronized(lock) {
             val current = packageCache[uid]
             val currentAge = current?.let { now - it.timestamp }
-            if (current != null && currentAge != null && currentAge >= 0 && currentAge < CACHE_TTL_MS) return current.value.clone()
+            if (current != null && currentAge != null && currentAge >= 0 && currentAge < CACHE_TTL_MS) return current.value
             val pm = getPm()
             return if (pm == null) emptyArray() else {
                 try {
@@ -2092,7 +2107,7 @@ object Config {
                     val packages = normalized.take(MAX_PACKAGES_PER_UID).sorted().toTypedArray()
                     if (current == null || !current.value.contentEquals(packages)) invalidateUidPolicyCaches(uid)
                     putBoundedUidCache(packageCache, uid, CachedPackage(packages, now))
-                    packages.clone()
+                    packages
                 } catch (error: Exception) {
                     if (iPm === pm) iPm = null
                     Logger.e("Failed to resolve packages for uid=$uid", error)

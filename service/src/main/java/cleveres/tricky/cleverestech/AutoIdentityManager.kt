@@ -10,6 +10,8 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.time.LocalDate
 import javax.net.ssl.HttpsURLConnection
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Resolves a current Pixel beta/canary identity from Google's public Android
@@ -95,30 +97,48 @@ object AutoIdentityManager {
     @Volatile
     private var cachedResult: CachedResult? = null
 
+    private val inFlightFetch = AtomicReference<CompletableFuture<Result>?>(null)
+
     /**
-     * Production entry point. It is synchronized to collapse accidental
-     * double-taps into one bounded network lookup.
+     * Production entry point. It collapses accidental
+     * double-taps into one bounded network lookup lock-free.
      */
-    @Synchronized
     fun fetchLatest(): Result {
         val now = System.currentTimeMillis()
         cachedResult?.takeIf { ageMs(now, it.storedAtMs) <= CACHE_TTL_MS }?.let { return it.value }
 
-        return try {
-            val deadlineNanos = System.nanoTime() + FETCH_BUDGET_MS * 1_000_000L
-            fetchLatest(NetworkFetcher(deadlineNanos)).also { resolved ->
-                cachedResult = CachedResult(resolved, System.currentTimeMillis())
+        val future = CompletableFuture<Result>()
+        if (!inFlightFetch.compareAndSet(null, future)) {
+            return try {
+                inFlightFetch.get()?.join() ?: throw IOException("In-flight auto identity fetch failed")
+            } catch (e: Exception) {
+                fallbackOrThrow(now, if (e is IOException) e else IOException("In-flight auto identity fetch failed", e))
             }
-        } catch (error: IOException) {
-            val fallback = cachedResult?.takeIf { ageMs(now, it.storedAtMs) <= STALE_CACHE_FALLBACK_MS }
-            if (fallback != null) return fallback.value
-            localPixelFallback()?.also { resolved ->
-                Logger.w("Auto Identity remote source is unavailable; using a verified local Pixel template")
-                cachedResult = CachedResult(resolved, System.currentTimeMillis())
-                return resolved
-            }
-            throw error
         }
+
+        try {
+            val deadlineNanos = System.nanoTime() + FETCH_BUDGET_MS * 1_000_000L
+            val resolved = fetchLatest(NetworkFetcher(deadlineNanos))
+            cachedResult = CachedResult(resolved, System.currentTimeMillis())
+            inFlightFetch.compareAndSet(future, null)
+            future.complete(resolved)
+            return resolved
+        } catch (error: IOException) {
+            inFlightFetch.compareAndSet(future, null)
+            future.completeExceptionally(error)
+            return fallbackOrThrow(now, error)
+        }
+    }
+
+    private fun fallbackOrThrow(now: Long, error: IOException): Result {
+        val fallback = cachedResult?.takeIf { ageMs(now, it.storedAtMs) <= STALE_CACHE_FALLBACK_MS }
+        if (fallback != null) return fallback.value
+        localPixelFallback()?.also { resolved ->
+            Logger.w("Auto Identity remote source is unavailable; using a verified local Pixel template")
+            cachedResult = CachedResult(resolved, System.currentTimeMillis())
+            return resolved
+        }
+        throw error
     }
 
     private fun localPixelFallback(): Result? {

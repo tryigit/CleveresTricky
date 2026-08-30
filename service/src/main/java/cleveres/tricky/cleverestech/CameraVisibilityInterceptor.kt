@@ -105,10 +105,12 @@ object CameraVisibilityInterceptor : BinderInterceptor() {
                     listenerProxies.values.forEach(CameraListenerProxy::dispose)
                     listenerProxies.clear()
                 }
+                uidVisibilityCache.clear()
                 registered = false
                 deathRecipientLinked = false
                 injected = false
                 injectedPid = null
+                injectionInFlight = false
                 binderBackdoor = null
                 cachedCameraServerPid = null
                 lastInjectionAttemptMs = 0L
@@ -224,6 +226,7 @@ object CameraVisibilityInterceptor : BinderInterceptor() {
             try {
                 val statuses = reply.createTypedArray(CameraStatus.CREATOR) ?: emptyArray()
                 val visibleKeys = proxy.initializeSnapshot(statuses, limit)
+                rebuildUidVisibilityCache(callingUid)
                 if (limit == null) return Skip
 
                 val filtered =
@@ -239,6 +242,7 @@ object CameraVisibilityInterceptor : BinderInterceptor() {
                 }.let { OverrideReply(0, it) }
             } catch (_: RuntimeException) {
                 proxy.failOpenInitialization()
+                rebuildUidVisibilityCache(callingUid)
                 Skip
             }
         } finally {
@@ -277,12 +281,16 @@ object CameraVisibilityInterceptor : BinderInterceptor() {
             reply.readException()
             val combinations =
                 reply.createTypedArray(ConcurrentCameraIdCombination.CREATOR) ?: return Skip
-            val filtered =
-                combinations.filter { combination ->
-                    val keys = combinationCameraKeys(combination)
-                    keys == null || visibleKeys.containsAll(keys)
+            var removed = 0
+            val filtered = ArrayList<ConcurrentCameraIdCombination>(combinations.size)
+            for (combination in combinations) {
+                if (isCombinationVisible(combination, visibleKeys)) {
+                    filtered.add(combination)
+                } else {
+                    removed++
                 }
-            if (filtered.size == combinations.size) return Skip
+            }
+            if (removed == 0) return Skip
             Parcel.obtain().also { replacement ->
                 replacement.writeNoException()
                 replacement.writeTypedArray(filtered.toTypedArray(), 0)
@@ -294,30 +302,29 @@ object CameraVisibilityInterceptor : BinderInterceptor() {
         }
     }
 
-    private fun combinationCameraKeys(combination: ConcurrentCameraIdCombination): Set<CameraVisibilityKey>? {
+    private fun isCombinationVisible(combination: ConcurrentCameraIdCombination, visibleKeys: Set<CameraVisibilityKey>): Boolean {
         val raw =
             try {
                 combination.getConcurrentCameraIdCombination()
             } catch (_: RuntimeException) {
-                return null
+                return true // Fail open on malformed combination
             } catch (_: LinkageError) {
-                return null
+                return true
             }
-        val result = LinkedHashSet<CameraVisibilityKey>(raw.size)
         for (entry in raw) {
             val key =
                 when (entry) {
                     is String -> CameraVisibilityKey(entry)
                     is android.util.Pair<*, *> -> {
-                        val cameraId = entry.first as? String ?: return null
+                        val cameraId = entry.first as? String ?: return true
                         val deviceId = (entry.second as? Number)?.toInt() ?: DEFAULT_CAMERA_DEVICE_ID
                         CameraVisibilityKey(cameraId, deviceId)
                     }
-                    else -> return null
+                    else -> return true
                 }
-            result += key
+            if (!visibleKeys.contains(key)) return false
         }
-        return result
+        return true
     }
 
     private fun cameraStatusKey(status: CameraStatus): CameraVisibilityKey? {
@@ -373,22 +380,35 @@ object CameraVisibilityInterceptor : BinderInterceptor() {
                 return@synchronized null
             }
             listenerProxies[original] = proxy
+            rebuildUidVisibilityCache(callingUid)
             proxy
         }
 
     /** Returns true when the final retained proxy was removed. */
     private fun removeProxy(original: IBinder): Boolean {
         val proxy = synchronized(listenerLock) { listenerProxies.remove(original) } ?: return false
+        val ownerUid = proxy.ownerUid
         proxy.dispose()
+        rebuildUidVisibilityCache(ownerUid)
         return synchronized(listenerLock) { listenerProxies.isEmpty() }
     }
 
-    private fun visibleCameraKeysForUid(uid: Int): Set<CameraVisibilityKey>? =
-        synchronized(listenerLock) {
+    private val uidVisibilityCache = java.util.concurrent.ConcurrentHashMap<Int, Set<CameraVisibilityKey>?>()
+
+    private fun rebuildUidVisibilityCache(uid: Int) {
+        val keys = synchronized(listenerLock) {
             val matching = listenerProxies.values.filter { proxy -> proxy.ownerUid == uid && !proxy.isDead() }
             if (matching.isEmpty() || matching.any { !it.canFilterVisibility() }) return@synchronized null
             matching.flatMapTo(linkedSetOf()) { it.visibleCameraKeysSnapshot() }
         }
+        if (keys == null) {
+            uidVisibilityCache.remove(uid)
+        } else {
+            uidVisibilityCache[uid] = keys
+        }
+    }
+
+    private fun visibleCameraKeysForUid(uid: Int): Set<CameraVisibilityKey>? = uidVisibilityCache[uid]
 
     private fun hasDeadProxies(): Boolean =
         synchronized(listenerLock) { listenerProxies.values.any(CameraListenerProxy::isDead) }
@@ -402,9 +422,14 @@ object CameraVisibilityInterceptor : BinderInterceptor() {
 
     private fun refreshProxyVisibility(): Boolean {
         val proxies = synchronized(listenerLock) { listenerProxies.values.toList() }
+        val uids = mutableSetOf<Int>()
         proxies.forEach { proxy ->
-            if (!proxy.isDead()) proxy.refreshVisibility(Config.getVisibleCameraCount(proxy.ownerUid))
+            if (!proxy.isDead()) {
+                proxy.refreshVisibility(Config.getVisibleCameraCount(proxy.ownerUid))
+                uids.add(proxy.ownerUid)
+            }
         }
+        uids.forEach(::rebuildUidVisibilityCache)
         return cleanupDeadProxies()
     }
 
@@ -416,16 +441,19 @@ object CameraVisibilityInterceptor : BinderInterceptor() {
                     .map { it.key to it.value }
             }
         var clean = true
+        val changedUids = mutableSetOf<Int>()
         deadEntries.forEach { (original, proxy) ->
             if (removeRemoteListener(proxy)) {
                 synchronized(listenerLock) {
                     if (listenerProxies[original] === proxy) listenerProxies.remove(original)
                 }
                 proxy.dispose()
+                changedUids.add(proxy.ownerUid)
             } else {
                 clean = false
             }
         }
+        changedUids.forEach(::rebuildUidVisibilityCache)
         return clean
     }
 
@@ -954,6 +982,9 @@ object CameraVisibilityInterceptor : BinderInterceptor() {
         }
     }
 
+    @Volatile
+    private var injectionInFlight = false
+
     @Synchronized
     fun tryRun(): Boolean {
         if (!Config.shouldInterceptCameraVisibility) return stop()
@@ -970,11 +1001,17 @@ object CameraVisibilityInterceptor : BinderInterceptor() {
             if (lastInjectionAttemptMs != 0L && now - lastInjectionAttemptMs < INJECTION_RETRY_INTERVAL_MS) {
                 return false
             }
+            if (injectionInFlight) return false
+            injectionInFlight = true
             lastInjectionAttemptMs = now
-            if (activateNativeHook(pid)) {
-                injected = true
-                injectedPid = pid
-            }
+            Thread {
+                val success = activateNativeHook(pid)
+                if (success) {
+                    injected = true
+                    injectedPid = pid
+                }
+                injectionInFlight = false
+            }.start()
             triedCount.incrementAndGet()
             return false
         }
@@ -1023,6 +1060,7 @@ object CameraVisibilityInterceptor : BinderInterceptor() {
                 listenerProxies.values.forEach(CameraListenerProxy::dispose)
                 listenerProxies.clear()
             }
+            uidVisibilityCache.clear()
         } else {
             val proxies = synchronized(listenerLock) { listenerProxies.values.toList() }
             proxies.forEach { proxy -> if (!proxy.isDead()) proxy.refreshVisibility(null) }

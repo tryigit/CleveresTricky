@@ -21,6 +21,7 @@ import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.security.MessageDigest
 import java.security.cert.X509Certificate
+import java.util.concurrent.CompletableFuture
 
 object KeyboxVerifier {
     data class Result(
@@ -67,6 +68,7 @@ object KeyboxVerifier {
     private var cachedEtag: String? = null
     private var lastFetchTime: Long = 0
     private val cacheLock = java.util.concurrent.locks.ReentrantLock()
+    private var inFlightFetch: CompletableFuture<CrlWire.Handle?>? = null
 
     @androidx.annotation.VisibleForTesting
     fun setCrlUrlForTesting(url: String) {
@@ -236,6 +238,10 @@ object KeyboxVerifier {
     @JvmStatic
     fun fetchCrl(): CrlWire.Handle? {
         val now = System.currentTimeMillis()
+        val future: CompletableFuture<CrlWire.Handle?>
+        var isLeader = false
+        val requestedUrl: String
+
         cacheLock.lock()
         try {
             cachedCrl?.let { cached ->
@@ -245,32 +251,69 @@ object KeyboxVerifier {
             loadPersistedCrlLocked(now)?.let { persisted ->
                 val (raw, modified) = persisted
                 try {
-                    val handle = CrlBackend.refresh(raw) ?: return@let
-                    cachedCrl = handle
-                    lastFetchTime = modified
-                    Logger.i("Loaded fresh attestation revocation cache into Rust generation ${handle.generation}")
-                    return handle
+                    val handle = CrlBackend.refresh(raw)
+                    if (handle != null) {
+                        cachedCrl = handle
+                        lastFetchTime = modified
+                        Logger.i("Loaded fresh attestation revocation cache into Rust generation ${handle.generation}")
+                        return handle
+                    }
                 } finally {
                     raw.fill(0)
                 }
             }
 
-            val requestedUrl = crlUrl
+            requestedUrl = crlUrl
             if (!isAllowedCrlUrl(requestedUrl, allowLoopbackHttp = requestedUrl != DEFAULT_CRL_URL)) {
                 Logger.e("Rejected unsafe CRL URL")
                 return null
             }
-            return fetchNetworkCrlLocked(requestedUrl, now)
+
+            if (inFlightFetch != null) {
+                future = inFlightFetch!!
+            } else {
+                future = CompletableFuture()
+                inFlightFetch = future
+                isLeader = true
+            }
         } finally {
             cacheLock.unlock()
         }
+
+        if (!isLeader) {
+            return try {
+                future.join()
+            } catch (e: Exception) {
+                null
+            }
+        }
+
+        val result = fetchNetworkCrl(requestedUrl, now)
+
+        cacheLock.lock()
+        try {
+            if (inFlightFetch === future) {
+                inFlightFetch = null
+            }
+        } finally {
+            cacheLock.unlock()
+        }
+
+        future.complete(result)
+        return result
     }
 
-    private fun fetchNetworkCrlLocked(
+    private fun fetchNetworkCrl(
         requestedUrl: String,
         now: Long,
     ): CrlWire.Handle? {
-        var conditionalEtag = cachedEtag
+        var conditionalEtag: String?
+        cacheLock.lock()
+        try {
+            conditionalEtag = cachedEtag
+        } finally {
+            cacheLock.unlock()
+        }
         repeat(2) { attempt ->
             val connection = URL(requestedUrl).openConnection() as HttpURLConnection
             try {
@@ -284,13 +327,23 @@ object KeyboxVerifier {
 
                 val responseCode = connection.responseCode
                 if (responseCode == HttpURLConnection.HTTP_NOT_MODIFIED) {
-                    cachedCrl?.let { cached ->
-                        lastFetchTime = now
-                        return cached
+                    cacheLock.lock()
+                    try {
+                        cachedCrl?.let { cached ->
+                            lastFetchTime = now
+                            return cached
+                        }
+                    } finally {
+                        cacheLock.unlock()
                     }
                     if (conditionalEtag != null && attempt == 0) {
                         Logger.w("CRL server returned 304 without usable local state; retrying unconditionally")
-                        cachedEtag = null
+                        cacheLock.lock()
+                        try {
+                            cachedEtag = null
+                        } finally {
+                            cacheLock.unlock()
+                        }
                         conditionalEtag = null
                         return@repeat
                     }
@@ -307,10 +360,15 @@ object KeyboxVerifier {
                 val raw = BoundedInputStream(connection.inputStream, MAX_CRL_BYTES).use(::readAllBytesBounded)
                 try {
                     val handle = CrlBackend.refresh(raw) ?: return null
-                    persistCrlLocked(raw)
-                    cachedCrl = handle
-                    cachedEtag = connection.getHeaderField("ETag")?.take(512)
-                    lastFetchTime = now
+                    cacheLock.lock()
+                    try {
+                        persistCrlLocked(raw)
+                        cachedCrl = handle
+                        cachedEtag = connection.getHeaderField("ETag")?.take(512)
+                        lastFetchTime = now
+                    } finally {
+                        cacheLock.unlock()
+                    }
                     return handle
                 } finally {
                     raw.fill(0)

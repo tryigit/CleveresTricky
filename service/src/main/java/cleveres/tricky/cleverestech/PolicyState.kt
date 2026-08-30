@@ -157,7 +157,8 @@ object PolicyState {
         val patch: PatchSet,
         val profiles: Map<String, Profile>,
         val activeProfile: String?,
-        val assignments: List<Assignment>,
+        val exactAssignments: Map<String, Assignment>,
+        val wildcardAssignments: List<Assignment>,
         val generation: Long,
         val recovery: String,
     ) {
@@ -221,7 +222,8 @@ object PolicyState {
             patch = defaultPatchSet(),
             profiles = emptyMap(),
             activeProfile = null,
-            assignments = emptyList(),
+            exactAssignments = emptyMap(),
+            wildcardAssignments = emptyList(),
             generation = generationCounter.incrementAndGet(),
             recovery = "bootstrap",
         )
@@ -345,13 +347,16 @@ object PolicyState {
             require(active.enabled) { "Disabled profile cannot be active" }
         }
         if (validateReferences) validateAssignedProfileReferences(profiles.values)
+        val exactAssignments = assignments.filter { '*' !in it.pattern }.associateBy { it.pattern }
+        val wildcardAssignments = assignments.filter { '*' in it.pattern }
         return Snapshot(
             explicit = true,
             features = features,
             patch = patch,
             profiles = profiles.toMap(),
             activeProfile = activeProfile,
-            assignments = assignments,
+            exactAssignments = exactAssignments,
+            wildcardAssignments = wildcardAssignments,
             generation = generationCounter.incrementAndGet(),
             recovery = recovery,
         )
@@ -571,7 +576,8 @@ object PolicyState {
             patch = defaultPatchSet(),
             profiles = emptyMap(),
             activeProfile = null,
-            assignments = emptyList(),
+            exactAssignments = emptyMap(),
+            wildcardAssignments = emptyList(),
             generation = generationCounter.incrementAndGet(),
             recovery = recovery,
         )
@@ -609,9 +615,17 @@ object PolicyState {
         val normalizedPackages = packages.asSequence().filter(packagePattern::matches).distinct().sorted().toList()
         val matches = ArrayList<Pair<Assignment, Profile>>()
         normalizedPackages.forEach { packageName ->
-            val assignment = snapshotValue.assignments.firstOrNull { wildcardMatches(it.pattern, packageName) }
-            val profile = assignment?.let { findProfile(snapshotValue.profiles, it.profileName) }?.takeIf { it.enabled }
-            if (assignment != null && profile != null) matches += assignment to profile
+            var bestAssignment = snapshotValue.exactAssignments[packageName]
+            if (bestAssignment == null) {
+                bestAssignment = snapshotValue.wildcardAssignments.firstOrNull { wildcardMatches(it.pattern, packageName) }
+            } else {
+                val wildcard = snapshotValue.wildcardAssignments.firstOrNull { wildcardMatches(it.pattern, packageName) }
+                if (wildcard != null && wildcard.specificity > bestAssignment.specificity) {
+                    bestAssignment = wildcard
+                }
+            }
+            val profile = bestAssignment?.let { findProfile(snapshotValue.profiles, it.profileName) }?.takeIf { it.enabled }
+            if (bestAssignment != null && profile != null) matches += bestAssignment to profile
         }
         if (matches.isEmpty()) return SelectedProfile(activeProfile(snapshotValue), null, false)
         val selected = matches.first()
@@ -1178,7 +1192,8 @@ object PolicyState {
             patch = current.patch,
             profiles = emptyMap(),
             activeProfile = null,
-            assignments = emptyList(),
+            exactAssignments = emptyMap(),
+            wildcardAssignments = emptyList(),
             generation = generationCounter.incrementAndGet(),
             recovery = "configured",
         )
@@ -1193,11 +1208,14 @@ object PolicyState {
             require(active != null) { "Active profile does not exist" }
             require(active.enabled) { "Disabled profile cannot be active" }
         }
+        val exactAssignments = assignments.filter { '*' !in it.pattern }.associateBy { it.pattern }
+        val wildcardAssignments = assignments.filter { '*' in it.pattern }
         return current.copy(
             explicit = true,
             profiles = profiles.toMap(),
             activeProfile = activeProfile,
-            assignments = assignments,
+            exactAssignments = exactAssignments,
+            wildcardAssignments = wildcardAssignments,
             generation = generationCounter.incrementAndGet(),
             recovery = "configured",
         )
@@ -1218,7 +1236,8 @@ object PolicyState {
                 patch = PatchSet(thresholdMonths, automatic, automatic, automatic),
                 profiles = emptyMap(),
                 activeProfile = null,
-                assignments = emptyList(),
+                exactAssignments = emptyMap(),
+                wildcardAssignments = emptyList(),
                 generation = generationCounter.incrementAndGet(),
                 recovery = "default",
             ),
