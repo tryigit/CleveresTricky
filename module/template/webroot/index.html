@@ -351,6 +351,7 @@
         }
         #status_rkp.status-value { color: var(--success) !important; background: var(--success-soft) !important; border-color: rgba(48, 209, 88, 0.3); }
         #status_global.status-value, #status_drm.status-value { border-color: rgba(255, 69, 58, 0.3); }
+        #status_global.status-value.active, #status_drm.status-value.active { border-color: rgba(48, 209, 88, 0.3); }
         .log-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) repeat(3, minmax(124px, auto)); gap: 10px; align-items: stretch; margin-bottom: 10px; width: 100%; box-sizing: border-box; }
         .log-toolbar > * { min-width: 0; }
         .log-toolbar select, .log-toolbar button { width: 100%; min-width: 0; margin: 0; min-height: 44px; }
@@ -443,7 +444,8 @@
             .status-label { font-size: 0.66rem; }
             .grid-2 { grid-template-columns: 1fr; gap: 14px; }
             .row { flex-wrap: wrap; gap: 10px; }
-            .row > label, .row > span, .row > h3 { flex: 1; min-width: 0; line-height: 1.4; }
+            .row > label, .row > span, .row > h3 { flex: 1 1 100%; min-width: 0; line-height: 1.4; }
+            .row > button { width: 100%; margin-top: 4px; }
             .row > input[type="checkbox"].toggle { flex: 0 0 auto; }
             .responsive-table thead { display: none; }
             .responsive-table tr { display: flex; flex-direction: column; border: 1px solid var(--border); margin-bottom: 14px; border-radius: 12px; background: var(--panel); overflow: hidden; }
@@ -1713,6 +1715,7 @@ if (!status) return;
 status.innerText = enabled ? 'ACTIVE' : 'INACTIVE';
 status.style.color = enabled ? 'var(--success)' : 'var(--danger)';
 status.style.background = enabled ? 'rgba(74, 222, 128, 0.1)' : 'rgba(239, 68, 68, 0.1)';
+enabled ? status.classList.add('active') : status.classList.remove('active');
         }
 
         function updateDrmStatus(enabled) {
@@ -1721,6 +1724,7 @@ if (!status) return;
 status.innerText = enabled ? 'ACTIVE' : 'INACTIVE';
 status.style.color = enabled ? 'var(--success)' : 'var(--danger)';
 status.style.background = enabled ? 'rgba(74, 222, 128, 0.1)' : 'rgba(239, 68, 68, 0.1)';
+enabled ? status.classList.add('active') : status.classList.remove('active');
         }
 
 

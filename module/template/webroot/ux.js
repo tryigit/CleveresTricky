@@ -1616,9 +1616,12 @@
             @media (max-width: 520px) {
                 .row { gap: 12px; align-items: flex-start; }
                 .row > input[type="checkbox"].toggle { margin-top: 2px !important; }
-                #ct_language_panel .row, #ct_debug_panel .row, #ct_diagnostics_panel .row, #ct_drm_dashboard_panel .row { align-items:center; }
+                #ct_language_panel .row, #ct_debug_panel .row, #ct_diagnostics_panel .row, #ct_drm_dashboard_panel .row { flex-direction: column; align-items: stretch; gap: 12px; }
+                #ct_language_panel .row > *, #ct_debug_panel .row > *, #ct_diagnostics_panel .row > *, #ct_drm_dashboard_panel .row > *, #ct_diagnostics_hint { width: 100%; padding-right: 0 !important; margin: 0 !important; }
                 #ct_config_management .ct-config-actions { grid-template-columns:1fr; }
                 #ct_config_management .ct-config-actions #runtimeSyncBtn { grid-column:auto; }
+                .ct-verify-controls { flex-direction: column; align-items: stretch !important; }
+                .ct-verify-controls > * { width: 100%; margin: 0 !important; }
             }
             @media (max-width: 390px) {
                 #ct_keyboxhub_hint { grid-template-columns:1fr; }
@@ -3255,6 +3258,7 @@
         const controls = document.createElement('div');
         controls.id = 'ct_verify_controls';
         controls.style.cssText = 'display:flex;gap:8px;align-items:center;margin:10px 0;flex-wrap:wrap;';
+        controls.className = 'ct-verify-controls';
         const input = document.createElement('input');
         input.id = 'ct_verify_filter';
         input.type = 'search';
