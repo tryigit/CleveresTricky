@@ -9,7 +9,10 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
+
+concurrency:
+  group: release-notes-master
+  cancel-in-progress: false
 
 env:
   NO_COLOR: "1"
@@ -188,18 +191,8 @@ jobs:
           git config user.name "cleverestricky-release-bot"
           git config user.email "cleverestricky-release-bot@users.noreply.github.com"
           git add update.json
-          git commit -m "docs(release): sync $RELEASE_TAG update metadata"
+          git commit -m "docs(release): sync $RELEASE_TAG update metadata [skip ci]"
 
-          branch="automation/release-metadata-${RELEASE_TAG//[^A-Za-z0-9_.-]/-}-${BUILD_SHA:0:12}"
-          git push origin "HEAD:refs/heads/$branch"
-          if ! gh pr list --repo "$GITHUB_REPOSITORY" --head "$branch" --state open --json number --jq 'length == 0' | grep -qx true; then
-            echo "A metadata PR for $branch already exists"
-            exit 0
-          fi
-          gh pr create \
-            --repo "$GITHUB_REPOSITORY" \
-            --base master \
-            --head "$branch" \
-            --title "docs(release): sync $RELEASE_TAG update metadata" \
-            --body "Automated metadata update generated from the published $RELEASE_TAG artifact. The ZIP digest and module versionCode were verified before this PR was opened." \
-            >/dev/null
+          # The Build head was verified above. Publish metadata directly as a fast-forward to
+          # master so release bookkeeping does not create an extra automation branch or PR.
+          git push origin "HEAD:refs/heads/master"
