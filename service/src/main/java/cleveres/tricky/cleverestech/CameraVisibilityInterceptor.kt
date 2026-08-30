@@ -987,6 +987,7 @@ object CameraVisibilityInterceptor : BinderInterceptor() {
 
     @Volatile
     private var injectionInFlight = false
+    private var injectionGeneration = 0
 
     @Synchronized
     fun tryRun(): Boolean {
@@ -1005,15 +1006,20 @@ object CameraVisibilityInterceptor : BinderInterceptor() {
                 return false
             }
             if (injectionInFlight) return false
+            val currentGeneration = ++injectionGeneration
             injectionInFlight = true
             lastInjectionAttemptMs = now
             Thread {
                 val success = activateNativeHook(pid)
-                if (success) {
-                    injected = true
-                    injectedPid = pid
+                synchronized(this@CameraVisibilityInterceptor) {
+                    if (currentGeneration == injectionGeneration && Config.shouldInterceptCameraVisibility) {
+                        if (success) {
+                            injected = true
+                            injectedPid = pid
+                        }
+                    }
+                    injectionInFlight = false
                 }
-                injectionInFlight = false
             }.start()
             triedCount.incrementAndGet()
             return false
@@ -1057,6 +1063,7 @@ object CameraVisibilityInterceptor : BinderInterceptor() {
 
     @Synchronized
     fun stop(): Boolean {
+        injectionGeneration++
         val targetAlive = ::cameraService.isInitialized && cameraService.isBinderAlive
         if (!targetAlive) {
             synchronized(listenerLock) {
