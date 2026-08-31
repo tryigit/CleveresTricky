@@ -100,20 +100,19 @@ internal object BackupRestoreTransaction {
         try {
             unique.values.forEachIndexed { index, mutation ->
                 val path = mutation.target.toPath()
-                val existed = Files.exists(path, LinkOption.NOFOLLOW_LINKS)
-                if (existed && !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
+                val existed = Files.exists(path)
+                if (existed && !Files.isRegularFile(path)) {
                     throw SecurityException("Refusing non-regular restore transaction target")
                 }
                 val backup =
                     if (existed) {
                         val copy = File(transactionDir, index.toString().padStart(4, '0') + ".bak")
-                        Files.copy(
-                            path,
-                            copy.toPath(),
-                            LinkOption.NOFOLLOW_LINKS,
-                            StandardCopyOption.COPY_ATTRIBUTES,
-                        )
-                        if (!Files.isRegularFile(copy.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+                        try {
+                            Files.copy(path, copy.toPath(), StandardCopyOption.COPY_ATTRIBUTES)
+                        } catch (e: java.io.IOException) {
+                            throw SecurityException("Refusing symbolic-link or unreadable destination")
+                        }
+                        if (!Files.isRegularFile(copy.toPath())) {
                             throw SecurityException("Restore transaction source changed while snapshotting")
                         }
                         copy
