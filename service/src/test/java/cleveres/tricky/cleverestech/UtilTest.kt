@@ -152,6 +152,12 @@ class UtilTest {
                 "A".repeat(1000),
                 "Ç".repeat(1000),
                 "中".repeat(1000),
+                "\u0000",
+                "\u007F",
+                "\u0080",
+                "\u07FF",
+                "\u0800",
+                "\uFFFF",
             )
         for (sample in samples) {
             val expected = sample.toByteArray(Charsets.UTF_8).size
