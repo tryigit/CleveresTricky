@@ -185,6 +185,9 @@ pub fn rewrite_extension(request: &RewriteRequest<'_>) -> Result<RewriteResult, 
     let mut original_module_hash: Option<TaggedTlv> = None;
     let mut pending_ids = Vec::new();
 
+    let mut sorted_overrides = request.id_overrides.to_vec();
+    sorted_overrides.sort_unstable_by_key(|o| o.tag);
+
     for field in tee_original {
         if field.tag == ROOT_OF_TRUST_TAG {
             continue;
@@ -197,10 +200,10 @@ pub fn rewrite_extension(request: &RewriteRequest<'_>) -> Result<RewriteResult, 
             continue;
         }
         if is_attestation_id_tag(field.tag) {
-            if let Some(value) = find_override(request.id_overrides, field.tag) {
+            if let Ok(index) = sorted_overrides.binary_search_by_key(&field.tag, |o| o.tag) {
                 pending_ids.push(TaggedTlv {
                     tag: field.tag,
-                    encoded: explicit_octet_string(field.tag, value)?,
+                    encoded: explicit_octet_string(field.tag, sorted_overrides[index].value)?,
                 });
                 continue;
             }
@@ -440,13 +443,6 @@ fn add_patch_tag(
         software.push(TaggedTlv { tag, encoded });
     }
     Ok(())
-}
-
-fn find_override<'a>(overrides: &'a [AttestationIdOverride<'a>], tag: u32) -> Option<&'a [u8]> {
-    overrides
-        .iter()
-        .find(|configured| configured.tag == tag)
-        .map(|configured| configured.value)
 }
 
 fn is_attestation_id_tag(tag: u32) -> bool {
