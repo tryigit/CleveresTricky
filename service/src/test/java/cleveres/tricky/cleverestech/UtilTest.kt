@@ -79,13 +79,28 @@ class UtilTest {
     }
 
     @Test
-    fun testGetBootHashFromProp_rejectsZeroSentinel() {
-        setProp("ro.boot.vbmeta.digest", "0".repeat(64))
-        assertNull(getBootHashFromProp())
-
+    fun testGetBootHashFromProp_primary() {
         val expected = ByteArray(32) { 0xCD.toByte() }
         setProp("ro.boot.vbmeta.digest", expected.toHexString())
         assertArrayEquals(expected, getBootHashFromProp())
+    }
+
+    @Test
+    fun testGetBootHashFromProp_missing() {
+        setProp("ro.boot.vbmeta.digest", "")
+        assertNull(getBootHashFromProp())
+    }
+
+    @Test
+    fun testGetBootHashFromProp_invalidLength() {
+        setProp("ro.boot.vbmeta.digest", "1234567890")
+        assertNull(getBootHashFromProp())
+    }
+
+    @Test
+    fun testGetBootHashFromProp_rejectsZeroSentinel() {
+        setProp("ro.boot.vbmeta.digest", "0".repeat(64))
+        assertNull(getBootHashFromProp())
     }
 
     @Test
