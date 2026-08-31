@@ -136,6 +136,15 @@ class UtilTest {
     }
 
     @Test
+    fun testValidTransactCodes_filtersAndDeduplicates() {
+        assertArrayEquals("Empty array should return empty array", intArrayOf(), validTransactCodes())
+        assertArrayEquals("All negative or zero should return empty array", intArrayOf(), validTransactCodes(-1, 0, -5))
+        assertArrayEquals("Valid inputs without duplicates should be returned as is", intArrayOf(1, 2, 3), validTransactCodes(1, 2, 3))
+        assertArrayEquals("Duplicates should be removed", intArrayOf(1, 2, 3), validTransactCodes(1, 2, 2, 3, 1, 3))
+        assertArrayEquals("Mixed valid, invalid and duplicates", intArrayOf(1, 5, 2), validTransactCodes(-1, 0, 1, 5, 2, 1, -10, 0))
+    }
+
+    @Test
     fun testUtf8ByteLength_matchesByteArraySize() {
         val samples =
             listOf(
