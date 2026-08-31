@@ -80,6 +80,13 @@ message() {
         tr:REPORT_INFO) printf '%s\n' "CleveresTricky acil durum raporu. Bu arşiv, sorun gidermek için cihaz/modül durumunu ve tanılama günlüklerini içerir." ;;
         tr:REPORT_LANGUAGE) printf '%s\n' "Rapor dili:" ;;
         tr:NOTICE) printf '%s\n' "Bu arşiv hassas sistem günlükleri içerebilir. Paylaşmadan önce inceleyin. CleveresTricky keybox XML/CBOX dosyaları bilerek toplanmaz." ;;
+        tr:WARNING)
+            printf '%s
+' "Aksiyon butonuna tıkladınız." \
+                          "Bu buton çok acil durumlarda log oluşturmanızı sağlar." \
+                          "Lütfen modül ayarlarına girmek istiyorsanız diğer Webui butonunu kullanın." \
+                          "5 saniye sonra log oluşturulacak."
+            ;;
 
         zh:GENERATING) printf '%s\n' "正在生成紧急诊断报告 ..." ;;
         zh:BASIC) printf '%s\n' "正在收集基本信息 ..." ;;
@@ -94,6 +101,13 @@ message() {
         zh:REPORT_INFO) printf '%s\n' "CleveresTricky 紧急诊断报告。此压缩包包含用于故障排查的设备/模块状态和诊断日志。" ;;
         zh:REPORT_LANGUAGE) printf '%s\n' "报告语言：" ;;
         zh:NOTICE) printf '%s\n' "此压缩包可能包含敏感的系统日志。分享前请先检查。CleveresTricky keybox XML/CBOX 文件不会被主动收集。" ;;
+        zh:WARNING)
+            printf '%s
+' "您点击了操作按钮。" \
+                          "此按钮用于在非常紧急的情况下生成日志。" \
+                          "如果您想进入模块设置，请使用另一个 WebUI 按钮。" \
+                          "5 秒后将生成日志。"
+            ;;
 
         es:GENERATING) printf '%s\n' "Generando informe de emergencia ..." ;;
         es:BASIC) printf '%s\n' "Recopilando información básica ..." ;;
@@ -108,6 +122,13 @@ message() {
         es:REPORT_INFO) printf '%s\n' "Informe de emergencia de CleveresTricky. Este archivo contiene el estado del dispositivo/módulo y registros de diagnóstico para solucionar problemas." ;;
         es:REPORT_LANGUAGE) printf '%s\n' "Idioma del informe:" ;;
         es:NOTICE) printf '%s\n' "Este archivo puede contener registros sensibles del sistema. Revísalo antes de compartirlo. Los archivos keybox XML/CBOX de CleveresTricky se excluyen deliberadamente." ;;
+        es:WARNING)
+            printf '%s
+' "Hizo clic en el botón de acción." \
+                          "Este botón le permite generar un registro en situaciones muy urgentes." \
+                          "Utilice el otro botón de WebUI si desea ingresar a la configuración del módulo." \
+                          "Se generará un registro en 5 segundos."
+            ;;
 
         de:GENERATING) printf '%s\n' "Notfallbericht wird erstellt ..." ;;
         de:BASIC) printf '%s\n' "Grundlegende Informationen werden gesammelt ..." ;;
@@ -122,6 +143,13 @@ message() {
         de:REPORT_INFO) printf '%s\n' "CleveresTricky-Notfallbericht. Dieses Archiv enthält Geräte-/Modulstatus und Diagnoseprotokolle zur Fehleranalyse." ;;
         de:REPORT_LANGUAGE) printf '%s\n' "Berichtssprache:" ;;
         de:NOTICE) printf '%s\n' "Dieses Archiv kann sensible Systemprotokolle enthalten. Vor dem Teilen prüfen. CleveresTricky-Keybox-Dateien im XML/CBOX-Format werden bewusst nicht gesammelt." ;;
+        de:WARNING)
+            printf '%s
+' "Sie haben die Aktionsschaltfläche geklickt." \
+                          "Diese Schaltfläche ermöglicht es Ihnen, in sehr dringenden Fällen ein Protokoll zu erstellen." \
+                          "Bitte verwenden Sie die andere WebUI-Schaltfläche, wenn Sie die Moduleinstellungen aufrufen möchten." \
+                          "Ein Protokoll wird in 5 Sekunden erstellt."
+            ;;
 
         ru:GENERATING) printf '%s\n' "Создаётся аварийный диагностический отчёт ..." ;;
         ru:BASIC) printf '%s\n' "Сбор основной информации ..." ;;
@@ -136,6 +164,13 @@ message() {
         ru:REPORT_INFO) printf '%s\n' "Аварийный отчёт CleveresTricky. Архив содержит состояние устройства/модуля и диагностические журналы для поиска неисправностей." ;;
         ru:REPORT_LANGUAGE) printf '%s\n' "Язык отчёта:" ;;
         ru:NOTICE) printf '%s\n' "Архив может содержать чувствительные системные журналы. Проверьте его перед отправкой. Файлы keybox CleveresTricky XML/CBOX намеренно не собираются." ;;
+        ru:WARNING)
+            printf '%s
+' "Вы нажали кнопку действия." \
+                          "Эта кнопка позволяет создать журнал в очень срочных ситуациях." \
+                          "Пожалуйста, используйте другую кнопку WebUI, если вы хотите войти в настройки модуля." \
+                          "Журнал будет создан через 5 секунд."
+            ;;
 
         id:GENERATING) printf '%s\n' "Membuat laporan darurat ..." ;;
         id:BASIC) printf '%s\n' "Mengumpulkan informasi dasar ..." ;;
@@ -150,6 +185,13 @@ message() {
         id:REPORT_INFO) printf '%s\n' "Laporan darurat CleveresTricky. Arsip ini berisi status perangkat/modul dan log diagnostik untuk pemecahan masalah." ;;
         id:REPORT_LANGUAGE) printf '%s\n' "Bahasa laporan:" ;;
         id:NOTICE) printf '%s\n' "Arsip ini dapat berisi log sistem sensitif. Tinjau sebelum membagikan. File keybox XML/CBOX CleveresTricky sengaja tidak dikumpulkan." ;;
+        id:WARNING)
+            printf '%s
+' "Anda mengklik tombol tindakan." \
+                          "Tombol ini memungkinkan Anda membuat log dalam situasi yang sangat mendesak." \
+                          "Silakan gunakan tombol WebUI lainnya jika Anda ingin masuk ke pengaturan modul." \
+                          "Log akan dibuat dalam 5 detik."
+            ;;
 
         hi:GENERATING) printf '%s\n' "आपातकालीन रिपोर्ट बनाई जा रही है ..." ;;
         hi:BASIC) printf '%s\n' "मूल जानकारी एकत्र की जा रही है ..." ;;
@@ -164,6 +206,13 @@ message() {
         hi:REPORT_INFO) printf '%s\n' "CleveresTricky आपातकालीन रिपोर्ट। इस आर्काइव में समस्या निवारण के लिए डिवाइस/मॉड्यूल स्थिति और डायग्नोस्टिक लॉग शामिल हैं।" ;;
         hi:REPORT_LANGUAGE) printf '%s\n' "रिपोर्ट भाषा:" ;;
         hi:NOTICE) printf '%s\n' "इस आर्काइव में संवेदनशील सिस्टम लॉग हो सकते हैं। साझा करने से पहले इसकी समीक्षा करें। CleveresTricky keybox XML/CBOX फ़ाइलें जानबूझकर एकत्र नहीं की जातीं।" ;;
+        hi:WARNING)
+            printf '%s
+' "आपने एक्शन बटन पर क्लिक किया है।" \
+                          "यह बटन आपको बहुत जरूरी स्थितियों में लॉग जनरेट करने की अनुमति देता है।" \
+                          "यदि आप मॉड्यूल सेटिंग्स में प्रवेश करना चाहते हैं तो कृपया अन्य WebUI बटन का उपयोग करें।" \
+                          "5 सेकंड में एक लॉग जनरेट किया जाएगा।"
+            ;;
 
         ar:GENERATING) printf '%s\n' "جارٍ إنشاء تقرير طوارئ ..." ;;
         ar:BASIC) printf '%s\n' "جارٍ جمع المعلومات الأساسية ..." ;;
@@ -178,6 +227,13 @@ message() {
         ar:REPORT_INFO) printf '%s\n' "تقرير طوارئ CleveresTricky. يحتوي هذا الأرشيف على حالة الجهاز/الوحدة وسجلات التشخيص لاستكشاف المشكلات." ;;
         ar:REPORT_LANGUAGE) printf '%s\n' "لغة التقرير:" ;;
         ar:NOTICE) printf '%s\n' "قد يحتوي هذا الأرشيف على سجلات نظام حساسة. راجعه قبل المشاركة. لا يتم جمع ملفات CleveresTricky keybox بصيغة XML/CBOX عمدًا." ;;
+        ar:WARNING)
+            printf '%s
+' "لقد نقرت على زر الإجراء." \
+                          "يتيح لك هذا الزر إنشاء سجل في الحالات الطارئة جداً." \
+                          "يرجى استخدام زر WebUI الآخر إذا كنت ترغب في الدخول إلى إعدادات الوحدة." \
+                          "سيتم إنشاء السجل خلال 5 ثوانٍ."
+            ;;
 
         en:GENERATING|*:GENERATING) printf '%s\n' "Generating emergency report ..." ;;
         en:BASIC|*:BASIC) printf '%s\n' "Collecting basic information ..." ;;
@@ -192,6 +248,13 @@ message() {
         en:REPORT_INFO|*:REPORT_INFO) printf '%s\n' "CleveresTricky emergency report. This archive contains device/module status and diagnostic logs for troubleshooting." ;;
         en:REPORT_LANGUAGE|*:REPORT_LANGUAGE) printf '%s\n' "Report language:" ;;
         en:NOTICE|*:NOTICE) printf '%s\n' "This archive may contain sensitive system logs. Review it before sharing. CleveresTricky keybox XML/CBOX files are intentionally not collected." ;;
+        en:WARNING|*:WARNING)
+            printf '%s
+' "You clicked the action button." \
+                          "This button allows you to generate a log in very urgent situations." \
+                          "Please use the other WebUI button if you want to enter the module settings." \
+                          "A log will be generated in 5 seconds."
+            ;;
     esac
 }
 
@@ -330,6 +393,12 @@ detect_language
 if [ "$FROM_WEBUI" = "1" ] && [ "${1:-}" = "--send" ]; then
     send_bugreport "${2:-}"
     exit $?
+fi
+
+
+if [ "$FROM_WEBUI" != "1" ]; then
+    print_log "$(message WARNING)"
+    sleep 5
 fi
 
 print_log "$(message GENERATING)"
