@@ -290,7 +290,7 @@ private fun VaultScreen(
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 OutlinedButton(
                                     onClick = {
-                                        zipTargets = files.filter { it.file.name in selectedNames }.map { it.file }
+                                        zipTargets = files.mapNotNull { if (it.file.name in selectedNames) it.file else null }
                                         zipExportLauncher.launch("cleveres-keyboxes.zip")
                                     },
                                 ) { Text(stringResource(R.string.export_selected_zip)) }

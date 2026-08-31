@@ -17,7 +17,7 @@ class VaultSearchContractTest {
         assertTrue(source.contains("items(filteredFiles"))
         assertTrue(source.contains("selectedNames - filteredNames"))
         assertTrue(source.contains("selectedNames + filteredNames"))
-        assertTrue(source.contains("zipTargets = files.filter { it.file.name in selectedNames }.map { it.file }"))
+        assertTrue(source.contains("zipTargets = files.mapNotNull { if (it.file.name in selectedNames) it.file else null }"))
         assertTrue(source.contains("files.filter { it.file.name in names }.forEach"))
     }
 
