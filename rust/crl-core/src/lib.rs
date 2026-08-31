@@ -266,7 +266,7 @@ fn normalize_entry(value: &str, output: &mut HashSet<Box<str>>) -> Result<(), Cr
     if PAD_LENGTHS.contains(&bytes.len()) && is_hex {
         insert_bounded(output, value.to_ascii_lowercase())?;
     }
-    if !added && is_hex {
+    if !is_decimal && !added && is_hex {
         if let Some(number) = BigInt::parse_bytes(bytes, 16) {
             insert_bounded(output, number.to_str_radix(16))?;
         }

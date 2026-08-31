@@ -91,7 +91,7 @@ internal object ManagedCrlOracle {
         if (value.length in hashLengths && value.all(::isHexChar)) {
             output += value.lowercase()
         }
-        if (!added && value.all(::isHexChar)) {
+        if (!decimal && !added && value.all(::isHexChar)) {
             try {
                 output += BigInteger(value, 16).toString(16)
             } catch (_: Exception) {
