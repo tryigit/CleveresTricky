@@ -1,3 +1,4 @@
+@file:Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
 package cleveres.tricky.cleverestech
 
 import fi.iki.elonen.NanoHTTPD
@@ -21,28 +22,23 @@ open class MockIHTTPSession(
 
     override fun getCookies(): CookieHandler? = null
 
-    @Deprecated("Deprecated by NanoHTTPD")
     override fun getHeaders(): Map<String, String> = headers
 
     override fun getInputStream(): InputStream? = inputStream
 
     override fun getMethod(): Method = method
 
-    @Deprecated("Use getParameters")
     override fun getParms(): Map<String, String> = parms
 
     override fun getParameters(): Map<String, List<String>> = parameters
 
-    @Deprecated("Deprecated by NanoHTTPD")
     override fun getQueryParameterString(): String = queryParameterString
 
     override fun getUri(): String = uri
 
     override fun parseBody(files: MutableMap<String, String>?) {}
 
-    @Deprecated("Deprecated by NanoHTTPD")
     override fun getRemoteIpAddress(): String = remoteIpAddress
 
-    @Deprecated("Deprecated by NanoHTTPD")
     override fun getRemoteHostName(): String = remoteHostName
 }
