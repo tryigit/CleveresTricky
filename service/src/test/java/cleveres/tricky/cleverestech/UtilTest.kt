@@ -136,6 +136,14 @@ class UtilTest {
     }
 
     @Test
+    fun testGetModuleDir_noCandidatesExist() {
+        // Since we are running on a standard JVM/build environment, the /data/adb/ paths
+        // will not exist, thus testing the edge case where no candidate directory is found.
+        val expectedDefault = "/data/adb/modules/cleverestricky"
+        org.junit.Assert.assertEquals(expectedDefault, getModuleDir())
+    }
+
+    @Test
     fun testUtf8ByteLength_matchesByteArraySize() {
         val samples =
             listOf(
