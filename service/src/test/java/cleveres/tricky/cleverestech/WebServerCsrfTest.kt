@@ -20,8 +20,7 @@ class WebServerCsrfTest {
                 "origin" to origin,
                 "content-length" to "0",
             ),
-            parms = mapOf("token" to server.token),
-            parameters = mapOf("token" to listOf("testtoken"))
+            parameters = mapOf("token" to listOf(server.token))
         )
     }
 

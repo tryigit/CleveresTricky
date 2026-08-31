@@ -9,7 +9,6 @@ open class MockIHTTPSession(
     private val uri: String = "/",
     private val method: Method = Method.GET,
     private val headers: Map<String, String> = mapOf("host" to "localhost"),
-    private val parms: Map<String, String> = emptyMap(),
     private val parameters: Map<String, List<String>> = emptyMap(),
     private val inputStream: InputStream? = null,
     private val queryParameterString: String = "",
@@ -29,7 +28,7 @@ open class MockIHTTPSession(
     override fun getMethod(): Method = method
 
     @Deprecated("Use getParameters")
-    override fun getParms(): Map<String, String> = parms
+    override fun getParms(): Map<String, String> = parameters.mapValues { it.value.first() }
 
     override fun getParameters(): Map<String, List<String>> = parameters
 

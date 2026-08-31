@@ -69,10 +69,10 @@ class WebServerSaveValidationTest {
             uri = "/api/save",
             method = NanoHTTPD.Method.POST,
             headers = mapOf("content-length" to "100", "host" to "localhost"),
-            parms = mapOf(
-                "token" to webServer.token,
-                "filename" to filename,
-                "content" to content,
+            parameters = mapOf(
+                "token" to listOf(webServer.token),
+                "filename" to listOf(filename),
+                "content" to listOf(content),
             )
         )
     }
@@ -250,7 +250,7 @@ class WebServerSaveValidationTest {
                 uri = "/api/reset_environment",
                 method = NanoHTTPD.Method.POST,
                 headers = mapOf("content-length" to "0", "host" to "localhost"),
-                parms = mapOf("token" to webServer.token),
+                parameters = mapOf("token" to listOf(webServer.token)),
             )
         )
 

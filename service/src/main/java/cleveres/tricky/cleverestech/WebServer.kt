@@ -328,12 +328,11 @@ class WebServer(
         }
     }
 
-    @Suppress("DEPRECATION")
     private fun getParam(
         session: IHTTPSession,
         name: String,
     ): String? {
-        return session.parms[name]
+        return session.parameters[name]?.firstOrNull()
     }
 
     private fun isRateLimited(ip: String): Boolean {

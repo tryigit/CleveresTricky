@@ -68,7 +68,7 @@ class WebServerStoredXssTest {
         val session = MockIHTTPSession(
             uri = "/api/app_config_structured",
             method = NanoHTTPD.Method.GET,
-            parms = mapOf("token" to webServer.token)
+            parameters = mapOf("token" to listOf(webServer.token))
         )
 
         val response = webServer.serve(session)

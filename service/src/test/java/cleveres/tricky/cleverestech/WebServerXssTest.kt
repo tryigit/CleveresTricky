@@ -68,7 +68,7 @@ class WebServerXssTest {
             uri = "/api/app_config_structured",
             method = NanoHTTPD.Method.POST,
             headers = mapOf("content-length" to jsonPayload.length.toString(), "host" to "localhost"),
-            parms = mapOf("token" to webServer.token, "data" to jsonPayload)
+            parameters = mapOf("token" to listOf(webServer.token), "data" to listOf(jsonPayload))
         )
 
         val response = webServer.serve(session)
@@ -94,7 +94,7 @@ class WebServerXssTest {
             uri = "/api/app_config_structured",
             method = NanoHTTPD.Method.POST,
             headers = mapOf("content-length" to jsonPayload.length.toString(), "host" to "localhost"),
-            parms = mapOf("token" to webServer.token, "data" to jsonPayload)
+            parameters = mapOf("token" to listOf(webServer.token), "data" to listOf(jsonPayload))
         )
 
         val response = webServer.serve(session)
