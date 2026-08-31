@@ -7,8 +7,13 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
+import android.content.pm.IPackageManager
+import android.content.pm.PackageInfo
+import android.os.Build
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import org.mockito.Mockito.mock
+import org.mockito.Mockito.`when`
 
 @OptIn(ExperimentalStdlibApi::class)
 class UtilTest {
@@ -133,6 +138,36 @@ class UtilTest {
 
         assertTrue(bootKey.isUsableBootDigest())
         assertFalse(root.resolve("boot_key").readText().trim().all { it == '0' })
+    }
+
+    @Test
+    fun testGetPackageInfoCompat_TiramisuAndAbove() {
+        val pm = mock(IPackageManager::class.java)
+        val expectedInfo = PackageInfo()
+        val flags = 1234567890L
+        val userId = 0
+        val packageName = "com.test.app"
+
+        `when`(pm.getPackageInfo(packageName, flags, userId)).thenReturn(expectedInfo)
+
+        val result = pm.getPackageInfoCompat(packageName, flags, userId, Build.VERSION_CODES.TIRAMISU)
+
+        org.junit.Assert.assertEquals(expectedInfo, result)
+    }
+
+    @Test
+    fun testGetPackageInfoCompat_BelowTiramisu() {
+        val pm = mock(IPackageManager::class.java)
+        val expectedInfo = PackageInfo()
+        val flags = 12345L
+        val userId = 0
+        val packageName = "com.test.app"
+
+        `when`(pm.getPackageInfo(packageName, flags.toInt(), userId)).thenReturn(expectedInfo)
+
+        val result = pm.getPackageInfoCompat(packageName, flags, userId, Build.VERSION_CODES.S)
+
+        org.junit.Assert.assertEquals(expectedInfo, result)
     }
 
     @Test

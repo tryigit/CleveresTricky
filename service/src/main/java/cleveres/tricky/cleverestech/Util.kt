@@ -235,7 +235,8 @@ fun IPackageManager.getPackageInfoCompat(
     name: String,
     flags: Long,
     userId: Int,
-) = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+    sdkInt: Int = Build.VERSION.SDK_INT,
+) = if (sdkInt >= Build.VERSION_CODES.TIRAMISU) {
     getPackageInfo(name, flags, userId)
 } else {
     getPackageInfo(name, flags.toInt(), userId)
