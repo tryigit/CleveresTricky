@@ -32,7 +32,8 @@ cleanup() {
         rm -rf "$workspace" 2>/dev/null || true
     fi
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 1' INT TERM
 
 detect_language() {
     RAW_LOCALE=""
