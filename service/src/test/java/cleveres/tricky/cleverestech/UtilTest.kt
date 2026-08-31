@@ -98,6 +98,15 @@ class UtilTest {
     }
 
     @Test
+    fun testGetBootKeyFromProp_fetchesExpectedProperty() {
+        val expected = ByteArray(32) { 0x11.toByte() }
+        setProp("ro.boot.vbmeta.public_key_digest", "11".repeat(32))
+
+        val result = getBootKeyFromProp()
+        assertArrayEquals(expected, result)
+    }
+
+    @Test
     fun testGetBootKeyFromProp_invalidLength() {
         setProp("ro.boot.vbmeta.public_key_digest", "1234567890")
         setProp("ro.boot.verifiedbootkey", "abcdef")
