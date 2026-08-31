@@ -16,7 +16,7 @@ coroutines = "1.10.2"
 kxml = "2.3.0"
 json = "20260814"
 mockito = "5.23.0"
-remap = "0.1.4"
+remap = "0.1.5"
 
 [libraries]
 nanohttpd = { module = "org.nanohttpd:nanohttpd", version = "2.3.1" }
