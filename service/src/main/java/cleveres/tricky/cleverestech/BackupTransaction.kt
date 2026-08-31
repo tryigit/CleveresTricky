@@ -110,7 +110,7 @@ internal object BackupRestoreTransaction {
                         try {
                             Files.copy(path, copy.toPath(), StandardCopyOption.COPY_ATTRIBUTES)
                         } catch (e: java.io.IOException) {
-                            throw SecurityException("Refusing symbolic-link or unreadable destination")
+                            throw SecurityException("Refusing symbolic-link or unreadable destination", e)
                         }
                         if (!Files.isRegularFile(copy.toPath())) {
                             throw SecurityException("Restore transaction source changed while snapshotting")
