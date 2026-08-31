@@ -87,7 +87,6 @@ class UtilTest {
 
     @Test
     fun testGetBootHashFromProp_missing() {
-        setProp("ro.boot.vbmeta.digest", "")
         assertNull(getBootHashFromProp())
     }
 
