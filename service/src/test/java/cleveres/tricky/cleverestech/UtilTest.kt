@@ -159,4 +159,54 @@ class UtilTest {
             org.junit.Assert.assertEquals("Length mismatch for: $sample", expected, actual)
         }
     }
+
+    @Test
+    fun testGetTransactCode_successField() {
+        val code = getTransactCode(DummyStub::class.java, "testMethod")
+        org.junit.Assert.assertEquals(42, code)
+    }
+
+    @Test
+    fun testGetTransactCode_fallbackMethod() {
+        val code = getTransactCode(DummyStub::class.java, "fallbackMethod")
+        org.junit.Assert.assertEquals(43, code)
+    }
+
+    @Test
+    fun testGetTransactCode_errorHandling() {
+        val code = getTransactCode(ErrorStub::class.java, "someMethod")
+        org.junit.Assert.assertEquals(-1, code)
+    }
+
+    @Test
+    fun testGetTransactCode_notFound() {
+        val code = getTransactCode(FailedStub::class.java, "someMethod")
+        org.junit.Assert.assertEquals(-1, code)
+    }
+
+    class DummyStub {
+        companion object {
+            @JvmField
+            val TRANSACTION_testMethod = 42
+
+            @JvmStatic
+            fun getDefaultTransactionName(transactionCode: Int): String? {
+                return when (transactionCode) {
+                    43 -> "fallbackMethod"
+                    else -> null
+                }
+            }
+        }
+    }
+
+    class ErrorStub {
+        companion object {
+            @JvmStatic
+            fun getDefaultTransactionName(transactionCode: Int): String? {
+                throw RuntimeException("Intentional crash")
+            }
+        }
+    }
+
+    class FailedStub
 }
