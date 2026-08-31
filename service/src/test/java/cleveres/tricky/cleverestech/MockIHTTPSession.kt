@@ -21,28 +21,28 @@ open class MockIHTTPSession(
 
     override fun getCookies(): CookieHandler? = null
 
-    @Deprecated("Deprecated by NanoHTTPD")
+    @Suppress("OVERRIDE_DEPRECATION", "DEPRECATION")
     override fun getHeaders(): Map<String, String> = headers
 
     override fun getInputStream(): InputStream? = inputStream
 
     override fun getMethod(): Method = method
 
-    @Deprecated("Use getParameters")
+    @Suppress("OVERRIDE_DEPRECATION", "DEPRECATION")
     override fun getParms(): Map<String, String> = parms
 
-    override fun getParameters(): Map<String, List<String>> = parameters
+    override fun getParameters(): Map<String, List<String>> = if (parameters.isEmpty() && parms.isNotEmpty()) parms.mapValues { listOf(it.value) } else parameters
 
-    @Deprecated("Deprecated by NanoHTTPD")
+    @Suppress("OVERRIDE_DEPRECATION", "DEPRECATION")
     override fun getQueryParameterString(): String = queryParameterString
 
     override fun getUri(): String = uri
 
     override fun parseBody(files: MutableMap<String, String>?) {}
 
-    @Deprecated("Deprecated by NanoHTTPD")
+    @Suppress("OVERRIDE_DEPRECATION", "DEPRECATION")
     override fun getRemoteIpAddress(): String = remoteIpAddress
 
-    @Deprecated("Deprecated by NanoHTTPD")
+    @Suppress("OVERRIDE_DEPRECATION", "DEPRECATION")
     override fun getRemoteHostName(): String = remoteHostName
 }
