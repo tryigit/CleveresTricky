@@ -2881,8 +2881,8 @@ class WebServer(
                 val obj = JSONObject()
                 // Use JSONObject to safely escape strings and prevent JSON injection
                 obj.put("filename", r.filename)
-                obj.put("storage_id", r.storageId)
-                obj.put("certificate_serial", r.certificateSerial ?: "")
+                    obj.put("storage_id", r.storageId)
+                    obj.put("certificate_serial", r.certificateSerial ?: "")
                 obj.put("status", r.status.name)
                 obj.put("details", r.details)
                 array.put(obj)

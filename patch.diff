@@ -1,0 +1,14 @@
+--- service/src/main/java/cleveres/tricky/cleverestech/WebServer.kt
++++ service/src/main/java/cleveres/tricky/cleverestech/WebServer.kt
+@@ -2879,10 +2879,9 @@
+             val array = JSONArray()
+             results.forEach { r ->
+                 val obj = JSONObject()
+                 obj.put("filename", r.filename)
+-            obj.put("storage_id", r.storageId)
+-            obj.put("certificate_serial", r.certificateSerial ?: "")
++                obj.put("storage_id", r.storageId)
++                obj.put("certificate_serial", r.certificateSerial ?: "")
+                 obj.put("status", r.status.name)
+                 obj.put("details", r.details)
+                 array.put(obj)
