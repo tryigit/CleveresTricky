@@ -7,8 +7,10 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
+import org.junit.Assert.assertThrows
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import java.time.DateTimeException
 
 @OptIn(ExperimentalStdlibApi::class)
 class UtilTest {
@@ -158,5 +160,55 @@ class UtilTest {
             val actual = sample.utf8ByteLength()
             org.junit.Assert.assertEquals("Length mismatch for: $sample", expected, actual)
         }
+    }
+
+    @Test
+    fun testConvertPatchLevel_validFormats() {
+        org.junit.Assert.assertEquals(202305, "202305".convertPatchLevel(false))
+        org.junit.Assert.assertEquals(20230501, "202305".convertPatchLevel(true))
+
+        org.junit.Assert.assertEquals(202305, "2023-05".convertPatchLevel(false))
+        org.junit.Assert.assertEquals(20230501, "2023-05".convertPatchLevel(true))
+
+        org.junit.Assert.assertEquals(202305, "20230505".convertPatchLevel(false))
+        org.junit.Assert.assertEquals(20230505, "20230505".convertPatchLevel(true))
+
+        org.junit.Assert.assertEquals(202305, "2023-05-05".convertPatchLevel(false))
+        org.junit.Assert.assertEquals(20230505, "2023-05-05".convertPatchLevel(true))
+
+        org.junit.Assert.assertEquals(202305, "  2023-05-05  ".convertPatchLevel(false))
+        org.junit.Assert.assertEquals(20230505, "  2023-05-05  ".convertPatchLevel(true))
+    }
+
+    @Test
+    fun testConvertPatchLevel_invalidLengths() {
+        assertThrows(IllegalArgumentException::class.java) { "20230".convertPatchLevel(false) }
+        assertThrows(IllegalArgumentException::class.java) { "2023-0".convertPatchLevel(false) }
+        assertThrows(IllegalArgumentException::class.java) { "2023050".convertPatchLevel(false) }
+        assertThrows(IllegalArgumentException::class.java) { "202305050".convertPatchLevel(false) }
+        assertThrows(IllegalArgumentException::class.java) { "2023-05-050".convertPatchLevel(false) }
+    }
+
+    @Test
+    fun testConvertPatchLevel_invalidSeparators() {
+        assertThrows(IllegalArgumentException::class.java) { "20230-5".convertPatchLevel(false) }
+        assertThrows(IllegalArgumentException::class.java) { "20-2305".convertPatchLevel(false) }
+        assertThrows(IllegalArgumentException::class.java) { "2023--05".convertPatchLevel(false) }
+        assertThrows(IllegalArgumentException::class.java) { "2023-050-5".convertPatchLevel(false) }
+    }
+
+    @Test
+    fun testConvertPatchLevel_nonDigits() {
+        assertThrows(IllegalArgumentException::class.java) { "2023-AB".convertPatchLevel(false) }
+        assertThrows(IllegalArgumentException::class.java) { "2023-05-AB".convertPatchLevel(false) }
+        assertThrows(IllegalArgumentException::class.java) { "2023AB05".convertPatchLevel(false) }
+    }
+
+    @Test
+    fun testConvertPatchLevel_invalidDates() {
+        assertThrows(DateTimeException::class.java) { "2023-13".convertPatchLevel(false) } // Invalid month
+        assertThrows(DateTimeException::class.java) { "2023-00".convertPatchLevel(false) } // Invalid month
+        assertThrows(DateTimeException::class.java) { "2023-05-32".convertPatchLevel(false) } // Invalid day
+        assertThrows(DateTimeException::class.java) { "2023-02-29".convertPatchLevel(false) } // Invalid leap year
     }
 }
