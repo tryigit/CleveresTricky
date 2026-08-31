@@ -638,7 +638,6 @@ class WebUiBridge(
 
         override fun getCookies(): NanoHTTPD.CookieHandler? = null
 
-        @Deprecated("NanoHTTPD API")
         override fun getHeaders(): Map<String, String> = requestHeaders
 
         override fun getInputStream(): InputStream = ByteArrayInputStream(ByteArray(0))
@@ -650,7 +649,6 @@ class WebUiBridge(
 
         override fun getParameters(): Map<String, List<String>> = requestParameters
 
-        @Deprecated("NanoHTTPD API")
         override fun getQueryParameterString(): String = ""
 
         override fun getUri(): String = requestUri
@@ -659,10 +657,8 @@ class WebUiBridge(
             if (files != null && uploadField != null && uploadFile != null) files[uploadField] = uploadFile.absolutePath
         }
 
-        @Deprecated("NanoHTTPD API")
         override fun getRemoteIpAddress(): String = "native-webui"
 
-        @Deprecated("NanoHTTPD API")
         override fun getRemoteHostName(): String = "native-webui"
     }
 
