@@ -284,8 +284,14 @@ for (const [tag, expected] of testVariants) {
     assert.strictEqual(resolvedZip, expected, `ux.js normalizeSupportedLocale (site 2) mismatch for tag "${tag}"`);
 }
 
-// Verify data-i18n restoration when switching back to English (tr(key) === key)
-const leafElement = {
+// Verify data-i18n restoration when switching back to English (including when tr(key) === key)
+const fallbackLeafElement = {
+    hasAttribute(name) { return name === 'data-i18n'; },
+    getAttribute(name) { return name === 'data-i18n' ? 'Fallback Leaf Text' : null; },
+    children: [],
+    textContent: 'Türkçe Metin'
+};
+const mappedLeafElement = {
     hasAttribute(name) { return name === 'data-i18n'; },
     getAttribute(name) { return name === 'data-i18n' ? 'refresh' : null; },
     children: [],
@@ -299,7 +305,10 @@ function testTranslateLeaf(el, loc) {
         if (el.textContent !== rendered) el.textContent = rendered;
     }
 }
-testTranslateLeaf(leafElement, 'en');
-assert.strictEqual(leafElement.textContent, 'Refresh', 'leaf element must restore English translation even when switching back');
+testTranslateLeaf(fallbackLeafElement, 'en');
+assert.strictEqual(fallbackLeafElement.textContent, 'Fallback Leaf Text', 'leaf element must restore source key when tr(key) === key');
+
+testTranslateLeaf(mappedLeafElement, 'en');
+assert.strictEqual(mappedLeafElement.textContent, 'Refresh', 'leaf element must restore mapped English translation');
 
 console.log('WebUI localization coverage tests passed');
