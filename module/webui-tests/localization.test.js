@@ -12,7 +12,12 @@ const instrumentedSource = uxSource.replace(
 );
 assert.notStrictEqual(instrumentedSource, uxSource, 'localization catalog instrumentation marker is missing');
 
-function loadI18n(locale) {
+function loadI18n(localeOrOptions) {
+    const options = typeof localeOrOptions === 'string' ? { savedLocale: localeOrOptions } : (localeOrOptions || {});
+    const savedLocale = typeof options.savedLocale === 'string' ? options.savedLocale : null;
+    const cachedSystemLocale = typeof options.cachedSystemLocale === 'string' ? options.cachedSystemLocale : null;
+    const browserLocale = typeof options.browserLocale === 'string' ? options.browserLocale : null;
+    const runtimeSystemLocale = typeof options.systemLocale === 'string' ? options.systemLocale : null;
     const document = {
         readyState: 'loading',
         documentElement: {},
@@ -22,12 +27,21 @@ function loadI18n(locale) {
     const context = {
         console,
         document,
-        localStorage: { getItem: () => locale, setItem() {} },
+        localStorage: {
+            getItem: key => {
+                if (key === 'cleverestricky.language.v1') return savedLocale;
+                if (key === 'cleverestricky.system_locale.v1') return cachedSystemLocale;
+                return null;
+            },
+            setItem() {}
+        },
+        navigator: browserLocale ? { language: browserLocale } : {},
         CleveresBridge: {},
         setTimeout() {},
         clearTimeout() {},
         addEventListener() {}
     };
+    if (runtimeSystemLocale) context.CleveresSystemLocale = runtimeSystemLocale;
     context.window = context;
     vm.createContext(context);
     vm.runInContext(instrumentedSource, context, { filename: 'ux.js' });
@@ -133,5 +147,11 @@ assert.strictEqual(turkish.translate('noServers'), 'Yapılandırılmış sunucu 
 assert.strictEqual(turkish.translate('refresh'), 'Yenile');
 assert.strictEqual(turkish.translate('remove'), 'Kaldır');
 assert.strictEqual(loadI18n('en').i18n.translate('Runtime Health'), 'Runtime Health');
+
+assert.strictEqual(loadI18n({ savedLocale: 'de', systemLocale: 'tr-TR', browserLocale: 'zh-CN' }).i18n.locale, 'de');
+assert.strictEqual(loadI18n({ systemLocale: 'tr-TR', browserLocale: 'de-DE' }).i18n.locale, 'tr');
+assert.strictEqual(loadI18n({ cachedSystemLocale: 'zh-CN', browserLocale: 'de-DE' }).i18n.locale, 'zh-CN');
+assert.strictEqual(loadI18n({ browserLocale: 'es-MX' }).i18n.locale, 'es');
+assert.strictEqual(loadI18n({ browserLocale: 'pt-BR' }).i18n.locale, 'en');
 
 console.log('WebUI localization coverage tests passed');

@@ -1,5 +1,6 @@
 package cleveres.tricky.cleverestech
 
+import android.content.res.Resources
 import android.system.Os
 import cleveres.tricky.cleverestech.keystore.CertHack
 import cleveres.tricky.cleverestech.util.BackupEncryptor
@@ -60,6 +61,16 @@ private val clonedKeyboxFilenameSuffix = Regex("""\s*\((\d+)\)(?=\s*(?:\(\d+\)\s
  */
 private fun normalizeKeyboxUploadFilename(name: String): String =
     name.replace(clonedKeyboxFilenameSuffix) { match -> "_${match.groupValues[1]}" }
+
+private fun currentSystemLocaleTag(): String {
+    val locale =
+        runCatching { Resources.getSystem().configuration.locales[0] }
+            .getOrNull()
+            ?: runCatching { java.util.Locale.getDefault() }.getOrNull()
+            ?: return "en"
+    val tag = locale.toLanguageTag()
+    return if (tag.isBlank()) "en" else tag
+}
 
 private fun isValidKeyboxFilename(s: String): Boolean {
     if (s.length !in 5..128 || s.startsWith('.')) return false
@@ -1210,6 +1221,7 @@ class WebServer(
 
         if (uri == "/api/config" && method == Method.GET) {
             val json = JSONObject()
+            json.put("system_locale", currentSystemLocaleTag())
             WEB_UI_SETTINGS.forEach { setting -> json.put(setting, fileExists(setting)) }
             val files = JSONArray()
             files.put("keybox.xml")

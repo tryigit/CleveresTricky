@@ -17,6 +17,9 @@
     const debugFlag = '/data/adb/cleverestricky/debug_logging';
     const nativeSuccessMarker = '__CT_NATIVE_OK__';
     const nativeFilePickerIds = new Set(['kbFilePicker', 'restoreInput']);
+    const languageStorageKey = 'cleverestricky.language.v1';
+    const systemLocaleStorageKey = 'cleverestricky.system_locale.v1';
+    const supportedLocales = new Set(['en', 'tr', 'zh-CN', 'es', 'de', 'ru', 'id', 'hi', 'ar']);
     let callbackCounter = 0;
 
     const configRoot = '/data/adb/cleverestricky';
@@ -138,12 +141,27 @@
         }
     };
 
+    function normalizeLocale(value) {
+        if (typeof value !== 'string' || !value) return null;
+        if (supportedLocales.has(value)) return value;
+        const base = value.split('-')[0];
+        return supportedLocales.has(base) ? base : null;
+    }
+
     function extensionLocale() {
         const active = global.CleveresI18n && global.CleveresI18n.locale;
-        if (typeof active === 'string' && active) return active;
+        const activeLocale = normalizeLocale(active);
+        if (activeLocale) return activeLocale;
         try {
-            const stored = global.localStorage && global.localStorage.getItem('cleverestricky.language.v1');
-            return typeof stored === 'string' && stored ? stored : 'en';
+            const stored = normalizeLocale(global.localStorage && global.localStorage.getItem(languageStorageKey));
+            if (stored) return stored;
+            const systemLocale = normalizeLocale(global.CleveresSystemLocale);
+            if (systemLocale) return systemLocale;
+            const cachedSystem = normalizeLocale(global.localStorage && global.localStorage.getItem(systemLocaleStorageKey));
+            if (cachedSystem) return cachedSystem;
+            const browserLocale = normalizeLocale(global.navigator && global.navigator.language);
+            if (browserLocale) return browserLocale;
+            return 'en';
         } catch (_) {
             return 'en';
         }

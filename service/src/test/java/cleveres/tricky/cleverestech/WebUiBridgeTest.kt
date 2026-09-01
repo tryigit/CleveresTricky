@@ -47,7 +47,10 @@ class WebUiBridgeTest {
 
         assertEquals(200, response.getInt("status"))
         val body = decodeBody(response)
-        assertTrue(JSONObject(body).has("files"))
+        val config = JSONObject(body)
+        assertTrue(config.has("files"))
+        assertTrue(config.has("system_locale"))
+        assertTrue(config.getString("system_locale").isNotBlank())
         assertFalse(File(configDir, "webui_bridge/requests").exists())
         assertFalse(File(configDir, "webui_bridge/responses").exists())
     }

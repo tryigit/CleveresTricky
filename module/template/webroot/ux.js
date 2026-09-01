@@ -5,6 +5,7 @@
     if (!bridge || typeof document === 'undefined') return;
 
     const STORAGE_KEY = 'cleverestricky.language.v1';
+    const SYSTEM_LOCALE_KEY = 'cleverestricky.system_locale.v1';
     // To add a locale: append [locale, displayName] here, add TRANSLATIONS[locale],
     // add GUIDE[locale] when a localized guide is available, then run module/webui-tests.
     const SUPPORTED = [
@@ -1483,33 +1484,61 @@
         }
     };
 
+    let compatibilityConfig = null;
+    let compatibilityConfigController = null;
     let locale = readLocale();
     const originalText = new WeakMap();
     const originalAttrs = new WeakMap();
-    let compatibilityConfig = null;
-    let compatibilityConfigController = null;
     let translationObserver = null;
 
+    function normalizeSupportedLocale(value) {
+        if (typeof value !== 'string' || !value) return null;
+        if (SUPPORTED.some(([id]) => id === value)) return value;
+        const baseLang = value.split('-')[0];
+        if (SUPPORTED.some(([id]) => id === baseLang)) return baseLang;
+        return null;
+    }
+
+    function readSavedLocale() {
+        try {
+            return normalizeSupportedLocale(global.localStorage && global.localStorage.getItem(STORAGE_KEY));
+        } catch (_) {
+            return null;
+        }
+    }
+
+    function readSystemLocaleHint() {
+        const runtimeLocale = normalizeSupportedLocale(global.CleveresSystemLocale);
+        if (runtimeLocale) return runtimeLocale;
+        const configLocale = normalizeSupportedLocale(compatibilityConfig && compatibilityConfig.system_locale);
+        if (configLocale) return configLocale;
+        try {
+            return normalizeSupportedLocale(global.localStorage && global.localStorage.getItem(SYSTEM_LOCALE_KEY));
+        } catch (_) {
+            return null;
+        }
+    }
+
+    function persistSystemLocaleHint(value) {
+        const normalized = normalizeSupportedLocale(value);
+        if (!normalized) return null;
+        global.CleveresSystemLocale = normalized;
+        try {
+            if (global.localStorage) global.localStorage.setItem(SYSTEM_LOCALE_KEY, normalized);
+        } catch (_) {}
+        return normalized;
+    }
+
+    function readBrowserLocale() {
+        try {
+            return normalizeSupportedLocale(global.navigator && global.navigator.language);
+        } catch (_) {
+            return null;
+        }
+    }
+
     function readLocale() {
-        try {
-            const saved = global.localStorage && global.localStorage.getItem(STORAGE_KEY);
-            if (SUPPORTED.some(([id]) => id === saved)) return saved;
-        } catch (_) {}
-
-        try {
-            if (global.navigator && global.navigator.language) {
-                const navLang = global.navigator.language;
-
-                // Check exact match (e.g., zh-CN)
-                if (SUPPORTED.some(([id]) => id === navLang)) return navLang;
-
-                // Check base match (e.g., tr from tr-TR)
-                const baseLang = navLang.split('-')[0];
-                if (SUPPORTED.some(([id]) => id === baseLang)) return baseLang;
-            }
-        } catch (_) {}
-
-        return 'en';
+        return readSavedLocale() || readSystemLocaleHint() || readBrowserLocale() || 'en';
     }
 
     function saveLocale(value) {
@@ -1993,6 +2022,7 @@
             const data = await response.json();
             if (controller.signal.aborted) return compatibilityConfig;
             compatibilityConfig = data;
+            if (typeof persistSystemLocaleHint === 'function') persistSystemLocaleHint(data && data.system_locale);
             return compatibilityConfig;
         } catch (error) {
             if (controller.signal.aborted || (error && error.name === 'AbortError')) return compatibilityConfig;
@@ -2212,7 +2242,11 @@
         applyTranslations();
     }
 
-    function start() {
+    async function start() {
+        if (!readSavedLocale()) {
+            try { await requestConfig(); } catch (_) {}
+            locale = readLocale();
+        }
         injectStyles();
         installOwnedSurfaceInteractions();
         installTranslationObserver();
@@ -2373,21 +2407,30 @@
         throw new ZipImportError(code);
     }
 
+    function normalizeSupportedLocale(value) {
+        if (typeof value !== 'string' || !value) return null;
+        if (SUPPORTED_LOCALES.has(value)) return value;
+        const baseLang = value.split('-')[0];
+        if (SUPPORTED_LOCALES.has(baseLang)) return baseLang;
+        return null;
+    }
+
     function readLocale() {
         try {
-            const value = global.localStorage && global.localStorage.getItem(STORAGE_KEY);
-            if (SUPPORTED_LOCALES.has(value)) return value;
+            const value = normalizeSupportedLocale(global.localStorage && global.localStorage.getItem(STORAGE_KEY));
+            if (value) return value;
+        } catch (_) {}
+
+        const runtimeLocale = normalizeSupportedLocale(global.CleveresSystemLocale);
+        if (runtimeLocale) return runtimeLocale;
+        try {
+            const cachedSystem = normalizeSupportedLocale(global.localStorage && global.localStorage.getItem(SYSTEM_LOCALE_KEY));
+            if (cachedSystem) return cachedSystem;
         } catch (_) {}
 
         try {
-            if (global.navigator && global.navigator.language) {
-                const navLang = global.navigator.language;
-
-                if (SUPPORTED_LOCALES.has(navLang)) return navLang;
-
-                const baseLang = navLang.split('-')[0];
-                if (SUPPORTED_LOCALES.has(baseLang)) return baseLang;
-            }
+            const navLang = normalizeSupportedLocale(global.navigator && global.navigator.language);
+            if (navLang) return navLang;
         } catch (_) {}
 
         return 'en';
