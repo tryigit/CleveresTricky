@@ -45,6 +45,7 @@ internal object IdentityRuntimeApplier {
         val build = PolicyState.isTopLevelFeatureEnabled(PolicyState.Feature.BUILD_IDENTITY)
         val region = PolicyState.isTopLevelFeatureEnabled(PolicyState.Feature.REGION_IDENTITY)
         if (!build && !region) return Result(false, false, false, "disabled")
+        if (!Config.isGlobalIdentityMode) return Result(false, false, false, "global_identity_disabled")
 
         val expectedFingerprint = Config.getBuildIdentity()["FINGERPRINT"].orEmpty()
         val buildConfigured = !build || expectedFingerprint.isNotBlank()

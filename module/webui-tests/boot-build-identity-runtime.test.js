@@ -125,6 +125,7 @@ fs.writeFileSync(db, JSON.stringify(props, null, 2));
 
   fs.writeFileSync(path.join(configDir, 'spoof_enabled'), '');
   fs.writeFileSync(path.join(configDir, 'spoof_build_identity'), '');
+  fs.writeFileSync(path.join(configDir, 'global_identity_mode'), '');
   fs.writeFileSync(path.join(configDir, 'boot_props_mode'), 'auto\n');
   fs.writeFileSync(
     path.join(configDir, 'spoof_build_vars'),

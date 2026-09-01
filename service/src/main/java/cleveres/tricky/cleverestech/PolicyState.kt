@@ -979,8 +979,13 @@ object PolicyState {
         val vendorPolicy = profile?.vendorPatch ?: patch.vendor
         val bootPolicy = profile?.bootPatch ?: patch.boot
         val legacyRule = readLegacyAppRule(packageName)
-        val profileAutoIdentity = profileAutoIdentityEnabled(profile, current) && features.buildIdentity
-        val appConfig = mergeAppConfig(profile, legacyRule, profileAutoIdentity)
+        val autoIdentitySource = when {
+            legacyRule?.autoIdentity == true -> true
+            legacyRule?.autoIdentity == false -> false
+            else -> profileAutoIdentityEnabled(profile, current)
+        }
+        val appAutoIdentity = autoIdentitySource && features.buildIdentity
+        val appConfig = mergeAppConfig(profile, legacyRule, appAutoIdentity)
         val rkpPassthrough = profile?.rkpPassthrough ?: Config.isRkpPassthroughEnabled
         val drmPassthrough = profile?.drmPassthrough ?: Config.isDrmPassthroughEnabled
         val patchJson = JSONObject()
@@ -995,7 +1000,7 @@ object PolicyState {
             .put("profileConflict", selected.conflict)
             .put("scope", if (selected.matchedRule != null || legacyRule != null) "targeted" else if (Config.isGlobalMode) "global" else "unmatched")
             .put("identityTemplate", appConfig?.template ?: JSONObject.NULL)
-            .put("identitySource", if (profileAutoIdentity) "auto_identity" else if (appConfig?.template != null) "template" else "global")
+            .put("identitySource", if (appAutoIdentity) "auto_identity" else if (appConfig?.template != null) "template" else "global")
             .put("keyboxReference", appConfig?.keyboxFilename ?: JSONObject.NULL)
             .put("privacy", appConfig?.privacyMode?.configValue ?: Config.AppPrivacyMode.INHERIT.configValue)
             .put("buildIdentity", features.buildIdentity)
@@ -1003,40 +1008,25 @@ object PolicyState {
             .put("telephonyIdentity", features.telephonyIdentity)
             .put("regionIdentity", features.regionIdentity)
             .put("identityRefresh", features.identityRefresh)
-            .put("securityPatchOverride", features.securityPatch)
-            .put("securityPatch", patchJson)
-            .put("rkp", if (rkpPassthrough) "genuine_passthrough" else "certificate_compatibility")
-            .put("drm", if (drmPassthrough) "genuine_passthrough" else "configured_path")
-            .put("keyMint", "genuine_platform_keymint_strongbox")
-            .put("keystoreCore", if (KeystoreInterceptor.isRunning()) "active" else "waiting")
-            .put("providerCoexistence", providerMode)
-            .put("rebootRequired", features.regionIdentity)
+            .put("securityPatch", features.securityPatch)
+            .put("rkpPassthrough", rkpPassthrough)
+            .put("drmPassthrough", drmPassthrough)
+            .put("bootPropertiesMode", providerMode)
+            .put("patch", patchJson)
     }
 
     private fun componentStateJson(
         component: String,
-        policy: PatchPolicy,
+        policy: PatchComponentPolicy,
         long: Boolean,
         captured: Int?,
-        enabled: Boolean,
+        featureEnabled: Boolean,
         explicit: Boolean,
     ): JSONObject {
-        if (!enabled) {
-            return JSONObject()
-                .put("captured", formatPatch(captured, long) ?: JSONObject.NULL)
-                .put("configured", "disabled")
-                .put("effective", formatPatch(captured, long) ?: "device")
-        }
-        if (!explicit) {
-            return JSONObject()
-                .put("captured", formatPatch(captured, long) ?: JSONObject.NULL)
-                .put("configured", "legacy security_patch.txt")
-                .put("effective", "legacy resolver")
-        }
-        val resolved = resolvePatchComponent(component, policy, long, captured, snapshot.patch.thresholdMonths)
+        val resolved = resolveComponent(component, policy, long, captured, featureEnabled, explicit)
         val effective =
             when (resolved.disposition) {
-                Config.PatchDisposition.KEEP -> formatPatch(captured, long) ?: "device"
+                Config.PatchDisposition.KEEP_CURRENT -> "device_default"
                 Config.PatchDisposition.OMIT -> "omitted"
                 Config.PatchDisposition.REPLACE -> formatPatch(resolved.value, long) ?: resolved.value.toString()
             }
@@ -1065,7 +1055,8 @@ object PolicyState {
                 val template = columns.getOrNull(1)?.takeUnless { it == "null" }
                 val keybox = columns.getOrNull(2)?.takeUnless { it == "null" }
                 val privacy = columns.getOrNull(3)?.let(Config.AppPrivacyMode::parse) ?: Config.AppPrivacyMode.INHERIT
-                matched = Config.AppSpoofConfig(template, keybox, privacy)
+                val autoIdentity = columns.getOrNull(4)?.takeUnless { it == "null" || it == "inherit" }?.toBooleanStrictOrNull()
+                matched = Config.AppSpoofConfig(template, keybox, privacy, autoIdentity)
             }
             matched
         }.getOrNull()

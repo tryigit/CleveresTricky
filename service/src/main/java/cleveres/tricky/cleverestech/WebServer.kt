@@ -1926,7 +1926,12 @@ class WebServer(
                         if (Config.AppPrivacyMode.parse(privacy) == null) {
                             return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid privacy mode")
                         }
-                        if (tmpl == "null" && kb == "null" && privacy == Config.AppPrivacyMode.INHERIT.configValue) {
+                        val autoIdentityRaw = obj.optString("autoIdentity", "inherit")
+                        if (autoIdentityRaw != "true" && autoIdentityRaw != "false" && autoIdentityRaw != "inherit" && autoIdentityRaw != "null") {
+                            return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid auto identity mode")
+                        }
+                        val autoIdentity = if (autoIdentityRaw == "true") "true" else if (autoIdentityRaw == "false") "false" else "inherit"
+                        if (tmpl == "null" && kb == "null" && privacy == Config.AppPrivacyMode.INHERIT.configValue && autoIdentity == "inherit") {
                             return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Empty app rule")
                         }
                         if (pkg.any { it.isWhitespace() }) {
@@ -1939,8 +1944,6 @@ class WebServer(
                         if (!seenPackages.add(pkg)) {
                             return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Duplicate app rule")
                         }
-                        val autoIdentityRaw = obj.optString("autoIdentity", "inherit")
-                        val autoIdentity = if (autoIdentityRaw == "true") "true" else if (autoIdentityRaw == "false") "false" else "inherit"
                         sb.append("$pkg $tmpl $kb $privacy $autoIdentity\n")
                         if (sb.length.toLong() > MAX_CONFIG_FILE_SIZE) {
                             return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "App configuration is too large")
@@ -2719,7 +2722,17 @@ class WebServer(
                                 if (privacyMode != Config.AppPrivacyMode.INHERIT) hasEffect = true
 
                                 while (idx < len && trimmed[idx].isWhitespace()) idx++
-                                if (idx < len) return@all false
+                                if (idx < len) {
+                                    start = idx
+                                    while (idx < len && !trimmed[idx].isWhitespace()) idx++
+                                    val autoId = trimmed.substring(start, idx)
+                                    if (autoId != "inherit" && autoId != "null") {
+                                        val parsed = autoId.toBooleanStrictOrNull() ?: return@all false
+                                        hasEffect = true
+                                    }
+                                    while (idx < len && trimmed[idx].isWhitespace()) idx++
+                                    if (idx < len) return@all false
+                                }
                             }
                         }
                     }

@@ -197,6 +197,9 @@ apply_optional_identity_properties() {
   [ -f "$CONFIG_DIR/spoof_enabled" ] || return 0
   [ ! -L "$CONFIG_DIR/spoof_enabled" ] || return 0
 
+  [ -f "$CONFIG_DIR/global_identity_mode" ] || return 0
+  [ ! -L "$CONFIG_DIR/global_identity_mode" ] || return 0
+
   boot_mode=auto
   if [ -f "$CONFIG_DIR/boot_props_mode" ] && [ ! -L "$CONFIG_DIR/boot_props_mode" ]; then
     IFS= read -r boot_mode < "$CONFIG_DIR/boot_props_mode"
