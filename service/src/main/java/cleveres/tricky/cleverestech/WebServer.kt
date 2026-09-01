@@ -1847,7 +1847,8 @@ class WebServer(
                                         obj.put("template", tmpl)
                                         obj.put("keybox", kb)
                                         obj.put("privacy", parsedPrivacy.configValue)
-                                        obj.put("autoIdentity", autoIdentity)
+                                        val normalizedAutoIdentity = if (autoIdentity == "null") "inherit" else autoIdentity
+                                        obj.put("autoIdentity", normalizedAutoIdentity)
                                         array.put(obj)
                                     }
                                 }
