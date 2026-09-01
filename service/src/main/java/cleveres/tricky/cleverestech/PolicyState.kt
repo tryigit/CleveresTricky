@@ -734,8 +734,8 @@ object PolicyState {
     }
 
     private fun hasRuntimeScope(profile: Profile, current: Snapshot): Boolean =
-        profile.applications.isNotEmpty() &&
-            activeProfile(current).let { it == null || !it.name.equals(profile.name, ignoreCase = true) }
+        profile.enabled &&
+            (profile.applications.isNotEmpty() || current.activeProfile?.equals(profile.name, ignoreCase = true) == true)
 
     private fun hasIsolateRules(): Boolean {
         val current = snapshot
