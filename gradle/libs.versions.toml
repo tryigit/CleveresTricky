@@ -1,5 +1,5 @@
 [versions]
-agp = "9.3.2"
+agp = "9.4.0"
 bcpkix-jdk18on = "1.85"
 bcprov-jdk18on = "1.85.2"
 bcutil-jdk18on = "1.85"
