@@ -112,7 +112,7 @@ kotlin {
 }
 
 dependencies {
-    compileOnly(project(":stub"))
+    remapApi(project(":stub"))
     implementation(libs.annotation)
     implementation(libs.coroutines.android)
     implementation(libs.nanohttpd)
