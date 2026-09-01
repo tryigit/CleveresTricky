@@ -197,7 +197,7 @@ class WebServerHtmlTest {
             "Missing disabled toggle CSS",
             html.contains("input[type=\"checkbox\"].toggle:disabled { opacity: 0.5; cursor: not-allowed; }"),
         )
-        assertTrue("Missing label cursor CSS", html.contains("label { font-size: 0.84rem; font-weight: 600; color: var(--text-muted); margin-bottom: 7px; cursor: pointer; display: block; letter-spacing: -0.01em; }"))
+        assertTrue("Missing label cursor CSS", html.contains("label { font-size: 0.88rem; font-weight: 600; color: var(--text-muted); margin-bottom: 7px; cursor: pointer; display: block; letter-spacing: -0.01em; }"))
         assertFalse("Core protection must not expose a safe-mode switch", html.contains("Disable Certificate Substitution (Safe Mode)"))
         assertFalse("Core property hiding must not expose a toggle", html.contains("id=\"hide_sensitive_props\""))
         assertTrue("Missing always-active core notice", html.contains("Bootloader/verified-boot property compatibility"))
