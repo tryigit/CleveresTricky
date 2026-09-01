@@ -13,7 +13,6 @@ dependencyResolutionManagement {
         mavenCentral()
         maven {
             url = uri("https://downloads.bouncycastle.org/java/maven")
-            isAllowInsecureProtocol = true
             content {
                 includeGroup("org.bouncycastle")
             }
