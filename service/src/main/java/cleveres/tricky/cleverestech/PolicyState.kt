@@ -703,15 +703,14 @@ object PolicyState {
     internal fun isTopLevelFeatureEnabled(feature: Feature): Boolean = snapshot.features.enabled(feature)
 
     internal fun isProfileAutoIdentityEnabled(uid: Int): Boolean {
+        val legacy = Config.getAppConfig(uid)
+        if (legacy?.autoIdentity == false) return false
+        if (legacy?.autoIdentity == true) {
+            return isFeatureEnabled(Feature.BUILD_IDENTITY, uid)
+        }
         if (!snapshot.explicit) return false
         val resolved = resolveUid(uid)
-        val legacy = Config.getAppConfig(uid)
-        val useAutoIdentitySource = when {
-            legacy?.autoIdentity == true -> true
-            legacy?.autoIdentity == false -> false
-            else -> resolved.profileAutoIdentity
-        }
-        return useAutoIdentitySource && resolved.features.buildIdentity
+        return resolved.profileAutoIdentity && resolved.features.buildIdentity
     }
 
     internal fun hasProfileAutoIdentityWork(): Boolean {
