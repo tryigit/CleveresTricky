@@ -154,4 +154,13 @@ assert.strictEqual(loadI18n({ cachedSystemLocale: 'zh-CN', browserLocale: 'de-DE
 assert.strictEqual(loadI18n({ browserLocale: 'es-MX' }).i18n.locale, 'es');
 assert.strictEqual(loadI18n({ browserLocale: 'pt-BR' }).i18n.locale, 'en');
 
+assert.strictEqual(
+    loadI18n({ systemLocale: 'zh-Hans-CN', browserLocale: 'de-DE' }).i18n.locale,
+    'zh-CN'
+);
+assert.strictEqual(
+    loadI18n({ browserLocale: 'zh-Hans-CN' }).i18n.locale,
+    'zh-CN'
+);
+
 console.log('WebUI localization coverage tests passed');

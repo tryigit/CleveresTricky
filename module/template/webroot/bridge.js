@@ -143,6 +143,10 @@
 
     function normalizeLocale(value) {
         if (typeof value !== 'string' || !value) return null;
+        if (value.startsWith('zh-Hans-')) {
+            const mapped = 'zh-' + value.split('-')[2];
+            if (supportedLocales.has(mapped)) return mapped;
+        }
         if (supportedLocales.has(value)) return value;
         const base = value.split('-')[0];
         return supportedLocales.has(base) ? base : null;

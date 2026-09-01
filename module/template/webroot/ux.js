@@ -1493,6 +1493,10 @@
 
     function normalizeSupportedLocale(value) {
         if (typeof value !== 'string' || !value) return null;
+        if (value.startsWith('zh-Hans-')) {
+            const mapped = 'zh-' + value.split('-')[2];
+            if (SUPPORTED.some(([id]) => id === mapped)) return mapped;
+        }
         if (SUPPORTED.some(([id]) => id === value)) return value;
         const baseLang = value.split('-')[0];
         if (SUPPORTED.some(([id]) => id === baseLang)) return baseLang;
@@ -2409,6 +2413,10 @@
 
     function normalizeSupportedLocale(value) {
         if (typeof value !== 'string' || !value) return null;
+        if (value.startsWith('zh-Hans-')) {
+            const mapped = 'zh-' + value.split('-')[2];
+            if (SUPPORTED_LOCALES.has(mapped)) return mapped;
+        }
         if (SUPPORTED_LOCALES.has(value)) return value;
         const baseLang = value.split('-')[0];
         if (SUPPORTED_LOCALES.has(baseLang)) return baseLang;
