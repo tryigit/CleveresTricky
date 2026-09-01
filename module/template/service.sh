@@ -40,6 +40,25 @@ terminate_previous_instances() {
 
 terminate_previous_instances
 
+if [ -L "$CONFIG_DIR" ]; then
+  log -t CleveresTricky "Config directory is a symlink; refusing supervisor startup"
+  exit 1
+fi
+
+if [ ! -d "$CONFIG_DIR" ]; then
+  if ! mkdir -p "$CONFIG_DIR" 2>/dev/null; then
+    log -t CleveresTricky "Failed to create config directory; refusing supervisor startup"
+    exit 1
+  fi
+  chmod 700 "$CONFIG_DIR" 2>/dev/null || true
+  chcon u:object_r:system_file:s0 "$CONFIG_DIR" 2>/dev/null || true
+fi
+
+if ! : > "$SUPERVISOR_PID_FILE" 2>/dev/null; then
+  log -t CleveresTricky "Failed to initialize supervisor PID file; refusing supervisor startup"
+  exit 1
+fi
+
 (
 retry_delay=2
 max_retry_delay=60
@@ -328,9 +347,9 @@ while true; do
 done
 ) &
 supervisor_pid=$!
-if [ ! -d "$CONFIG_DIR" ] && [ ! -L "$CONFIG_DIR" ]; then
-  mkdir -p "$CONFIG_DIR" 2>/dev/null || true
-  chmod 700 "$CONFIG_DIR" 2>/dev/null || true
-  chown 0:0 "$CONFIG_DIR" 2>/dev/null || true
+if ! echo "$supervisor_pid" > "$SUPERVISOR_PID_FILE" 2>/dev/null || [ ! -s "$SUPERVISOR_PID_FILE" ]; then
+  log -t CleveresTricky "Failed to record supervisor PID; terminating supervisor"
+  kill -9 "$supervisor_pid" 2>/dev/null || true
+  rm -f "$SUPERVISOR_PID_FILE" 2>/dev/null || true
+  exit 1
 fi
-echo "$supervisor_pid" > "$SUPERVISOR_PID_FILE" 2>/dev/null || true
