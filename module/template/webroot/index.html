@@ -2237,7 +2237,7 @@ const makeActionButton = (label, packageName, handler) => {
 if (appRules.length === 0) {
     const tr = document.createElement('tr');
     const empty = makeCell('', 'No active rules.');
-    empty.colSpan = 5;
+    empty.colSpan = 6;
     empty.style.cssText = 'text-align:center; padding:20px; color:#666;';
     tr.appendChild(empty);
     tbody.appendChild(tr);
@@ -2272,7 +2272,7 @@ appRules.forEach((rule, idx) => {
 if (filter && matchCount === 0) {
     const tr = document.createElement('tr');
     const empty = makeCell('', 'No rules match your filter.');
-    empty.colSpan = 5;
+    empty.colSpan = 6;
     empty.style.cssText = 'text-align:center; padding:20px; color:#666;';
     const clear = document.createElement('button');
     clear.type = 'button';
