@@ -1204,7 +1204,7 @@ class WebServer(
         headers: Map<String, String>,
         trustedBridge: Boolean
     ): Response? {
-        if (uri == "/api/policy_state" || uri == "/api/effective_state" || uri == "/api/profile_v2") {
+        if (uri == "/api/policy_state" || uri == "/api/effective_state" || uri == "/api/profile_v2" || uri == "/api/identity_diagnostics") {
             if (method == Method.POST) {
                 val files = HashMap<String, String>()
                 try {

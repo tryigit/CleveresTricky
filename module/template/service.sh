@@ -324,7 +324,12 @@ while true; do
   if [ "$runtime" -lt "$stable_runtime" ] && [ "$retry_delay" -lt "$max_retry_delay" ]; then
     retry_delay=$((retry_delay * 2))
     [ "$retry_delay" -gt "$max_retry_delay" ] && retry_delay=$max_retry_delay
-  fi
 done
 ) &
-echo $! > "$SUPERVISOR_PID_FILE"
+supervisor_pid=$!
+if [ ! -d "$CONFIG_DIR" ] && [ ! -L "$CONFIG_DIR" ]; then
+  mkdir -p "$CONFIG_DIR" 2>/dev/null || true
+  chmod 700 "$CONFIG_DIR" 2>/dev/null || true
+  chown 0:0 "$CONFIG_DIR" 2>/dev/null || true
+fi
+echo "$supervisor_pid" > "$SUPERVISOR_PID_FILE" 2>/dev/null || true

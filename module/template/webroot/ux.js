@@ -3149,7 +3149,11 @@
         if (typeof window.matchMedia === 'function') {
             const mq = window.matchMedia('(min-width: 600px)');
             const updateLayout = (e) => { toolbar.style.flexDirection = e.matches ? 'row' : 'column'; toolbar.style.alignItems = e.matches ? 'center' : 'stretch'; };
-            mq.addListener(updateLayout);
+            if (typeof mq.addEventListener === 'function') {
+                mq.addEventListener('change', updateLayout);
+            } else if (typeof mq.addListener === 'function') {
+                mq.addListener(updateLayout);
+            }
             updateLayout(mq);
         }
 

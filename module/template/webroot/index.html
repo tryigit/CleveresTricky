@@ -1423,7 +1423,7 @@ try {
 
     const lockedList = document.getElementById('lockedList');
     lockedList.innerHTML = '';
-    if (data.locked.length > 0) {
+    if (Array.isArray(data?.locked) && data.locked.length > 0) {
         document.getElementById('lockedSection').style.display = 'block';
         data.locked.forEach((f, index) => {
             const div = document.createElement('div');

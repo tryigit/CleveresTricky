@@ -445,16 +445,16 @@ filename="CleveresTricky-bugreport-$stamp-$report_nonce.tar.gz"
 
 print_log "$(message BASIC)"
 root_managers=""
-[ -d /data/adb/ksu ] && root_managers="${root_managers} KernelSU"
-[ -d /data/adb/ap ] && root_managers="${root_managers} APatch"
-[ -d /data/adb/magisk ] && root_managers="${root_managers} Magisk"
-[ -n "$root_managers" ] || root_managers=" Unknown"
+if [ -d /data/adb/ksu ]; then root_managers="${root_managers} KernelSU"; fi
+if [ -d /data/adb/ap ]; then root_managers="${root_managers} APatch"; fi
+if [ -d /data/adb/magisk ]; then root_managers="${root_managers} Magisk"; fi
+if [ -z "$root_managers" ]; then root_managers=" Unknown"; fi
 
 daemon_pids=$(pidof CleveresTricky 2>/dev/null || true)
-[ -n "$daemon_pids" ] || daemon_pids="not running"
+if [ -z "$daemon_pids" ]; then daemon_pids="not running"; fi
 module_state="enabled"
-[ -e "$MODDIR/disable" ] && module_state="disabled"
-[ -e "$MODDIR/remove" ] && module_state="pending removal"
+if [ -e "$MODDIR/disable" ]; then module_state="disabled"; fi
+if [ -e "$MODDIR/remove" ]; then module_state="pending removal"; fi
 
 {
     printf 'CleveresTricky Emergency Report\n'
