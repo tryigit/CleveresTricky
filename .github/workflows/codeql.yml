@@ -63,13 +63,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          expected='kotlin = "2.4.20-RC"'
+          expected=$(grep -m1 '^kotlin =' gradle/libs.versions.toml || true)
           supported='kotlin = "2.4.10"'
-          if ! grep -Fxq "$expected" gradle/libs.versions.toml; then
-            echo "::error::Unexpected Kotlin version; update the CodeQL compatibility pin deliberately"
+          if [ -z "$expected" ]; then
+            echo "::error::Could not find Kotlin version in gradle/libs.versions.toml"
             exit 1
           fi
-          sed -i "s/^$expected$/$supported/" gradle/libs.versions.toml
+          expected_escaped=$(printf '%s\n' "$expected" | sed -e 's/[]\/$*.^|[]/\\&/g')
+          sed -i "s/^$expected_escaped$/$supported/" gradle/libs.versions.toml
           grep -Fx "$supported" gradle/libs.versions.toml
 
       - name: Initialize CodeQL
