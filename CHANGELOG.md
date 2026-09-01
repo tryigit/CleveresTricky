@@ -2,9 +2,8 @@
 
 ## V2.7.2
 
-- **DRM & Multi-User Support:** Improved DRM privacy handling across secondary Android users, associated DRM plugin registrations with the originating application UID, and resolved live application UIDs reliably from kernel process state.
-- **Security & Reliability:** Fixed large decimal serial parsing in `KeyboxVerifier`, hardened backup/restore filesystem handling, improved security-patch date parsing, added safer manual `action.sh` execution warnings, and strengthened runtime/process handling.
-- **Performance:** Optimized identity override lookups with sorted binary search and reduced intermediate allocations in file filtering paths.
-- **WebUI & Localization:** Added complete server-list translations across supported languages, automatic Android system-locale detection with browser fallback, dynamic retranslation of generated controls, improved table header layout, and a more readable 16px base font.
-- **Build & Compatibility:** Updated Kotlin and remap dependencies, improved BouncyCastle/CodeQL build configuration, added the `IUserManager` AIDL stub integration, and corrected service remapping configuration.
-- **Native Core Maintenance:** Refined Rust attestation/CRL components and related service/native code paths while preserving the existing runtime payload contracts.
+- **Auto Identity & App Rules:** Added per-app Auto Identity (Pixel Beta) support to App Rules (`app_config`), allowing automatic daily identity rotation to be configured individually per target application. Enforced strict Global Identity Mode property isolation so system properties are never modified device-wide when Global Mode is disabled.
+- **WebUI & Mobile Usability:** Improved readability with a 16px base font and responsive mobile layouts, refined touch targets, fixed translation fallbacks (`noServers` / server lists), and added automatic system and browser locale detection across all supported languages.
+- **Multi-User & DRM Privacy:** Enhanced DRM privacy handling for secondary Android users and work profiles, binding DRM plugin registrations accurately to the calling application UID.
+- **Keybox & Attestation Stability:** Fixed large decimal serial number parsing in `KeyboxVerifier` to prevent false certificate revocation warnings, and added safety confirmation warnings before manual action execution.
+- **Performance:** Optimized identity lookup performance using sorted binary search and eliminated redundant memory allocations in file filtering and background polling loops.
