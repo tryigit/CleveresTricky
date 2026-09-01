@@ -83,7 +83,9 @@ assert.equal(rows.length, 3, 'malformed and attacker-shaped rules should render 
 assert.equal(rows[0].children[0].textContent, '\"><IMG SRC=x ONERROR=alert(1)>', 'package data must be assigned as text');
 assert.equal(rows[0].children[1].textContent, '<SCRIPT>alert(2)</SCRIPT>', 'template data must be assigned as text');
 assert.equal(rows[0].children[2].textContent, '&evil', 'keybox data must be assigned as text');
-assert.equal(rows[0].children[4].children[0].attributes['aria-label'], 'Edit rule for \"><IMG SRC=x ONERROR=alert(1)>', 'dynamic accessible names must use attribute APIs');
+assert.equal(rows[0].children[3].textContent, 'Isolated', 'privacy data must be assigned as text');
+assert.equal(rows[0].children[4].textContent, 'Inherit', 'auto identity data must be assigned as text');
+assert.equal(rows[0].children[5].children[0].attributes['aria-label'], 'Edit rule for \"><IMG SRC=x ONERROR=alert(1)>', 'dynamic accessible names must use attribute APIs');
 assert.equal(rows[0].children[0].children.length, 0, 'package attacker data must not create child markup nodes');
 assert.equal(rows[0].children[1].children.length, 0, 'template attacker data must not create child markup nodes');
 assert.equal(rows[1].children[0].textContent, '', 'null rule values must normalize to empty safe text');

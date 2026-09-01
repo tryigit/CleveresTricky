@@ -1278,10 +1278,10 @@ object Config {
     }
 
     fun getBuildVar(key: String, uid: Int): String? {
-        val appConfig = getAppConfig(uid)
-        if (PolicyState.isProfileAutoIdentityEnabled(uid, appConfig)) {
+        if (PolicyState.isProfileAutoIdentityEnabled(uid)) {
             ProfileAutoIdentityStore.get(key)?.let { return it }
         }
+        val appConfig = getAppConfig(uid)
         val template = if (appConfig?.template != null) templates[appConfig.template] else null
         return template?.get(key) ?: buildVars[key]
     }

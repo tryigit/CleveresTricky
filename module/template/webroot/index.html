@@ -2249,13 +2249,14 @@ appRules.forEach((rule, idx) => {
     const templateName = typeof rule?.template === 'string' ? rule.template : '';
     const keyboxName = typeof rule?.keybox === 'string' ? rule.keybox : '';
     const privacy = typeof rule?.privacy === 'string' ? rule.privacy : 'inherit';
+    const autoIdentity = typeof rule?.autoIdentity === 'string' ? rule.autoIdentity : 'inherit';
     if (filter && !packageName.toLowerCase().includes(filter)) return;
     matchCount++;
     const tr = document.createElement('tr');
     const tmplDisplay = (templateName && templateName !== 'null') ? templateName : 'Default';
     const kbDisplay = (keyboxName && keyboxName !== 'null') ? keyboxName : '';
     const privacyDisplay = privacy === 'isolate' ? 'Isolated' : (privacy === 'redact' ? 'Redacted' : 'Global');
-    const autoIdDisplay = rule.autoIdentity === 'true' ? 'Enabled' : (rule.autoIdentity === 'false' ? 'Disabled' : 'Inherit');
+    const autoIdDisplay = autoIdentity === 'true' ? 'Enabled' : (autoIdentity === 'false' ? 'Disabled' : 'Inherit');
     tr.append(makeCell('Package', packageName), makeCell('Profile', tmplDisplay), makeCell('Keybox', kbDisplay), makeCell('Privacy', privacyDisplay), makeCell('Auto Identity', autoIdDisplay));
     const actions = document.createElement('td');
     actions.style.textAlign = 'right';
