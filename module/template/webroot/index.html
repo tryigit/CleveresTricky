@@ -1505,7 +1505,7 @@ try {
         : [];
     if (list) list.innerHTML = '';
     if (servers.length === 0) {
-        if (list) list.innerHTML = '<div style="text-align:center; padding:15px; color:#666;">No servers configured. Add one below to fetch keyboxes automatically.</div>';
+        if (list) list.innerHTML = '<div style="text-align:center; padding:15px; color:#666;"><span data-i18n="noServers">No servers configured. Add one below to fetch keyboxes automatically.</span></div>';
     }
     servers.forEach(s => {
         const div = document.createElement('div');
@@ -1528,19 +1528,20 @@ try {
 
         const refresh = document.createElement('button');
         refresh.style.cssText = 'padding:8px 16px;margin-left:10px;min-height:44px';
-        refresh.textContent = 'Refresh';
+        refresh.textContent = 'Refresh'; refresh.setAttribute('data-i18n', 'refresh');
         refresh.onclick = () => runWithState(refresh, 'Refreshing...', () => refreshServer(String(s.id)));
 
         const remove = document.createElement('button');
         remove.className = 'danger';
         remove.style.cssText = 'padding:8px 16px;margin-left:5px;min-height:44px';
-        remove.textContent = 'Remove';
+        remove.textContent = 'Remove'; remove.setAttribute('data-i18n', 'remove');
         remove.onclick = () => requireConfirm(remove, () => runWithState(remove, 'Removing...', () => deleteServer(String(s.id))), 'Confirm Remove');
 
         actions.append(status, refresh, remove);
         div.append(info, actions);
         list.appendChild(div);
     });
+    if (typeof window.dispatchEvent === 'function') window.dispatchEvent(new Event('ct_retranslate'));
 } catch(e) {
     if (controller.signal.aborted || (e && e.name === 'AbortError')) return;
     console.error(e);
