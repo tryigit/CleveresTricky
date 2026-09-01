@@ -104,6 +104,9 @@
             'Security patch levels are actively managed according to the component modes below.': '安全补丁级别将根据以下组件模式进行积极管理。',
             'Security patch spoofing is currently disabled. Toggle it ON from the Dashboard to apply custom patch levels.': '安全补丁伪装当前已禁用。从仪表盘将其开启以应用自定义补丁级别。',
             'All major features and runtime paths in one place.': '所有主要功能和运行路径集中说明。'
+            'noServers': '未配置服务器。在下方添加一个以自动获取 keybox。',
+            'refresh': '刷新',
+            'remove': '移除'
         },
         es: {
             'Identity Controls': 'Controles de identidad', 'Enable only the identity paths you need. Disabled paths do not start optional interceptors.': 'Activa solo las rutas de identidad que necesites. Las rutas desactivadas no inician interceptores opcionales.', 'Identity is currently disabled. Enable only the identity paths you need below.': 'La identidad está desactivada. Activa abajo solo las rutas que necesites.', 'Random': 'Aleatorio', 'Identity value randomized': 'Valor de identidad aleatorizado',
