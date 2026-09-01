@@ -143,13 +143,18 @@
 
     function normalizeLocale(value) {
         if (typeof value !== 'string' || !value) return null;
-        const tag = value.replace(/_/g, '-');
-        if (tag === 'zh' || tag.startsWith('zh-Hans') || tag.startsWith('zh-CN') || tag.startsWith('zh-SG')) {
+        const tag = value.toLowerCase().replace(/_/g, '-');
+        if (tag === 'zh' || tag.startsWith('zh-hans') || tag.startsWith('zh-cn') || tag.startsWith('zh-sg')) {
             return 'zh-CN';
         }
-        if (supportedLocales.has(tag)) return tag;
+        for (const loc of supportedLocales) {
+            if (loc.toLowerCase() === tag) return loc;
+        }
         const base = tag.split('-')[0];
-        return supportedLocales.has(base) ? base : null;
+        for (const loc of supportedLocales) {
+            if (loc.toLowerCase() === base) return loc;
+        }
+        return null;
     }
 
     function extensionLocale() {
@@ -879,7 +884,7 @@
 
     function routeExternalLinks() {
         const document = global.document;
-        if (!document || document.documentElement.dataset.ctExternalLinkRouting) return;
+        if (!document || !document.documentElement || !document.documentElement.dataset || document.documentElement.dataset.ctExternalLinkRouting) return;
         document.documentElement.dataset.ctExternalLinkRouting = '1';
         document.addEventListener('click', event => {
             const link = event.target && event.target.closest ? event.target.closest('a[href]') : null;

@@ -1502,13 +1502,15 @@
 
     function normalizeSupportedLocale(value) {
         if (typeof value !== 'string' || !value) return null;
-        const tag = value.replace(/_/g, '-');
-        if (tag === 'zh' || tag.startsWith('zh-Hans') || tag.startsWith('zh-CN') || tag.startsWith('zh-SG')) {
+        const tag = value.toLowerCase().replace(/_/g, '-');
+        if (tag === 'zh' || tag.startsWith('zh-hans') || tag.startsWith('zh-cn') || tag.startsWith('zh-sg')) {
             return 'zh-CN';
         }
-        if (SUPPORTED.some(([id]) => id === tag)) return tag;
+        const exact = SUPPORTED.find(([id]) => id.toLowerCase() === tag);
+        if (exact) return exact[0];
         const baseLang = tag.split('-')[0];
-        if (SUPPORTED.some(([id]) => id === baseLang)) return baseLang;
+        const base = SUPPORTED.find(([id]) => id.toLowerCase() === baseLang);
+        if (base) return base[0];
         return null;
     }
 
@@ -1791,7 +1793,7 @@
         if (element.hasAttribute && element.hasAttribute('data-i18n')) {
             const key = element.getAttribute('data-i18n');
             const rendered = tr(key);
-            if (rendered && rendered !== key && (!element.children || element.children.length === 0)) {
+            if (typeof rendered === 'string' && (!element.children || element.children.length === 0)) {
                 if (element.textContent !== rendered) element.textContent = rendered;
             }
         }
@@ -1811,7 +1813,7 @@
             if (child.hasAttribute('data-i18n')) {
                 const key = child.getAttribute('data-i18n');
                 const rendered = tr(key);
-                if (rendered && rendered !== key && (!child.children || child.children.length === 0)) {
+                if (typeof rendered === 'string' && (!child.children || child.children.length === 0)) {
                     if (child.textContent !== rendered) child.textContent = rendered;
                 }
             }
@@ -2442,13 +2444,17 @@
 
     function normalizeSupportedLocale(value) {
         if (typeof value !== 'string' || !value) return null;
-        const tag = value.replace(/_/g, '-');
-        if (tag === 'zh' || tag.startsWith('zh-Hans') || tag.startsWith('zh-CN') || tag.startsWith('zh-SG')) {
+        const tag = value.toLowerCase().replace(/_/g, '-');
+        if (tag === 'zh' || tag.startsWith('zh-hans') || tag.startsWith('zh-cn') || tag.startsWith('zh-sg')) {
             return 'zh-CN';
         }
-        if (SUPPORTED_LOCALES.has(tag)) return tag;
+        for (const loc of SUPPORTED_LOCALES) {
+            if (loc.toLowerCase() === tag) return loc;
+        }
         const baseLang = tag.split('-')[0];
-        if (SUPPORTED_LOCALES.has(baseLang)) return baseLang;
+        for (const loc of SUPPORTED_LOCALES) {
+            if (loc.toLowerCase() === baseLang) return loc;
+        }
         return null;
     }
 

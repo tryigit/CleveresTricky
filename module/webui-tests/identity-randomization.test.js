@@ -40,3 +40,44 @@ assert(index.includes("randomizeIdentityField('visible_camera_count')"), 'camera
 assert(index.includes("visible_camera_count: 'inputVisibleCameraCount'"), 'random payload must map visible camera count');
 assert(policy.includes("setLegacyToggle('camera_visibility'"), 'camera visibility must be an explicit opt-in legacy toggle');
 assert(policy.includes('Disabled means no cameraserver interceptor is started.'), 'camera control must document disabled lifecycle');
+
+// Verify telephony section visibility hides the action container when disabled
+const mockTelephonyHeader = {
+  style: {},
+  getAttribute(name) { return name === 'data-section' ? 'telephony' : null; },
+  nextElementSibling: {
+    style: {},
+    nextElementSibling: {
+      style: {}
+    }
+  }
+};
+const mockSimHeader = {
+  style: {},
+  getAttribute(name) { return name === 'data-section' ? 'sim1' : null; },
+  nextElementSibling: {
+    style: {}
+  }
+};
+
+const visibilityBlockMatch = policy.match(/headers\.forEach\(header => \{[\s\S]*?\n    \}\);/);
+assert.ok(visibilityBlockMatch, 'headers visibility block must exist in policy.js');
+const runVisibility = new Function('headers', 'telephonyOn', 'cameraOn', `
+  ${visibilityBlockMatch[0]}
+`);
+
+// Test with telephonyOn = false
+runVisibility([mockTelephonyHeader, mockSimHeader], false, false);
+assert.strictEqual(mockTelephonyHeader.style.display, 'none');
+assert.strictEqual(mockTelephonyHeader.nextElementSibling.style.display, 'none');
+assert.strictEqual(mockTelephonyHeader.nextElementSibling.nextElementSibling.style.display, 'none');
+assert.strictEqual(mockSimHeader.style.display, 'none');
+assert.strictEqual(mockSimHeader.nextElementSibling.style.display, 'none');
+
+// Test with telephonyOn = true
+runVisibility([mockTelephonyHeader, mockSimHeader], true, false);
+assert.strictEqual(mockTelephonyHeader.style.display, '');
+assert.strictEqual(mockTelephonyHeader.nextElementSibling.style.display, '');
+assert.strictEqual(mockTelephonyHeader.nextElementSibling.nextElementSibling.style.display, '');
+assert.strictEqual(mockSimHeader.style.display, '');
+assert.strictEqual(mockSimHeader.nextElementSibling.style.display, '');

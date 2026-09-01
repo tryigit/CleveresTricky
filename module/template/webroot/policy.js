@@ -554,11 +554,21 @@ function refreshDynamicVisibility() {
     headers.forEach(header => {
       if (!header || !header.style) return;
       const section = header.getAttribute('data-section') || '';
-      if (section === 'sim1' || section === 'sim2' || section === 'telephony') {
+      if (section === 'sim1' || section === 'sim2') {
         header.style.display = telephonyOn ? '' : 'none';
         const next = header.nextElementSibling;
         if (next && next.style) {
           next.style.display = telephonyOn ? '' : 'none';
+        }
+      } else if (section === 'telephony') {
+        header.style.display = telephonyOn ? '' : 'none';
+        const next = header.nextElementSibling;
+        if (next && next.style) {
+          next.style.display = telephonyOn ? '' : 'none';
+          const action = next.nextElementSibling;
+          if (action && action.style) {
+            action.style.display = telephonyOn ? '' : 'none';
+          }
         }
       } else if (section === 'hardware') {
         header.style.display = cameraOn ? '' : 'none';

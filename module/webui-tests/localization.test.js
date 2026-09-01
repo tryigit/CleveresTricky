@@ -179,5 +179,127 @@ assert.strictEqual(
     loadI18n({ browserLocale: 'zh-Hans-CN' }).i18n.locale,
     'zh-CN'
 );
+assert.strictEqual(
+    loadI18n({ systemLocale: 'zh-hans-cn' }).i18n.locale,
+    'zh-CN'
+);
+assert.strictEqual(
+    loadI18n({ systemLocale: 'zh_hans_cn' }).i18n.locale,
+    'zh-CN'
+);
+assert.strictEqual(
+    loadI18n({ systemLocale: 'zh-cn' }).i18n.locale,
+    'zh-CN'
+);
+assert.strictEqual(
+    loadI18n({ systemLocale: 'zh-sg' }).i18n.locale,
+    'zh-CN'
+);
+assert.strictEqual(
+    loadI18n({ systemLocale: 'ZH_CN' }).i18n.locale,
+    'zh-CN'
+);
+assert.strictEqual(
+    loadI18n({ systemLocale: 'tr-tr' }).i18n.locale,
+    'tr'
+);
+assert.strictEqual(
+    loadI18n({ systemLocale: 'TR-TR' }).i18n.locale,
+    'tr'
+);
+assert.strictEqual(
+    loadI18n({ systemLocale: 'de-de' }).i18n.locale,
+    'de'
+);
+assert.strictEqual(
+    loadI18n({ systemLocale: 'DE-DE' }).i18n.locale,
+    'de'
+);
+assert.strictEqual(
+    loadI18n({ systemLocale: 'es-mx' }).i18n.locale,
+    'es'
+);
+assert.strictEqual(
+    loadI18n({ systemLocale: 'ES-MX' }).i18n.locale,
+    'es'
+);
+
+// Verify bridge.js normalizeLocale handles all lowercase/uppercase/underscore variants
+const bridgeSource = fs.readFileSync('module/template/webroot/bridge.js', 'utf8');
+const bridgeNormMatch = bridgeSource.match(/function normalizeLocale\([\s\S]*?\n    \}/);
+assert.ok(bridgeNormMatch, 'normalizeLocale must exist in bridge.js');
+const supportedLocales = new Set(['en', 'tr', 'zh-CN', 'es', 'de', 'ru', 'id', 'hi', 'ar']);
+const bridgeNormalizeLocale = new Function('supportedLocales', `return (${bridgeNormMatch[0]});`)(supportedLocales);
+
+// Verify ux.js second normalizeSupportedLocale (ZIP importer)
+const zipNormMatches = [...uxSource.matchAll(/function normalizeSupportedLocale\([\s\S]*?\n    \}/g)];
+assert.strictEqual(zipNormMatches.length, 2, 'ux.js must define normalizeSupportedLocale in both IIFEs');
+const SUPPORTED_LOCALES = new Set(['en', 'tr', 'zh-CN', 'es', 'de', 'ru', 'id', 'hi', 'ar']);
+const zipNormalizeLocale = new Function('SUPPORTED_LOCALES', `return (${zipNormMatches[1][0]});`)(SUPPORTED_LOCALES);
+
+const testVariants = [
+    ['zh-Hans-CN', 'zh-CN'],
+    ['zh-hans-cn', 'zh-CN'],
+    ['zh_Hans_CN', 'zh-CN'],
+    ['zh_hans_cn', 'zh-CN'],
+    ['zh-Hans', 'zh-CN'],
+    ['zh-hans', 'zh-CN'],
+    ['zh_CN', 'zh-CN'],
+    ['zh-cn', 'zh-CN'],
+    ['ZH_CN', 'zh-CN'],
+    ['ZH-CN', 'zh-CN'],
+    ['zh-SG', 'zh-CN'],
+    ['zh-sg', 'zh-CN'],
+    ['zh', 'zh-CN'],
+    ['ZH', 'zh-CN'],
+    ['tr-TR', 'tr'],
+    ['tr-tr', 'tr'],
+    ['TR-TR', 'tr'],
+    ['de-DE', 'de'],
+    ['de-de', 'de'],
+    ['DE-DE', 'de'],
+    ['es-MX', 'es'],
+    ['es-mx', 'es'],
+    ['ES-MX', 'es'],
+    ['ru-RU', 'ru'],
+    ['ru-ru', 'ru'],
+    ['id-ID', 'id'],
+    ['id-id', 'id'],
+    ['hi-IN', 'hi'],
+    ['hi-in', 'hi'],
+    ['ar-EG', 'ar'],
+    ['ar-eg', 'ar'],
+    ['pt-BR', null]
+];
+
+for (const [tag, expected] of testVariants) {
+    const uxExpected = expected || 'en';
+    const resolvedUx = loadI18n({ systemLocale: tag }).i18n.locale;
+    assert.strictEqual(resolvedUx, uxExpected, `ux.js normalizeSupportedLocale (site 1) mismatch for tag "${tag}"`);
+
+    const resolvedBridge = bridgeNormalizeLocale(tag);
+    assert.strictEqual(resolvedBridge, expected, `bridge.js normalizeLocale mismatch for tag "${tag}"`);
+
+    const resolvedZip = zipNormalizeLocale(tag);
+    assert.strictEqual(resolvedZip, expected, `ux.js normalizeSupportedLocale (site 2) mismatch for tag "${tag}"`);
+}
+
+// Verify data-i18n restoration when switching back to English (tr(key) === key)
+const leafElement = {
+    hasAttribute(name) { return name === 'data-i18n'; },
+    getAttribute(name) { return name === 'data-i18n' ? 'refresh' : null; },
+    children: [],
+    textContent: 'Yenile'
+};
+const { catalogs } = loadI18n('en');
+function testTranslateLeaf(el, loc) {
+    const key = el.getAttribute('data-i18n');
+    const rendered = (catalogs[loc] && catalogs[loc][key]) || key;
+    if (typeof rendered === 'string' && (!el.children || el.children.length === 0)) {
+        if (el.textContent !== rendered) el.textContent = rendered;
+    }
+}
+testTranslateLeaf(leafElement, 'en');
+assert.strictEqual(leafElement.textContent, 'Refresh', 'leaf element must restore English translation even when switching back');
 
 console.log('WebUI localization coverage tests passed');
