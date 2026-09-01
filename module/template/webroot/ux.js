@@ -25,6 +25,9 @@
             'noServers': 'No servers configured. Add one below to fetch keyboxes automatically.',
             'refresh': 'Refresh',
             'remove': 'Remove',
+            'Refresh': 'Refresh',
+            'Remove': 'Remove',
+            'Failed to load servers.': 'Failed to load servers.',
         },
         tr: {
             'Identity Controls': 'Kimlik Denetimleri', 'Enable only the identity paths you need. Disabled paths do not start optional interceptors.': 'Yalnızca ihtiyacınız olan kimlik yollarını etkinleştirin. Devre dışı yollar isteğe bağlı yakalayıcıları başlatmaz.', 'Identity is currently disabled. Enable only the identity paths you need below.': 'Kimlik şu anda devre dışı. Aşağıdan yalnızca ihtiyacınız olan kimlik yollarını etkinleştirin.', 'Random': 'Rastgele', 'Identity value randomized': 'Kimlik değeri rastgeleleştirildi',
@@ -382,6 +385,9 @@
         'noServers': 'Yapılandırılmış sunucu yok. Keybox\'ları otomatik olarak almak için aşağıdan bir tane ekleyin.',
         'refresh': 'Yenile',
         'remove': 'Kaldır',
+        'Refresh': 'Yenile',
+        'Remove': 'Kaldır',
+        'Failed to load servers.': 'Sunucular yüklenemedi.',
         'Notification': 'Bildirim',
         'Close notification': 'Bildirimi kapat',
         'Always active.': 'Her zaman etkin.',
@@ -1184,6 +1190,9 @@
         ["Optionally overrides uname release/version inside the injected Keystore runtime. Official GKI presets use published base kernel versions and remain editable.", "可选地覆盖注入 Keystore 运行时中的 uname release/version。官方 GKI 预设使用已发布的基础内核版本并可编辑。", "Sustituye opcionalmente release/version de uname dentro del entorno Keystore inyectado. Los preajustes GKI oficiales usan versiones base publicadas y siguen siendo editables.", "Überschreibt optional uname release/version in der injizierten Keystore-Laufzeit. Offizielle GKI-Voreinstellungen verwenden veröffentlichte Basis-Kernelversionen und bleiben editierbar.", "При необходимости заменяет uname release/version во внедрённой среде Keystore. Официальные профили GKI используют опубликованные базовые версии ядра и остаются редактируемыми.", "Secara opsional mengganti uname release/version di runtime Keystore yang diinjeksi. Preset GKI resmi memakai versi kernel dasar yang dipublikasikan dan tetap dapat diedit.", "इंजेक्ट किए गए Keystore रनटाइम में uname release/version को वैकल्पिक रूप से बदलता है। आधिकारिक GKI प्रीसेट प्रकाशित बेस कर्नेल संस्करणों का उपयोग करते हैं और संपादन योग्य रहते हैं।", "يستبدل اختياريا uname release/version داخل بيئة Keystore المحقونة. تستخدم إعدادات GKI الرسمية إصدارات النواة الأساسية المنشورة وتظل قابلة للتحرير."],
         ["Custom", "自定义", "Personalizado", "Benutzerdefiniert", "Пользовательский", "Kustom", "कस्टम", "مخصص"],
         ["No servers configured. Add one below to fetch keyboxes automatically.", "未配置服务器。在下方添加一个以自动获取 keybox。", "No hay servidores configurados. Añada uno abajo para obtener keyboxes automáticamente.", "Keine Server konfiguriert. Fügen Sie unten einen hinzu, um Keyboxen automatisch abzurufen.", "Серверы не настроены. Добавьте один ниже, чтобы получать keybox автоматически.", "Tidak ada server yang dikonfigurasi. Tambahkan satu di bawah untuk mengambil keybox secara otomatis.", "कोई सर्वर कॉन्फ़िगर नहीं किया गया है। स्वचालित रूप से कीबॉक्स प्राप्त करने के लिए नीचे एक जोड़ें।", "لم يتم تكوين أي خوادم. أضف واحداً أدناه لجلب keyboxes تلقائياً."],
+        ["Refresh", "刷新", "Actualizar", "Aktualisieren", "Обновить", "Segarkan", "रीफ़्रेश करें", "تحديث"],
+        ["Remove", "移除", "Eliminar", "Entfernen", "Удалить", "Hapus", "हटाएं", "إزالة"],
+        ["Failed to load servers.", "无法加载服务器。", "No se pudieron cargar los servidores.", "Server konnten nicht geladen werden.", "Не удалось загрузить серверы.", "Gagal memuat server.", "सर्वर लोड करने में विफल।", "تعذر تحميل الخوادم."],
     ];
 
     for (const row of COMPLETE_CATALOG_ROWS) {
@@ -1493,12 +1502,12 @@
 
     function normalizeSupportedLocale(value) {
         if (typeof value !== 'string' || !value) return null;
-        if (value.startsWith('zh-Hans-')) {
-            const mapped = 'zh-' + value.split('-')[2];
-            if (SUPPORTED.some(([id]) => id === mapped)) return mapped;
+        const tag = value.replace(/_/g, '-');
+        if (tag === 'zh' || tag.startsWith('zh-Hans') || tag.startsWith('zh-CN') || tag.startsWith('zh-SG')) {
+            return 'zh-CN';
         }
-        if (SUPPORTED.some(([id]) => id === value)) return value;
-        const baseLang = value.split('-')[0];
+        if (SUPPORTED.some(([id]) => id === tag)) return tag;
+        const baseLang = tag.split('-')[0];
         if (SUPPORTED.some(([id]) => id === baseLang)) return baseLang;
         return null;
     }
@@ -1779,7 +1788,14 @@
             record.rendered = rendered;
             if (current !== rendered) element.setAttribute(name, rendered);
         });
-        if (element.querySelectorAll) element.querySelectorAll('[placeholder],[title],[aria-label],[data-label]').forEach(child => {
+        if (element.hasAttribute && element.hasAttribute('data-i18n')) {
+            const key = element.getAttribute('data-i18n');
+            const rendered = tr(key);
+            if (rendered && rendered !== key && (!element.children || element.children.length === 0)) {
+                if (element.textContent !== rendered) element.textContent = rendered;
+            }
+        }
+        if (element.querySelectorAll) element.querySelectorAll('[placeholder],[title],[aria-label],[data-label],[data-i18n]').forEach(child => {
             ['placeholder','title','aria-label','data-label'].forEach(name => {
                 if (!child.hasAttribute(name)) return;
                 let stored = originalAttrs.get(child);
@@ -1792,10 +1808,23 @@
                 record.rendered = rendered;
                 if (current !== rendered) child.setAttribute(name, rendered);
             });
+            if (child.hasAttribute('data-i18n')) {
+                const key = child.getAttribute('data-i18n');
+                const rendered = tr(key);
+                if (rendered && rendered !== key && (!child.children || child.children.length === 0)) {
+                    if (child.textContent !== rendered) child.textContent = rendered;
+                }
+            }
         });
     }
 
     function installTranslationObserver() {
+        if (typeof global.addEventListener === 'function' && !global.__ctRetranslateInstalled) {
+            global.__ctRetranslateInstalled = true;
+            global.addEventListener('ct_retranslate', () => {
+                if (document.body) translateElement(document.body);
+            });
+        }
         if (translationObserver || typeof global.MutationObserver !== 'function' || !document.body) return;
         translationObserver = new global.MutationObserver(mutations => {
             mutations.forEach(mutation => {
@@ -1818,7 +1847,7 @@
             childList: true,
             characterData: true,
             attributes: true,
-            attributeFilter: ['placeholder','title','aria-label','data-label']
+            attributeFilter: ['placeholder','title','aria-label','data-label','data-i18n']
         });
     }
 
@@ -2413,12 +2442,12 @@
 
     function normalizeSupportedLocale(value) {
         if (typeof value !== 'string' || !value) return null;
-        if (value.startsWith('zh-Hans-')) {
-            const mapped = 'zh-' + value.split('-')[2];
-            if (SUPPORTED_LOCALES.has(mapped)) return mapped;
+        const tag = value.replace(/_/g, '-');
+        if (tag === 'zh' || tag.startsWith('zh-Hans') || tag.startsWith('zh-CN') || tag.startsWith('zh-SG')) {
+            return 'zh-CN';
         }
-        if (SUPPORTED_LOCALES.has(value)) return value;
-        const baseLang = value.split('-')[0];
+        if (SUPPORTED_LOCALES.has(tag)) return tag;
+        const baseLang = tag.split('-')[0];
         if (SUPPORTED_LOCALES.has(baseLang)) return baseLang;
         return null;
     }

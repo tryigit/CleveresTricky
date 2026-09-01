@@ -91,7 +91,7 @@ Copy Diagnostics в Info & Resources копирует ограниченную s
 
 Passthrough держит выбранные media apps на genuine Android Keystore certificate path. Identifier Privacy заменяет только supported stable-AIDL `deviceUniqueId` для `privacy=isolate` стабильным app-scoped pseudonym без использования genuine DRM ID в derivation.
 
-`drm_packages.txt` поддерживает exact packages и bounded wildcard. Privacy hook ограничен `IDrmFactory` / `IDrmPlugin.getPropertyByteArray("deviceUniqueId")`; HIDL, security level, licenses, provisioning, keys, sessions, HDCP и string properties не меняются. Неожиданный ABI сохраняет original response fail open.
+`drm_packages.txt` поддерживает exact packages и bounded wildcard. При создании плагина фиксируются имя пакета и контекст пользователя (multi-user / work-profile). Privacy hook ограничен `IDrmFactory` / `IDrmPlugin.getPropertyByteArray("deviceUniqueId")`; HIDL, security level, licenses, provisioning, keys, sessions, HDCP и string properties не меняются. Неожиданный ABI сохраняет original response fail open.
 
 <a id="encrypted-storage"></a>
 ## Encrypted Storage

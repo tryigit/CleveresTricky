@@ -144,8 +144,9 @@ const turkish = loadI18n('tr').i18n;
 assert.match(turkish.translate(runtimeGlobal), /4 doğrulanmış keybox/);
 assert.strictEqual(turkish.translate('4 Keys Loaded'), '4 anahtar yüklendi');
 assert.strictEqual(turkish.translate('noServers'), 'Yapılandırılmış sunucu yok. Keybox\'ları otomatik olarak almak için aşağıdan bir tane ekleyin.');
-assert.strictEqual(turkish.translate('refresh'), 'Yenile');
-assert.strictEqual(turkish.translate('remove'), 'Kaldır');
+assert.strictEqual(turkish.translate('Refresh'), 'Yenile');
+assert.strictEqual(turkish.translate('Remove'), 'Kaldır');
+assert.strictEqual(turkish.translate('Failed to load servers.'), 'Sunucular yüklenemedi.');
 assert.strictEqual(loadI18n('en').i18n.translate('Runtime Health'), 'Runtime Health');
 
 assert.strictEqual(loadI18n({ savedLocale: 'de', systemLocale: 'tr-TR', browserLocale: 'zh-CN' }).i18n.locale, 'de');
@@ -156,6 +157,22 @@ assert.strictEqual(loadI18n({ browserLocale: 'pt-BR' }).i18n.locale, 'en');
 
 assert.strictEqual(
     loadI18n({ systemLocale: 'zh-Hans-CN', browserLocale: 'de-DE' }).i18n.locale,
+    'zh-CN'
+);
+assert.strictEqual(
+    loadI18n({ systemLocale: 'zh_Hans_CN', browserLocale: 'de-DE' }).i18n.locale,
+    'zh-CN'
+);
+assert.strictEqual(
+    loadI18n({ systemLocale: 'zh_CN', browserLocale: 'de-DE' }).i18n.locale,
+    'zh-CN'
+);
+assert.strictEqual(
+    loadI18n({ browserLocale: 'zh-Hans' }).i18n.locale,
+    'zh-CN'
+);
+assert.strictEqual(
+    loadI18n({ browserLocale: 'zh' }).i18n.locale,
     'zh-CN'
 );
 assert.strictEqual(

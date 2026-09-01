@@ -91,7 +91,7 @@ Kontrollü izolasyon için Minimal profile ile reboot edin, genuine path'i doğr
 
 DRM Keystore Passthrough seçili medya uygulamalarını Android'in gerçek Keystore certificate path'inde tutar. DRM Identifier Privacy ise desteklenen stable AIDL DRM yolunda `privacy=isolate` kullanılan uygulamanın `deviceUniqueId` byte array okumasını, gerçek değeri input olarak kullanmadan, stable app-scoped pseudonym ile değiştirir.
 
-`drm_packages.txt` exact paket ve bounded wildcard kabul eder. Privacy hook yalnız `IDrmFactory`/`IDrmPlugin.getPropertyByteArray("deviceUniqueId")` yolunu hedefler; legacy HIDL veya vendor-specific yolları değiştirmez. Security level, licenses, provisioning, content keys, sessions, HDCP, string properties ve DRM policy değiştirilmez. Beklenen AIDL servis veya transaction yapısı yoksa fail open ile gerçek yanıt korunur.
+`drm_packages.txt` exact paket ve bounded wildcard kabul eder. Plugin oluşturma sırasında çağrıyı başlatan uygulamanın paket adı ve çalışma zamanı kullanıcı bağlamı (multi-user / work-profile) kaydedilir. Privacy hook yalnız `IDrmFactory`/`IDrmPlugin.getPropertyByteArray("deviceUniqueId")` yolunu hedefler; legacy HIDL veya vendor-specific yolları değiştirmez. Security level, licenses, provisioning, content keys, sessions, HDCP, string properties ve DRM policy değiştirilmez. Beklenen AIDL servis veya transaction yapısı yoksa fail open ile gerçek yanıt korunur.
 
 <a id="encrypted-storage"></a>
 ## Encrypted Storage

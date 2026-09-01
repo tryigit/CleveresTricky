@@ -143,12 +143,12 @@
 
     function normalizeLocale(value) {
         if (typeof value !== 'string' || !value) return null;
-        if (value.startsWith('zh-Hans-')) {
-            const mapped = 'zh-' + value.split('-')[2];
-            if (supportedLocales.has(mapped)) return mapped;
+        const tag = value.replace(/_/g, '-');
+        if (tag === 'zh' || tag.startsWith('zh-Hans') || tag.startsWith('zh-CN') || tag.startsWith('zh-SG')) {
+            return 'zh-CN';
         }
-        if (supportedLocales.has(value)) return value;
-        const base = value.split('-')[0];
+        if (supportedLocales.has(tag)) return tag;
+        const base = tag.split('-')[0];
         return supportedLocales.has(base) ? base : null;
     }
 

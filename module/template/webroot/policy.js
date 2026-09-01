@@ -400,11 +400,14 @@ function retireLegacyLocalization() {
 function markIdentityActionGroups() {
   const spoof = document.getElementById('spoof');
   if (!spoof) return;
-  spoof.querySelectorAll('button').forEach(button => {
+  const buttons = (typeof spoof.querySelectorAll === 'function') ? spoof.querySelectorAll('button') : [];
+  buttons.forEach(button => {
+    const action = typeof button.getAttribute === 'function' ? button.getAttribute('data-action') : null;
     const text = (button.textContent || '').trim().toUpperCase();
-    if (text.includes('AUTO IDENTITY') || text.includes('RANDOMIZE ALL') || text === 'APPLY IDENTITY' || text === 'CLEAR ALL') {
+    if (action === 'auto-identity' || action === 'randomize-all' || action === 'apply-identity' || action === 'clear-all' ||
+        text.includes('AUTO IDENTITY') || text.includes('RANDOMIZE ALL') || text === 'APPLY IDENTITY' || text === 'CLEAR ALL') {
       const parent = button.parentElement;
-      if (parent && parent.children.length >= 2) parent.classList.add('ct-action-grid');
+      if (parent && parent.children && parent.children.length >= 2) parent.classList.add('ct-action-grid');
     }
   });
 }
@@ -547,17 +550,17 @@ function refreshDynamicVisibility() {
     const cameraOn = Boolean(legacyConfig && legacyConfig.camera_visibility);
     const telephonyOn = Boolean(features.telephonyIdentity);
 
-    const headers = (typeof spoofPage.querySelectorAll === 'function') ? (spoofPage.querySelectorAll('.section-header') || []) : [];
+    const headers = (typeof spoofPage.querySelectorAll === 'function') ? (spoofPage.querySelectorAll('.section-header[data-section]') || []) : [];
     headers.forEach(header => {
       if (!header || !header.style) return;
-      const text = (header.textContent || '').trim();
-      if (text.startsWith('SIM') || text.includes('Telephony')) {
+      const section = header.getAttribute('data-section') || '';
+      if (section === 'sim1' || section === 'sim2' || section === 'telephony') {
         header.style.display = telephonyOn ? '' : 'none';
         const next = header.nextElementSibling;
         if (next && next.style) {
           next.style.display = telephonyOn ? '' : 'none';
         }
-      } else if (text.includes('Hardware') || text.includes('Camera')) {
+      } else if (section === 'hardware') {
         header.style.display = cameraOn ? '' : 'none';
         const next = header.nextElementSibling;
         if (next && next.style) {
@@ -645,7 +648,8 @@ function installFeatureCenter() {
     panel.id = 'ct_dashboard_controls';
     panel.className = 'panel';
     panel.innerHTML = '<h3>Feature Center</h3><div class="scope-note">Main controls are here. Parent features reveal only the settings that belong to them.</div><div class="ct-control-host"></div>';
-    const corePanel = [...dashboard.querySelectorAll('.panel')].find(item => /^Core Protection$/i.test((item.querySelector('h3')?.textContent || '').trim()));
+    const coreTitle = document.getElementById('ct_core_protection_title');
+    const corePanel = coreTitle ? coreTitle.closest('.panel') : null;
     if (corePanel && corePanel.nextSibling) dashboard.insertBefore(panel,corePanel.nextSibling);
     else dashboard.prepend(panel);
   }
@@ -728,7 +732,7 @@ function installIdentityBanner() {
 function installConfigurationActions() {
   const dashboard = document.getElementById('dashboard');
   if (!dashboard || document.getElementById('ct_restore_defaults')) return;
-  const panel = [...dashboard.querySelectorAll('.panel')].find(item => /^Configuration Management$/i.test((item.querySelector('h3')?.textContent || '').trim()));
+  const panel = document.getElementById('ct_config_management') || document.getElementById('backupPw')?.closest('.panel');
   if (!panel) return;
   const note = document.createElement('div');
   note.className = 'scope-note';
@@ -772,7 +776,8 @@ const CUSTOM_TEMPLATE_FIELDS = [
 function installCustomTemplateBuilder() {
   const spoof = document.getElementById('spoof');
   if (!spoof || document.getElementById('ct_custom_template_panel')) return;
-  const identityPanel = [...spoof.querySelectorAll('.panel')].find(item => /^Identity Manager$/i.test((item.querySelector('h3')?.textContent || '').trim()));
+  const identityTitle = document.getElementById('ct_identity_manager_title');
+  const identityPanel = identityTitle ? identityTitle.closest('.panel') : null;
   if (!identityPanel) return;
   const panel = document.createElement('div');
   panel.id = 'ct_custom_template_panel';
@@ -1111,7 +1116,8 @@ function openProfile(index) {
   fillSelect(document.getElementById('ct_profile_template'),templateValues,profile.template || '','Inherit / none');
   fillSelect(document.getElementById('ct_profile_keybox'),keyboxes,profile.keybox || '','Inherit / none');
   const featureHost = document.getElementById('ct_profile_features');
-  featureHost.innerHTML = FEATURE_KEYS.map(([key,title,desc]) => {
+  const profileFeatureList = PROFILE_FEATURES.filter(([key]) => key !== 'securityPatch');
+  featureHost.innerHTML = profileFeatureList.map(([key,title,desc]) => {
     const current = typeof profile.features[key] === 'boolean' ? String(profile.features[key]) : 'inherit';
     return `<div class="row"><label for="ct_pf_${key}" style="flex:1;padding-right:10px"><strong style="color:#fff">${escapeHtml(title)}</strong><span class="res-desc">${escapeHtml(desc)}</span></label><select id="ct_pf_${key}" style="max-width:180px"><option value="inherit" ${current==='inherit'?'selected':''}>Inherit</option><option value="true" ${current==='true'?'selected':''}>Enabled</option><option value="false" ${current==='false'?'selected':''}>Disabled</option></select></div>`;
   }).join('');
@@ -1399,9 +1405,12 @@ function showLoadingButton(button) {
 function installAutoIdentityOverride() {
   const spoof = document.getElementById('spoof');
   if (!spoof) return;
-  const button = [...spoof.querySelectorAll('button')].find(node => (node.textContent || '').toUpperCase().includes('AUTO IDENTITY'));
-  if (!button || button.dataset.ctAutoIdentity === '1') return;
-  button.dataset.ctAutoIdentity = '1';
+  const button = (typeof spoof.querySelector === 'function' ? spoof.querySelector('button[data-action="auto-identity"]') : null) ||
+    [...(typeof spoof.querySelectorAll === 'function' ? spoof.querySelectorAll('button') : [])].find(node =>
+      (typeof node.getAttribute === 'function' && node.getAttribute('data-action') === 'auto-identity') || (node.textContent || '').toUpperCase().includes('AUTO IDENTITY')
+    );
+  if (!button || (button.dataset && button.dataset.ctAutoIdentity === '1')) return;
+  if (button.dataset) button.dataset.ctAutoIdentity = '1';
   button.onclick = null;
   button.removeAttribute('onclick');
   button.addEventListener('click',async event => {

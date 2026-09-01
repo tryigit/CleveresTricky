@@ -91,7 +91,7 @@ Isolation के लिए Minimal + reboot, genuine path verify, फिर feat
 
 Passthrough selected media apps को genuine Android Keystore certificate path पर रखता है। Identifier Privacy केवल supported stable-AIDL `deviceUniqueId` को `privacy=isolate` apps के लिए stable app-scoped pseudonym से बदलता है, genuine DRM ID derivation input नहीं है।
 
-`drm_packages.txt` exact package/bounded wildcard support करता है। Hook `IDrmFactory` / `IDrmPlugin.getPropertyByteArray("deviceUniqueId")` तक सीमित है; HIDL, security level, license, provisioning, keys, sessions, HDCP, string property नहीं बदलते। Unexpected ABI fail open रहता है।
+`drm_packages.txt` exact package/bounded wildcard support करता है। Plugin निर्माण के समय पैकेज नाम और रनटाइम यूज़र कॉन्टेक्स्ट (multi-user / work-profile) कैप्चर किया जाता है। Hook `IDrmFactory` / `IDrmPlugin.getPropertyByteArray("deviceUniqueId")` तक सीमित है; HIDL, security level, license, provisioning, keys, sessions, HDCP, string property नहीं बदलते। Unexpected ABI fail open रहता है।
 
 <a id="encrypted-storage"></a>
 ## Encrypted Storage

@@ -91,7 +91,7 @@ Para aislar, aplicar Minimal y reboot, confirmar genuine path y luego activar gr
 
 Keystore Passthrough mantiene apps multimedia seleccionadas en la ruta genuina de certificados Android. Identifier Privacy sustituye únicamente el `deviceUniqueId` compatible sobre stable AIDL para apps `privacy=isolate`, usando un pseudónimo estable por app que no deriva del ID DRM genuino.
 
-`drm_packages.txt` permite paquetes exactos y wildcards acotados. El hook de privacidad se limita a `IDrmFactory` y `IDrmPlugin.getPropertyByteArray("deviceUniqueId")`; no modifica HIDL legado, security level, licenses, provisioning, content keys, sessions, HDCP ni string properties. Si la forma esperada no existe, fail open y conserva la respuesta original.
+`drm_packages.txt` permite paquetes exactos y wildcards acotados. Al crear el plugin se captura el paquete y el contexto de usuario (multi-user / work-profile). El hook de privacidad se limita a `IDrmFactory` y `IDrmPlugin.getPropertyByteArray("deviceUniqueId")`; no modifica HIDL legado, security level, licenses, provisioning, content keys, sessions, HDCP ni string properties. Si la forma esperada no existe, fail open y conserva la respuesta original.
 
 <a id="encrypted-storage"></a>
 ## Encrypted Storage

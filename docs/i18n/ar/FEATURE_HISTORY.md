@@ -1,6 +1,6 @@
 # سجل الميزات
 
-> **اللغات:** [English](../../FEATURE_HISTORY.md) · [Türkçe](../tr/FEATURE_HISTORY.md) · **العربية** · [Deutsch](../de/FEATURE_HISTORY.md) · [Español](../es/FEATURE_HISTORY.md) · [Русский](../ru/FEATURE_HISTORY.md) · [Bahasa Indonesia](../id/FEATURE_HISTORY.md) · [हिन्दी](../hi/FEATURE_HISTORY.md) · [中文](../zh/FEATURE_HISTORY.md)
+> **اللغات:** [English](../../../FEATURE_HISTORY.md) · [Türkçe](../tr/FEATURE_HISTORY.md) · **العربية** · [Deutsch](../de/FEATURE_HISTORY.md) · [Español](../es/FEATURE_HISTORY.md) · [Русский](../ru/FEATURE_HISTORY.md) · [Bahasa Indonesia](../id/FEATURE_HISTORY.md) · [हिन्दी](../hi/FEATURE_HISTORY.md) · [中文](../zh/FEATURE_HISTORY.md)
 
 توثق هذه الصفحة التاريخ العام لتطوير الميزات الرئيسية في CleveresTricky مع روابط GitHub المباشرة.
 

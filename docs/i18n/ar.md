@@ -93,7 +93,7 @@ CI يتحقق من shell وSELinux وtemplate وKotlin/Java/Rust والمعما�
 
 Passthrough يبقي تطبيقات الوسائط المحددة على genuine Android Keystore certificate path. Identifier Privacy يستبدل فقط supported stable-AIDL `deviceUniqueId` لتطبيق `privacy=isolate` باسم مستعار ثابت خاص بالتطبيق دون استخدام genuine DRM ID في الاشتقاق.
 
-`drm_packages.txt` يدعم exact package وbounded wildcard. Hook محدود إلى `IDrmFactory` / `IDrmPlugin.getPropertyByteArray("deviceUniqueId")` ولا يغير HIDL أوsecurity level أوlicenses أوprovisioning أوkeys أوsessions أوHDCP أوstring properties. Unexpected ABI يحافظ على original response fail open.
+`drm_packages.txt` يدعم exact package وbounded wildcard. عند إنشاء المكون الإضافي، يتم التقاط اسم الحزمة وسياق وقت تشغيل المستخدم (multi-user / work-profile). Hook محدود إلى `IDrmFactory` / `IDrmPlugin.getPropertyByteArray("deviceUniqueId")` ولا يغير HIDL أوsecurity level أوlicenses أوprovisioning أوkeys أوsessions أوHDCP أوstring properties. Unexpected ABI يحافظ على original response fail open.
 
 <a id="encrypted-storage"></a>
 ## Encrypted Storage

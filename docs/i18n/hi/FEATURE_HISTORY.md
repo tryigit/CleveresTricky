@@ -1,6 +1,6 @@
 # फीचर इतिहास
 
-> **भाषाएँ:** [English](../../FEATURE_HISTORY.md) · [Türkçe](../tr/FEATURE_HISTORY.md) · [العربية](../ar/FEATURE_HISTORY.md) · [Deutsch](../de/FEATURE_HISTORY.md) · [Español](../es/FEATURE_HISTORY.md) · [Русский](../ru/FEATURE_HISTORY.md) · [Bahasa Indonesia](../id/FEATURE_HISTORY.md) · **हिन्दी** · [中文](../zh/FEATURE_HISTORY.md)
+> **भाषाएँ:** [English](../../../FEATURE_HISTORY.md) · [Türkçe](../tr/FEATURE_HISTORY.md) · [العربية](../ar/FEATURE_HISTORY.md) · [Deutsch](../de/FEATURE_HISTORY.md) · [Español](../es/FEATURE_HISTORY.md) · [Русский](../ru/FEATURE_HISTORY.md) · [Bahasa Indonesia](../id/FEATURE_HISTORY.md) · **हिन्दी** · [中文](../zh/FEATURE_HISTORY.md)
 
 यह पेज CleveresTricky की प्रमुख सुविधाओं के सार्वजनिक विकास इतिहास और सीधे GitHub रिकॉर्ड दर्ज करता है।
 

@@ -28,7 +28,7 @@ The default list includes common media applications such as Netflix, Amazon Prim
 
 DRM Identifier Privacy requires Identity Spoof Engine to be enabled and the application's Application Rule privacy mode to be `isolate`. `inherit` leaves the DRM identifier unchanged. The DRM privacy hook does not use the Keystore `drm_passthrough` targeting decision.
 
-The runtime discovers stable AIDL `android.hardware.drm.IDrmFactory/*` services, attaches the existing bounded native Binder hook to the vendor DRM service process, observes newly created `IDrmPlugin` Binder objects, and filters only `getPropertyByteArray` transactions. A request is modified only when its property name is exactly `deviceUniqueId` and the real Binder caller has an explicit isolate policy.
+The runtime discovers stable AIDL `android.hardware.drm.IDrmFactory/*` services, attaches the existing bounded native Binder hook to the vendor DRM service process, observes newly created `IDrmPlugin` Binder objects, and filters only `getPropertyByteArray` transactions. The originating application package name and runtime user context are captured during plugin creation so that requests are correctly isolated even when calls originate from media daemons, secondary users, or work profiles. A request is modified only when its property name is exactly `deviceUniqueId` and the real application has an explicit isolate policy.
 
 Legacy HIDL DRM implementations and vendor specific paths that do not use the supported stable AIDL interface remain untouched. If the expected AIDL service, transaction shape, process information, or response format is unavailable, the hook fails open and Android's original response is preserved.
 

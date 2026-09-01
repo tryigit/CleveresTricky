@@ -269,7 +269,7 @@ async function main() {
     assert.match(uxSource, /record\.source = current/);
     assert.match(uxSource, /if \(current !== rendered\) node\.nodeValue = rendered/);
     assert.match(uxSource, /new global\.MutationObserver/);
-    assert.match(uxSource, /attributeFilter: \['placeholder','title','aria-label','data-label'\]/);
+    assert.match(uxSource, /attributeFilter: \['placeholder','title','aria-label','data-label','data-i18n'\]/);
     assert.match(uxSource, /Identity is currently disabled\. You can enable it from Dashboard\./);
     assert.match(uxSource, /ct_language_panel/);
     assert.match(uxSource, /To add a locale:/);

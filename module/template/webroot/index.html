@@ -49,6 +49,7 @@
         body {
             background-color: var(--bg);
             color: var(--text);
+            font-size: 16px;
             font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "SF Pro", -system-ui, system-ui, "Helvetica Neue", Helvetica, Arial, sans-serif;
             -webkit-font-smoothing: antialiased;
             -moz-osx-font-smoothing: grayscale;
@@ -296,9 +297,9 @@
         input[type="checkbox"].toggle.pending-reboot:checked, input[type="checkbox"].ct-switch.pending-reboot:checked { background: #d97706 !important; border-color: #fbbf24 !important; box-shadow: 0 0 10px rgba(251, 191, 36, 0.5) !important; }
         textarea:disabled, input:disabled, select:disabled, button:disabled { opacity: 0.5; cursor: not-allowed; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.9em; box-sizing: border-box; }
-        th { text-align: left; padding: 10px; border-bottom: 1px solid var(--border); color: var(--text-muted); font-weight: 600; }
+        th { text-align: left; padding: 10px; border-bottom: 1px solid var(--border); color: var(--text-muted); font-weight: 600; white-space: nowrap; }
         td { padding: 10px; border-bottom: 1px solid var(--border); color: #ccc; }
-        .tag { display: inline-block; padding: 3px 8px; border-radius: 8px; background: var(--panel-elevated); color: var(--text-muted); font-size: 0.75em; margin-right: 5px; font-weight: 600; }
+        .tag { display: inline-block; padding: 4px 9px; border-radius: 8px; background: var(--panel-elevated); color: var(--text-muted); font-size: 0.82em; margin-right: 5px; font-weight: 600; }
         .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; width: 100%; box-sizing: border-box; margin-bottom: 16px; }
         .grid-2 > div { min-width: 0; display: flex; flex-direction: column; }
         .identity-actions { margin-top: 18px; display: flex; justify-content: flex-end; gap: 10px; }
@@ -306,11 +307,11 @@
         .identity-input-slot { min-width: 0; }
         .identity-input-slot input, .identity-input-slot select { width: 100%; }
         .identity-random-btn { min-width: 84px; padding: 10px 12px; text-transform: none; letter-spacing: 0; }
-        .scope-note { font-size: 0.85em; color: var(--text-muted); line-height: 1.5; margin-bottom: 15px; overflow-wrap: anywhere; }
+        .scope-note { font-size: 0.88em; color: var(--text-muted); line-height: 1.5; margin-bottom: 15px; overflow-wrap: anywhere; }
         .master-panel { border: 1px solid var(--border); background: var(--panel); border-radius: 16px; }
         .master-copy { flex: 1; min-width: 0; padding-right: 16px; }
         .master-copy strong { display: block; color: #fff; font-size: 1.05em; margin-bottom: 5px; }
-        .section-header { font-size: 0.76em; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin: 16px 0 6px 0; font-weight: 600; }
+        .section-header { font-size: 0.82em; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin: 16px 0 6px 0; font-weight: 600; white-space: nowrap; }
         .drag-over { border-color: var(--accent) !important; background: rgba(255,255,255,0.05); }
         #dropZone:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         ::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -319,13 +320,13 @@
         ::-webkit-scrollbar-thumb:hover { background: #555558; }
         .locked-item { border: 1px solid var(--danger); background: var(--danger-soft); padding: 12px; border-radius: 10px; margin-bottom: 10px; }
         .server-item { border: 1px solid var(--border); background: var(--panel); padding: 12px; border-radius: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
-        .status-badge { font-size: 0.75em; padding: 2px 6px; border-radius: 4px; margin-left: 10px; }
+        .status-badge { font-size: 0.82em; padding: 3px 8px; border-radius: 6px; margin-left: 10px; font-weight: 600; }
         .status-OK { background: var(--success-soft); color: var(--success); }
         input.valid { border-color: var(--success); }
         input.invalid { border-color: var(--danger); }
-        .error-msg { color: var(--danger); font-size: 0.8em; margin-top: 4px; display: none; }
+        .error-msg { color: var(--danger); font-size: 0.82em; margin-top: 4px; display: none; }
         button.confirm-active { background: var(--danger) !important; color: #fff !important; font-weight: bold; border-color: var(--danger) !important; }
-        .res-desc { display: block; font-size: 0.8em; color: var(--text-muted); margin-top: 4px; line-height: 1.3; }
+        .res-desc { display: block; font-size: 0.85em; color: var(--text-muted); margin-top: 4px; line-height: 1.35; }
         .search-container { position: relative; margin-bottom: 0; width: 100%; box-sizing: border-box; }
         .search-container input[type="search"], .search-container input[type="text"] { width: 100%; padding-right: 44px; }
         .clear-btn { position: absolute; right: 0; top: 0; bottom: 0; height: 100%; min-height: 44px; min-width: 44px; background: transparent; border: none; color: var(--text-muted); font-size: 1.2em; padding: 0; cursor: pointer; display: none; touch-action: manipulation; align-items: center; justify-content: center; }
@@ -341,7 +342,7 @@
         .resource-summary { display: flex; justify-content: space-around; align-items: center; background: var(--panel); padding: 18px; border-radius: 14px; border: 1px solid var(--border); margin-bottom: 18px; box-shadow: 0 4px 16px rgba(0,0,0,0.2); box-sizing: border-box; }
         .resource-stat { text-align: center; padding: 8px 12px; flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; min-width: 0; }
         .resource-stat-mid { border-left: 1px solid var(--border); border-right: 1px solid var(--border); }
-        .resource-stat-label { font-size: 0.75em; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+        .resource-stat-label { font-size: 0.80em; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
         .resource-stat-value { margin-top: 4px; font-size: 1.1em; font-weight: 700; color: var(--accent); overflow-wrap: anywhere; }
         .info-health { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; align-items: start; padding: 16px 18px; margin-bottom: 16px; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; box-sizing: border-box; }
         .info-health[data-state="ok"] { border-color: rgba(48, 209, 88, 0.45); }
@@ -350,7 +351,7 @@
         .info-health-copy { min-width: 0; line-height: 1.5; overflow-wrap: anywhere; }
         .info-health-copy strong { display: block; margin-bottom: 4px; color: #fff; font-size: 1em; }
         .info-health-copy span { color: var(--text-muted); font-size: 0.9em; }
-        .info-health-badge { display: inline-flex; align-items: center; justify-content: center; min-height: 32px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--border); font-size: 0.72em; font-weight: 700; letter-spacing: 0.06em; white-space: nowrap; }
+        .info-health-badge { display: inline-flex; align-items: center; justify-content: center; min-height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--border); font-size: 0.80em; font-weight: 700; letter-spacing: 0.06em; white-space: nowrap; }
         .info-health[data-state="ok"] .info-health-badge { color: var(--success); background: var(--success-soft); border-color: rgba(48, 209, 88, 0.35); }
         .info-health[data-state="warn"] .info-health-badge { color: var(--warning); background: var(--warning-soft); border-color: rgba(255, 159, 10, 0.35); }
         .info-health[data-state="error"] .info-health-badge { color: var(--danger); background: var(--danger-soft); border-color: rgba(255, 69, 58, 0.35); }
@@ -425,9 +426,9 @@
                 align-items: center;
                 justify-content: center;
                 gap: 6px;
-                padding: 8px 12px;
+                padding: 8px 14px;
                 border-radius: 18px;
-                font-size: 0.75rem;
+                font-size: 0.85rem;
                 font-weight: 600;
                 color: var(--text-muted);
                 box-shadow: none;
@@ -439,9 +440,9 @@
                 box-shadow: none;
             }
             .tab-icon {
-                width: 16px;
-                height: 16px;
-                min-width: 16px;
+                width: 18px;
+                height: 18px;
+                min-width: 18px;
             }
             .tab-label {
                 flex: 0 1 auto;
@@ -534,7 +535,7 @@
 
     <div id="dashboard" class="content active" role="tabpanel" aria-labelledby="tab_dashboard">
         <div class="panel panel-hero">
-<h3>Core Protection</h3>
+<h3 id="ct_core_protection_title">Core Protection</h3>
 <div class="scope-note" style="margin-top:10px;"><strong style="color:var(--success);">Always active.</strong> Bootloader/verified-boot property compatibility and Keystore/TEE certificate protection are core module behavior. They have no on/off switch and continue working when Identity Engine is disabled. Hardware bootloader and root-of-trust state are not physically changed.</div>
         </div>
 
@@ -560,7 +561,7 @@
 
     <div id="spoof" class="content" role="tabpanel" aria-labelledby="tab_spoof">
         <div class="panel">
-<h3>Identity Manager</h3>
+<h3 id="ct_identity_manager_title">Identity Manager</h3>
 <label for="templateSelect" style="display:block; font-size:0.85em; color:#888; margin-bottom:8px;">Select the attestation identity used for configured target applications.</label>
 <div class="identity-input-action" style="margin-bottom:15px;"><div class="identity-input-slot"><select id="templateSelect" onchange="previewTemplate()"><option value="">No attestation template</option></select></div><button type="button" class="identity-random-btn" title="Random" aria-label="Random" onclick="runWithState(this, 'Generating...', () => generateRandomIdentity('template'))">Random</button></div>
 <div id="templatePreview" style="background:var(--input-bg); border-radius:8px; padding:15px; margin-bottom:15px;">
@@ -568,12 +569,12 @@
     <div class="section-header">Template fingerprint <button onclick="copyToClipboard(document.getElementById('pFing').innerText, 'Fingerprint Copied', this)" style="font-size:0.9em; padding:8px 12px; margin-left:5px; min-height:44px;" title="Copy template fingerprint" aria-label="Copy Template Fingerprint">Copy</button></div><div style="font-family:monospace; font-size:0.8em; color:#999; word-break:break-all;" id="pFing"></div>
 </div>
 <div class="scope-note">Applying a template persists its fingerprint and build fields. Build Identity at Boot requires Identity Engine and a reboot. Android ID remains Android's per-app SSAID, and the actual kernel uname remains unchanged.</div>
-<div style="display:flex; gap:10px; flex-wrap:wrap;"><button onclick="runWithState(this, 'Generating...', () => generateRandomIdentity('all'))" class="primary" style="flex:1;">Randomize All Identifiers</button><button onclick="runWithState(this, 'Fetching...', applyAutoIdentity)" style="flex:1;">Auto Identity (Pixel Beta)</button><button onclick="runWithState(this, 'Saving...', applySpoofing)" style="flex:1;">Apply Identity</button></div>
+<div style="display:flex; gap:10px; flex-wrap:wrap;"><button data-action="randomize-all" onclick="runWithState(this, 'Generating...', () => generateRandomIdentity('all'))" class="primary" style="flex:1;">Randomize All Identifiers</button><button data-action="auto-identity" onclick="runWithState(this, 'Fetching...', applyAutoIdentity)" style="flex:1;">Auto Identity (Pixel Beta)</button><button data-action="apply-identity" onclick="runWithState(this, 'Saving...', applySpoofing)" style="flex:1;">Apply Identity</button></div>
 <div class="scope-note" style="margin-top:12px; margin-bottom:0;"><strong>Auto Identity:</strong> for Play Integrity it pulls a current Pixel beta/canary ROM identity from Google's public metadata. Recommended only if you use a Custom ROM. The result is saved locally; enable Identity Engine and reboot to expose build fields.</div>
         </div>
         <div class="panel"><h3>Attestation and Telephony Identifiers</h3>
 <div id="identityScope" class="scope-note">These overrides are visible only to selected apps after Android grants the original API request. They do not change modem, SIM, EFS, baseband, or mobile-network identity.</div>
-<div class="section-header">SIM 1</div>
+<div class="section-header" data-section="sim1">SIM 1</div>
 <div class="grid-2">
     <div><label for="inputImei">IMEI</label><div class="identity-input-action"><div class="identity-input-slot"><input type="text" id="inputImei" placeholder="35..." maxlength="15" style="font-family:monospace;" inputmode="numeric" enterkeyhint="next" oninput="validateRealtime(this, 'luhn')" aria-describedby="identityScope" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></div><button type="button" class="identity-random-btn" title="Random" aria-label="Random" onclick="runWithState(this, 'Generating...', () => randomizeIdentityField('imei'))">Random</button></div></div>
     <div><label for="inputMeid">MEID</label><div class="identity-input-action"><div class="identity-input-slot"><input type="text" id="inputMeid" placeholder="14 hexadecimal characters" maxlength="14" style="font-family:monospace;" inputmode="text" enterkeyhint="next" oninput="validateRealtime(this, 'meid')" aria-describedby="identityScope" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="characters"></div><button type="button" class="identity-random-btn" title="Random" aria-label="Random" onclick="runWithState(this, 'Generating...', () => randomizeIdentityField('meid'))">Random</button></div></div>
@@ -581,7 +582,7 @@
     <div><label for="inputIccid">ICCID</label><div class="identity-input-action"><div class="identity-input-slot"><input type="text" id="inputIccid" placeholder="SIM card identity" maxlength="22" style="font-family:monospace;" inputmode="numeric" enterkeyhint="next" oninput="validateRealtime(this, 'luhn')" aria-describedby="identityScope" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></div><button type="button" class="identity-random-btn" title="Random" aria-label="Random" onclick="runWithState(this, 'Generating...', () => randomizeIdentityField('iccid'))">Random</button></div></div>
     <div><label for="inputPhoneNumber">Phone number</label><div class="identity-input-action"><div class="identity-input-slot"><input type="tel" id="inputPhoneNumber" placeholder="+12025550123" maxlength="32" style="font-family:monospace;" inputmode="tel" enterkeyhint="next" oninput="validateRealtime(this, 'phone')" aria-describedby="identityScope" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></div><button type="button" class="identity-random-btn" title="Random" aria-label="Random" onclick="runWithState(this, 'Generating...', () => randomizeIdentityField('phone_number'))">Random</button></div></div>
 </div>
-<div class="section-header">SIM 2 (optional)</div>
+<div class="section-header" data-section="sim2">SIM 2 (optional)</div>
 <div class="grid-2">
     <div><label for="inputImei2">IMEI 2</label><div class="identity-input-action"><div class="identity-input-slot"><input type="text" id="inputImei2" placeholder="35..." maxlength="15" style="font-family:monospace;" inputmode="numeric" enterkeyhint="next" oninput="validateRealtime(this, 'luhn')" aria-describedby="identityScope" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></div><button type="button" class="identity-random-btn" title="Random" aria-label="Random" onclick="runWithState(this, 'Generating...', () => randomizeIdentityField('imei2'))">Random</button></div></div>
     <div><label for="inputMeid2">MEID 2</label><div class="identity-input-action"><div class="identity-input-slot"><input type="text" id="inputMeid2" placeholder="14 hexadecimal characters" maxlength="14" style="font-family:monospace;" inputmode="text" enterkeyhint="next" oninput="validateRealtime(this, 'meid')" aria-describedby="identityScope" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="characters"></div><button type="button" class="identity-random-btn" title="Random" aria-label="Random" onclick="runWithState(this, 'Generating...', () => randomizeIdentityField('meid2'))">Random</button></div></div>
@@ -589,13 +590,13 @@
     <div><label for="inputIccid2">ICCID 2</label><div class="identity-input-action"><div class="identity-input-slot"><input type="text" id="inputIccid2" placeholder="SIM card identity" maxlength="22" style="font-family:monospace;" inputmode="numeric" enterkeyhint="next" oninput="validateRealtime(this, 'luhn')" aria-describedby="identityScope" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></div><button type="button" class="identity-random-btn" title="Random" aria-label="Random" onclick="runWithState(this, 'Generating...', () => randomizeIdentityField('iccid2'))">Random</button></div></div>
     <div><label for="inputPhoneNumber2">Phone number 2</label><div class="identity-input-action"><div class="identity-input-slot"><input type="tel" id="inputPhoneNumber2" placeholder="+12025550124" maxlength="32" style="font-family:monospace;" inputmode="tel" enterkeyhint="next" oninput="validateRealtime(this, 'phone')" aria-describedby="identityScope" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></div><button type="button" class="identity-random-btn" title="Random" aria-label="Random" onclick="runWithState(this, 'Generating...', () => randomizeIdentityField('phone_number2'))">Random</button></div></div>
 </div>
-<div class="section-header">Telephony visibility</div>
+<div class="section-header" data-section="telephony">Telephony visibility</div>
 <div class="grid-2">
     <div><label for="inputVisibleSimCount">Visible SIM count</label><div class="identity-input-action"><div class="identity-input-slot"><input type="number" id="inputVisibleSimCount" min="0" max="8" step="1" inputmode="numeric" aria-describedby="visibleSimScope"></div><button type="button" class="identity-random-btn" title="Random" aria-label="Random" onclick="runWithState(this, 'Generating...', () => randomizeIdentityField('visible_sim_count'))">Random</button></div></div>
     <div id="visibleSimScope" class="scope-note" style="margin:0;align-self:end;">Limits the active subscription list returned to selected apps. It never creates SIMs that are not present.</div>
 </div>
 <div style="margin-top:10px;"><button type="button" onclick="runWithState(this, 'Generating...', () => generateRandomIdentity('telephony'))" style="width:100%;">Randomize Telephony</button></div>
-<div class="section-header">Hardware visibility</div>
+<div class="section-header" data-section="hardware">Hardware visibility</div>
 <div class="grid-2">
     <div><label for="inputVisibleCameraCount">Visible camera count</label><div class="identity-input-action"><div class="identity-input-slot"><input type="number" id="inputVisibleCameraCount" min="0" max="16" step="1" inputmode="numeric" aria-describedby="visibleCameraScope"></div><button type="button" class="identity-random-btn" title="Random" aria-label="Random" onclick="runWithState(this, 'Generating...', () => randomizeIdentityField('visible_camera_count'))">Random</button></div></div>
     <div id="visibleCameraScope" class="scope-note" style="margin:0;align-self:end;">Limits discoverable camera IDs for selected apps. It never creates cameras that are not present.</div>

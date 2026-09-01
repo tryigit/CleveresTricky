@@ -91,7 +91,7 @@ Zur Isolation Minimal + Reboot, genuine Verhalten bestätigen und Funktionen Sch
 
 Keystore Passthrough hält ausgewählte Medien-Apps auf Androids echtem Zertifikatspfad. Identifier Privacy ersetzt nur das unterstützte stable-AIDL-`deviceUniqueId` für `privacy=isolate` durch ein stabiles app-spezifisches Pseudonym, das nicht aus dem echten DRM-ID abgeleitet wird.
 
-`drm_packages.txt` unterstützt exakte Pakete und begrenzte Wildcards. Der Privacy Hook ist auf `IDrmFactory` / `IDrmPlugin.getPropertyByteArray("deviceUniqueId")` begrenzt und ändert keine HIDL-Pfade, Security Level, Lizenzen, Provisioning, Keys, Sessions, HDCP oder String Properties. Bei unerwartetem ABI bleibt die Originalantwort erhalten.
+`drm_packages.txt` unterstützt exakte Pakete und begrenzte Wildcards. Beim Erstellen des Plugins werden Paketname und Benutzerkontext (Multi-User / Work-Profile) erfasst. Der Privacy Hook ist auf `IDrmFactory` / `IDrmPlugin.getPropertyByteArray("deviceUniqueId")` begrenzt und ändert keine HIDL-Pfade, Security Level, Lizenzen, Provisioning, Keys, Sessions, HDCP oder String Properties. Bei unerwartetem ABI bleibt die Originalantwort erhalten.
 
 <a id="encrypted-storage"></a>
 ## Encrypted Storage
