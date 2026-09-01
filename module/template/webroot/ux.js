@@ -1562,9 +1562,8 @@
     }
 
     function tr(value) {
+        if (TRANSLATIONS[locale] && TRANSLATIONS[locale][value]) return TRANSLATIONS[locale][value];
         if (locale === 'en') return value;
-        const translated = TRANSLATIONS[locale] && TRANSLATIONS[locale][value];
-        if (translated) return translated;
         return translateDynamicCopy(value);
     }
 

@@ -617,12 +617,15 @@
 <h3>New Rule</h3>
 <div style="margin-bottom:14px;"><label for="appPkg">Package Name</label><input type="text" id="appPkg" placeholder="Type to search packages..." oninput="toggleAddButton();" onkeydown="if(event.key==='Enter') addAppRule()" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></div>
 <div class="grid-2"><div><label for="appTemplate">Attestation Identity Profile</label><select id="appTemplate"><option value="null">No identity override</option></select></div><div><label for="appKeybox">Custom Keybox</label><input type="text" id="appKeybox" placeholder="Custom Keybox" onkeydown="if(event.key==='Enter') addAppRule()" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></div></div>
-<div style="margin-bottom:18px;"><label for="appPrivacy">Privacy Policy</label><select id="appPrivacy"><option value="inherit">Use global identity</option><option value="isolate">Stable isolated identity</option><option value="redact">Blank supported identifiers</option></select></div>
+<div style="margin-bottom:18px;" class="grid-2">
+<div><label for="appPrivacy">Privacy Policy</label><select id="appPrivacy"><option value="inherit">Use global identity</option><option value="isolate">Stable isolated identity</option><option value="redact">Blank supported identifiers</option></select></div>
+<div><label for="appAutoIdentity">Auto Identity (Pixel Beta)</label><select id="appAutoIdentity"><option value="inherit">Inherit / none</option><option value="true">Enabled</option><option value="false">Disabled</option></select></div>
+</div>
 <button id="btnAddRule" class="primary" style="width:100%" onclick="addAppRule()" disabled>Add Rule</button>
         </div>
         <div class="panel">
 <h3>Active Rules</h3><div class="search-container"><input type="search" id="appFilter" placeholder="Filter active rules by package name..." oninput="renderAppTable()" aria-label="Filter rules" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"><button onclick="document.getElementById('appFilter').value=''; renderAppTable(); document.getElementById('appFilter').focus();" class="clear-btn" id="clearAppFilterBtn" aria-label="Clear filter">&times;</button></div>
-<table id="appTable" class="responsive-table"><thead><tr><th>Package</th><th>Profile</th><th>Keybox</th><th>Privacy</th><th></th></tr></thead><tbody></tbody></table>
+<table id="appTable" class="responsive-table"><thead><tr><th>Package</th><th>Profile</th><th>Keybox</th><th>Privacy</th><th>Auto Identity</th><th></th></tr></thead><tbody></tbody></table>
 <div style="margin-top:15px; text-align:right;"><button onclick="runWithState(this, 'Saving...', saveAppConfig)" class="primary">Save Configuration</button></div>
         </div>
     </div>
@@ -2249,11 +2252,11 @@ appRules.forEach((rule, idx) => {
     if (filter && !packageName.toLowerCase().includes(filter)) return;
     matchCount++;
     const tr = document.createElement('tr');
-    const privacyLabel = privacy === 'isolate' ? 'Isolated' : (privacy === 'redact' ? 'Redacted' : 'Global');
-    tr.appendChild(makeCell('Package', packageName));
-    tr.appendChild(makeCell('Profile', templateName && templateName !== 'null' ? templateName : 'Default'));
-    tr.appendChild(makeCell('Keybox', keyboxName && keyboxName !== 'null' ? keyboxName : ''));
-    tr.appendChild(makeCell('Privacy', privacyLabel));
+    const tmplDisplay = (templateName && templateName !== 'null') ? templateName : 'Default';
+    const kbDisplay = (keyboxName && keyboxName !== 'null') ? keyboxName : '';
+    const privacyDisplay = privacy === 'isolate' ? 'Isolated' : (privacy === 'redact' ? 'Redacted' : 'Global');
+    const autoIdDisplay = rule.autoIdentity === 'true' ? 'Enabled' : (rule.autoIdentity === 'false' ? 'Disabled' : 'Inherit');
+    tr.append(makeCell('Package', packageName), makeCell('Profile', tmplDisplay), makeCell('Keybox', kbDisplay), makeCell('Privacy', privacyDisplay), makeCell('Auto Identity', autoIdDisplay));
     const actions = document.createElement('td');
     actions.style.textAlign = 'right';
     const editButton = makeActionButton('Edit', packageName, () => editAppRule(idx));
@@ -2286,19 +2289,20 @@ const pkg = pkgInput.value.trim();
 const tmpl = document.getElementById('appTemplate').value;
 const kb = document.getElementById('appKeybox').value;
 const privacy = document.getElementById('appPrivacy').value;
+const autoIdentity = document.getElementById('appAutoIdentity').value;
 if (!pkg) { notify('Package required', 'error'); pkgInput.focus(); return; }
 const pkgRegex = /^[a-zA-Z0-9_.*]+$/;
 if (!pkgRegex.test(pkg)) { notify('Invalid package', 'error'); pkgInput.focus(); return; }
-if ((tmpl === 'null' || !tmpl) && !kb && privacy === 'inherit') { notify('Select a profile, keybox, or privacy policy', 'error'); return; }
+if ((tmpl === 'null' || !tmpl) && !kb && privacy === 'inherit' && autoIdentity === 'inherit') { notify('Select a profile, keybox, privacy policy, or identity refresh', 'error'); return; }
 
 const existingIdx = appRules.findIndex(r => r.package === pkg);
 if (existingIdx !== -1) {
-    appRules[existingIdx] = { package: pkg, template: tmpl === 'null' ? '' : tmpl, keybox: kb, privacy };
+    appRules[existingIdx] = { package: pkg, template: tmpl === 'null' ? '' : tmpl, keybox: kb, privacy, autoIdentity };
 } else {
-    appRules.push({ package: pkg, template: tmpl === 'null' ? '' : tmpl, keybox: kb, privacy });
+    appRules.push({ package: pkg, template: tmpl === 'null' ? '' : tmpl, keybox: kb, privacy, autoIdentity });
 }
 
-renderAppTable(); pkgInput.value = ''; document.getElementById('appKeybox').value = ''; document.getElementById('appPrivacy').value = 'inherit';
+renderAppTable(); pkgInput.value = ''; document.getElementById('appKeybox').value = ''; document.getElementById('appPrivacy').value = 'inherit'; document.getElementById('appAutoIdentity').value = 'inherit';
 toggleAddButton(); pkgInput.focus();
 notify(existingIdx !== -1 ? 'Rule Updated' : 'Rule Added');
         }
@@ -2311,6 +2315,7 @@ tmplSel.value = rule.template || 'null';
 if (!tmplSel.value) tmplSel.value = 'null';
 document.getElementById('appKeybox').value = rule.keybox || '';
 document.getElementById('appPrivacy').value = rule.privacy || 'inherit';
+document.getElementById('appAutoIdentity').value = rule.autoIdentity || 'inherit';
 document.getElementById('appPkg').focus();
 toggleAddButton();
 

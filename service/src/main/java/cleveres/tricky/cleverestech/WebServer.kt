@@ -1804,6 +1804,7 @@ class WebServer(
                             var tmpl = ""
                             var kb = ""
                             var privacy = Config.AppPrivacyMode.INHERIT.configValue
+                            var autoIdentity = "inherit"
 
                             while (idx < len && trimmed[idx].isWhitespace()) idx++
                             if (idx < len) {
@@ -1824,6 +1825,12 @@ class WebServer(
                                         start = idx
                                         while (idx < len && !trimmed[idx].isWhitespace()) idx++
                                         privacy = trimmed.substring(start, idx)
+                                        while (idx < len && trimmed[idx].isWhitespace()) idx++
+                                        if (idx < len) {
+                                            start = idx
+                                            while (idx < len && !trimmed[idx].isWhitespace()) idx++
+                                            autoIdentity = trimmed.substring(start, idx)
+                                        }
                                     }
                                 }
                             }
@@ -1840,6 +1847,7 @@ class WebServer(
                                         obj.put("template", tmpl)
                                         obj.put("keybox", kb)
                                         obj.put("privacy", parsedPrivacy.configValue)
+                                        obj.put("autoIdentity", autoIdentity)
                                         array.put(obj)
                                     }
                                 }
@@ -1931,7 +1939,9 @@ class WebServer(
                         if (!seenPackages.add(pkg)) {
                             return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Duplicate app rule")
                         }
-                        sb.append("$pkg $tmpl $kb $privacy\n")
+                        val autoIdentityRaw = obj.optString("autoIdentity", "inherit")
+                        val autoIdentity = if (autoIdentityRaw == "true") "true" else if (autoIdentityRaw == "false") "false" else "inherit"
+                        sb.append("$pkg $tmpl $kb $privacy $autoIdentity\n")
                         if (sb.length.toLong() > MAX_CONFIG_FILE_SIZE) {
                             return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "App configuration is too large")
                         }
@@ -2487,7 +2497,7 @@ class WebServer(
                 "boot_props_mode",
                 PolicyState.STATE_FILE,
             )
-        private val APP_RULE_FIELDS = setOf("package", "template", "keybox", "privacy")
+        private val APP_RULE_FIELDS = setOf("package", "template", "keybox", "privacy", "autoIdentity")
 
         fun getSafeFile(
             baseDir: File,

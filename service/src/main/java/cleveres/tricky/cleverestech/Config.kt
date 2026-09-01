@@ -80,6 +80,7 @@ object Config {
         val template: String?,
         val keyboxFilename: String?,
         val privacyMode: AppPrivacyMode = AppPrivacyMode.INHERIT,
+        val autoIdentity: Boolean? = null,
     )
 
     internal data class IdentityOverrides(
@@ -312,6 +313,7 @@ object Config {
                         var template: String? = null
                         var keybox: String? = null
                         var privacyMode = AppPrivacyMode.INHERIT
+                        var autoIdentity: Boolean? = null
                         while (idx < len && trimmed[idx].isWhitespace()) idx++
                         if (idx < len) {
                             start = idx
@@ -331,6 +333,16 @@ object Config {
                                     privacyMode =
                                         AppPrivacyMode.parse(trimmed.substring(start, idx))
                                             ?: throw IllegalArgumentException("Invalid app privacy mode")
+                                    while (idx < len && trimmed[idx].isWhitespace()) idx++
+                                    if (idx < len) {
+                                        start = idx
+                                        while (idx < len && !trimmed[idx].isWhitespace()) idx++
+                                        val aiStr = trimmed.substring(start, idx)
+                                        if (aiStr != "null" && aiStr != "inherit") {
+                                            autoIdentity = aiStr.toBooleanStrictOrNull()
+                                                ?: throw IllegalArgumentException("Invalid app auto identity mode")
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -344,11 +356,11 @@ object Config {
                         require(keybox == null || isValidAppKeybox(keybox)) {
                             "app_config contains an invalid keybox"
                         }
-                        require(template != null || keybox != null || privacyMode != AppPrivacyMode.INHERIT) {
+                        require(template != null || keybox != null || privacyMode != AppPrivacyMode.INHERIT || autoIdentity != null) {
                             "app_config contains an empty rule"
                         }
                         if (privacyMode != AppPrivacyMode.INHERIT) hasPrivacyRules = true
-                        newConfigs.add(pkg, AppSpoofConfig(template, keybox, privacyMode))
+                        newConfigs.add(pkg, AppSpoofConfig(template, keybox, privacyMode, autoIdentity))
                     }
                 }
             }
@@ -1266,10 +1278,10 @@ object Config {
     }
 
     fun getBuildVar(key: String, uid: Int): String? {
-        if (PolicyState.isProfileAutoIdentityEnabled(uid)) {
+        val appConfig = getAppConfig(uid)
+        if (PolicyState.isProfileAutoIdentityEnabled(uid, appConfig)) {
             ProfileAutoIdentityStore.get(key)?.let { return it }
         }
-        val appConfig = getAppConfig(uid)
         val template = if (appConfig?.template != null) templates[appConfig.template] else null
         return template?.get(key) ?: buildVars[key]
     }

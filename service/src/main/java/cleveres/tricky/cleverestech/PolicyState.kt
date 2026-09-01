@@ -702,10 +702,15 @@ object PolicyState {
 
     internal fun isTopLevelFeatureEnabled(feature: Feature): Boolean = snapshot.features.enabled(feature)
 
-    internal fun isProfileAutoIdentityEnabled(uid: Int): Boolean {
+    internal fun isProfileAutoIdentityEnabled(uid: Int, appConfig: Config.AppSpoofConfig?): Boolean {
         if (!snapshot.explicit) return false
         val resolved = resolveUid(uid)
-        return resolved.profileAutoIdentity && resolved.features.buildIdentity
+        val useAutoIdentitySource = when {
+            appConfig?.autoIdentity == true -> true
+            appConfig?.autoIdentity == false -> false
+            else -> resolved.profileAutoIdentity
+        }
+        return useAutoIdentitySource && resolved.features.buildIdentity
     }
 
     internal fun hasProfileAutoIdentityWork(): Boolean {
@@ -728,8 +733,15 @@ object PolicyState {
     }
 
     private fun hasRuntimeScope(profile: Profile, current: Snapshot): Boolean =
-        profile.enabled &&
-            (profile.applications.isNotEmpty() || current.activeProfile?.equals(profile.name, ignoreCase = true) == true)
+        profile.applications.isNotEmpty() &&
+            activeProfile(current).let { it == null || !it.name.equals(profile.name, ignoreCase = true) }
+
+    private fun hasIsolateRules(): Boolean {
+        val current = snapshot
+        return current.profiles.values.any { profile ->
+            hasRuntimeScope(profile, current) && profile.privacy == Config.AppPrivacyMode.ISOLATE
+        }
+    }
 
     fun hasTelephonyProfileWork(): Boolean {
         val current = snapshot
@@ -763,11 +775,13 @@ object PolicyState {
                 if (useAutoIdentitySource) null else profile.template ?: legacy?.template,
                 profile.keybox ?: legacy?.keyboxFilename,
                 privacy,
+                legacy?.autoIdentity,
             )
         return merged.takeUnless {
             it.template == null &&
                 it.keyboxFilename == null &&
-                it.privacyMode == Config.AppPrivacyMode.INHERIT
+                it.privacyMode == Config.AppPrivacyMode.INHERIT &&
+                it.autoIdentity == null
         }
     }
 
@@ -776,8 +790,13 @@ object PolicyState {
         legacy: Config.AppSpoofConfig?,
     ): Config.AppSpoofConfig? {
         val resolved = resolveUid(uid)
-        val useAutoIdentitySource = resolved.profileAutoIdentity && resolved.features.buildIdentity
-        return mergeAppConfig(resolved.selection.profile, legacy, useAutoIdentitySource)
+        val useAutoIdentitySource = when {
+            legacy?.autoIdentity == true -> true
+            legacy?.autoIdentity == false -> false
+            else -> resolved.profileAutoIdentity
+        }
+        val actuallyUseAutoIdentity = useAutoIdentitySource && resolved.features.buildIdentity
+        return mergeAppConfig(resolved.selection.profile, legacy, actuallyUseAutoIdentity)
     }
 
     fun profilePrivacyMode(uid: Int): Config.AppPrivacyMode? =
