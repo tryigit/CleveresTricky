@@ -1007,26 +1007,40 @@ object PolicyState {
             .put("attestationIdentity", features.attestationIdentity)
             .put("telephonyIdentity", features.telephonyIdentity)
             .put("regionIdentity", features.regionIdentity)
-            .put("identityRefresh", features.identityRefresh)
-            .put("securityPatch", features.securityPatch)
-            .put("rkpPassthrough", rkpPassthrough)
-            .put("drmPassthrough", drmPassthrough)
-            .put("bootPropertiesMode", providerMode)
-            .put("patch", patchJson)
+            .put("securityPatchOverride", features.securityPatch)
+            .put("securityPatch", patchJson)
+            .put("rkp", if (rkpPassthrough) "genuine_passthrough" else "certificate_compatibility")
+            .put("drm", if (drmPassthrough) "genuine_passthrough" else "configured_path")
+            .put("keyMint", "genuine_platform_keymint_strongbox")
+            .put("keystoreCore", if (KeystoreInterceptor.isRunning()) "active" else "waiting")
+            .put("providerCoexistence", providerMode)
+            .put("rebootRequired", features.regionIdentity)
     }
 
     private fun componentStateJson(
         component: String,
-        policy: PatchComponentPolicy,
+        policy: PatchPolicy,
         long: Boolean,
         captured: Int?,
-        featureEnabled: Boolean,
+        enabled: Boolean,
         explicit: Boolean,
     ): JSONObject {
-        val resolved = resolveComponent(component, policy, long, captured, featureEnabled, explicit)
+        if (!enabled) {
+            return JSONObject()
+                .put("captured", formatPatch(captured, long) ?: JSONObject.NULL)
+                .put("configured", "disabled")
+                .put("effective", formatPatch(captured, long) ?: "device")
+        }
+        if (!explicit) {
+            return JSONObject()
+                .put("captured", formatPatch(captured, long) ?: JSONObject.NULL)
+                .put("configured", "legacy security_patch.txt")
+                .put("effective", "legacy resolver")
+        }
+        val resolved = resolvePatchComponent(component, policy, long, captured, snapshot.patch.thresholdMonths)
         val effective =
             when (resolved.disposition) {
-                Config.PatchDisposition.KEEP_CURRENT -> "device_default"
+                Config.PatchDisposition.KEEP -> formatPatch(captured, long) ?: "device"
                 Config.PatchDisposition.OMIT -> "omitted"
                 Config.PatchDisposition.REPLACE -> formatPatch(resolved.value, long) ?: resolved.value.toString()
             }
