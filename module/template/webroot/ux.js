@@ -378,6 +378,9 @@
     // aligned catalog rows below provide the same static and runtime-generated
     // coverage for every other built-in locale.
     Object.assign(TRANSLATIONS.tr, {
+        'noServers': 'Yapılandırılmış sunucu yok. Keybox\'ları otomatik olarak almak için aşağıdan bir tane ekleyin.',
+        'refresh': 'Yenile',
+        'remove': 'Kaldır',
         'Notification': 'Bildirim',
         'Close notification': 'Bildirimi kapat',
         'Always active.': 'Her zaman etkin.',
