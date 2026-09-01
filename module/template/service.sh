@@ -324,6 +324,7 @@ while true; do
   if [ "$runtime" -lt "$stable_runtime" ] && [ "$retry_delay" -lt "$max_retry_delay" ]; then
     retry_delay=$((retry_delay * 2))
     [ "$retry_delay" -gt "$max_retry_delay" ] && retry_delay=$max_retry_delay
+  fi
 done
 ) &
 supervisor_pid=$!
