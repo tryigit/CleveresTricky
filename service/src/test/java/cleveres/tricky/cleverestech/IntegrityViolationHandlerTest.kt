@@ -111,4 +111,37 @@ class IntegrityViolationHandlerTest {
         assertEquals(1, deletedPaths.size)
         assertTrue(deletedPaths[0].contains("cleverestricky"))
     }
+
+    @Test
+    fun symlinkInsideModulePreservesExternalTarget() {
+        val root = java.nio.file.Files.createTempDirectory("test_module_root").toFile()
+        val externalTarget = java.nio.file.Files.createTempFile("external_target", ".txt").toFile()
+        externalTarget.writeText("vital external system data")
+
+        val subDir = java.io.File(root, "subdir")
+        subDir.mkdirs()
+        java.io.File(subDir, "payload.txt").writeText("payload")
+
+        val symlinkFile = java.io.File(root, "external_link")
+        try {
+            java.nio.file.Files.createSymbolicLink(symlinkFile.toPath(), externalTarget.toPath())
+        } catch (_: Exception) {
+            // Symlinks not supported in host environment
+            root.deleteRecursively()
+            externalTarget.delete()
+            return
+        }
+
+        val noFollowMethod =
+            Class.forName("cleveres.tricky.cleverestech.IntegrityViolationHandlerKt")
+                .getDeclaredMethod("deleteDirectoryRecursivelyNoFollow", java.nio.file.Path::class.java, Int::class.javaPrimitiveType)
+        noFollowMethod.isAccessible = true
+        val deleted = noFollowMethod.invoke(null, root.toPath(), 16) as Boolean
+
+        assertTrue("Expected recursive deletion to succeed", deleted)
+        assertFalse("Module directory should be deleted", root.exists())
+        assertTrue("External target file MUST NOT be deleted!", externalTarget.exists())
+        assertEquals("vital external system data", externalTarget.readText())
+        externalTarget.delete()
+    }
 }

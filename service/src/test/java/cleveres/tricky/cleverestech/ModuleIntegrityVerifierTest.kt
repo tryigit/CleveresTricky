@@ -18,9 +18,32 @@ class ModuleIntegrityVerifierTest {
     @get:Rule
     val tempFolder = TemporaryFolder()
 
+    private val testKeyPair by lazy {
+        java.security.KeyPairGenerator.getInstance("Ed25519").generateKeyPair()
+    }
+
+    private fun testPublicKeyBytes(): ByteArray {
+        val encoded = testKeyPair.public.encoded
+        return encoded.copyOfRange(encoded.size - 32, encoded.size)
+    }
+
+    private fun signManifestForTesting(
+        version: Int,
+        files: List<ManifestFileEntry>,
+        keyPair: java.security.KeyPair = testKeyPair,
+    ): String {
+        val canonicalBytes = ModuleIntegrityVerifier.computeCanonicalData(version, files)
+        val sig = java.security.Signature.getInstance("Ed25519")
+        sig.initSign(keyPair.private)
+        sig.update(canonicalBytes)
+        val sigBytes = sig.sign()
+        return sigBytes.joinToString("") { "%02x".format(it) }
+    }
+
     @Before
     fun setUp() {
         ModuleIntegrityVerifier.resetForTesting()
+        ModuleIntegrityVerifier.trustedPublicKeyProvider = { testPublicKeyBytes() }
     }
 
     @After
@@ -42,13 +65,16 @@ class ModuleIntegrityVerifierTest {
     private fun createManifest(
         moduleDir: File,
         files: List<Pair<String, ByteArray>>,
-        privateKeySeedHex: String = "6ae309c5b17bc175d6af12b5688613ebd5ae97cd5c5d6f152b68807053c0c80f",
+        keyPair: java.security.KeyPair = testKeyPair,
     ): File {
         // Create the files
         files.forEach { (path, content) ->
             val file = File(moduleDir, path)
             file.parentFile?.mkdirs()
             file.writeBytes(content)
+            if (path.endsWith(".sh") || !path.contains(".")) {
+                file.setExecutable(true, false)
+            }
         }
 
         val entries = files.map { (path, content) ->
@@ -59,7 +85,7 @@ class ModuleIntegrityVerifierTest {
             )
         }
 
-        val signatureHex = ModuleIntegrityVerifier.signManifestForTesting(1, entries, privateKeySeedHex)
+        val signatureHex = signManifestForTesting(1, entries, keyPair)
 
         val filesJson = org.json.JSONArray()
         entries.forEach { entry ->
@@ -102,7 +128,7 @@ class ModuleIntegrityVerifierTest {
         val content = "test content".toByteArray()
 
         val entry = ManifestFileEntry("missing.so", sha256Hex(content), "regular")
-        val signatureHex = ModuleIntegrityVerifier.signManifestForTesting(1, listOf(entry))
+        val signatureHex = signManifestForTesting(1, listOf(entry))
 
         val filesJson = org.json.JSONArray()
         val obj = org.json.JSONObject()
@@ -205,7 +231,7 @@ class ModuleIntegrityVerifierTest {
         ModuleIntegrityVerifier.moduleDirProvider = { moduleDir.absolutePath }
 
         val entry = ManifestFileEntry("../../../etc/passwd", "a".repeat(64), "regular")
-        val signatureHex = ModuleIntegrityVerifier.signManifestForTesting(1, listOf(entry))
+        val signatureHex = signManifestForTesting(1, listOf(entry))
 
         val filesJson = org.json.JSONArray()
         val obj = org.json.JSONObject()

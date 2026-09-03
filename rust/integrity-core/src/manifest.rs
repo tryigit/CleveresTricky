@@ -7,11 +7,6 @@ pub const TRUSTED_PUBLIC_KEY: [u8; 32] = [
     0x7e, 0xc0, 0x63, 0x31, 0x48, 0xae, 0x6c, 0x66, 0xc0, 0xf3, 0x79, 0x10, 0x85, 0xe7, 0x9b, 0x31,
 ];
 
-pub const DEFAULT_DEV_SIGNING_KEY: [u8; 32] = [
-    0x6a, 0xe3, 0x09, 0xc5, 0xb1, 0x7b, 0xc1, 0x75, 0xd6, 0xaf, 0x12, 0xb5, 0x68, 0x86, 0x13, 0xeb,
-    0xd5, 0xae, 0x97, 0xcd, 0x5c, 0x5d, 0x6f, 0x15, 0x2b, 0x68, 0x80, 0x70, 0x53, 0xc0, 0xc8, 0x0f,
-];
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum FileType {
@@ -246,11 +241,22 @@ mod tests {
         ]
     }
 
+    const TEST_DEV_SIGNING_KEY: [u8; 32] = [
+        0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
+        0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee,
+        0xff, 0x00,
+    ];
+
+    fn test_verifying_key() -> [u8; 32] {
+        let sk = SigningKey::from_bytes(&TEST_DEV_SIGNING_KEY);
+        sk.verifying_key().to_bytes()
+    }
+
     #[test]
     fn test_valid_manifest_roundtrip() {
         let files = create_test_manifest_raw();
-        let json = sign_manifest(1, files, &DEFAULT_DEV_SIGNING_KEY).unwrap();
-        let manifest = IntegrityManifest::parse_and_verify(&json, &TRUSTED_PUBLIC_KEY).unwrap();
+        let json = sign_manifest(1, files, &TEST_DEV_SIGNING_KEY).unwrap();
+        let manifest = IntegrityManifest::parse_and_verify(&json, &test_verifying_key()).unwrap();
         assert_eq!(manifest.version, 1);
         assert_eq!(manifest.entries.len(), 2);
         assert_eq!(manifest.entries[0].path, "libcleverestricky.so");
@@ -259,7 +265,7 @@ mod tests {
     #[test]
     fn test_wrong_ed25519_key() {
         let files = create_test_manifest_raw();
-        let json = sign_manifest(1, files, &DEFAULT_DEV_SIGNING_KEY).unwrap();
+        let json = sign_manifest(1, files, &TEST_DEV_SIGNING_KEY).unwrap();
         let wrong_key = [0x42u8; 32];
         let err = IntegrityManifest::parse_and_verify(&json, &wrong_key).unwrap_err();
         assert_eq!(err, ManifestError::InvalidSignature);
@@ -278,8 +284,8 @@ mod tests {
 
         let mut files = create_test_manifest_raw();
         files[0].sha256 = "ö".repeat(32);
-        let json = sign_manifest(1, files, &DEFAULT_DEV_SIGNING_KEY).unwrap();
-        let res = IntegrityManifest::parse_and_verify(&json, &TRUSTED_PUBLIC_KEY);
+        let json = sign_manifest(1, files, &TEST_DEV_SIGNING_KEY).unwrap();
+        let res = IntegrityManifest::parse_and_verify(&json, &test_verifying_key());
         assert_eq!(res.unwrap_err(), ManifestError::InvalidHex);
     }
 
@@ -301,8 +307,8 @@ mod tests {
         for path in bad_paths {
             let mut files = create_test_manifest_raw();
             files[0].path = path.clone();
-            let json = sign_manifest(1, files, &DEFAULT_DEV_SIGNING_KEY).unwrap();
-            let res = IntegrityManifest::parse_and_verify(&json, &TRUSTED_PUBLIC_KEY);
+            let json = sign_manifest(1, files, &TEST_DEV_SIGNING_KEY).unwrap();
+            let res = IntegrityManifest::parse_and_verify(&json, &test_verifying_key());
             assert_eq!(
                 res.unwrap_err(),
                 ManifestError::InvalidPath,
@@ -316,8 +322,8 @@ mod tests {
     fn test_duplicate_path() {
         let mut files = create_test_manifest_raw();
         files[1].path = files[0].path.clone();
-        let json = sign_manifest(1, files, &DEFAULT_DEV_SIGNING_KEY).unwrap();
-        let res = IntegrityManifest::parse_and_verify(&json, &TRUSTED_PUBLIC_KEY);
+        let json = sign_manifest(1, files, &TEST_DEV_SIGNING_KEY).unwrap();
+        let res = IntegrityManifest::parse_and_verify(&json, &test_verifying_key());
         assert_eq!(res.unwrap_err(), ManifestError::DuplicatePath);
     }
 
@@ -325,15 +331,15 @@ mod tests {
     fn test_invalid_hex() {
         let mut files = create_test_manifest_raw();
         files[0].sha256 = "invalid_hex".to_string();
-        let json = sign_manifest(1, files, &DEFAULT_DEV_SIGNING_KEY).unwrap();
-        let res = IntegrityManifest::parse_and_verify(&json, &TRUSTED_PUBLIC_KEY);
+        let json = sign_manifest(1, files, &TEST_DEV_SIGNING_KEY).unwrap();
+        let res = IntegrityManifest::parse_and_verify(&json, &test_verifying_key());
         assert_eq!(res.unwrap_err(), ManifestError::InvalidHex);
     }
 
     #[test]
     fn test_empty_files() {
-        let json = sign_manifest(1, vec![], &DEFAULT_DEV_SIGNING_KEY).unwrap();
-        let manifest = IntegrityManifest::parse_and_verify(&json, &TRUSTED_PUBLIC_KEY).unwrap();
+        let json = sign_manifest(1, vec![], &TEST_DEV_SIGNING_KEY).unwrap();
+        let manifest = IntegrityManifest::parse_and_verify(&json, &test_verifying_key()).unwrap();
         assert!(manifest.entries.is_empty());
     }
 }

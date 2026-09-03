@@ -227,4 +227,24 @@ class ModuleIntegrityWatcherTest {
         ModuleIntegrityWatcher.start(dir, manifestWithSubdir) { violations.add(it) }
         assertEquals(3, ModuleIntegrityWatcher.watcherRegistrationCount.get())
     }
+
+    @Test
+    fun parentObserverFailureThrowsAndFailsClosed() {
+        val dir = tempFolder.newFolder("modules", "cleverestricky")
+        ModuleIntegrityWatcher.parentObserverStarter = {
+            throw RuntimeException("Injected parent observer registration failure")
+        }
+
+        var threw = false
+        try {
+            ModuleIntegrityWatcher.start(dir, testManifest) { violations.add(it) }
+        } catch (e: Throwable) {
+            threw = true
+            assertTrue(e.message?.contains("Injected parent observer") == true)
+        }
+
+        assertTrue("start() must throw on parent observer failure", threw)
+        assertFalse(ModuleIntegrityWatcher.isChildObserverActiveForTesting())
+        assertFalse(ModuleIntegrityWatcher.isParentObserverActiveForTesting())
+    }
 }

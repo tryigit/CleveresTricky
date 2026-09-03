@@ -1,5 +1,7 @@
 package cleveres.tricky.cleverestech
 
+import android.net.LocalSocket
+import android.net.LocalSocketAddress
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.LinkOption
@@ -83,7 +85,62 @@ private fun safeDeleteModule(moduleDir: String): Boolean {
         return false
     }
 
+    // 1. Authoritative primary path: Request deletion via the privileged Rust daemon.
+    // The daemon executes native descriptor-relative deletion (openat with O_NOFOLLOW | O_DIRECTORY | O_CLOEXEC
+    // and unlinkat) as root, providing atomic, symlink-swap-immune deletion.
+    if (isAndroidRuntime()) {
+        val daemonDeleted = requestDaemonDeleteModule()
+        if (daemonDeleted && !dir.exists()) {
+            return true
+        }
+        Logger.w("Daemon module deletion was not successful; attempting local fallback deletion")
+    }
+
+    // 2. Local fallback deletion with strict NOFOLLOW_LINKS protection:
     return deleteDirectoryRecursivelyNoFollow(path)
+}
+
+private fun requestDaemonDeleteModule(): Boolean {
+    return try {
+        LocalSocket().use { socket ->
+            socket.connect(LocalSocketAddress("cleverestrickyd.v1", LocalSocketAddress.Namespace.ABSTRACT))
+            val peer = socket.peerCredentials
+            if (peer == null || peer.uid != 0) {
+                Logger.e("Untrusted daemon peer UID: ${peer?.uid}")
+                return false
+            }
+            socket.soTimeout = 5000
+            val output = socket.outputStream
+            val input = socket.inputStream
+
+            // Magic: "CTIP", version: 1, opcode: 0x32 (OP_INTEGRITY_DELETE_MODULE), flags: 0, payload_len: 0
+            val header = ByteArray(16)
+            "CTIP".toByteArray(Charsets.US_ASCII).copyInto(header, 0)
+            header[4] = 0
+            header[5] = 1
+            header[6] = 0
+            header[7] = 0x32
+            output.write(header)
+            output.flush()
+
+            val responseHeader = ByteArray(16)
+            var read = 0
+            while (read < 16) {
+                val count = input.read(responseHeader, read, 16 - read)
+                if (count < 0) return false
+                read += count
+            }
+            val flags =
+                ((responseHeader[8].toInt() and 0xff) shl 24) or
+                    ((responseHeader[9].toInt() and 0xff) shl 16) or
+                    ((responseHeader[10].toInt() and 0xff) shl 8) or
+                    (responseHeader[11].toInt() and 0xff)
+            flags == 0
+        }
+    } catch (e: Exception) {
+        Logger.e("Daemon module deletion request failed", e)
+        false
+    }
 }
 
 private fun deleteDirectoryRecursivelyNoFollow(dir: java.nio.file.Path, maxDepth: Int = 16): Boolean {
@@ -115,8 +172,24 @@ private fun deleteDirectoryRecursivelyNoFollow(dir: java.nio.file.Path, maxDepth
                 if (Files.isSymbolicLink(entry)) {
                     if (!tryDeleteEntry(entry)) allSuccess = false
                 } else if (Files.isDirectory(entry, LinkOption.NOFOLLOW_LINKS)) {
-                    if (!deleteDirectoryRecursivelyNoFollow(entry, maxDepth - 1)) {
-                        allSuccess = false
+                    val attrs =
+                        try {
+                            Files.readAttributes(
+                                entry,
+                                java.nio.file.attribute.BasicFileAttributes::class.java,
+                                LinkOption.NOFOLLOW_LINKS,
+                            )
+                        } catch (_: Exception) {
+                            null
+                        }
+                    if (attrs == null || attrs.isSymbolicLink) {
+                        if (!tryDeleteEntry(entry)) allSuccess = false
+                    } else if (attrs.isDirectory) {
+                        if (!deleteDirectoryRecursivelyNoFollow(entry, maxDepth - 1)) {
+                            allSuccess = false
+                        }
+                    } else {
+                        if (!tryDeleteEntry(entry)) allSuccess = false
                     }
                 } else {
                     if (!tryDeleteEntry(entry)) allSuccess = false
@@ -167,4 +240,10 @@ private fun performReboot() {
             throw fallbackError
         }
     }
+}
+
+private fun isAndroidRuntime(): Boolean {
+    val runtimeName = System.getProperty("java.runtime.name").orEmpty()
+    val vmName = System.getProperty("java.vm.name").orEmpty()
+    return runtimeName.contains("Android", ignoreCase = true) || vmName.equals("Dalvik", ignoreCase = true)
 }

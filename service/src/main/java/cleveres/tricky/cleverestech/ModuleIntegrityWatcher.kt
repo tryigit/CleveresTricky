@@ -22,6 +22,7 @@ internal object ModuleIntegrityWatcher {
     private var childObserver: FileObserver? = null
     private val subObservers = mutableListOf<FileObserver>()
     private var parentObserver: FileObserver? = null
+    internal var parentObserverStarter: (FileObserver) -> Unit = { it.startWatching() }
 
     @Volatile
     private var isRunning = false
@@ -105,11 +106,13 @@ internal object ModuleIntegrityWatcher {
                             }
                         }
                     }
-                    pObserver.startWatching()
+                    parentObserverStarter(pObserver)
                     parentObserver = pObserver
                     watcherRegistrationCount.incrementAndGet()
                 } catch (e: Throwable) {
                     Logger.e("Failed to arm integrity parent watcher", e)
+                    stop()
+                    throw e
                 }
             }
 
@@ -326,6 +329,7 @@ internal object ModuleIntegrityWatcher {
     @androidx.annotation.VisibleForTesting
     internal fun resetForTesting() {
         stop()
+        parentObserverStarter = { it.startWatching() }
         watcherRegistrationCount.set(0)
         eventCoalescedCount.set(0)
         targetedVerificationExecutions.set(0)

@@ -205,11 +205,15 @@ object ModuleIntegrityVerifier {
             val perms = try {
                 posixView.readAttributes().permissions()
             } catch (_: Exception) {
-                return true
+                return false
             }
             val isExec = perms.any { it.name.endsWith("_EXECUTE") }
             if (expectedType == "executable" && !isExec) return false
             if (expectedType == "regular" && isExec) return false
+            return true
+        }
+        if (File.separatorChar == '/') {
+            return false
         }
         return true
     }
@@ -461,25 +465,6 @@ object ModuleIntegrityVerifier {
         }
     }
 
-    /**
-     * Signs manifest canonical data for testing.
-     */
-    @androidx.annotation.VisibleForTesting
-    internal fun signManifestForTesting(
-        version: Int,
-        files: List<ManifestFileEntry>,
-        privateKeySeedHex: String = "6ae309c5b17bc175d6af12b5688613ebd5ae97cd5c5d6f152b68807053c0c80f",
-    ): String {
-        val canonicalBytes = computeCanonicalData(version, files)
-        val pkcs8Header = hexToBytes("302e020100300506032b657004220420")
-        val privKeyBytes = pkcs8Header + hexToBytes(privateKeySeedHex)
-        val keyFactory = java.security.KeyFactory.getInstance("Ed25519")
-        val privKey = keyFactory.generatePrivate(java.security.spec.PKCS8EncodedKeySpec(privKeyBytes))
-        val sig = java.security.Signature.getInstance("Ed25519")
-        sig.initSign(privKey)
-        sig.update(canonicalBytes)
-        return bytesToHex(sig.sign())
-    }
 
     /**
      * Computes the canonical byte representation of the manifest for digital signing.

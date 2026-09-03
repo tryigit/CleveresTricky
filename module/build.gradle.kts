@@ -436,7 +436,10 @@ afterEvaluate {
                     val privateKeySeed =
                         System.getenv("INTEGRITY_SIGNING_KEY")?.trim()
                             ?: rootProject.file("keys/integrity_signer.key").takeIf { it.exists() }?.readText()?.trim()
-                            ?: "6ae309c5b17bc175d6af12b5688613ebd5ae97cd5c5d6f152b68807053c0c80f"
+                            ?: throw GradleException(
+                                "INTEGRITY_SIGNING_KEY environment variable or keys/integrity_signer.key is required " +
+                                    "to sign the module manifest. Hardcoded signing keys are strictly prohibited.",
+                            )
                     val privKeyBytes = pkcs8Header + HexFormat.of().parseHex(privateKeySeed)
                     val keyFactory = KeyFactory.getInstance("Ed25519")
                     val privKey = keyFactory.generatePrivate(PKCS8EncodedKeySpec(privKeyBytes))
