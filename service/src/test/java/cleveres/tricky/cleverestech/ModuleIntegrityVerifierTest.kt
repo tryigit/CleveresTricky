@@ -9,21 +9,18 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
+import java.nio.file.FileSystemException
+import java.nio.file.Files
 import java.security.MessageDigest
-import javax.crypto.Mac
-import javax.crypto.spec.SecretKeySpec
 
 class ModuleIntegrityVerifierTest {
 
     @get:Rule
     val tempFolder = TemporaryFolder()
 
-    private val testHmacKey = ByteArray(32) { (it + 42).toByte() }
-
     @Before
     fun setUp() {
         ModuleIntegrityVerifier.resetForTesting()
-        ModuleIntegrityVerifier.hmacKeyProvider = { testHmacKey.clone() }
     }
 
     @After
@@ -45,22 +42,13 @@ class ModuleIntegrityVerifierTest {
     private fun createManifest(
         moduleDir: File,
         files: List<Pair<String, ByteArray>>,
+        privateKeySeedHex: String = "6ae309c5b17bc175d6af12b5688613ebd5ae97cd5c5d6f152b68807053c0c80f",
     ): File {
         // Create the files
         files.forEach { (path, content) ->
             val file = File(moduleDir, path)
             file.parentFile?.mkdirs()
             file.writeBytes(content)
-        }
-
-        // Build manifest JSON
-        val filesJson = org.json.JSONArray()
-        files.forEach { (path, content) ->
-            val entry = org.json.JSONObject()
-            entry.put("path", path)
-            entry.put("sha256", sha256Hex(content))
-            entry.put("type", if (path.endsWith(".sh") || !path.contains(".")) "executable" else "regular")
-            filesJson.put(entry)
         }
 
         val entries = files.map { (path, content) ->
@@ -71,11 +59,16 @@ class ModuleIntegrityVerifierTest {
             )
         }
 
-        val canonicalBytes = ModuleIntegrityVerifier.computeCanonicalHmacData(1, entries)
-        val mac = Mac.getInstance("HmacSHA256")
-        mac.init(SecretKeySpec(testHmacKey, "HmacSHA256"))
-        val signature = mac.doFinal(canonicalBytes)
-        val signatureHex = signature.joinToString("") { "%02x".format(it) }
+        val signatureHex = ModuleIntegrityVerifier.signManifestForTesting(1, entries, privateKeySeedHex)
+
+        val filesJson = org.json.JSONArray()
+        entries.forEach { entry ->
+            val obj = org.json.JSONObject()
+            obj.put("path", entry.path)
+            obj.put("sha256", entry.sha256)
+            obj.put("type", entry.type)
+            filesJson.put(obj)
+        }
 
         val manifest = org.json.JSONObject()
         manifest.put("version", 1)
@@ -107,24 +100,16 @@ class ModuleIntegrityVerifierTest {
         ModuleIntegrityVerifier.moduleDirProvider = { moduleDir.absolutePath }
 
         val content = "test content".toByteArray()
-        // Create manifest referencing a file, but don't create the file
-        val filesJson = org.json.JSONArray()
-        val entry = org.json.JSONObject()
-        entry.put("path", "missing.so")
-        entry.put("sha256", sha256Hex(content))
-        entry.put("type", "regular")
-        filesJson.put(entry)
 
-        val canonicalBytes = ModuleIntegrityVerifier.computeCanonicalHmacData(
-            1,
-            listOf(
-                ManifestFileEntry("missing.so", sha256Hex(content), "regular"),
-            ),
-        )
-        val mac = Mac.getInstance("HmacSHA256")
-        mac.init(SecretKeySpec(testHmacKey, "HmacSHA256"))
-        val signature = mac.doFinal(canonicalBytes)
-        val signatureHex = signature.joinToString("") { "%02x".format(it) }
+        val entry = ManifestFileEntry("missing.so", sha256Hex(content), "regular")
+        val signatureHex = ModuleIntegrityVerifier.signManifestForTesting(1, listOf(entry))
+
+        val filesJson = org.json.JSONArray()
+        val obj = org.json.JSONObject()
+        obj.put("path", "missing.so")
+        obj.put("sha256", sha256Hex(content))
+        obj.put("type", "regular")
+        filesJson.put(obj)
 
         val manifest = org.json.JSONObject()
         manifest.put("version", 1)
@@ -166,18 +151,18 @@ class ModuleIntegrityVerifierTest {
     }
 
     @Test
-    fun wrongHmacKeyFails() {
+    fun wrongPublicKeyFails() {
         val moduleDir = tempFolder.newFolder("module")
         ModuleIntegrityVerifier.moduleDirProvider = { moduleDir.absolutePath }
 
         createManifest(moduleDir, listOf("test.sh" to "content".toByteArray()))
 
-        // Change HMAC key
-        ModuleIntegrityVerifier.hmacKeyProvider = { ByteArray(32) { 0xFF.toByte() } }
+        // Change trusted public key
+        ModuleIntegrityVerifier.trustedPublicKeyProvider = { ByteArray(32) { 0xFF.toByte() } }
 
         val result = ModuleIntegrityVerifier.verifyFull()
         assertTrue(result is IntegrityResult.Fail)
-        assertTrue((result as IntegrityResult.Fail).violations.any { it.contains("HMAC") || it.contains("signature") })
+        assertTrue((result as IntegrityResult.Fail).violations.any { it.contains("signature") || it.contains("Manifest") })
     }
 
     @Test
@@ -192,14 +177,20 @@ class ModuleIntegrityVerifierTest {
             "legit.sh" to "legit".toByteArray(),
         ))
 
-        // Create a symlink for the payload
+        // Delete the created file first so symlink creation does not fail with FileAlreadyExistsException
+        val symlinkTarget = File(moduleDir, "legit.sh")
+        symlinkTarget.delete()
+
         try {
-            java.nio.file.Files.createSymbolicLink(
-                File(moduleDir, "legit.sh").toPath(),
+            Files.createSymbolicLink(
+                symlinkTarget.toPath(),
                 realFile.toPath(),
             )
-        } catch (_: Exception) {
-            // Symlink creation might fail on some OS/permissions; skip test
+        } catch (_: UnsupportedOperationException) {
+            // Symlink creation not supported on filesystem; skip test
+            return
+        } catch (_: FileSystemException) {
+            // OS permissions do not allow symlink creation; skip test
             return
         }
 
@@ -213,24 +204,15 @@ class ModuleIntegrityVerifierTest {
         val moduleDir = tempFolder.newFolder("module")
         ModuleIntegrityVerifier.moduleDirProvider = { moduleDir.absolutePath }
 
-        // Create a manifest with path traversal
-        val filesJson = org.json.JSONArray()
-        val entry = org.json.JSONObject()
-        entry.put("path", "../../../etc/passwd")
-        entry.put("sha256", "a".repeat(64))
-        entry.put("type", "regular")
-        filesJson.put(entry)
+        val entry = ManifestFileEntry("../../../etc/passwd", "a".repeat(64), "regular")
+        val signatureHex = ModuleIntegrityVerifier.signManifestForTesting(1, listOf(entry))
 
-        val canonicalBytes = ModuleIntegrityVerifier.computeCanonicalHmacData(
-            1,
-            listOf(
-                ManifestFileEntry("../../../etc/passwd", "a".repeat(64), "regular"),
-            ),
-        )
-        val mac = Mac.getInstance("HmacSHA256")
-        mac.init(SecretKeySpec(testHmacKey, "HmacSHA256"))
-        val signature = mac.doFinal(canonicalBytes)
-        val signatureHex = signature.joinToString("") { "%02x".format(it) }
+        val filesJson = org.json.JSONArray()
+        val obj = org.json.JSONObject()
+        obj.put("path", "../../../etc/passwd")
+        obj.put("sha256", "a".repeat(64))
+        obj.put("type", "regular")
+        filesJson.put(obj)
 
         val manifest = org.json.JSONObject()
         manifest.put("version", 1)
@@ -251,7 +233,7 @@ class ModuleIntegrityVerifierTest {
         val manifest = org.json.JSONObject()
         manifest.put("version", 99)
         manifest.put("files", org.json.JSONArray())
-        manifest.put("signature", "a".repeat(64))
+        manifest.put("signature", "a".repeat(128))
         File(moduleDir, "integrity_manifest.json").writeText(manifest.toString())
 
         val result = ModuleIntegrityVerifier.verifyFull()
@@ -320,7 +302,7 @@ class ModuleIntegrityVerifierTest {
             "test.sh" to "content".toByteArray(),
         ))
 
-        // Add ignored files
+        // Add ignored files at root
         File(moduleDir, "disable").writeText("")
         File(moduleDir, "supervisor.pid").writeText("12345")
         File(moduleDir, "module.prop").writeText("id=cleverestricky")
@@ -328,6 +310,25 @@ class ModuleIntegrityVerifierTest {
 
         val result = ModuleIntegrityVerifier.verifyFull()
         assertTrue("Expected Pass but got $result", result is IntegrityResult.Pass)
+    }
+
+    @Test
+    fun nestedIgnoredFileNotIgnored() {
+        val moduleDir = tempFolder.newFolder("module")
+        ModuleIntegrityVerifier.moduleDirProvider = { moduleDir.absolutePath }
+
+        createManifest(moduleDir, listOf(
+            "test.sh" to "content".toByteArray(),
+        ))
+
+        // Control files in subdirectories must NOT be ignored
+        val subDir = File(moduleDir, "subdir")
+        subDir.mkdirs()
+        File(subDir, "disable").writeText("")
+
+        val result = ModuleIntegrityVerifier.verifyFull()
+        assertTrue(result is IntegrityResult.Fail)
+        assertTrue((result as IntegrityResult.Fail).violations.any { it.contains("Unexpected") })
     }
 
     @Test

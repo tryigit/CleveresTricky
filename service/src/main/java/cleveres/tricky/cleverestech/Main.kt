@@ -251,17 +251,26 @@ fun main(args: Array<String>) {
             .onFailure { Logger.e("Failed to install conflated keybox watcher; keeping legacy observer", it) }
 
         val integrityManifest = ModuleIntegrityVerifier.loadManifest()
-        if (integrityManifest != null) {
-            runCatching {
-                ModuleIntegrityWatcher.start(
-                    File(getModuleDir()),
-                    integrityManifest,
-                ) { violations ->
-                    IntegrityViolationHandler.handleViolation(violations)
-                }
-            }.onFailure { Logger.e("Failed to start integrity watcher", it) }
-        } else {
-            Logger.w("Integrity manifest not available; runtime integrity monitoring disabled")
+        if (integrityManifest == null) {
+            Logger.e("Integrity manifest missing or invalid: failing closed")
+            IntegrityViolationHandler.handleViolation(listOf("Integrity manifest missing or invalid at startup"))
+            return@runBlocking
+        }
+
+        val watcherStarted = runCatching {
+            ModuleIntegrityWatcher.start(
+                File(getModuleDir()),
+                integrityManifest,
+            ) { violations ->
+                IntegrityViolationHandler.handleViolation(violations)
+            }
+        }.onFailure {
+            Logger.e("Failed to start integrity watcher: failing closed", it)
+            IntegrityViolationHandler.handleViolation(listOf("Failed to start integrity watcher: ${it.message}"))
+        }.isSuccess
+
+        if (!watcherStarted) {
+            return@runBlocking
         }
 
         KeyboxAutoCleaner.start()

@@ -221,6 +221,23 @@ fn verify_single_entry(dir_fd: RawFd, entry: &ManifestEntry) -> Option<Violation
         });
     }
 
+    match entry.file_type {
+        crate::manifest::FileType::Executable => {
+            if !safe_fd::is_executable(pre_stat.mode) {
+                return Some(Violation::FileWrongType {
+                    path: entry.path.clone(),
+                });
+            }
+        }
+        crate::manifest::FileType::Regular => {
+            if safe_fd::is_executable(pre_stat.mode) {
+                return Some(Violation::FileWrongType {
+                    path: entry.path.clone(),
+                });
+            }
+        }
+    }
+
     let actual_hash = match hash_file_safe(fd, pre_stat.size, &entry.path) {
         Ok(h) => h,
         Err(v) => return Some(v),
@@ -253,24 +270,28 @@ fn verify_single_entry(dir_fd: RawFd, entry: &ManifestEntry) -> Option<Violation
     None
 }
 
-/// Verifies a single file against the manifest, checking if it exists and matches expected hash.
+/// Verifies a single file given its relative path against the manifest.
 pub fn verify_file(
     dir_fd: RawFd,
     manifest: &IntegrityManifest,
     relative_path: &str,
 ) -> VerifyResult {
-    let entry = manifest.entries.iter().find(|e| e.path == relative_path);
-
     let mut violations = Vec::new();
 
-    match entry {
-        Some(e) => {
-            if let Some(v) = verify_single_entry(dir_fd, e) {
+    match manifest.entries.iter().find(|e| e.path == relative_path) {
+        Some(entry) => {
+            if let Some(v) = verify_single_entry(dir_fd, entry) {
                 violations.push(v);
             }
         }
         None => {
-            if !is_ignored(relative_path) {
+            let is_root = !relative_path.contains('/');
+            let is_ignored_entry = if is_root {
+                is_ignored(relative_path)
+            } else {
+                relative_path.ends_with(".sha256")
+            };
+            if !is_ignored_entry {
                 violations.push(Violation::FileUnexpected {
                     path: relative_path.to_string(),
                 });
@@ -341,8 +362,13 @@ pub fn verify_full(dir_fd: RawFd, manifest: &IntegrityManifest) -> VerifyResult 
             } else {
                 let is_in_manifest = manifest.entries.iter().any(|e| e.path == relative_path);
                 if !is_in_manifest {
-                    let top_level_name = relative_path.split('/').next().unwrap_or(&relative_path);
-                    if !is_ignored(top_level_name) && !is_ignored(&relative_path) {
+                    let is_root = current_path.is_empty();
+                    let is_ignored_entry = if is_root {
+                        is_ignored(&name)
+                    } else {
+                        relative_path.ends_with(".sha256")
+                    };
+                    if !is_ignored_entry {
                         violations.push(Violation::FileUnexpected {
                             path: relative_path,
                         });
@@ -517,5 +543,23 @@ mod tests {
 
         let res = verify_full(safe_fd::get_raw_fd(&dir_fd), &manifest);
         assert!(res.is_pass()); // ignored files don't trigger unexpected
+    }
+
+    #[test]
+    fn test_nested_control_file_not_ignored() {
+        let dir = tempdir().unwrap();
+        let sub = dir.path().join("sub");
+        fs::create_dir(&sub).unwrap();
+        fs::write(sub.join("module.prop"), "prop in sub").unwrap();
+
+        let manifest = dummy_manifest();
+        let dir_str = dir.path().to_str().unwrap();
+        let dir_fd = safe_fd::open_dir_nofollow(dir_str).unwrap();
+
+        let res = verify_full(safe_fd::get_raw_fd(&dir_fd), &manifest);
+        assert!(!res.is_pass());
+        let violations = res.violations();
+        assert_eq!(violations.len(), 1);
+        assert!(matches!(violations[0], Violation::FileUnexpected { .. }));
     }
 }

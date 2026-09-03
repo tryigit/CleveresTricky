@@ -120,6 +120,39 @@ mod imp {
         (mode & (libc::S_IFMT as u32)) == (libc::S_IFLNK as u32)
     }
 
+    /// Checks if a file mode has any executable permission bits set.
+    pub fn is_executable(mode: u32) -> bool {
+        (mode & 0o111) != 0
+    }
+
+    #[cfg(target_os = "android")]
+    unsafe fn clear_errno() {
+        // SAFETY: __errno returns a valid thread-local errno pointer on Android Bionic.
+        unsafe {
+            *libc::__errno() = 0;
+        }
+    }
+
+    #[cfg(target_os = "android")]
+    unsafe fn get_errno() -> libc::c_int {
+        // SAFETY: __errno returns a valid thread-local errno pointer on Android Bionic.
+        unsafe { *libc::__errno() }
+    }
+
+    #[cfg(all(unix, not(target_os = "android")))]
+    unsafe fn clear_errno() {
+        // SAFETY: __errno_location returns a valid thread-local errno pointer on non-Android Unix.
+        unsafe {
+            *libc::__errno_location() = 0;
+        }
+    }
+
+    #[cfg(all(unix, not(target_os = "android")))]
+    unsafe fn get_errno() -> libc::c_int {
+        // SAFETY: __errno_location returns a valid thread-local errno pointer on non-Android Unix.
+        unsafe { *libc::__errno_location() }
+    }
+
     /// Lists all entries in a directory by file descriptor, returning (name, is_dir) pairs.
     #[allow(clippy::unnecessary_cast)]
     pub fn list_directory_at(dir_fd: RawFd) -> io::Result<Vec<(String, bool)>> {
@@ -140,40 +173,53 @@ mod imp {
         let mut entries = Vec::new();
 
         loop {
+            // SAFETY: clear errno before readdir to distinguish EOF from error.
+            unsafe { clear_errno() };
             // SAFETY: dir is a valid DIR pointer returned by fdopendir.
             let entry = unsafe { libc::readdir(dir) };
             if entry.is_null() {
+                let err = unsafe { get_errno() };
+                if err != 0 {
+                    unsafe { libc::closedir(dir) };
+                    return Err(io::Error::from_raw_os_error(err));
+                }
                 break;
             }
 
             // SAFETY: entry is a valid dirent pointer from readdir.
             let name_cstr = unsafe { CStr::from_ptr((*entry).d_name.as_ptr()) };
-            if let Ok(name) = name_cstr.to_str() {
-                if name != "." && name != ".." {
-                    // SAFETY: entry is valid. If d_type is DT_UNKNOWN, fallback to fstatat.
-                    let is_dir = unsafe {
-                        if (*entry).d_type == libc::DT_DIR {
-                            true
-                        } else if (*entry).d_type == libc::DT_UNKNOWN {
-                            let mut stat: libc::stat = std::mem::zeroed();
-                            if libc::fstatat(
-                                dir_fd,
-                                (*entry).d_name.as_ptr(),
-                                &mut stat,
-                                libc::AT_SYMLINK_NOFOLLOW,
-                            ) == 0
-                            {
-                                (stat.st_mode & (libc::S_IFMT as u32)) == (libc::S_IFDIR as u32)
-                            } else {
-                                false
-                            }
-                        } else {
-                            false
-                        }
-                    };
-                    entries.push((name.to_string(), is_dir));
-                }
+            let name_bytes = name_cstr.to_bytes();
+            if name_bytes == b"." || name_bytes == b".." {
+                continue;
             }
+
+            let name = match std::str::from_utf8(name_bytes) {
+                Ok(s) => s.to_string(),
+                Err(_) => name_cstr.to_string_lossy().into_owned(),
+            };
+
+            // SAFETY: entry is valid. If d_type is DT_UNKNOWN, fallback to fstatat.
+            let is_dir = unsafe {
+                if (*entry).d_type == libc::DT_DIR {
+                    true
+                } else if (*entry).d_type == libc::DT_UNKNOWN {
+                    let mut stat: libc::stat = std::mem::zeroed();
+                    if libc::fstatat(
+                        dir_fd,
+                        (*entry).d_name.as_ptr(),
+                        &mut stat,
+                        libc::AT_SYMLINK_NOFOLLOW,
+                    ) == 0
+                    {
+                        (stat.st_mode & (libc::S_IFMT as u32)) == (libc::S_IFDIR as u32)
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            };
+            entries.push((name, is_dir));
         }
 
         // SAFETY: dir is a valid DIR pointer. This will also close the underlying FD.
@@ -244,6 +290,11 @@ mod imp {
 
     /// Windows stub: always returns false.
     pub fn is_symlink(_mode: u32) -> bool {
+        false
+    }
+
+    /// Windows stub: returns false for executable check.
+    pub fn is_executable(_mode: u32) -> bool {
         false
     }
 

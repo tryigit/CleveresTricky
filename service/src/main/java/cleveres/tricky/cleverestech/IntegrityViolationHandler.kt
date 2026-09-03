@@ -38,17 +38,16 @@ object IntegrityViolationHandler {
             Logger.e("Module deletion failed with exception", error)
             false
         }
-        if (deleted) {
-            Logger.e("Module directory deleted successfully")
-        } else {
-            Logger.e("Module deletion failed - module remains fail-closed")
-        }
 
-        Logger.e("Initiating system reboot due to integrity violation")
-        try {
-            rebootSystem()
-        } catch (error: Exception) {
-            Logger.e("System reboot failed", error)
+        if (deleted) {
+            Logger.e("Module directory deleted successfully - initiating reboot")
+            try {
+                rebootSystem()
+            } catch (error: Exception) {
+                Logger.e("System reboot failed", error)
+            }
+        } else {
+            Logger.e("Module deletion failed - module remains fail-closed; aborting reboot")
         }
     }
 
@@ -65,8 +64,8 @@ object IntegrityViolationHandler {
 }
 
 /**
- * Safely deletes the module directory after validating the path and checking for symlinks.
- * Returns true if deletion succeeded, false otherwise.
+ * Safely deletes the module directory using descriptor/no-follow traversal without following symlinks.
+ * Returns true if deletion succeeded completely, false if any file could not be deleted.
  */
 private fun safeDeleteModule(moduleDir: String): Boolean {
     val dir = File(moduleDir)
@@ -83,36 +82,68 @@ private fun safeDeleteModule(moduleDir: String): Boolean {
         Logger.e("Refusing to delete suspicious path: $moduleDir")
         return false
     }
-    return try {
-        var success = true
-        val entries = ArrayList<java.nio.file.Path>()
-        Files.walk(path).use { stream ->
-            val iterator = stream.iterator()
-            var count = 0
-            while (iterator.hasNext() && count <= 4096) {
-                entries.add(iterator.next())
-                count++
-            }
-            if (count > 4096) {
-                Logger.e("Module directory has too many entries, aborting delete")
-                return false
-            }
+
+    return deleteDirectoryRecursivelyNoFollow(path)
+}
+
+private fun deleteDirectoryRecursivelyNoFollow(dir: java.nio.file.Path, maxDepth: Int = 16): Boolean {
+    if (maxDepth <= 0) {
+        Logger.e("Exceeded maximum recursion depth while deleting: $dir")
+        return false
+    }
+    if (Files.isSymbolicLink(dir)) {
+        return try {
+            Files.deleteIfExists(dir)
+        } catch (e: Exception) {
+            Logger.e("Failed to delete symlink: $dir", e)
+            false
         }
-        entries.sortedByDescending { it.nameCount }.forEach { entry ->
-            if (Files.isSymbolicLink(entry)) {
-                Files.deleteIfExists(entry)
-            } else {
-                try {
-                    Files.deleteIfExists(entry)
-                } catch (e: Exception) {
-                    Logger.e("Failed to delete: $entry", e)
-                    success = false
+    }
+    if (!Files.isDirectory(dir, LinkOption.NOFOLLOW_LINKS)) {
+        return try {
+            Files.deleteIfExists(dir)
+        } catch (e: Exception) {
+            Logger.e("Failed to delete non-directory: $dir", e)
+            false
+        }
+    }
+
+    var allSuccess = true
+    try {
+        Files.newDirectoryStream(dir).use { stream ->
+            for (entry in stream) {
+                if (Files.isSymbolicLink(entry)) {
+                    if (!tryDeleteEntry(entry)) allSuccess = false
+                } else if (Files.isDirectory(entry, LinkOption.NOFOLLOW_LINKS)) {
+                    if (!deleteDirectoryRecursivelyNoFollow(entry, maxDepth - 1)) {
+                        allSuccess = false
+                    }
+                } else {
+                    if (!tryDeleteEntry(entry)) allSuccess = false
                 }
             }
         }
-        success
-    } catch (error: Exception) {
-        Logger.e("Safe module deletion failed", error)
+    } catch (e: Exception) {
+        Logger.e("Failed to iterate directory: $dir", e)
+        return false
+    }
+
+    if (allSuccess) {
+        try {
+            Files.deleteIfExists(dir)
+        } catch (e: Exception) {
+            Logger.e("Failed to delete directory: $dir", e)
+            allSuccess = false
+        }
+    }
+    return allSuccess
+}
+
+private fun tryDeleteEntry(entry: java.nio.file.Path): Boolean {
+    return try {
+        Files.deleteIfExists(entry)
+    } catch (e: Exception) {
+        Logger.e("Failed to delete entry: $entry", e)
         false
     }
 }

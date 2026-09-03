@@ -20,8 +20,6 @@ object ModuleIntegrityVerifier {
 
     private const val MANIFEST_VERSION = 1
     private const val MANIFEST_FILENAME = "integrity_manifest.json"
-    private const val HMAC_ALGORITHM = "HmacSHA256"
-    private const val HMAC_DOMAIN = "INTEGRITY-MANIFEST-V1"
     private const val MAX_MANIFEST_BYTES = 64L * 1024
     private const val MAX_PAYLOAD_BYTES = 128L * 1024 * 1024
     private const val MAX_MODULE_ENTRIES = 4096
@@ -31,6 +29,8 @@ object ModuleIntegrityVerifier {
     private const val OP_INTEGRITY_VERIFY_FILE = 0x31
     private const val FLAG_ERROR = 1
     private const val DAEMON_SOCKET_NAME = "cleverestrickyd.v1"
+
+    const val TRUSTED_PUBLIC_KEY_HEX = "eaa2491abc562da68f2e9383043676617ec0633148ae6c66c0f3791085e79b31"
 
     private sealed interface DaemonQueryResult {
         data class Verdict(val result: IntegrityResult) : DaemonQueryResult
@@ -46,7 +46,7 @@ object ModuleIntegrityVerifier {
         internal set
 
     internal var remoteDisabledForTesting = false
-    internal var hmacKeyProvider: () -> ByteArray = ::deriveDefaultHmacKey
+    internal var trustedPublicKeyProvider: () -> ByteArray = { hexToBytes(TRUSTED_PUBLIC_KEY_HEX) }
     internal var moduleDirProvider: () -> String = { getModuleDir() }
 
     /**
@@ -55,7 +55,7 @@ object ModuleIntegrityVerifier {
      */
     fun verifyFull(): IntegrityResult {
         fullVerificationCount.incrementAndGet()
-        when (val daemonResult = queryDaemon(OP_INTEGRITY_VERIFY_FULL, deriveDefaultHmacKey())) {
+        when (val daemonResult = queryDaemon(OP_INTEGRITY_VERIFY_FULL, trustedPublicKeyProvider())) {
             is DaemonQueryResult.Verdict -> return daemonResult.result
             DaemonQueryResult.OperationalError, null -> Unit
         }
@@ -71,7 +71,7 @@ object ModuleIntegrityVerifier {
         providedManifest: ParsedManifest? = cachedManifest,
     ): IntegrityResult {
         targetedVerificationCount.incrementAndGet()
-        val payload = deriveDefaultHmacKey() + relativePath.toByteArray(Charsets.UTF_8)
+        val payload = trustedPublicKeyProvider() + relativePath.toByteArray(Charsets.UTF_8)
         when (val daemonResult = queryDaemon(OP_INTEGRITY_VERIFY_FILE, payload)) {
             is DaemonQueryResult.Verdict -> return daemonResult.result
             DaemonQueryResult.OperationalError, null -> Unit
@@ -121,6 +121,11 @@ object ModuleIntegrityVerifier {
 
             if (!Files.isRegularFile(filePath, LinkOption.NOFOLLOW_LINKS)) {
                 violations.add("Wrong file type for critical payload: ${entry.path}")
+                continue
+            }
+
+            if (!checkFileTypeMode(filePath, entry.type)) {
+                violations.add("Wrong file mode for payload: ${entry.path} (expected ${entry.type})")
                 continue
             }
 
@@ -174,6 +179,9 @@ object ModuleIntegrityVerifier {
         if (!Files.isRegularFile(filePath, LinkOption.NOFOLLOW_LINKS)) {
             return IntegrityResult.Fail(listOf("Wrong file type for critical payload: $relativePath"))
         }
+        if (!checkFileTypeMode(filePath, entry.type)) {
+            return IntegrityResult.Fail(listOf("Wrong file mode for payload: $relativePath (expected ${entry.type})"))
+        }
 
         return try {
             val actualHash = calculateSha256(file)
@@ -189,6 +197,21 @@ object ModuleIntegrityVerifier {
         } catch (error: Exception) {
             IntegrityResult.Fail(listOf("I/O error verifying $relativePath: ${error.message}"))
         }
+    }
+
+    private fun checkFileTypeMode(filePath: java.nio.file.Path, expectedType: String): Boolean {
+        val posixView = Files.getFileAttributeView(filePath, java.nio.file.attribute.PosixFileAttributeView::class.java)
+        if (posixView != null) {
+            val perms = try {
+                posixView.readAttributes().permissions()
+            } catch (_: Exception) {
+                return true
+            }
+            val isExec = perms.any { it.name.endsWith("_EXECUTE") }
+            if (expectedType == "executable" && !isExec) return false
+            if (expectedType == "regular" && isExec) return false
+        }
+        return true
     }
 
     /**
@@ -381,8 +404,8 @@ object ModuleIntegrityVerifier {
         }
 
         val signature = json.optString("signature", "")
-        if (signature.length != 64) {
-            throw SecurityException("Invalid manifest signature length")
+        if (signature.length != 128 || signature.any { it.digitToIntOrNull(16) == null }) {
+            throw SecurityException("Invalid manifest signature length or format")
         }
 
         val filesArray = json.optJSONArray("files")
@@ -411,27 +434,57 @@ object ModuleIntegrityVerifier {
             files.add(ManifestFileEntry(path, sha256, type))
         }
 
-        val canonicalBytes = computeCanonicalHmacData(version, files)
-        val hmacKey = hmacKeyProvider()
-        try {
-            val mac = Mac.getInstance(HMAC_ALGORITHM)
-            mac.init(SecretKeySpec(hmacKey, HMAC_ALGORITHM))
-            val expectedMac = mac.doFinal(canonicalBytes)
-            val providedMac = hexToBytes(signature)
-            if (!MessageDigest.isEqual(expectedMac, providedMac)) {
-                throw SecurityException("Manifest HMAC signature verification failed")
-            }
-        } finally {
-            hmacKey.fill(0)
+        val canonicalBytes = computeCanonicalData(version, files)
+        val trustedPublicKey = trustedPublicKeyProvider()
+        val signatureBytes = hexToBytes(signature)
+        if (!verifyEd25519(trustedPublicKey, canonicalBytes, signatureBytes)) {
+            throw SecurityException("Manifest digital signature verification failed")
         }
 
         return ParsedManifest(version, files, signature)
     }
 
+    private fun verifyEd25519(publicKeyRaw: ByteArray, data: ByteArray, signatureBytes: ByteArray): Boolean {
+        return try {
+            val spkiHeader = byteArrayOf(
+                0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x03, 0x21, 0x00
+            )
+            val spkiBytes = spkiHeader + publicKeyRaw
+            val keyFactory = java.security.KeyFactory.getInstance("Ed25519")
+            val pubKey = keyFactory.generatePublic(java.security.spec.X509EncodedKeySpec(spkiBytes))
+            val sig = java.security.Signature.getInstance("Ed25519")
+            sig.initVerify(pubKey)
+            sig.update(data)
+            sig.verify(signatureBytes)
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     /**
-     * Computes the canonical byte representation of the manifest for HMAC signing.
+     * Signs manifest canonical data for testing.
      */
-    internal fun computeCanonicalHmacData(version: Int, files: List<ManifestFileEntry>): ByteArray {
+    @androidx.annotation.VisibleForTesting
+    internal fun signManifestForTesting(
+        version: Int,
+        files: List<ManifestFileEntry>,
+        privateKeySeedHex: String = "6ae309c5b17bc175d6af12b5688613ebd5ae97cd5c5d6f152b68807053c0c80f",
+    ): String {
+        val canonicalBytes = computeCanonicalData(version, files)
+        val pkcs8Header = hexToBytes("302e020100300506032b657004220420")
+        val privKeyBytes = pkcs8Header + hexToBytes(privateKeySeedHex)
+        val keyFactory = java.security.KeyFactory.getInstance("Ed25519")
+        val privKey = keyFactory.generatePrivate(java.security.spec.PKCS8EncodedKeySpec(privKeyBytes))
+        val sig = java.security.Signature.getInstance("Ed25519")
+        sig.initSign(privKey)
+        sig.update(canonicalBytes)
+        return bytesToHex(sig.sign())
+    }
+
+    /**
+     * Computes the canonical byte representation of the manifest for digital signing.
+     */
+    internal fun computeCanonicalData(version: Int, files: List<ManifestFileEntry>): ByteArray {
         val sorted = files.sortedBy { it.path }
         val sb = StringBuilder()
         sb.append(version).append('\n')
@@ -489,19 +542,20 @@ object ModuleIntegrityVerifier {
             if (relativePath in manifestPaths) continue
             if (isIgnoredFile(relativePath)) continue
             if (relativePath.endsWith(".sha256")) continue
-            if (isCriticalFileType(relativePath)) {
-                violations.add("Unexpected critical file: $relativePath")
-            }
+            violations.add("Unexpected file in module directory: $relativePath")
         }
     }
 
     /**
-     * Checks if a file should be ignored during integrity verification (e.g., PID files, manifest itself).
+     * Checks if a file should be ignored during integrity verification (restricted strictly to module root).
      */
     internal fun isIgnoredFile(relativePath: String): Boolean {
-        val name = relativePath.substringAfterLast("/")
-        return name in IGNORED_FILES || relativePath.endsWith(".sha256") ||
-            relativePath == MANIFEST_FILENAME || relativePath == "module.prop" ||
+        if (relativePath.endsWith(".sha256")) return true
+        val isRoot = !relativePath.contains('/')
+        if (!isRoot) return false
+        return relativePath in IGNORED_FILES ||
+            relativePath == MANIFEST_FILENAME ||
+            relativePath == "module.prop" ||
             relativePath == "sepolicy.rule" ||
             relativePath in CONFIG_TEMPLATE_FILES
     }
@@ -521,26 +575,16 @@ object ModuleIntegrityVerifier {
      * Converts a byte array to a lowercase hex string.
      */
     @OptIn(ExperimentalStdlibApi::class)
-    private fun bytesToHex(bytes: ByteArray): String = bytes.toHexString(HexFormat.Default)
+    internal fun bytesToHex(bytes: ByteArray): String = bytes.toHexString(HexFormat.Default)
 
     /**
      * Converts a hex string to a byte array.
      */
-    private fun hexToBytes(hex: String): ByteArray {
+    internal fun hexToBytes(hex: String): ByteArray {
         require(hex.length % 2 == 0) { "Hex string must have even length" }
         return ByteArray(hex.length / 2) { i ->
             ((hex[i * 2].digitToInt(16) shl 4) or hex[i * 2 + 1].digitToInt(16)).toByte()
         }
-    }
-
-    /**
-     * Derives the default HMAC key from the build checksum and domain constant.
-     */
-    private fun deriveDefaultHmacKey(): ByteArray {
-        val md = MessageDigest.getInstance("SHA-256")
-        md.update(BuildConfig.CHECKSUM.toByteArray(Charsets.UTF_8))
-        md.update(HMAC_DOMAIN.toByteArray(Charsets.UTF_8))
-        return md.digest()
     }
 
     /**
@@ -552,7 +596,7 @@ object ModuleIntegrityVerifier {
         fullVerificationCount.set(0)
         targetedVerificationCount.set(0)
         remoteDisabledForTesting = true
-        hmacKeyProvider = ::deriveDefaultHmacKey
+        trustedPublicKeyProvider = { hexToBytes(TRUSTED_PUBLIC_KEY_HEX) }
         moduleDirProvider = { getModuleDir() }
     }
 

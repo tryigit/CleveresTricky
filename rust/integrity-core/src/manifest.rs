@@ -1,9 +1,16 @@
-use hmac::{Hmac, Mac};
+use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
 use serde::{Deserialize, Serialize};
-use sha2::Sha256;
 use std::fmt;
 
-type HmacSha256 = Hmac<Sha256>;
+pub const TRUSTED_PUBLIC_KEY: [u8; 32] = [
+    0xea, 0xa2, 0x49, 0x1a, 0xbc, 0x56, 0x2d, 0xa6, 0x8f, 0x2e, 0x93, 0x83, 0x04, 0x36, 0x76, 0x61,
+    0x7e, 0xc0, 0x63, 0x31, 0x48, 0xae, 0x6c, 0x66, 0xc0, 0xf3, 0x79, 0x10, 0x85, 0xe7, 0x9b, 0x31,
+];
+
+pub const DEFAULT_DEV_SIGNING_KEY: [u8; 32] = [
+    0x6a, 0xe3, 0x09, 0xc5, 0xb1, 0x7b, 0xc1, 0x75, 0xd6, 0xaf, 0x12, 0xb5, 0x68, 0x86, 0x13, 0xeb,
+    0xd5, 0xae, 0x97, 0xcd, 0x5c, 0x5d, 0x6f, 0x15, 0x2b, 0x68, 0x80, 0x70, 0x53, 0xc0, 0xc8, 0x0f,
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -55,7 +62,7 @@ impl fmt::Display for ManifestError {
         match self {
             ManifestError::ParseError(msg) => write!(f, "Parse error: {}", msg),
             ManifestError::UnsupportedVersion => write!(f, "Unsupported manifest version"),
-            ManifestError::InvalidSignature => write!(f, "Invalid HMAC signature"),
+            ManifestError::InvalidSignature => write!(f, "Invalid digital signature"),
             ManifestError::InvalidHex => write!(f, "Invalid SHA256 hex string"),
             ManifestError::InvalidPath => write!(f, "Invalid path in manifest"),
             ManifestError::DuplicatePath => write!(f, "Duplicate path in manifest"),
@@ -63,20 +70,47 @@ impl fmt::Display for ManifestError {
     }
 }
 
-/// Parses a 64-character hex string into a 32-byte SHA256 hash.
-fn parse_hex_sha256(hex_str: &str) -> Result<[u8; 32], ManifestError> {
-    if hex_str.len() != 64 {
-        return Err(ManifestError::InvalidHex);
-    }
-    let mut bytes = [0u8; 32];
-    for i in 0..32 {
-        let byte_str = &hex_str[i * 2..i * 2 + 2];
-        bytes[i] = u8::from_str_radix(byte_str, 16).map_err(|_| ManifestError::InvalidHex)?;
-    }
-    Ok(bytes)
+fn parse_hex_byte(hi: u8, lo: u8) -> Result<u8, ManifestError> {
+    let h = match hi {
+        b'0'..=b'9' => hi - b'0',
+        b'a'..=b'f' => hi - b'a' + 10,
+        b'A'..=b'F' => hi - b'A' + 10,
+        _ => return Err(ManifestError::InvalidHex),
+    };
+    let l = match lo {
+        b'0'..=b'9' => lo - b'0',
+        b'a'..=b'f' => lo - b'a' + 10,
+        b'A'..=b'F' => lo - b'A' + 10,
+        _ => return Err(ManifestError::InvalidHex),
+    };
+    Ok((h << 4) | l)
 }
 
-/// Validates that a manifest path is relative, safe, and within length limits.
+fn parse_hex_sha256(hex_str: &str) -> Result<[u8; 32], ManifestError> {
+    let bytes = hex_str.as_bytes();
+    if bytes.len() != 64 {
+        return Err(ManifestError::InvalidHex);
+    }
+    let mut out = [0u8; 32];
+    for i in 0..32 {
+        out[i] = parse_hex_byte(bytes[i * 2], bytes[i * 2 + 1])?;
+    }
+    Ok(out)
+}
+
+fn parse_hex_signature(hex_str: &str) -> Result<[u8; 64], ManifestError> {
+    let bytes = hex_str.as_bytes();
+    if bytes.len() != 128 {
+        return Err(ManifestError::InvalidSignature);
+    }
+    let mut out = [0u8; 64];
+    for i in 0..64 {
+        out[i] = parse_hex_byte(bytes[i * 2], bytes[i * 2 + 1])
+            .map_err(|_| ManifestError::InvalidSignature)?;
+    }
+    Ok(out)
+}
+
 fn is_valid_path(path: &str) -> bool {
     if path.is_empty()
         || path.starts_with('/')
@@ -94,14 +128,12 @@ fn is_valid_path(path: &str) -> bool {
             return false;
         }
         if component.is_empty() {
-            // Consecutive slashes or trailing slash
             return false;
         }
     }
     true
 }
 
-/// Computes the canonical byte representation of manifest data for HMAC signing.
 pub fn compute_canonical_data(version: u32, files: &[ManifestEntryRaw]) -> Vec<u8> {
     let mut sorted = files.to_vec();
     sorted.sort_by(|a, b| a.path.cmp(&b.path));
@@ -121,8 +153,7 @@ pub fn compute_canonical_data(version: u32, files: &[ManifestEntryRaw]) -> Vec<u
 }
 
 impl IntegrityManifest {
-    /// Parses a JSON manifest and verifies its HMAC signature.
-    pub fn parse_and_verify(json_str: &str, hmac_key: &[u8]) -> Result<Self, ManifestError> {
+    pub fn parse_and_verify(json_str: &str, public_key: &[u8; 32]) -> Result<Self, ManifestError> {
         let raw: IntegrityManifestRaw =
             serde_json::from_str(json_str).map_err(|e| ManifestError::ParseError(e.to_string()))?;
 
@@ -130,18 +161,17 @@ impl IntegrityManifest {
             return Err(ManifestError::UnsupportedVersion);
         }
 
-        // Validate signature using canonical data serialization
         let canonical_bytes = compute_canonical_data(raw.version, &raw.files);
-        let mut mac =
-            HmacSha256::new_from_slice(hmac_key).map_err(|_| ManifestError::InvalidSignature)?;
-        mac.update(&canonical_bytes);
+        let sig_bytes = parse_hex_signature(&raw.signature)?;
 
-        let expected_sig = match parse_hex_sha256(&raw.signature) {
-            Ok(s) => s,
-            Err(_) => return Err(ManifestError::InvalidSignature), // Return invalid sig for bad format
-        };
+        let verifying_key =
+            VerifyingKey::from_bytes(public_key).map_err(|_| ManifestError::InvalidSignature)?;
+        let signature = Signature::from_bytes(&sig_bytes);
 
-        if mac.verify_slice(&expected_sig).is_err() {
+        if verifying_key
+            .verify_strict(&canonical_bytes, &signature)
+            .is_err()
+        {
             return Err(ManifestError::InvalidSignature);
         }
 
@@ -171,19 +201,17 @@ impl IntegrityManifest {
     }
 }
 
-/// Signs a manifest with the given HMAC key and returns the JSON representation.
 pub fn sign_manifest(
     version: u32,
     files: Vec<ManifestEntryRaw>,
-    hmac_key: &[u8],
+    signing_key_seed: &[u8; 32],
 ) -> Result<String, String> {
     let canonical_bytes = compute_canonical_data(version, &files);
-    let mut mac = HmacSha256::new_from_slice(hmac_key).map_err(|e| e.to_string())?;
-    mac.update(&canonical_bytes);
-    let result = mac.finalize();
-    let sig_bytes = result.into_bytes();
+    let signing_key = SigningKey::from_bytes(signing_key_seed);
+    let signature = signing_key.sign(&canonical_bytes);
+    let sig_bytes = signature.to_bytes();
 
-    let mut sig_hex = String::with_capacity(64);
+    let mut sig_hex = String::with_capacity(128);
     for byte in sig_bytes {
         sig_hex.push_str(&format!("{:02x}", byte));
     }
@@ -201,9 +229,6 @@ pub fn sign_manifest(
 mod tests {
     use super::*;
 
-    const TEST_KEY: &[u8] = b"super_secret_key_for_testing";
-
-    /// Creates a test manifest with sample entries.
     fn create_test_manifest_raw() -> Vec<ManifestEntryRaw> {
         vec![
             ManifestEntryRaw {
@@ -224,19 +249,38 @@ mod tests {
     #[test]
     fn test_valid_manifest_roundtrip() {
         let files = create_test_manifest_raw();
-        let json = sign_manifest(1, files, TEST_KEY).unwrap();
-        let manifest = IntegrityManifest::parse_and_verify(&json, TEST_KEY).unwrap();
+        let json = sign_manifest(1, files, &DEFAULT_DEV_SIGNING_KEY).unwrap();
+        let manifest = IntegrityManifest::parse_and_verify(&json, &TRUSTED_PUBLIC_KEY).unwrap();
         assert_eq!(manifest.version, 1);
         assert_eq!(manifest.entries.len(), 2);
         assert_eq!(manifest.entries[0].path, "libcleverestricky.so");
     }
 
     #[test]
-    fn test_wrong_hmac_key() {
+    fn test_wrong_ed25519_key() {
         let files = create_test_manifest_raw();
-        let json = sign_manifest(1, files, TEST_KEY).unwrap();
-        let err = IntegrityManifest::parse_and_verify(&json, b"wrong_key").unwrap_err();
+        let json = sign_manifest(1, files, &DEFAULT_DEV_SIGNING_KEY).unwrap();
+        let wrong_key = [0x42u8; 32];
+        let err = IntegrityManifest::parse_and_verify(&json, &wrong_key).unwrap_err();
         assert_eq!(err, ManifestError::InvalidSignature);
+    }
+
+    #[test]
+    fn test_non_ascii_hex_does_not_panic() {
+        assert_eq!(
+            parse_hex_signature(&"ü".repeat(64)).unwrap_err(),
+            ManifestError::InvalidSignature
+        );
+        assert_eq!(
+            parse_hex_sha256(&"ö".repeat(32)).unwrap_err(),
+            ManifestError::InvalidHex
+        );
+
+        let mut files = create_test_manifest_raw();
+        files[0].sha256 = "ö".repeat(32);
+        let json = sign_manifest(1, files, &DEFAULT_DEV_SIGNING_KEY).unwrap();
+        let res = IntegrityManifest::parse_and_verify(&json, &TRUSTED_PUBLIC_KEY);
+        assert_eq!(res.unwrap_err(), ManifestError::InvalidHex);
     }
 
     #[test]
@@ -257,8 +301,8 @@ mod tests {
         for path in bad_paths {
             let mut files = create_test_manifest_raw();
             files[0].path = path.clone();
-            let json = sign_manifest(1, files, TEST_KEY).unwrap();
-            let res = IntegrityManifest::parse_and_verify(&json, TEST_KEY);
+            let json = sign_manifest(1, files, &DEFAULT_DEV_SIGNING_KEY).unwrap();
+            let res = IntegrityManifest::parse_and_verify(&json, &TRUSTED_PUBLIC_KEY);
             assert_eq!(
                 res.unwrap_err(),
                 ManifestError::InvalidPath,
@@ -272,8 +316,8 @@ mod tests {
     fn test_duplicate_path() {
         let mut files = create_test_manifest_raw();
         files[1].path = files[0].path.clone();
-        let json = sign_manifest(1, files, TEST_KEY).unwrap();
-        let res = IntegrityManifest::parse_and_verify(&json, TEST_KEY);
+        let json = sign_manifest(1, files, &DEFAULT_DEV_SIGNING_KEY).unwrap();
+        let res = IntegrityManifest::parse_and_verify(&json, &TRUSTED_PUBLIC_KEY);
         assert_eq!(res.unwrap_err(), ManifestError::DuplicatePath);
     }
 
@@ -281,15 +325,15 @@ mod tests {
     fn test_invalid_hex() {
         let mut files = create_test_manifest_raw();
         files[0].sha256 = "invalid_hex".to_string();
-        let json = sign_manifest(1, files, TEST_KEY).unwrap();
-        let res = IntegrityManifest::parse_and_verify(&json, TEST_KEY);
+        let json = sign_manifest(1, files, &DEFAULT_DEV_SIGNING_KEY).unwrap();
+        let res = IntegrityManifest::parse_and_verify(&json, &TRUSTED_PUBLIC_KEY);
         assert_eq!(res.unwrap_err(), ManifestError::InvalidHex);
     }
 
     #[test]
     fn test_empty_files() {
-        let json = sign_manifest(1, vec![], TEST_KEY).unwrap();
-        let manifest = IntegrityManifest::parse_and_verify(&json, TEST_KEY).unwrap();
+        let json = sign_manifest(1, vec![], &DEFAULT_DEV_SIGNING_KEY).unwrap();
+        let manifest = IntegrityManifest::parse_and_verify(&json, &TRUSTED_PUBLIC_KEY).unwrap();
         assert!(manifest.entries.is_empty());
     }
 }

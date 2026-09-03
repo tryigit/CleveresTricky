@@ -670,7 +670,7 @@ struct RegisteredAdapter {
 #[derive(Clone)]
 struct CachedManifest {
     manifest: cleverestricky_integrity_core::IntegrityManifest,
-    hmac_key_fingerprint: [u8; 32],
+    public_key_fingerprint: [u8; 32],
 }
 
 /// Serves WebUI IPC requests, relaying them to the registered adapter and handling integrity checks.
@@ -764,18 +764,25 @@ fn serve_web(
                     let _ = reply_error(&mut client, OP_WEB_REQUEST, &error);
                 }
             }
-            OP_INTEGRITY_VERIFY_FULL if header.flags == 0 && header.payload_len == 32 => {
-                let mut hmac_key = [0u8; 32];
-                if client.read_exact(&mut hmac_key).is_ok() {
-                    handle_integrity_verify_full(
-                        &mut client,
-                        &module_dir,
-                        &cached_manifest,
-                        &hmac_key,
-                    );
+            OP_INTEGRITY_VERIFY_FULL
+                if header.flags == 0 && (header.payload_len == 0 || header.payload_len == 32) =>
+            {
+                let mut public_key = cleverestricky_integrity_core::TRUSTED_PUBLIC_KEY;
+                if header.payload_len == 32 && client.read_exact(&mut public_key).is_err() {
+                    continue;
                 }
+                handle_integrity_verify_full(
+                    &mut client,
+                    &module_dir,
+                    &cached_manifest,
+                    &public_key,
+                );
             }
-            OP_INTEGRITY_VERIFY_FILE if header.flags == 0 && header.payload_len > 32 => {
+            OP_INTEGRITY_VERIFY_FILE
+                if header.flags == 0
+                    && header.payload_len > 0
+                    && header.payload_len <= MAX_FRAME_BYTES =>
+            {
                 let mut payload = vec![0u8; header.payload_len as usize];
                 if client.read_exact(&mut payload).is_ok() {
                     handle_integrity_verify_file(
@@ -803,7 +810,7 @@ fn handle_integrity_verify_full(
     client: &mut UnixStream,
     module_dir: &Path,
     cached_manifest: &std::sync::RwLock<Option<CachedManifest>>,
-    hmac_key: &[u8; 32],
+    public_key: &[u8; 32],
 ) {
     let module_dir_str = match module_dir.to_str() {
         Some(s) => s,
@@ -852,15 +859,14 @@ fn handle_integrity_verify_full(
 
     let manifest = match cleverestricky_integrity_core::IntegrityManifest::parse_and_verify(
         &manifest_str,
-        hmac_key,
+        public_key,
     ) {
         Ok(m) => m,
         Err(e) => {
-            let _ = write_frame(
+            let _ = write_integrity_violation(
                 client,
                 OP_INTEGRITY_VERIFY_FULL,
-                FLAG_ERROR,
-                format!("signature invalid: {e}").as_bytes(),
+                &format!("signature invalid: {e}"),
             );
             return;
         }
@@ -871,7 +877,7 @@ fn handle_integrity_verify_full(
         if let Ok(mut lock) = cached_manifest.write() {
             *lock = Some(CachedManifest {
                 manifest,
-                hmac_key_fingerprint: hmac_key_fingerprint(hmac_key),
+                public_key_fingerprint: public_key_fingerprint(public_key),
             });
         }
         let _ = write_frame(client, OP_INTEGRITY_VERIFY_FULL, 0, &[0]);
@@ -892,16 +898,34 @@ fn handle_integrity_verify_file(
     cached_manifest: &std::sync::RwLock<Option<CachedManifest>>,
     payload: &[u8],
 ) {
-    let hmac_key = &payload[..32];
-    let relative_path = match std::str::from_utf8(&payload[32..]) {
-        Ok(p) => p,
-        Err(_) => {
-            let _ = reply_text_error(client, OP_INTEGRITY_VERIFY_FILE, "invalid utf-8 path");
-            return;
-        }
+    let (public_key, relative_path) = if payload.len() >= 32 {
+        let key: &[u8; 32] = match payload[..32].try_into() {
+            Ok(k) => k,
+            Err(_) => {
+                let _ = reply_text_error(client, OP_INTEGRITY_VERIFY_FILE, "invalid key length");
+                return;
+            }
+        };
+        let path = match std::str::from_utf8(&payload[32..]) {
+            Ok(p) => p,
+            Err(_) => {
+                let _ = reply_text_error(client, OP_INTEGRITY_VERIFY_FILE, "invalid utf-8 path");
+                return;
+            }
+        };
+        (key, path)
+    } else {
+        let path = match std::str::from_utf8(payload) {
+            Ok(p) => p,
+            Err(_) => {
+                let _ = reply_text_error(client, OP_INTEGRITY_VERIFY_FILE, "invalid utf-8 path");
+                return;
+            }
+        };
+        (&cleverestricky_integrity_core::TRUSTED_PUBLIC_KEY, path)
     };
 
-    let manifest = match cached_manifest_for_key(cached_manifest, hmac_key) {
+    let manifest = match cached_manifest_for_key(cached_manifest, public_key) {
         Some(manifest) => manifest,
         None => {
             let module_dir_str = match module_dir.to_str() {
@@ -956,15 +980,14 @@ fn handle_integrity_verify_file(
 
             let m = match cleverestricky_integrity_core::IntegrityManifest::parse_and_verify(
                 &manifest_str,
-                hmac_key,
+                public_key,
             ) {
                 Ok(m) => m,
                 Err(e) => {
-                    let _ = write_frame(
+                    let _ = write_integrity_violation(
                         client,
                         OP_INTEGRITY_VERIFY_FILE,
-                        FLAG_ERROR,
-                        format!("signature invalid: {e}").as_bytes(),
+                        &format!("signature invalid: {e}"),
                     );
                     return;
                 }
@@ -972,7 +995,7 @@ fn handle_integrity_verify_file(
             if let Ok(mut lock) = cached_manifest.write() {
                 *lock = Some(CachedManifest {
                     manifest: m.clone(),
-                    hmac_key_fingerprint: hmac_key_fingerprint(hmac_key),
+                    public_key_fingerprint: public_key_fingerprint(public_key),
                 });
             }
             m
@@ -1027,21 +1050,21 @@ fn read_manifest_bounded<R: Read>(reader: R) -> io::Result<String> {
     Ok(manifest)
 }
 
-/// Returns a stable, non-reversible cache identity for an HMAC key.
-fn hmac_key_fingerprint(hmac_key: &[u8]) -> [u8; 32] {
-    Sha256::digest(hmac_key).into()
+/// Returns a stable, non-reversible cache identity for a public key.
+fn public_key_fingerprint(public_key: &[u8; 32]) -> [u8; 32] {
+    Sha256::digest(public_key).into()
 }
 
-/// Retrieves a cached manifest only when it was authenticated by the current key.
+/// Retrieves a cached manifest only when it was authenticated by the current public key.
 fn cached_manifest_for_key(
     cached_manifest: &std::sync::RwLock<Option<CachedManifest>>,
-    hmac_key: &[u8],
+    public_key: &[u8; 32],
 ) -> Option<cleverestricky_integrity_core::IntegrityManifest> {
-    let fingerprint = hmac_key_fingerprint(hmac_key);
+    let fingerprint = public_key_fingerprint(public_key);
     cached_manifest.read().ok().and_then(|cached| {
         cached
             .as_ref()
-            .filter(|entry| entry.hmac_key_fingerprint == fingerprint)
+            .filter(|entry| entry.public_key_fingerprint == fingerprint)
             .map(|entry| entry.manifest.clone())
     })
 }
@@ -1079,7 +1102,56 @@ fn handle_integrity_delete_module(client: &mut UnixStream, module_dir: &Path) {
         .or_else(|_| Command::new("reboot").status());
 }
 
-/// Recursively deletes all files and subdirectories within the given directory.
+#[cfg(unix)]
+fn delete_dir_descriptor_safe(dir_fd: RawFd) -> io::Result<()> {
+    let entries = cleverestricky_integrity_core::safe_fd::list_directory_at(dir_fd)?;
+    for (name, is_dir) in entries {
+        let c_name = std::ffi::CString::new(name.as_bytes())
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid filename"))?;
+        if is_dir {
+            let sub_fd = unsafe {
+                libc::openat(
+                    dir_fd,
+                    c_name.as_ptr(),
+                    libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+                )
+            };
+            if sub_fd < 0 {
+                let err = io::Error::last_os_error();
+                if err.raw_os_error() == Some(libc::ELOOP) {
+                    if unsafe { libc::unlinkat(dir_fd, c_name.as_ptr(), 0) } < 0 {
+                        return Err(io::Error::last_os_error());
+                    }
+                    continue;
+                }
+                return Err(err);
+            }
+            let res = delete_dir_descriptor_safe(sub_fd);
+            unsafe { libc::close(sub_fd) };
+            res?;
+            if unsafe { libc::unlinkat(dir_fd, c_name.as_ptr(), libc::AT_REMOVEDIR) } < 0 {
+                return Err(io::Error::last_os_error());
+            }
+        } else {
+            if unsafe { libc::unlinkat(dir_fd, c_name.as_ptr(), 0) } < 0 {
+                return Err(io::Error::last_os_error());
+            }
+        }
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn delete_dir_contents_safe(dir: &Path) -> io::Result<()> {
+    let dir_str = dir
+        .to_str()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "invalid directory path"))?;
+    let dir_fd = cleverestricky_integrity_core::safe_fd::open_dir_nofollow(dir_str)?;
+    delete_dir_descriptor_safe(cleverestricky_integrity_core::safe_fd::get_raw_fd(&dir_fd))?;
+    fs::remove_dir(dir)
+}
+
+#[cfg(not(unix))]
 fn delete_dir_contents_safe(dir: &Path) -> io::Result<()> {
     for entry in fs::read_dir(dir)? {
         let path = entry?.path();
@@ -1324,7 +1396,7 @@ mod tests {
     }
 
     #[test]
-    fn manifest_cache_is_bound_to_hmac_key_fingerprint() {
+    fn manifest_cache_is_bound_to_public_key_fingerprint() {
         let first_key = [0x11; 32];
         let second_key = [0x22; 32];
         let manifest = cleverestricky_integrity_core::IntegrityManifest {
@@ -1333,7 +1405,7 @@ mod tests {
         };
         let cache = std::sync::RwLock::new(Some(CachedManifest {
             manifest,
-            hmac_key_fingerprint: hmac_key_fingerprint(&first_key),
+            public_key_fingerprint: public_key_fingerprint(&first_key),
         }));
 
         assert!(cached_manifest_for_key(&cache, &first_key).is_some());

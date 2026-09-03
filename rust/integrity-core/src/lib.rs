@@ -4,5 +4,7 @@ pub mod manifest;
 pub mod safe_fd;
 pub mod verifier;
 
-pub use manifest::{FileType, IntegrityManifest, ManifestEntry};
+pub use manifest::{
+    FileType, IntegrityManifest, ManifestEntry, DEFAULT_DEV_SIGNING_KEY, TRUSTED_PUBLIC_KEY,
+};
 pub use verifier::{verify_file, verify_full, VerifyResult, Violation};

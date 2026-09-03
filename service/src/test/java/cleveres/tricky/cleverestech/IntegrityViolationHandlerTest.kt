@@ -69,19 +69,19 @@ class IntegrityViolationHandlerTest {
     }
 
     @Test
-    fun deleteFailureStillSetsViolatedFlag() {
+    fun deleteFailureStillSetsViolatedFlagAndAbortsReboot() {
         IntegrityViolationHandler.deleteModule = { false }
         IntegrityViolationHandler.handleViolation(listOf("delete will fail"))
         assertTrue(IntegrityViolationHandler.isViolated)
-        assertEquals(1, rebootCalls.get())
+        assertEquals(0, rebootCalls.get())
     }
 
     @Test
-    fun deleteExceptionStillSetsViolatedFlag() {
+    fun deleteExceptionStillSetsViolatedFlagAndAbortsReboot() {
         IntegrityViolationHandler.deleteModule = { throw RuntimeException("I/O error") }
         IntegrityViolationHandler.handleViolation(listOf("delete throws"))
         assertTrue(IntegrityViolationHandler.isViolated)
-        assertEquals(1, rebootCalls.get())
+        assertEquals(0, rebootCalls.get())
     }
 
     @Test

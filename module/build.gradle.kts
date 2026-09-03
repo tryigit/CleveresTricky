@@ -1,7 +1,10 @@
 import org.apache.tools.ant.filters.FixCrLfFilter
 import org.apache.tools.ant.filters.ReplaceTokens
 import java.io.File
+import java.security.KeyFactory
 import java.security.MessageDigest
+import java.security.Signature
+import java.security.spec.PKCS8EncodedKeySpec
 import java.util.HexFormat
 
 plugins {
@@ -429,27 +432,18 @@ afterEvaluate {
                             }
                         }
 
-                    val checksumString =
-                        MessageDigest.getInstance("SHA-256").run {
-                            update(moduleId.toByteArray(Charsets.UTF_8))
-                            update(moduleName.toByteArray(Charsets.UTF_8))
-                            update("$verName ($verCode-$commitHash-$variantLowered)".toByteArray(Charsets.UTF_8))
-                            update(verCode.toString().toByteArray(Charsets.UTF_8))
-                            update(author.toByteArray(Charsets.UTF_8))
-                            update(moduleDescription.toByteArray(Charsets.UTF_8))
-                            HexFormat.of().formatHex(digest())
-                        }
-
-                    val hmacKey =
-                        MessageDigest.getInstance("SHA-256").run {
-                            update(checksumString.toByteArray(Charsets.UTF_8))
-                            update("INTEGRITY-MANIFEST-V1".toByteArray(Charsets.UTF_8))
-                            digest()
-                        }
-
-                    val mac = javax.crypto.Mac.getInstance("HmacSHA256")
-                    mac.init(javax.crypto.spec.SecretKeySpec(hmacKey, "HmacSHA256"))
-                    val signatureHex = HexFormat.of().formatHex(mac.doFinal(canonicalData.toByteArray(Charsets.UTF_8)))
+                    val pkcs8Header = HexFormat.of().parseHex("302e020100300506032b657004220420")
+                    val privateKeySeed =
+                        System.getenv("INTEGRITY_SIGNING_KEY")?.trim()
+                            ?: rootProject.file("keys/integrity_signer.key").takeIf { it.exists() }?.readText()?.trim()
+                            ?: "6ae309c5b17bc175d6af12b5688613ebd5ae97cd5c5d6f152b68807053c0c80f"
+                    val privKeyBytes = pkcs8Header + HexFormat.of().parseHex(privateKeySeed)
+                    val keyFactory = KeyFactory.getInstance("Ed25519")
+                    val privKey = keyFactory.generatePrivate(PKCS8EncodedKeySpec(privKeyBytes))
+                    val sig = Signature.getInstance("Ed25519")
+                    sig.initSign(privKey)
+                    sig.update(canonicalData.toByteArray(Charsets.UTF_8))
+                    val signatureHex = HexFormat.of().formatHex(sig.sign())
 
                     val manifest =
                         groovy.json.JsonBuilder(
