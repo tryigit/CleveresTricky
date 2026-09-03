@@ -1,6 +1,7 @@
 package android.os;
 import java.io.File;
 public abstract class FileObserver {
+    public static final int MODIFY = 2;
     public static final int ATTRIB = 4;
     public static final int CLOSE_WRITE = 8;
     public static final int CREATE = 256;

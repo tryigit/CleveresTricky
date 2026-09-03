@@ -204,13 +204,12 @@ internal object KeyboxDirectoryRefreshWatcher {
                         event: Int,
                         path: String?,
                     ) {
-                        if ((event and DELETE_SELF) != 0 || (event and MOVE_SELF) != 0) {
-                            Logger.w("Keybox directory lost via MOVE_SELF or DELETE_SELF")
-                            synchronized(lock) {
+                        synchronized(lock) {
+                            if (!isRunning) return
+                            if ((event and DELETE_SELF) != 0 || (event and MOVE_SELF) != 0) {
+                                Logger.w("Keybox directory lost via MOVE_SELF or DELETE_SELF")
                                 disarmChildLocked()
                             }
-                            triggerRefresh()
-                        } else {
                             triggerRefresh()
                         }
                     }

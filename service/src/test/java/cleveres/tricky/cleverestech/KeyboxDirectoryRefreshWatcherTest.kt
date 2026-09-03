@@ -64,15 +64,13 @@ class KeyboxDirectoryRefreshWatcherTest {
     }
 
     /**
-     * Placeholder test for file modification detection (covered by CLOSE_WRITE).
+     * Verifies that file modification events trigger a keybox refresh.
      */
     @Test
     fun testFileModifyDetected() = runBlocking {
         KeyboxDirectoryRefreshWatcher.start(keyboxDir)
-        // FileObserver.MODIFY doesn't exist in our test stub, but we can use ATTRIB or just assume CLOSE_WRITE coverage based on bitmask
-        // We'll just test CLOSE_WRITE to represent modification as we've tested it.
-        // Wait, android.os.FileObserver has MODIFY = 2 (in real android).
-        // Let's use CLOSE_WRITE for the test, as it's structurally the same in the event handler.
+        KeyboxDirectoryRefreshWatcher.injectChildEventForTesting(FileObserver.MODIFY)
+        assertTrue(Config.keyboxInventoryFingerprintDirty)
     }
 
     /**
