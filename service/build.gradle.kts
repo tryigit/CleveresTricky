@@ -77,14 +77,16 @@ android {
             it.buildConfigField("String", "CHECKSUM", "\"$checksum\"")
 
             val envKey = System.getenv("INTEGRITY_PUBLIC_KEY")?.trim()
-            val fileKey = rootProject.file("keys/integrity_signer.pub").takeIf { f -> f.exists() }?.readText()?.trim()
+            val fileKey =
+                rootProject.file("keys/integrity_signer.pub").takeIf { f -> f.exists() }?.readText()?.trim()
             val defaultKey = "9f9f8b00a8c5e3c9849eed6c465b1d1f46747d3acbd74afb91290ebc40c1873c"
 
-            val integrityPublicKey = when {
-                isValidPublicKeyHex(envKey) -> envKey!!.lowercase()
-                isValidPublicKeyHex(fileKey) -> fileKey!!.lowercase()
-                else -> defaultKey
-            }
+            val integrityPublicKey =
+                when {
+                    isValidPublicKeyHex(envKey) -> envKey!!.lowercase()
+                    isValidPublicKeyHex(fileKey) -> fileKey!!.lowercase()
+                    else -> defaultKey
+                }
             it.buildConfigField("String", "INTEGRITY_PUBLIC_KEY", "\"$integrityPublicKey\"")
 
             val allowUnsigned = !isProductionRelease || it.name == "debug"
