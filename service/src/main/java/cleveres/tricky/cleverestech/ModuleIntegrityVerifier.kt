@@ -226,7 +226,7 @@ object ModuleIntegrityVerifier {
             val perms = try {
                 posixView.readAttributes().permissions()
             } catch (_: Exception) {
-                return true
+                return expectedType != "executable"
             }
             val isExec = perms.any { it.name.endsWith("_EXECUTE") }
             // Only enforce that executables have execute bit set.
