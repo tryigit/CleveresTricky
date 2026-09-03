@@ -13,9 +13,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.File
-import java.util.concurrent.Executors
-import java.util.concurrent.ScheduledFuture
-import java.util.concurrent.TimeUnit
 
 internal const val RUNTIME_RETRY_INITIAL_MS = 1_000L
 internal const val RUNTIME_RETRY_MAX_MS = 30_000L
@@ -126,151 +123,132 @@ internal object KeyboxDirectoryRefreshWatcher {
             Config.updateKeyBoxesSync()
         }
 
-    private val RECOVERY_INTERVAL_MS = 5000L
-    private val recoveryScheduler = Executors.newSingleThreadScheduledExecutor { r ->
-        val t = Thread(r, "KeyboxDir-Recovery")
-        t.isDaemon = true
-        t
-    }
+    private var childObserver: FileObserver? = null
+    private var parentObserver: FileObserver? = null
+    private var targetDirectory: File? = null
 
-    private var observer: FileObserver? = null
-    private var recoveryFuture: ScheduledFuture<*>? = null
-    private var currentDirectory: File? = null
     @Volatile
     private var isRunning = false
+    private val lock = Any()
 
-    /**
-     * Starts watching the keybox directory for filesystem events and schedules periodic recovery checks.
-     *
-     * @param directory The keybox directory to watch for file modifications
-     */
     @Synchronized
     fun start(directory: File) {
-        if (isRunning) return
-        isRunning = true
-        currentDirectory = directory
+        synchronized(lock) {
+            if (isRunning) return
+            isRunning = true
+            targetDirectory = directory
 
-        // Config.initialize() already started the legacy observer. Start the replacement first so
-        // a failure leaves the original observer intact, then retire the old one after hand-off.
-        tryWatch(directory)
-        Config.KeyboxDirObserver.stopWatching()
+            // Config.initialize() already started the legacy observer. Retire it first.
+            Config.KeyboxDirObserver.stopWatching()
 
-        recoveryFuture = recoveryScheduler.scheduleWithFixedDelay({
-            if (!isRunning) return@scheduleWithFixedDelay
-            checkRecovery()
-        }, RECOVERY_INTERVAL_MS, RECOVERY_INTERVAL_MS, TimeUnit.MILLISECONDS)
+            val parent = directory.parentFile
+            if (parent != null) {
+                try {
+                    val pObserver = object : FileObserver(parent, CREATE or MOVED_TO or DELETE or MOVED_FROM) {
+                        override fun onEvent(event: Int, path: String?) {
+                            if (path == directory.name) {
+                                synchronized(lock) {
+                                    if (!isRunning) return
+                                    if ((event and (CREATE or MOVED_TO)) != 0) {
+                                        Logger.i("Parent watcher detected keybox directory created/moved into place")
+                                        if (directory.exists()) {
+                                            tryArmChildLocked(directory)
+                                            triggerRefresh()
+                                        }
+                                    } else if ((event and (DELETE or MOVED_FROM)) != 0) {
+                                        Logger.w("Parent watcher detected keybox directory removed")
+                                        disarmChildLocked()
+                                        triggerRefresh()
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    pObserver.startWatching()
+                    parentObserver = pObserver
+                    Logger.i("Keybox parent directory watcher armed on ${parent.absolutePath}")
+                } catch (e: Throwable) {
+                    Logger.e("Failed to arm keybox parent directory watcher", e)
+                }
+            }
+
+            if (directory.exists()) {
+                tryArmChildLocked(directory)
+            } else {
+                Logger.w("Keybox directory not present at startup, waiting for parent watcher event")
+            }
+        }
     }
 
-    /**
-     * Attempts to create and start a FileObserver for the given directory.
-     * Skips if an observer is already active or the directory does not exist.
-     *
-     * @param directory The directory to watch for filesystem events
-     */
-    @Synchronized
-    private fun tryWatch(directory: File) {
-        if (observer != null) return
+    private fun tryArmChildLocked(directory: File) {
+        if (childObserver != null) return
         if (!directory.exists()) return
 
         try {
             val replacement =
                 object : FileObserver(directory, CREATE or CLOSE_WRITE or DELETE or MOVED_FROM or MOVED_TO or MODIFY or ATTRIB or DELETE_SELF or MOVE_SELF) {
-                    /**
-                     * Handles filesystem events on the watched directory.
-                     * MOVE_SELF and DELETE_SELF trigger observer teardown and recovery mode.
-                     */
                     override fun onEvent(
                         event: Int,
                         path: String?,
                     ) {
                         if ((event and DELETE_SELF) != 0 || (event and MOVE_SELF) != 0) {
-                            Logger.w("Keybox directory lost via MOVE_SELF or DELETE_SELF, entering recovery")
-                            synchronized(this@KeyboxDirectoryRefreshWatcher) {
-                                observer?.stopWatching()
-                                observer = null
-                                // schedule immediate recovery check
+                            Logger.w("Keybox directory lost via MOVE_SELF or DELETE_SELF")
+                            synchronized(lock) {
+                                disarmChildLocked()
                             }
-                            Config.keyboxInventoryFingerprintDirty = true
-                            scheduler.submit()
+                            triggerRefresh()
                         } else {
-                            Config.keyboxInventoryFingerprintDirty = true
-                            scheduler.submit()
+                            triggerRefresh()
                         }
                     }
                 }
             replacement.startWatching()
-            observer = replacement
+            childObserver = replacement
             Logger.i("Keybox directory watcher armed on ${directory.absolutePath}")
         } catch (e: Throwable) {
             Logger.e("Failed to arm keybox directory watcher", e)
         }
     }
 
-    /**
-     * Checks whether the directory watcher needs recovery and re-arms if necessary.
-     * Called periodically by the recovery scheduler to handle cases where the observer
-     * fails to start initially or the directory is recreated after being lost.
-     */
+    private fun disarmChildLocked() {
+        childObserver?.stopWatching()
+        childObserver = null
+    }
+
+    private fun triggerRefresh() {
+        Config.keyboxInventoryFingerprintDirty = true
+        scheduler.submit()
+    }
+
     @Synchronized
-    private fun checkRecovery() {
-        val dir = currentDirectory ?: return
-        if (observer == null) {
-            if (dir.exists()) {
-                Logger.i("Keybox directory recovered, re-arming watcher")
-                tryWatch(dir)
-                if (observer != null) {
-                    // Trigger a refresh since we might have missed events while dead
-                    Config.keyboxInventoryFingerprintDirty = true
-                    scheduler.submit()
-                }
-            }
-        } else {
-            // Observer exists but directory might be recreated silently without sending MOVE_SELF in some edge cases
-            if (!dir.exists()) {
-                 Logger.w("Keybox directory no longer exists but observer was active, entering recovery")
-                 observer?.stopWatching()
-                 observer = null
-            }
+    fun stop() {
+        synchronized(lock) {
+            isRunning = false
+            targetDirectory = null
+            disarmChildLocked()
+            parentObserver?.stopWatching()
+            parentObserver = null
+            scheduler.cancel()
         }
     }
 
-    /**
-     * Stops the directory watcher, cancels the recovery scheduler, and cleans up resources.
-     */
-    @Synchronized
-    fun stop() {
-        isRunning = false
-        currentDirectory = null
-        observer?.stopWatching()
-        observer = null
-        recoveryFuture?.cancel(false)
-        recoveryFuture = null
-        scheduler.cancel()
+    @androidx.annotation.VisibleForTesting
+    internal fun isChildObserverActiveForTesting(): Boolean = synchronized(lock) { childObserver != null }
+
+    @androidx.annotation.VisibleForTesting
+    internal fun isParentObserverActiveForTesting(): Boolean = synchronized(lock) { parentObserver != null }
+
+    @androidx.annotation.VisibleForTesting
+    internal fun injectChildEventForTesting(event: Int) {
+        synchronized(lock) {
+            childObserver?.onEvent(event, null)
+        }
     }
 
-    /**
-     * Test-only method to check whether the FileObserver is currently active.
-     *
-     * @return true if an observer instance exists, false otherwise
-     */
     @androidx.annotation.VisibleForTesting
-    internal fun isObserverActiveForTesting(): Boolean = observer != null
-
-    /**
-     * Test-only method to simulate a filesystem event by directly invoking the observer's onEvent handler.
-     *
-     * @param event The FileObserver event mask to inject
-     */
-    @androidx.annotation.VisibleForTesting
-    internal fun injectEventForTesting(event: Int) {
-        observer?.onEvent(event, null)
-    }
-
-    /**
-     * Test-only method to manually trigger a recovery check, bypassing the scheduled periodic task.
-     */
-    @androidx.annotation.VisibleForTesting
-    internal fun checkRecoveryForTesting() {
-        checkRecovery()
+    internal fun injectParentEventForTesting(event: Int, path: String?) {
+        synchronized(lock) {
+            parentObserver?.onEvent(event, path)
+        }
     }
 }
