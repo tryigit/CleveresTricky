@@ -493,6 +493,8 @@ jobs:
 
       - name: Build Module Artifact
         if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.module == 'true' }}
+        env:
+          INTEGRITY_SIGNING_KEY: ${{ secrets.INTEGRITY_SIGNING_KEY }}
         run: ./gradlew zipRelease --warning-mode=fail --console=plain
 
       - name: Build Encryptor App

@@ -2,6 +2,7 @@ import org.apache.tools.ant.filters.FixCrLfFilter
 import org.apache.tools.ant.filters.ReplaceTokens
 import java.io.File
 import java.security.KeyFactory
+import java.security.KeyPairGenerator
 import java.security.MessageDigest
 import java.security.Signature
 import java.security.spec.PKCS8EncodedKeySpec
@@ -436,13 +437,25 @@ afterEvaluate {
                     val privateKeySeed =
                         System.getenv("INTEGRITY_SIGNING_KEY")?.trim()
                             ?: rootProject.file("keys/integrity_signer.key").takeIf { it.exists() }?.readText()?.trim()
-                            ?: throw GradleException(
+
+                    val privKey =
+                        if (!privateKeySeed.isNullOrBlank()) {
+                            val privKeyBytes = pkcs8Header + HexFormat.of().parseHex(privateKeySeed)
+                            val keyFactory = KeyFactory.getInstance("Ed25519")
+                            keyFactory.generatePrivate(PKCS8EncodedKeySpec(privKeyBytes))
+                        } else if (System.getenv("CI_RELEASE") == "true" || System.getenv("REQUIRE_INTEGRITY_SIGNING_KEY") == "true") {
+                            throw GradleException(
                                 "INTEGRITY_SIGNING_KEY environment variable or keys/integrity_signer.key is required " +
-                                    "to sign the module manifest. Hardcoded signing keys are strictly prohibited.",
+                                    "for production release builds. Hardcoded signing keys are strictly prohibited.",
                             )
-                    val privKeyBytes = pkcs8Header + HexFormat.of().parseHex(privateKeySeed)
-                    val keyFactory = KeyFactory.getInstance("Ed25519")
-                    val privKey = keyFactory.generatePrivate(PKCS8EncodedKeySpec(privKeyBytes))
+                        } else {
+                            // Non-release / CI test / local development build:
+                            // Generate an ephemeral in-memory Ed25519 key pair for signing the module manifest.
+                            // This ensures that NO private signing key or fallback seed exists in the source tree,
+                            // while allowing CI verification jobs (such as native hardening and packaging checks) to run cleanly.
+                            val keyPairGen = KeyPairGenerator.getInstance("Ed25519")
+                            keyPairGen.generateKeyPair().private
+                        }
                     val sig = Signature.getInstance("Ed25519")
                     sig.initSign(privKey)
                     sig.update(canonicalData.toByteArray(Charsets.UTF_8))
