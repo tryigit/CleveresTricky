@@ -491,8 +491,12 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-      - name: Build Module Artifact
-        if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.module == 'true' }}
+      - name: Build Module Artifact (PR)
+        if: ${{ github.event_name == 'pull_request' && needs.changes.outputs.module == 'true' }}
+        run: ./gradlew zipRelease --warning-mode=fail --console=plain
+
+      - name: Build Signed Module Artifact
+        if: github.event_name != 'pull_request'
         env:
           INTEGRITY_SIGNING_KEY: ${{ secrets.INTEGRITY_SIGNING_KEY }}
         run: ./gradlew zipRelease --warning-mode=fail --console=plain

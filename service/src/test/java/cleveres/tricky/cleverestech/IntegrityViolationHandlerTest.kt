@@ -152,33 +152,45 @@ class IntegrityViolationHandlerTest {
         val sensitiveFile = java.io.File(externalDir, "sensitive_system_file.txt")
         sensitiveFile.writeText("critical system data that must not be deleted")
 
+        // Start with swappedEntry as a genuine directory
         val swappedEntry = java.io.File(root, "swapped_dir")
-        try {
-            java.nio.file.Files.createSymbolicLink(swappedEntry.toPath(), externalDir.toPath())
-        } catch (_: Exception) {
-            // Symlinks not supported in host environment
-            root.deleteRecursively()
-            externalDir.deleteRecursively()
-            return
+        swappedEntry.mkdirs()
+        java.io.File(swappedEntry, "child_file.txt").writeText("initial content")
+
+        var swapOccurred = false
+        IntegrityViolationHandler.onPreDescentCheck = { entryPath ->
+            if (entryPath == swappedEntry.toPath() && !swapOccurred) {
+                swapOccurred = true
+                swappedEntry.deleteRecursively()
+                try {
+                    java.nio.file.Files.createSymbolicLink(swappedEntry.toPath(), externalDir.toPath())
+                } catch (_: Exception) {
+                    // Symlinks not supported in host environment
+                }
+            }
         }
 
-        val noFollowMethod =
-            Class.forName("cleveres.tricky.cleverestech.IntegrityViolationHandlerKt")
-                .getDeclaredMethod(
-                    "deleteDirectoryRecursivelyNoFollow",
-                    java.nio.file.Path::class.java,
-                    Int::class.javaPrimitiveType,
-                )
-        noFollowMethod.isAccessible = true
-        val deleted = noFollowMethod.invoke(null, root.toPath(), 16) as Boolean
+        try {
+            val noFollowMethod =
+                Class.forName("cleveres.tricky.cleverestech.IntegrityViolationHandlerKt")
+                    .getDeclaredMethod(
+                        "deleteDirectoryRecursivelyNoFollow",
+                        java.nio.file.Path::class.java,
+                        Int::class.javaPrimitiveType,
+                    )
+            noFollowMethod.isAccessible = true
+            val deleted = noFollowMethod.invoke(null, root.toPath(), 16) as Boolean
 
-        assertTrue("Expected recursive deletion to succeed", deleted)
-        assertFalse("Module root should be deleted", root.exists())
-        assertFalse("Swapped symlink should be deleted", swappedEntry.exists())
-        assertTrue("External directory MUST NOT be traversed or deleted!", externalDir.exists())
-        assertTrue("Sensitive file in external directory MUST NOT be deleted!", sensitiveFile.exists())
-        assertEquals("critical system data that must not be deleted", sensitiveFile.readText())
-
-        externalDir.deleteRecursively()
+            assertTrue("Expected recursive deletion to succeed", deleted)
+            assertFalse("Module root should be deleted", root.exists())
+            assertFalse("Swapped symlink should be deleted", swappedEntry.exists())
+            assertTrue("External directory MUST NOT be traversed or deleted!", externalDir.exists())
+            assertTrue("Sensitive file in external directory MUST NOT be deleted!", sensitiveFile.exists())
+            assertEquals("critical system data that must not be deleted", sensitiveFile.readText())
+        } finally {
+            IntegrityViolationHandler.onPreDescentCheck = null
+            root.deleteRecursively()
+            externalDir.deleteRecursively()
+        }
     }
 }

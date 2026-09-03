@@ -52,8 +52,6 @@ jobs:
           targets: aarch64-linux-android,x86_64-linux-android
 
       - name: Build release artifacts
-        env:
-          INTEGRITY_SIGNING_KEY: ${{ secrets.INTEGRITY_SIGNING_KEY }}
         run: ./gradlew zipRelease :encryptor-app:assembleRelease --warning-mode=fail --console=plain
 
       - name: Verify all native ELF hardening

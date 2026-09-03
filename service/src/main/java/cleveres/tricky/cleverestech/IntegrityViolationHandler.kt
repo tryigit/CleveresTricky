@@ -20,6 +20,7 @@ object IntegrityViolationHandler {
 
     internal var deleteModule: (String) -> Boolean = ::safeDeleteModule
     internal var rebootSystem: () -> Unit = ::performReboot
+    internal var onPreDescentCheck: ((java.nio.file.Path) -> Unit)? = null
 
     const val VIOLATION_MESSAGE = "Module change detected! Module is being deleted and system is being restarted."
 
@@ -174,6 +175,7 @@ private fun deleteDirectoryRecursivelyNoFollow(dir: java.nio.file.Path, maxDepth
                 if (Files.isSymbolicLink(entry)) {
                     if (!tryDeleteEntry(entry)) allSuccess = false
                 } else if (Files.isDirectory(entry, LinkOption.NOFOLLOW_LINKS)) {
+                    IntegrityViolationHandler.onPreDescentCheck?.invoke(entry)
                     val attrs =
                         try {
                             Files.readAttributes(

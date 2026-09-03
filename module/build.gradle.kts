@@ -2,7 +2,6 @@ import org.apache.tools.ant.filters.FixCrLfFilter
 import org.apache.tools.ant.filters.ReplaceTokens
 import java.io.File
 import java.security.KeyFactory
-import java.security.KeyPairGenerator
 import java.security.MessageDigest
 import java.security.Signature
 import java.security.spec.PKCS8EncodedKeySpec
@@ -438,28 +437,31 @@ afterEvaluate {
                         System.getenv("INTEGRITY_SIGNING_KEY")?.trim()
                             ?: rootProject.file("keys/integrity_signer.key").takeIf { it.exists() }?.readText()?.trim()
 
-                    val privKey =
+                    val isReleaseBuild =
+                        System.getenv("CI_RELEASE") == "true" ||
+                            (System.getenv("CI") == "true" && System.getenv("GITHUB_EVENT_NAME") != "pull_request") ||
+                            System.getenv("REQUIRE_INTEGRITY_SIGNING_KEY") == "true"
+
+                    val signatureHex =
                         if (!privateKeySeed.isNullOrBlank()) {
                             val privKeyBytes = pkcs8Header + HexFormat.of().parseHex(privateKeySeed)
                             val keyFactory = KeyFactory.getInstance("Ed25519")
-                            keyFactory.generatePrivate(PKCS8EncodedKeySpec(privKeyBytes))
-                        } else if (System.getenv("CI_RELEASE") == "true" || System.getenv("REQUIRE_INTEGRITY_SIGNING_KEY") == "true") {
+                            val privKey = keyFactory.generatePrivate(PKCS8EncodedKeySpec(privKeyBytes))
+                            val sig = Signature.getInstance("Ed25519")
+                            sig.initSign(privKey)
+                            sig.update(canonicalData.toByteArray(Charsets.UTF_8))
+                            HexFormat.of().formatHex(sig.sign())
+                        } else if (isReleaseBuild) {
                             throw GradleException(
                                 "INTEGRITY_SIGNING_KEY environment variable or keys/integrity_signer.key is required " +
-                                    "for production release builds. Hardcoded signing keys are strictly prohibited.",
+                                    "to sign the module manifest for release builds. Hardcoded signing keys are strictly prohibited.",
                             )
                         } else {
-                            // Non-release / CI test / local development build:
-                            // Generate an ephemeral in-memory Ed25519 key pair for signing the module manifest.
-                            // This ensures that NO private signing key or fallback seed exists in the source tree,
-                            // while allowing CI verification jobs (such as native hardening and packaging checks) to run cleanly.
-                            val keyPairGen = KeyPairGenerator.getInstance("Ed25519")
-                            keyPairGen.generateKeyPair().private
+                            // Unsigned development / pull-request test packaging.
+                            // Preserves unsigned packaging for PR verification without exposing secrets
+                            // or signing with mismatched ephemeral keys that falsely mimic a trusted manifest.
+                            ""
                         }
-                    val sig = Signature.getInstance("Ed25519")
-                    sig.initSign(privKey)
-                    sig.update(canonicalData.toByteArray(Charsets.UTF_8))
-                    val signatureHex = HexFormat.of().formatHex(sig.sign())
 
                     val manifest =
                         groovy.json.JsonBuilder(

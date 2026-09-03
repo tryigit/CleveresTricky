@@ -30,7 +30,7 @@ object ModuleIntegrityVerifier {
     private const val FLAG_ERROR = 1
     private const val DAEMON_SOCKET_NAME = "cleverestrickyd.v1"
 
-    const val TRUSTED_PUBLIC_KEY_HEX = "eaa2491abc562da68f2e9383043676617ec0633148ae6c66c0f3791085e79b31"
+    const val TRUSTED_PUBLIC_KEY_HEX = "9f9f8b00a8c5e3c9849eed6c465b1d1f46747d3acbd74afb91290ebc40c1873c"
 
     private sealed interface DaemonQueryResult {
         data class Verdict(val result: IntegrityResult) : DaemonQueryResult
