@@ -247,4 +247,26 @@ class ModuleIntegrityWatcherTest {
         assertFalse(ModuleIntegrityWatcher.isChildObserverActiveForTesting())
         assertFalse(ModuleIntegrityWatcher.isParentObserverActiveForTesting())
     }
+
+    @Test
+    fun childObserverFailureThrowsAndFailsClosed() {
+        val dir = tempFolder.newFolder("modules", "cleverestricky_child_fail")
+        ModuleIntegrityWatcher.childObserverStarter = {
+            throw RuntimeException("Injected child observer registration failure")
+        }
+
+        var threw = false
+        try {
+            ModuleIntegrityWatcher.start(dir, testManifest) { violations.add(it) }
+        } catch (e: Throwable) {
+            threw = true
+            assertTrue(e.message?.contains("Injected child observer") == true)
+        }
+
+        assertTrue("start() must throw on child observer failure", threw)
+        assertEquals(1, violations.size)
+        assertTrue(violations[0].any { it.contains("Failed to arm integrity child watcher") })
+        assertFalse(ModuleIntegrityWatcher.isChildObserverActiveForTesting())
+        assertFalse(ModuleIntegrityWatcher.isParentObserverActiveForTesting())
+    }
 }

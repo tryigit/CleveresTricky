@@ -14,11 +14,18 @@ class IntegrityViolationHandlerTest {
 
     private val deleteCalls = AtomicInteger(0)
     private val rebootCalls = AtomicInteger(0)
+    private val terminateCalls = AtomicInteger(0)
+    private val terminateExitCodes = CopyOnWriteArrayList<Int>()
     private val deletedPaths = CopyOnWriteArrayList<String>()
 
     @Before
     fun setUp() {
         IntegrityViolationHandler.resetForTesting()
+        deleteCalls.set(0)
+        rebootCalls.set(0)
+        terminateCalls.set(0)
+        terminateExitCodes.clear()
+        deletedPaths.clear()
         IntegrityViolationHandler.deleteModule = { path ->
             deletedPaths.add(path)
             deleteCalls.incrementAndGet()
@@ -26,6 +33,10 @@ class IntegrityViolationHandlerTest {
         }
         IntegrityViolationHandler.rebootSystem = {
             rebootCalls.incrementAndGet()
+        }
+        IntegrityViolationHandler.terminateProcess = { code ->
+            terminateCalls.incrementAndGet()
+            terminateExitCodes.add(code)
         }
     }
 
@@ -40,6 +51,7 @@ class IntegrityViolationHandlerTest {
         assertTrue(IntegrityViolationHandler.isViolated)
         assertEquals(1, deleteCalls.get())
         assertEquals(1, rebootCalls.get())
+        assertEquals(0, terminateCalls.get())
     }
 
     @Test
@@ -49,6 +61,7 @@ class IntegrityViolationHandlerTest {
         IntegrityViolationHandler.handleViolation(listOf("third"))
         assertEquals(1, deleteCalls.get())
         assertEquals(1, rebootCalls.get())
+        assertEquals(0, terminateCalls.get())
     }
 
     @Test
@@ -65,6 +78,7 @@ class IntegrityViolationHandlerTest {
         threads.forEach { it.join(5000) }
         assertEquals(1, deleteCalls.get())
         assertEquals(1, rebootCalls.get())
+        assertEquals(0, terminateCalls.get())
         assertTrue(IntegrityViolationHandler.isViolated)
     }
 
@@ -74,6 +88,8 @@ class IntegrityViolationHandlerTest {
         IntegrityViolationHandler.handleViolation(listOf("delete will fail"))
         assertTrue(IntegrityViolationHandler.isViolated)
         assertEquals(0, rebootCalls.get())
+        assertEquals(1, terminateCalls.get())
+        assertEquals(1, terminateExitCodes[0])
     }
 
     @Test
@@ -82,6 +98,8 @@ class IntegrityViolationHandlerTest {
         IntegrityViolationHandler.handleViolation(listOf("delete throws"))
         assertTrue(IntegrityViolationHandler.isViolated)
         assertEquals(0, rebootCalls.get())
+        assertEquals(1, terminateCalls.get())
+        assertEquals(1, terminateExitCodes[0])
     }
 
     @Test
@@ -90,6 +108,8 @@ class IntegrityViolationHandlerTest {
         IntegrityViolationHandler.handleViolation(listOf("reboot fails"))
         assertTrue(IntegrityViolationHandler.isViolated)
         assertEquals(1, deleteCalls.get())
+        assertEquals(1, terminateCalls.get())
+        assertEquals(1, terminateExitCodes[0])
     }
 
     @Test

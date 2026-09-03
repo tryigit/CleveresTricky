@@ -23,6 +23,7 @@ internal object ModuleIntegrityWatcher {
     private val subObservers = mutableListOf<FileObserver>()
     private var parentObserver: FileObserver? = null
     internal var parentObserverStarter: (FileObserver) -> Unit = { it.startWatching() }
+    internal var childObserverStarter: (FileObserver) -> Unit = { it.startWatching() }
 
     @Volatile
     private var isRunning = false
@@ -60,12 +61,15 @@ internal object ModuleIntegrityWatcher {
                     pendingDirtyPaths.clear()
                     snapshot
                 }
+                if (pathsToVerify.isEmpty()) return@ConflatedRefreshScheduler
+                targetedVerificationExecutions.incrementAndGet()
+
+                val currentManifest = manifest ?: return@ConflatedRefreshScheduler
                 for (relPath in pathsToVerify) {
-                    targetedVerificationExecutions.incrementAndGet()
-                    val result = ModuleIntegrityVerifier.verifySingleFile(relPath, manifest)
+                    val result = ModuleIntegrityVerifier.verifySingleFile(relPath, currentManifest)
                     if (result is IntegrityResult.Fail) {
                         onViolation?.invoke(result.violations)
-                        break
+                        return@ConflatedRefreshScheduler
                     }
                 }
             }
@@ -98,8 +102,16 @@ internal object ModuleIntegrityWatcher {
                                     } else if ((event and (CREATE or MOVED_TO)) != 0) {
                                         Logger.w("Module directory recreated - triggering verification")
                                         if (directory.exists()) {
-                                            tryArmChildLocked(directory)
-                                            fullScheduler?.submit()
+                                            try {
+                                                tryArmChildLocked(directory)
+                                                fullScheduler?.submit()
+                                            } catch (e: Throwable) {
+                                                Logger.e("Failed to arm child watcher upon recreate - failing closed", e)
+                                                disarmChildLocked()
+                                                onViolation?.invoke(
+                                                    listOf("Failed to arm integrity child watcher upon recreate: ${e.message}")
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -117,7 +129,15 @@ internal object ModuleIntegrityWatcher {
             }
 
             if (directory.exists()) {
-                tryArmChildLocked(directory)
+                try {
+                    tryArmChildLocked(directory)
+                } catch (e: Throwable) {
+                    Logger.e("Failed to arm integrity child watcher at start - failing closed", e)
+                    val handler = onViolation
+                    stop()
+                    handler?.invoke(listOf("Failed to arm integrity child watcher: ${e.message}"))
+                    throw e
+                }
             } else {
                 Logger.e("Module directory missing at watcher start - integrity violation")
                 onViolation?.invoke(listOf("Module directory does not exist at watcher start"))
@@ -127,6 +147,7 @@ internal object ModuleIntegrityWatcher {
 
     /**
      * Attempts to register FileObserver instances for the module directory and its subdirectories.
+     * Throws an exception if registration fails to enforce fail-closed behavior.
      */
     private fun tryArmChildLocked(directory: File) {
         if (childObserver != null) return
@@ -164,7 +185,7 @@ internal object ModuleIntegrityWatcher {
                     }
                 }
             }
-            cObserver.startWatching()
+            childObserverStarter(cObserver)
             childObserver = cObserver
             watcherRegistrationCount.incrementAndGet()
 
@@ -201,13 +222,15 @@ internal object ModuleIntegrityWatcher {
                             }
                         }
                     }
-                    sObserver.startWatching()
+                    childObserverStarter(sObserver)
                     subObservers.add(sObserver)
                     watcherRegistrationCount.incrementAndGet()
                 }
             }
         } catch (e: Throwable) {
-            Logger.e("Failed to arm integrity child watcher", e)
+            Logger.e("Failed to arm integrity child watcher - disarming and failing closed", e)
+            disarmChildLocked()
+            throw e
         }
     }
 
@@ -330,6 +353,7 @@ internal object ModuleIntegrityWatcher {
     internal fun resetForTesting() {
         stop()
         parentObserverStarter = { it.startWatching() }
+        childObserverStarter = { it.startWatching() }
         watcherRegistrationCount.set(0)
         eventCoalescedCount.set(0)
         targetedVerificationExecutions.set(0)

@@ -20,6 +20,7 @@ object IntegrityViolationHandler {
 
     internal var deleteModule: (String) -> Boolean = ::safeDeleteModule
     internal var rebootSystem: () -> Unit = ::performReboot
+    internal var terminateProcess: (Int) -> Unit = ::defaultTerminateProcess
     internal var onPreDescentCheck: ((java.nio.file.Path) -> Unit)? = null
 
     const val VIOLATION_MESSAGE = "Module change detected! Module is being deleted and system is being restarted."
@@ -34,6 +35,12 @@ object IntegrityViolationHandler {
         Logger.e("INTEGRITY VIOLATION DETECTED:")
         violations.forEach { Logger.e("  - $it") }
 
+        try {
+            ModuleIntegrityWatcher.stop()
+        } catch (e: Throwable) {
+            Logger.e("Failed to stop ModuleIntegrityWatcher during violation handling", e)
+        }
+
         val moduleDir = getModuleDir()
         val deleted = try {
             deleteModule(moduleDir)
@@ -47,10 +54,12 @@ object IntegrityViolationHandler {
             try {
                 rebootSystem()
             } catch (error: Exception) {
-                Logger.e("System reboot failed", error)
+                Logger.e("System reboot failed - halting runtime and terminating process", error)
+                terminateProcess(1)
             }
         } else {
-            Logger.e("Module deletion failed - module remains fail-closed; aborting reboot")
+            Logger.e("Module deletion failed - module remains fail-closed; aborting reboot and terminating process")
+            terminateProcess(1)
         }
     }
 
@@ -63,6 +72,8 @@ object IntegrityViolationHandler {
         violationOnce.set(false)
         deleteModule = ::safeDeleteModule
         rebootSystem = ::performReboot
+        terminateProcess = ::defaultTerminateProcess
+        onPreDescentCheck = null
     }
 }
 
@@ -250,4 +261,16 @@ private fun isAndroidRuntime(): Boolean {
     val runtimeName = System.getProperty("java.runtime.name").orEmpty()
     val vmName = System.getProperty("java.vm.name").orEmpty()
     return runtimeName.contains("Android", ignoreCase = true) || vmName.equals("Dalvik", ignoreCase = true)
+}
+
+private fun defaultTerminateProcess(status: Int) {
+    try {
+        android.os.Process.killProcess(android.os.Process.myPid())
+    } catch (_: Throwable) {
+    }
+    try {
+        kotlin.system.exitProcess(status)
+    } catch (_: Throwable) {
+    }
+    Runtime.getRuntime().halt(status)
 }
