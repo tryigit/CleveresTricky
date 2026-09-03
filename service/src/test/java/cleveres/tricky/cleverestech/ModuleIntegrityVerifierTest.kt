@@ -2,6 +2,7 @@ package cleveres.tricky.cleverestech
 
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -327,5 +328,39 @@ class ModuleIntegrityVerifierTest {
 
         val result = ModuleIntegrityVerifier.verifyFull()
         assertTrue("Expected Pass but got $result", result is IntegrityResult.Pass)
+    }
+
+    @Test
+    fun daemonOperationalErrorsAreNotIntegrityViolations() {
+        val result = ModuleIntegrityVerifier.decodeDaemonResponseForTesting(
+            1,
+            "module directory unavailable".toByteArray(),
+        )
+
+        assertNull(result)
+    }
+
+    @Test
+    fun daemonViolationPayloadProducesConfirmedFailure() {
+        val payload = byteArrayOf(1) + "hash mismatch".toByteArray()
+        val result = ModuleIntegrityVerifier.decodeDaemonResponseForTesting(0, payload)
+
+        assertTrue(result is IntegrityResult.Fail)
+        assertEquals(listOf("hash mismatch"), (result as IntegrityResult.Fail).violations)
+    }
+
+    @Test(expected = java.io.IOException::class)
+    fun daemonResponseLengthIsBoundedBeforeAllocation() {
+        val header = ByteArray(16)
+        "CTIP".toByteArray().copyInto(header)
+        header[5] = 1
+        header[7] = 0x30
+        val overLimit = 1024 * 1024 + 1
+        header[12] = (overLimit ushr 24).toByte()
+        header[13] = (overLimit ushr 16).toByte()
+        header[14] = (overLimit ushr 8).toByte()
+        header[15] = overLimit.toByte()
+
+        ModuleIntegrityVerifier.daemonResponseLengthForTesting(0x30, header)
     }
 }

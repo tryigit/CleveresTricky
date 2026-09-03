@@ -12,6 +12,7 @@ use cleverestricky_service_core::secure_fs::TrustedDir;
 use cleverestricky_service_core::unix_socket::{
     bind_abstract, connect_abstract, peer_credentials, DAEMON_SOCKET_NAME,
 };
+use sha2::{Digest, Sha256};
 use std::env;
 use std::ffi::OsString;
 use std::fs;
@@ -39,6 +40,7 @@ const ADAPTER_POLL_INTERVAL: Duration = Duration::from_millis(100);
 const BACKEND_BROKER_FD: RawFd = 9;
 const FILE_SOCKET_NAME: &[u8] = b"cleverestrickyd.files.v1";
 const CAPABILITY_WORKERS: usize = 2;
+const MAX_MANIFEST_BYTES: usize = 64 * 1024;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct AdapterLease {
@@ -665,6 +667,12 @@ struct RegisteredAdapter {
     lease: AdapterLease,
 }
 
+#[derive(Clone)]
+struct CachedManifest {
+    manifest: cleverestricky_integrity_core::IntegrityManifest,
+    hmac_key_fingerprint: [u8; 32],
+}
+
 /// Serves WebUI IPC requests, relaying them to the registered adapter and handling integrity checks.
 fn serve_web(
     listener: UnixListener,
@@ -673,9 +681,8 @@ fn serve_web(
 ) -> io::Result<()> {
     let mut adapter: Option<RegisteredAdapter> = None;
     let mut relay_buffer = vec![0u8; STREAM_COPY_BYTES];
-    let cached_manifest: Arc<
-        std::sync::RwLock<Option<cleverestricky_integrity_core::IntegrityManifest>>,
-    > = Arc::new(std::sync::RwLock::new(None));
+    let cached_manifest: Arc<std::sync::RwLock<Option<CachedManifest>>> =
+        Arc::new(std::sync::RwLock::new(None));
     loop {
         let (mut client, _) = match listener.accept() {
             Ok(value) => value,
@@ -779,7 +786,9 @@ fn serve_web(
                     );
                 }
             }
-            OP_INTEGRITY_DELETE_MODULE if header.flags == 0 => {
+            OP_INTEGRITY_DELETE_MODULE
+                if integrity_delete_request_authorized(header, peer_lease) =>
+            {
                 handle_integrity_delete_module(&mut client, &module_dir);
             }
             _ => {
@@ -793,7 +802,7 @@ fn serve_web(
 fn handle_integrity_verify_full(
     client: &mut UnixStream,
     module_dir: &Path,
-    cached_manifest: &std::sync::RwLock<Option<cleverestricky_integrity_core::IntegrityManifest>>,
+    cached_manifest: &std::sync::RwLock<Option<CachedManifest>>,
     hmac_key: &[u8; 32],
 ) {
     let module_dir_str = match module_dir.to_str() {
@@ -829,16 +838,17 @@ fn handle_integrity_verify_full(
             return;
         }
     };
-    let mut manifest_file = fs::File::from(manifest_fd);
-    let mut manifest_str = String::new();
-    if let Err(e) = manifest_file.read_to_string(&mut manifest_str) {
-        let _ = reply_text_error(
-            client,
-            OP_INTEGRITY_VERIFY_FULL,
-            &format!("failed to read manifest: {e}"),
-        );
-        return;
-    }
+    let manifest_str = match read_manifest_bounded(fs::File::from(manifest_fd)) {
+        Ok(manifest) => manifest,
+        Err(e) => {
+            let _ = reply_text_error(
+                client,
+                OP_INTEGRITY_VERIFY_FULL,
+                &format!("failed to read manifest: {e}"),
+            );
+            return;
+        }
+    };
 
     let manifest = match cleverestricky_integrity_core::IntegrityManifest::parse_and_verify(
         &manifest_str,
@@ -859,7 +869,10 @@ fn handle_integrity_verify_full(
     let result = cleverestricky_integrity_core::verify_full(raw_dir_fd, &manifest);
     if result.is_pass() {
         if let Ok(mut lock) = cached_manifest.write() {
-            *lock = Some(manifest);
+            *lock = Some(CachedManifest {
+                manifest,
+                hmac_key_fingerprint: hmac_key_fingerprint(hmac_key),
+            });
         }
         let _ = write_frame(client, OP_INTEGRITY_VERIFY_FULL, 0, &[0]);
     } else {
@@ -868,7 +881,7 @@ fn handle_integrity_verify_full(
             msg.push_str(&v.to_string());
             msg.push('\n');
         }
-        let _ = write_frame(client, OP_INTEGRITY_VERIFY_FULL, FLAG_ERROR, msg.as_bytes());
+        let _ = write_integrity_violation(client, OP_INTEGRITY_VERIFY_FULL, &msg);
     }
 }
 
@@ -876,7 +889,7 @@ fn handle_integrity_verify_full(
 fn handle_integrity_verify_file(
     client: &mut UnixStream,
     module_dir: &Path,
-    cached_manifest: &std::sync::RwLock<Option<cleverestricky_integrity_core::IntegrityManifest>>,
+    cached_manifest: &std::sync::RwLock<Option<CachedManifest>>,
     payload: &[u8],
 ) {
     let hmac_key = &payload[..32];
@@ -888,11 +901,9 @@ fn handle_integrity_verify_file(
         }
     };
 
-    let manifest_guard = cached_manifest.read().unwrap();
-    let manifest = match manifest_guard.as_ref() {
-        Some(m) => m.clone(),
+    let manifest = match cached_manifest_for_key(cached_manifest, hmac_key) {
+        Some(manifest) => manifest,
         None => {
-            drop(manifest_guard);
             let module_dir_str = match module_dir.to_str() {
                 Some(s) => s,
                 None => {
@@ -931,16 +942,17 @@ fn handle_integrity_verify_file(
                     return;
                 }
             };
-            let mut manifest_file = fs::File::from(manifest_fd);
-            let mut manifest_str = String::new();
-            if let Err(e) = manifest_file.read_to_string(&mut manifest_str) {
-                let _ = reply_text_error(
-                    client,
-                    OP_INTEGRITY_VERIFY_FILE,
-                    &format!("failed to read manifest: {e}"),
-                );
-                return;
-            }
+            let manifest_str = match read_manifest_bounded(fs::File::from(manifest_fd)) {
+                Ok(manifest) => manifest,
+                Err(e) => {
+                    let _ = reply_text_error(
+                        client,
+                        OP_INTEGRITY_VERIFY_FILE,
+                        &format!("failed to read manifest: {e}"),
+                    );
+                    return;
+                }
+            };
 
             let m = match cleverestricky_integrity_core::IntegrityManifest::parse_and_verify(
                 &manifest_str,
@@ -958,7 +970,10 @@ fn handle_integrity_verify_file(
                 }
             };
             if let Ok(mut lock) = cached_manifest.write() {
-                *lock = Some(m.clone());
+                *lock = Some(CachedManifest {
+                    manifest: m.clone(),
+                    hmac_key_fingerprint: hmac_key_fingerprint(hmac_key),
+                });
             }
             m
         }
@@ -993,13 +1008,71 @@ fn handle_integrity_verify_file(
             msg.push_str(&v.to_string());
             msg.push('\n');
         }
-        let _ = write_frame(client, OP_INTEGRITY_VERIFY_FILE, FLAG_ERROR, msg.as_bytes());
+        let _ = write_integrity_violation(client, OP_INTEGRITY_VERIFY_FILE, &msg);
     }
+}
+
+/// Reads a manifest through a hard stream bound so a growing file cannot exhaust memory.
+fn read_manifest_bounded<R: Read>(reader: R) -> io::Result<String> {
+    let mut manifest = String::new();
+    reader
+        .take((MAX_MANIFEST_BYTES + 1) as u64)
+        .read_to_string(&mut manifest)?;
+    if manifest.len() > MAX_MANIFEST_BYTES {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "manifest exceeds size limit",
+        ));
+    }
+    Ok(manifest)
+}
+
+/// Returns a stable, non-reversible cache identity for an HMAC key.
+fn hmac_key_fingerprint(hmac_key: &[u8]) -> [u8; 32] {
+    Sha256::digest(hmac_key).into()
+}
+
+/// Retrieves a cached manifest only when it was authenticated by the current key.
+fn cached_manifest_for_key(
+    cached_manifest: &std::sync::RwLock<Option<CachedManifest>>,
+    hmac_key: &[u8],
+) -> Option<cleverestricky_integrity_core::IntegrityManifest> {
+    let fingerprint = hmac_key_fingerprint(hmac_key);
+    cached_manifest.read().ok().and_then(|cached| {
+        cached
+            .as_ref()
+            .filter(|entry| entry.hmac_key_fingerprint == fingerprint)
+            .map(|entry| entry.manifest.clone())
+    })
+}
+
+/// Restricts destructive module deletion to the active adapter and an empty request frame.
+fn integrity_delete_request_authorized(
+    header: FrameHeader,
+    peer_lease: Option<AdapterLease>,
+) -> bool {
+    peer_lease.is_some() && header.flags == 0 && header.payload_len == 0
+}
+
+/// Sends a confirmed integrity violation as a verdict rather than an operational error.
+fn write_integrity_violation(
+    client: &mut UnixStream,
+    opcode: u16,
+    message: &str,
+) -> io::Result<()> {
+    let message = message.as_bytes();
+    let mut payload = Vec::with_capacity(1 + message.len().min(MAX_FRAME_BYTES - 1));
+    payload.push(1);
+    payload.extend_from_slice(&message[..message.len().min(MAX_FRAME_BYTES - 1)]);
+    write_frame(client, opcode, 0, &payload)
 }
 
 /// Handles a module deletion request by wiping the module directory and rebooting.
 fn handle_integrity_delete_module(client: &mut UnixStream, module_dir: &Path) {
-    let _ = delete_dir_contents_safe(module_dir);
+    if let Err(error) = delete_dir_contents_safe(module_dir) {
+        let _ = reply_error(client, OP_INTEGRITY_DELETE_MODULE, &error);
+        return;
+    }
     let _ = write_frame(client, OP_INTEGRITY_DELETE_MODULE, 0, &[0]);
     let _ = Command::new("/system/bin/reboot")
         .status()
@@ -1008,21 +1081,16 @@ fn handle_integrity_delete_module(client: &mut UnixStream, module_dir: &Path) {
 
 /// Recursively deletes all files and subdirectories within the given directory.
 fn delete_dir_contents_safe(dir: &Path) -> io::Result<()> {
-    if let Ok(entries) = fs::read_dir(dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if let Ok(meta) = fs::symlink_metadata(&path) {
-                if meta.file_type().is_symlink() || meta.is_file() {
-                    let _ = fs::remove_file(&path);
-                } else if meta.is_dir() {
-                    let _ = delete_dir_contents_safe(&path);
-                    let _ = fs::remove_dir(&path);
-                }
-            }
+    for entry in fs::read_dir(dir)? {
+        let path = entry?.path();
+        let metadata = fs::symlink_metadata(&path)?;
+        if metadata.is_dir() {
+            delete_dir_contents_safe(&path)?;
+        } else {
+            fs::remove_file(&path)?;
         }
     }
-    let _ = fs::remove_dir(dir);
-    Ok(())
+    fs::remove_dir(dir)
 }
 
 /// Forwards a web request to the registered adapter and relays the response back to the client.
@@ -1078,7 +1146,7 @@ fn reply_text_error(stream: &mut UnixStream, opcode: u16, message: &str) -> io::
 mod tests {
     use super::*;
     use std::fs;
-    use std::io::{Read, Write};
+    use std::io::{Cursor, Read, Write};
     use std::sync::atomic::{AtomicU64, Ordering};
 
     struct TestRoot {
@@ -1211,6 +1279,91 @@ mod tests {
         assert!(!valid_backend_auth_value(&"5A".repeat(32)));
         assert!(!valid_backend_auth_value(&"00".repeat(32)));
         assert!(!valid_backend_auth_value(&format!("{}gg", "5a".repeat(31))));
+    }
+
+    #[test]
+    fn integrity_delete_requires_active_adapter_and_empty_unflagged_frame() {
+        let lease = AdapterLease {
+            pid: 123,
+            generation: 1,
+        };
+        let valid = FrameHeader {
+            opcode: OP_INTEGRITY_DELETE_MODULE,
+            flags: 0,
+            payload_len: 0,
+        };
+        assert!(integrity_delete_request_authorized(valid, Some(lease)));
+        assert!(!integrity_delete_request_authorized(valid, None));
+        assert!(!integrity_delete_request_authorized(
+            FrameHeader { flags: 1, ..valid },
+            Some(lease)
+        ));
+        assert!(!integrity_delete_request_authorized(
+            FrameHeader {
+                payload_len: 1,
+                ..valid
+            },
+            Some(lease)
+        ));
+    }
+
+    #[test]
+    fn manifest_reader_accepts_limit_and_rejects_over_limit() {
+        let exact = vec![b'a'; MAX_MANIFEST_BYTES];
+        assert_eq!(
+            read_manifest_bounded(Cursor::new(exact)).unwrap().len(),
+            MAX_MANIFEST_BYTES
+        );
+        let oversized = vec![b'a'; MAX_MANIFEST_BYTES + 1];
+        assert_eq!(
+            read_manifest_bounded(Cursor::new(oversized))
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::InvalidData
+        );
+    }
+
+    #[test]
+    fn manifest_cache_is_bound_to_hmac_key_fingerprint() {
+        let first_key = [0x11; 32];
+        let second_key = [0x22; 32];
+        let manifest = cleverestricky_integrity_core::IntegrityManifest {
+            version: 1,
+            entries: Vec::new(),
+        };
+        let cache = std::sync::RwLock::new(Some(CachedManifest {
+            manifest,
+            hmac_key_fingerprint: hmac_key_fingerprint(&first_key),
+        }));
+
+        assert!(cached_manifest_for_key(&cache, &first_key).is_some());
+        assert!(cached_manifest_for_key(&cache, &second_key).is_none());
+    }
+
+    #[test]
+    fn recursive_module_delete_propagates_errors() {
+        let test = TestRoot::new();
+        let nested = test.path.join("nested");
+        fs::create_dir(&nested).unwrap();
+        fs::write(nested.join("payload"), b"data").unwrap();
+        delete_dir_contents_safe(&test.path).unwrap();
+        assert!(!test.path.exists());
+
+        assert_eq!(
+            delete_dir_contents_safe(&test.path).unwrap_err().kind(),
+            io::ErrorKind::NotFound
+        );
+    }
+
+    #[test]
+    fn integrity_violation_uses_verdict_payload_without_error_flag() {
+        let (mut client, mut server) = UnixStream::pair().unwrap();
+        write_integrity_violation(&mut server, OP_INTEGRITY_VERIFY_FILE, "hash mismatch").unwrap();
+        let (header, payload) = read_payload(&mut client, MAX_FRAME_BYTES);
+
+        assert_eq!(header.flags, 0);
+        assert_eq!(payload[0], 1);
+        assert_eq!(&payload[1..], b"hash mismatch");
     }
 
     #[test]

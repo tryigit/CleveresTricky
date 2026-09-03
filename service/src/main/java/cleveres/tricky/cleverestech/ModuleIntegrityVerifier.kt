@@ -25,10 +25,18 @@ object ModuleIntegrityVerifier {
     private const val MAX_MANIFEST_BYTES = 64L * 1024
     private const val MAX_PAYLOAD_BYTES = 128L * 1024 * 1024
     private const val MAX_MODULE_ENTRIES = 4096
+    private const val MAX_FRAME_BYTES = 1024 * 1024
 
     private const val OP_INTEGRITY_VERIFY_FULL = 0x30
     private const val OP_INTEGRITY_VERIFY_FILE = 0x31
+    private const val FLAG_ERROR = 1
     private const val DAEMON_SOCKET_NAME = "cleverestrickyd.v1"
+
+    private sealed interface DaemonQueryResult {
+        data class Verdict(val result: IntegrityResult) : DaemonQueryResult
+
+        object OperationalError : DaemonQueryResult
+    }
 
     val fullVerificationCount = AtomicInteger(0)
     val targetedVerificationCount = AtomicInteger(0)
@@ -47,9 +55,9 @@ object ModuleIntegrityVerifier {
      */
     fun verifyFull(): IntegrityResult {
         fullVerificationCount.incrementAndGet()
-        val daemonResult = queryDaemon(OP_INTEGRITY_VERIFY_FULL, deriveDefaultHmacKey())
-        if (daemonResult != null) {
-            return daemonResult
+        when (val daemonResult = queryDaemon(OP_INTEGRITY_VERIFY_FULL, deriveDefaultHmacKey())) {
+            is DaemonQueryResult.Verdict -> return daemonResult.result
+            DaemonQueryResult.OperationalError, null -> Unit
         }
         return verifyFullLocal()
     }
@@ -64,9 +72,9 @@ object ModuleIntegrityVerifier {
     ): IntegrityResult {
         targetedVerificationCount.incrementAndGet()
         val payload = deriveDefaultHmacKey() + relativePath.toByteArray(Charsets.UTF_8)
-        val daemonResult = queryDaemon(OP_INTEGRITY_VERIFY_FILE, payload)
-        if (daemonResult != null) {
-            return daemonResult
+        when (val daemonResult = queryDaemon(OP_INTEGRITY_VERIFY_FILE, payload)) {
+            is DaemonQueryResult.Verdict -> return daemonResult.result
+            DaemonQueryResult.OperationalError, null -> Unit
         }
         val manifest = providedManifest ?: cachedManifest ?: loadManifest()
         return verifySingleFileLocal(relativePath, manifest)
@@ -205,77 +213,138 @@ object ModuleIntegrityVerifier {
      * Queries the daemon for integrity verification via IPC socket.
      * Returns the verification result if successful, or null if the daemon is unavailable.
      */
-    private fun queryDaemon(opcode: Int, payload: ByteArray): IntegrityResult? {
+    private fun queryDaemon(opcode: Int, payload: ByteArray): DaemonQueryResult? {
         if (remoteDisabledForTesting) return null
         return try {
-            val socket = LocalSocket()
-            socket.connect(LocalSocketAddress(DAEMON_SOCKET_NAME, LocalSocketAddress.Namespace.ABSTRACT))
-            socket.soTimeout = 5000
-            val output = socket.outputStream
-            val input = socket.inputStream
-
-            val header = ByteArray(16)
-            header[0] = 'C'.code.toByte()
-            header[1] = 'T'.code.toByte()
-            header[2] = 'I'.code.toByte()
-            header[3] = 'P'.code.toByte()
-            header[4] = 0
-            header[5] = 1
-            header[6] = (opcode ushr 8).toByte()
-            header[7] = opcode.toByte()
-            header[8] = 0
-            header[9] = 0
-            header[10] = 0
-            header[11] = 0
-            header[12] = (payload.size ushr 24).toByte()
-            header[13] = (payload.size ushr 16).toByte()
-            header[14] = (payload.size ushr 8).toByte()
-            header[15] = payload.size.toByte()
-
-            output.write(header)
-            output.write(payload)
-            output.flush()
-
-            val respHeader = ByteArray(16)
-            var read = 0
-            while (read < 16) {
-                val count = input.read(respHeader, read, 16 - read)
-                if (count < 0) throw IOException("EOF reading daemon header")
-                read += count
-            }
-
-            val flags = ((respHeader[8].toInt() and 0xff) shl 24) or
-                ((respHeader[9].toInt() and 0xff) shl 16) or
-                ((respHeader[10].toInt() and 0xff) shl 8) or
-                (respHeader[11].toInt() and 0xff)
-            val respLen = ((respHeader[12].toInt() and 0xff) shl 24) or
-                ((respHeader[13].toInt() and 0xff) shl 16) or
-                ((respHeader[14].toInt() and 0xff) shl 8) or
-                (respHeader[15].toInt() and 0xff)
-
-            val respPayload = ByteArray(respLen)
-            var pRead = 0
-            while (pRead < respLen) {
-                val count = input.read(respPayload, pRead, respLen - pRead)
-                if (count < 0) break
-                pRead += count
-            }
-            socket.close()
-
-            if (flags != 0 || (respPayload.isNotEmpty() && respPayload[0] != 0.toByte())) {
-                val msg = if (respPayload.isNotEmpty()) {
-                    String(respPayload, Charsets.UTF_8).trim()
-                } else {
-                    "Integrity check failed"
+            LocalSocket().use { socket ->
+                socket.connect(LocalSocketAddress(DAEMON_SOCKET_NAME, LocalSocketAddress.Namespace.ABSTRACT))
+                if (socket.peerCredentials.uid != 0) {
+                    throw IOException("Unexpected integrity daemon peer")
                 }
-                IntegrityResult.Fail(listOf(msg))
-            } else {
-                IntegrityResult.Pass
+                socket.soTimeout = 5000
+                val output = socket.outputStream
+                val input = socket.inputStream
+
+                val header = ByteArray(16)
+                header[0] = 'C'.code.toByte()
+                header[1] = 'T'.code.toByte()
+                header[2] = 'I'.code.toByte()
+                header[3] = 'P'.code.toByte()
+                header[4] = 0
+                header[5] = 1
+                header[6] = (opcode ushr 8).toByte()
+                header[7] = opcode.toByte()
+                header[12] = (payload.size ushr 24).toByte()
+                header[13] = (payload.size ushr 16).toByte()
+                header[14] = (payload.size ushr 8).toByte()
+                header[15] = payload.size.toByte()
+
+                output.write(header)
+                output.write(payload)
+                output.flush()
+
+                val respHeader = ByteArray(16)
+                readFully(input, respHeader)
+                val frameHeader = parseDaemonResponseHeader(opcode, respHeader)
+                val respPayload = ByteArray(frameHeader.payloadLength)
+                readFully(input, respPayload)
+                decodeDaemonResponse(frameHeader.flags, respPayload)
             }
         } catch (_: Throwable) {
             null
         }
     }
+
+    private data class DaemonResponseHeader(
+        val flags: Int,
+        val payloadLength: Int,
+    )
+
+    private fun parseDaemonResponseHeader(
+        expectedOpcode: Int,
+        header: ByteArray,
+    ): DaemonResponseHeader {
+        if (header.size != 16 || !header.copyOfRange(0, 4).contentEquals("CTIP".toByteArray())) {
+            throw IOException("Invalid integrity daemon response magic")
+        }
+        val version = readU16(header, 4)
+        if (version != 1) throw IOException("Unsupported integrity daemon response version")
+        if (readU16(header, 6) != expectedOpcode) throw IOException("Unexpected integrity daemon response opcode")
+        val flags = readI32(header, 8)
+        val payloadLength = readU32(header, 12)
+        if (payloadLength > MAX_FRAME_BYTES.toLong()) {
+            throw IOException("Integrity daemon response exceeds size limit")
+        }
+        return DaemonResponseHeader(flags, payloadLength.toInt())
+    }
+
+    private fun decodeDaemonResponse(
+        flags: Int,
+        payload: ByteArray,
+    ): DaemonQueryResult {
+        if (flags == FLAG_ERROR) return DaemonQueryResult.OperationalError
+        if (flags != 0 || payload.isEmpty()) return DaemonQueryResult.OperationalError
+        return when (payload[0].toInt()) {
+            0 -> {
+                if (payload.size != 1) DaemonQueryResult.OperationalError else DaemonQueryResult.Verdict(IntegrityResult.Pass)
+            }
+            1 -> {
+                val message = String(payload, 1, payload.size - 1, Charsets.UTF_8).trim()
+                    .ifEmpty { "Integrity check failed" }
+                DaemonQueryResult.Verdict(IntegrityResult.Fail(listOf(message)))
+            }
+            else -> DaemonQueryResult.OperationalError
+        }
+    }
+
+    private fun readFully(
+        input: java.io.InputStream,
+        buffer: ByteArray,
+    ) {
+        var offset = 0
+        while (offset < buffer.size) {
+            val count = input.read(buffer, offset, buffer.size - offset)
+            if (count <= 0) throw IOException("EOF reading integrity daemon response")
+            offset += count
+        }
+    }
+
+    private fun readU16(
+        bytes: ByteArray,
+        offset: Int,
+    ): Int =
+        ((bytes[offset].toInt() and 0xff) shl 8) or
+            (bytes[offset + 1].toInt() and 0xff)
+
+    private fun readI32(
+        bytes: ByteArray,
+        offset: Int,
+    ): Int =
+        ((bytes[offset].toInt() and 0xff) shl 24) or
+            ((bytes[offset + 1].toInt() and 0xff) shl 16) or
+            ((bytes[offset + 2].toInt() and 0xff) shl 8) or
+            (bytes[offset + 3].toInt() and 0xff)
+
+    private fun readU32(
+        bytes: ByteArray,
+        offset: Int,
+    ): Long =
+        ((bytes[offset].toLong() and 0xff) shl 24) or
+            ((bytes[offset + 1].toLong() and 0xff) shl 16) or
+            ((bytes[offset + 2].toLong() and 0xff) shl 8) or
+            (bytes[offset + 3].toLong() and 0xff)
+
+    @androidx.annotation.VisibleForTesting
+    internal fun decodeDaemonResponseForTesting(
+        flags: Int,
+        payload: ByteArray,
+    ): IntegrityResult? = (decodeDaemonResponse(flags, payload) as? DaemonQueryResult.Verdict)?.result
+
+    @androidx.annotation.VisibleForTesting
+    internal fun daemonResponseLengthForTesting(
+        expectedOpcode: Int,
+        header: ByteArray,
+    ): Int = parseDaemonResponseHeader(expectedOpcode, header).payloadLength
 
     /**
      * Loads the manifest file, parses it, and verifies the HMAC signature.
