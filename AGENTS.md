@@ -415,7 +415,7 @@ Source code must be self-explanatory through clear naming, modular design, and t
    - **Rust `// SAFETY:` requirements:** In `unsafe` blocks, document the exact preconditions and invariants that guarantee memory and concurrency safety.
    - **Non-obvious platform workarounds:** Comments explaining subtle Android/OS behavior, kernel quirks, or hardware bugs with references to the platform contract or issue.
 3. **Punctuation and typography rule:**
-   - Never use unicode long dashes (`—` [U+2014] or `–` [U+2013]) in code, comments, or documentation outside localized UI copy (such as `ux.js`). Always use standard ASCII hyphens (`-`).
+   - Never use unicode long dashes (em-dash U+2014 or en-dash U+2013) in code, comments, or documentation outside localized UI copy (such as `ux.js`). Always use standard ASCII hyphens (`-`).
 
 ### Final review before completion
 
