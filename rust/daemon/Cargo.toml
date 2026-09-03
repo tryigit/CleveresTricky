@@ -14,4 +14,4 @@ path = "src/main.rs"
 cleverestricky-integrity-core = { path = "../integrity-core" }
 cleverestricky-service-core = { path = "../service-core" }
 libc = "0.2"
-sha2 = "0.10"
+sha2 = "0.11"
