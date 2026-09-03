@@ -213,12 +213,12 @@ object ModuleIntegrityVerifier {
             }
             val isExec = perms.any { it.name.endsWith("_EXECUTE") }
             // Only enforce that executables have execute bit set.
-            // Do NOT reject regular files with execute bits — Android overlayfs,
+            // Do NOT reject regular files with execute bits - Android overlayfs,
             // KernelSU module mount, and ZIP extraction often set +x on all files.
             if (expectedType == "executable" && !isExec) return false
             return true
         }
-        // Non-POSIX filesystem (e.g. host JVM on Windows) — skip mode check
+        // Non-POSIX filesystem (e.g. host JVM on Windows) - skip mode check
         return true
     }
 
