@@ -139,6 +139,11 @@ internal object KeyboxDirectoryRefreshWatcher {
     @Volatile
     private var isRunning = false
 
+    /**
+     * Starts watching the keybox directory for filesystem events and schedules periodic recovery checks.
+     *
+     * @param directory The keybox directory to watch for file modifications
+     */
     @Synchronized
     fun start(directory: File) {
         if (isRunning) return
@@ -156,6 +161,12 @@ internal object KeyboxDirectoryRefreshWatcher {
         }, RECOVERY_INTERVAL_MS, RECOVERY_INTERVAL_MS, TimeUnit.MILLISECONDS)
     }
 
+    /**
+     * Attempts to create and start a FileObserver for the given directory.
+     * Skips if an observer is already active or the directory does not exist.
+     *
+     * @param directory The directory to watch for filesystem events
+     */
     @Synchronized
     private fun tryWatch(directory: File) {
         if (observer != null) return
@@ -164,6 +175,10 @@ internal object KeyboxDirectoryRefreshWatcher {
         try {
             val replacement =
                 object : FileObserver(directory, CREATE or CLOSE_WRITE or DELETE or MOVED_FROM or MOVED_TO or MODIFY or ATTRIB or DELETE_SELF or MOVE_SELF) {
+                    /**
+                     * Handles filesystem events on the watched directory.
+                     * MOVE_SELF and DELETE_SELF trigger observer teardown and recovery mode.
+                     */
                     override fun onEvent(
                         event: Int,
                         path: String?,
@@ -191,6 +206,11 @@ internal object KeyboxDirectoryRefreshWatcher {
         }
     }
 
+    /**
+     * Checks whether the directory watcher needs recovery and re-arms if necessary.
+     * Called periodically by the recovery scheduler to handle cases where the observer
+     * fails to start initially or the directory is recreated after being lost.
+     */
     @Synchronized
     private fun checkRecovery() {
         val dir = currentDirectory ?: return
@@ -214,6 +234,9 @@ internal object KeyboxDirectoryRefreshWatcher {
         }
     }
 
+    /**
+     * Stops the directory watcher, cancels the recovery scheduler, and cleans up resources.
+     */
     @Synchronized
     fun stop() {
         isRunning = false
@@ -225,14 +248,27 @@ internal object KeyboxDirectoryRefreshWatcher {
         scheduler.cancel()
     }
 
+    /**
+     * Test-only method to check whether the FileObserver is currently active.
+     *
+     * @return true if an observer instance exists, false otherwise
+     */
     @androidx.annotation.VisibleForTesting
     internal fun isObserverActiveForTesting(): Boolean = observer != null
 
+    /**
+     * Test-only method to simulate a filesystem event by directly invoking the observer's onEvent handler.
+     *
+     * @param event The FileObserver event mask to inject
+     */
     @androidx.annotation.VisibleForTesting
     internal fun injectEventForTesting(event: Int) {
         observer?.onEvent(event, null)
     }
 
+    /**
+     * Test-only method to manually trigger a recovery check, bypassing the scheduled periodic task.
+     */
     @androidx.annotation.VisibleForTesting
     internal fun checkRecoveryForTesting() {
         checkRecovery()

@@ -13,6 +13,9 @@ import kotlinx.coroutines.runBlocking
 
 class KeyboxDirectoryRefreshWatcherTest {
 
+    /**
+     * Verifies that a burst of filesystem events is properly debounced and handled.
+     */
     @Test
     fun testEventStormDebounce() = runBlocking {
         KeyboxDirectoryRefreshWatcher.start(keyboxDir)
@@ -27,6 +30,9 @@ class KeyboxDirectoryRefreshWatcherTest {
         assertTrue(Config.keyboxInventoryFingerprintDirty)
     }
 
+    /**
+     * Verifies that a CREATE event marks the keybox inventory as dirty.
+     */
     @Test
     fun testCreateEventDetected() = runBlocking {
         KeyboxDirectoryRefreshWatcher.start(keyboxDir)
@@ -34,6 +40,9 @@ class KeyboxDirectoryRefreshWatcherTest {
         assertTrue(Config.keyboxInventoryFingerprintDirty)
     }
 
+    /**
+     * Verifies that a CLOSE_WRITE event marks the keybox inventory as dirty.
+     */
     @Test
     fun testModifySameMetadata() = runBlocking {
         KeyboxDirectoryRefreshWatcher.start(keyboxDir)
@@ -41,6 +50,9 @@ class KeyboxDirectoryRefreshWatcherTest {
         assertTrue(Config.keyboxInventoryFingerprintDirty)
     }
 
+    /**
+     * Verifies that filesystem events correctly trigger the dirty flag even when a refresh is in progress.
+     */
     @Test
     fun testRefreshDuringEvent() = runBlocking {
         KeyboxDirectoryRefreshWatcher.start(keyboxDir)
@@ -58,6 +70,9 @@ class KeyboxDirectoryRefreshWatcherTest {
 
     private lateinit var keyboxDir: File
 
+    /**
+     * Sets up test fixtures: creates a temporary keybox directory and initializes test state.
+     */
     @Before
     fun setUp() {
         keyboxDir = tempFolder.newFolder("keyboxes")
@@ -66,11 +81,17 @@ class KeyboxDirectoryRefreshWatcherTest {
         Config.keyboxInventoryFingerprintDirty = false
     }
 
+    /**
+     * Cleans up test fixtures by stopping the directory watcher.
+     */
     @After
     fun tearDown() {
         KeyboxDirectoryRefreshWatcher.stop()
     }
 
+    /**
+     * Verifies that file modifications in the keybox directory are detected and trigger a refresh.
+     */
     @Test
     fun testModificationDetected() = runBlocking {
         KeyboxDirectoryRefreshWatcher.start(keyboxDir)
@@ -84,6 +105,9 @@ class KeyboxDirectoryRefreshWatcherTest {
         assertTrue(Config.keyboxInventoryFingerprintDirty)
     }
 
+    /**
+     * Verifies that the watcher recovers after the keybox directory is moved (MOVE_SELF event).
+     */
     @Test
     fun testObserverLossRecoveryMoveSelf() = runBlocking {
         KeyboxDirectoryRefreshWatcher.start(keyboxDir)
@@ -103,6 +127,9 @@ class KeyboxDirectoryRefreshWatcherTest {
         assertTrue("Observer should be re-armed after directory restored", KeyboxDirectoryRefreshWatcher.isObserverActiveForTesting())
     }
 
+    /**
+     * Verifies that the watcher recovers after the keybox directory is deleted (DELETE_SELF event).
+     */
     @Test
     fun testObserverLossRecoveryDeleteSelf() = runBlocking {
         KeyboxDirectoryRefreshWatcher.start(keyboxDir)
@@ -122,6 +149,9 @@ class KeyboxDirectoryRefreshWatcherTest {
         assertTrue("Observer should be re-armed after directory restored", KeyboxDirectoryRefreshWatcher.isObserverActiveForTesting())
     }
 
+    /**
+     * Verifies that the watcher can start successfully when the directory is created after initial startup failure.
+     */
     @Test
     fun testObserverStartupFailure() = runBlocking {
         // Start watching a directory that doesn't exist
