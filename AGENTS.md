@@ -402,6 +402,21 @@ During any discovery, audit, or verification pass, agents must systematically qu
 5. **Temporal & Path TOCTOU:** Where can external state (files, paths, symlinks, UID mappings, metadata) change between check and use, invalidating previous verification?
 6. **Failure Masking & Coercion:** Where are non-success states silently coerced into synthetic domain values, collapsing distinct failure modes into false positives or false negatives?
 
+### Code comment discipline and signal-to-noise standard
+
+Source code must be self-explanatory through clear naming, modular design, and typed invariants. Comments must provide high-signal context rather than restating the obvious.
+
+1. **Eliminate obvious and redundant inline comments:**
+   - Do NOT add comments that merely translate or narrate what the next line of code does (e.g. `// Create file`, `// Loop over entries`, `// Check if null`, `// Step 1: Load manifest`, `// Return true`, `// Ignore error`, `// Increment counter`, `// Set flag`).
+   - If the code is already clear from function and variable names, adding an obvious comment adds maintenance debt, noise, and clutter.
+2. **What comments must be preserved and written:**
+   - **Architectural and protocol contracts:** Non-obvious invariants, wire protocol layouts, IPC ordering requirements, and state-machine sequencing that cannot be expressed via types alone.
+   - **Security and safety rationale:** Document why an invariant prevents a specific exploit or vulnerability (e.g. TOCTOU prevention, bounded allocation, fail-closed verification).
+   - **Rust `// SAFETY:` requirements:** In `unsafe` blocks, document the exact preconditions and invariants that guarantee memory and concurrency safety.
+   - **Non-obvious platform workarounds:** Comments explaining subtle Android/OS behavior, kernel quirks, or hardware bugs with references to the platform contract or issue.
+3. **Punctuation and typography rule:**
+   - Never use unicode long dashes (`—` [U+2014] or `–` [U+2013]) in code, comments, or documentation outside localized UI copy (such as `ux.js`). Always use standard ASCII hyphens (`-`).
+
 ### Final review before completion
 
 Before declaring work complete:

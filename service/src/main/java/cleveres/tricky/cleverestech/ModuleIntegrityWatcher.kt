@@ -5,20 +5,15 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import java.io.File
+import java.util.concurrent.atomic.AtomicInteger
 
 private const val INTEGRITY_DEBOUNCE_MS = 100L
+private const val MAX_PENDING_PATHS = 64
 
-/**
- * Event-driven module integrity watcher.
- *
- * Uses a two-tier [FileObserver] pattern (parent + child) to detect filesystem
- * changes to critical module payloads and trigger targeted hash verification.
- *
- * Normal operation with no filesystem changes produces zero CPU activity.
- */
 internal object ModuleIntegrityWatcher {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    private var scheduler: ConflatedRefreshScheduler? = null
+    private var targetedScheduler: ConflatedRefreshScheduler? = null
+    private var fullScheduler: ConflatedRefreshScheduler? = null
 
     private var childObserver: FileObserver? = null
     private val subObservers = mutableListOf<FileObserver>()
@@ -28,8 +23,14 @@ internal object ModuleIntegrityWatcher {
     private var isRunning = false
     private val lock = Any()
 
+    private val pendingDirtyPaths = LinkedHashSet<String>()
     private var onViolation: ((List<String>) -> Unit)? = null
     private var manifest: ParsedManifest? = null
+
+    val watcherRegistrationCount = AtomicInteger(0)
+    val eventCoalescedCount = AtomicInteger(0)
+    val targetedVerificationExecutions = AtomicInteger(0)
+    val fullVerificationExecutions = AtomicInteger(0)
 
     @Synchronized
     fun start(
@@ -42,10 +43,26 @@ internal object ModuleIntegrityWatcher {
             isRunning = true
             manifest = loadedManifest
             onViolation = violationHandler
+            pendingDirtyPaths.clear()
 
-            scheduler = ConflatedRefreshScheduler(scope, INTEGRITY_DEBOUNCE_MS) {
-                // This is the debounced integrity check action.
-                // We do a full re-verification when events are conflated.
+            targetedScheduler = ConflatedRefreshScheduler(scope, INTEGRITY_DEBOUNCE_MS) {
+                val pathsToVerify = synchronized(lock) {
+                    val snapshot = ArrayList(pendingDirtyPaths)
+                    pendingDirtyPaths.clear()
+                    snapshot
+                }
+                for (relPath in pathsToVerify) {
+                    targetedVerificationExecutions.incrementAndGet()
+                    val result = ModuleIntegrityVerifier.verifySingleFile(relPath, manifest)
+                    if (result is IntegrityResult.Fail) {
+                        onViolation?.invoke(result.violations)
+                        break
+                    }
+                }
+            }
+
+            fullScheduler = ConflatedRefreshScheduler(scope, INTEGRITY_DEBOUNCE_MS) {
+                fullVerificationExecutions.incrementAndGet()
                 val result = ModuleIntegrityVerifier.verifyFull()
                 if (result is IntegrityResult.Fail) {
                     onViolation?.invoke(result.violations)
@@ -64,16 +81,16 @@ internal object ModuleIntegrityWatcher {
                                 synchronized(lock) {
                                     if (!isRunning) return
                                     if ((event and (DELETE or MOVED_FROM)) != 0) {
-                                        Logger.e("Module directory removed — integrity violation")
+                                        Logger.e("Module directory removed - integrity violation")
                                         disarmChildLocked()
                                         onViolation?.invoke(
                                             listOf("Module directory was removed or moved")
                                         )
                                     } else if ((event and (CREATE or MOVED_TO)) != 0) {
-                                        Logger.w("Module directory recreated — triggering verification")
+                                        Logger.w("Module directory recreated - triggering verification")
                                         if (directory.exists()) {
                                             tryArmChildLocked(directory)
-                                            triggerRefresh()
+                                            fullScheduler?.submit()
                                         }
                                     }
                                 }
@@ -82,6 +99,7 @@ internal object ModuleIntegrityWatcher {
                     }
                     pObserver.startWatching()
                     parentObserver = pObserver
+                    watcherRegistrationCount.incrementAndGet()
                 } catch (e: Throwable) {
                     Logger.e("Failed to arm integrity parent watcher", e)
                 }
@@ -90,7 +108,7 @@ internal object ModuleIntegrityWatcher {
             if (directory.exists()) {
                 tryArmChildLocked(directory)
             } else {
-                Logger.e("Module directory missing at watcher start — integrity violation")
+                Logger.e("Module directory missing at watcher start - integrity violation")
                 onViolation?.invoke(listOf("Module directory does not exist at watcher start"))
             }
         }
@@ -108,7 +126,7 @@ internal object ModuleIntegrityWatcher {
             ) {
                 override fun onEvent(event: Int, path: String?) {
                     if ((event and DELETE_SELF) != 0 || (event and MOVE_SELF) != 0) {
-                        Logger.e("Module directory lost (DELETE_SELF/MOVE_SELF) — integrity violation")
+                        Logger.e("Module directory lost - integrity violation")
                         synchronized(lock) {
                             disarmChildLocked()
                         }
@@ -116,24 +134,26 @@ internal object ModuleIntegrityWatcher {
                             listOf("Module directory was deleted or moved (self event)")
                         )
                     } else if ((event and DELETE) != 0) {
-                        // A file was deleted from the module directory
                         val deletedPath = path ?: return
                         val currentManifest = manifest ?: return
-                        // Check if the deleted file is in the manifest
                         if (currentManifest.files.any { it.path == deletedPath }) {
                             Logger.e("Critical payload deleted: $deletedPath")
                             onViolation?.invoke(listOf("Critical payload deleted: $deletedPath"))
+                        } else if (!ModuleIntegrityVerifier.isIgnoredFile(deletedPath)) {
+                            scheduleTargetedCheck(deletedPath)
                         }
                     } else {
-                        // MODIFY, CLOSE_WRITE, CREATE, MOVED_TO, MOVED_FROM, ATTRIB
-                        triggerRefresh()
+                        val modifiedPath = path ?: return
+                        if (!ModuleIntegrityVerifier.isIgnoredFile(modifiedPath)) {
+                            scheduleTargetedCheck(modifiedPath)
+                        }
                     }
                 }
             }
             cObserver.startWatching()
             childObserver = cObserver
+            watcherRegistrationCount.incrementAndGet()
 
-            // Also arm observers for any subdirectories in the manifest (e.g. webroot)
             val subdirs = manifest?.files?.mapNotNull {
                 val idx = it.path.lastIndexOf('/')
                 if (idx > 0) it.path.substring(0, idx) else null
@@ -156,18 +176,41 @@ internal object ModuleIntegrityWatcher {
                                 if (manifest?.files?.any { it.path == deletedPath } == true) {
                                     Logger.e("Critical payload deleted: $deletedPath")
                                     onViolation?.invoke(listOf("Critical payload deleted: $deletedPath"))
+                                } else if (!ModuleIntegrityVerifier.isIgnoredFile(deletedPath)) {
+                                    scheduleTargetedCheck(deletedPath)
                                 }
                             } else {
-                                triggerRefresh()
+                                val modifiedPath = path?.let { "$subdirRel/$it" } ?: return
+                                if (!ModuleIntegrityVerifier.isIgnoredFile(modifiedPath)) {
+                                    scheduleTargetedCheck(modifiedPath)
+                                }
                             }
                         }
                     }
                     sObserver.startWatching()
                     subObservers.add(sObserver)
+                    watcherRegistrationCount.incrementAndGet()
                 }
             }
         } catch (e: Throwable) {
             Logger.e("Failed to arm integrity child watcher", e)
+        }
+    }
+
+    private fun scheduleTargetedCheck(relPath: String) {
+        synchronized(lock) {
+            if (!isRunning) return
+            if (pendingDirtyPaths.contains(relPath)) {
+                eventCoalescedCount.incrementAndGet()
+                return
+            }
+            if (pendingDirtyPaths.size >= MAX_PENDING_PATHS) {
+                pendingDirtyPaths.clear()
+                fullScheduler?.submit()
+                return
+            }
+            pendingDirtyPaths.add(relPath)
+            targetedScheduler?.submit()
         }
     }
 
@@ -180,10 +223,6 @@ internal object ModuleIntegrityWatcher {
         subObservers.clear()
     }
 
-    private fun triggerRefresh() {
-        scheduler?.submit()
-    }
-
     @Synchronized
     fun stop() {
         synchronized(lock) {
@@ -191,8 +230,11 @@ internal object ModuleIntegrityWatcher {
             disarmChildLocked()
             parentObserver?.stopWatching()
             parentObserver = null
-            scheduler?.cancel()
-            scheduler = null
+            targetedScheduler?.cancel()
+            targetedScheduler = null
+            fullScheduler?.cancel()
+            fullScheduler = null
+            pendingDirtyPaths.clear()
             onViolation = null
             manifest = null
         }
@@ -234,7 +276,15 @@ internal object ModuleIntegrityWatcher {
     }
 
     @androidx.annotation.VisibleForTesting
+    internal fun pendingDirtyCountForTesting(): Int =
+        synchronized(lock) { pendingDirtyPaths.size }
+
+    @androidx.annotation.VisibleForTesting
     internal fun resetForTesting() {
         stop()
+        watcherRegistrationCount.set(0)
+        eventCoalescedCount.set(0)
+        targetedVerificationExecutions.set(0)
+        fullVerificationExecutions.set(0)
     }
 }

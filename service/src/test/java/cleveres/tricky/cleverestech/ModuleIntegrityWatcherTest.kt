@@ -2,6 +2,7 @@ package cleveres.tricky.cleverestech
 
 import android.os.FileObserver
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -29,12 +30,14 @@ class ModuleIntegrityWatcherTest {
     fun setUp() {
         violations.clear()
         Config.setRootForTesting(tempFolder.root)
+        ModuleIntegrityVerifier.resetForTesting()
         ModuleIntegrityWatcher.resetForTesting()
     }
 
     @After
     fun tearDown() {
         ModuleIntegrityWatcher.resetForTesting()
+        ModuleIntegrityVerifier.resetForTesting()
         Config.reset()
     }
 
@@ -117,10 +120,7 @@ class ModuleIntegrityWatcherTest {
     fun nonCriticalDeleteDoesNotTriggerViolation() {
         val dir = tempFolder.newFolder("modules", "cleverestricky")
         ModuleIntegrityWatcher.start(dir, testManifest) { violations.add(it) }
-        // Delete a file not in the manifest
         ModuleIntegrityWatcher.injectChildEventForTesting(FileObserver.DELETE, "supervisor.pid")
-        // This triggers a refresh (debounced), not an immediate violation
-        // The violation list should be empty because supervisor.pid is not a manifest file
         assertTrue(violations.isEmpty())
     }
 
@@ -137,15 +137,14 @@ class ModuleIntegrityWatcherTest {
             signature = "c".repeat(64),
         )
         ModuleIntegrityWatcher.start(dir, manifestWithSubdir) { violations.add(it) }
-        org.junit.Assert.assertEquals(1, ModuleIntegrityWatcher.subObserverCountForTesting())
+        assertEquals(1, ModuleIntegrityWatcher.subObserverCountForTesting())
 
-        // Critical delete in subdirectory
         ModuleIntegrityWatcher.injectSubEventForTesting(0, FileObserver.DELETE, "index.html")
         assertTrue(violations.isNotEmpty())
         assertTrue(violations.any { it.any { v -> v.contains("webroot/index.html") } })
 
         ModuleIntegrityWatcher.stop()
-        org.junit.Assert.assertEquals(0, ModuleIntegrityWatcher.subObserverCountForTesting())
+        assertEquals(0, ModuleIntegrityWatcher.subObserverCountForTesting())
     }
 
     @Test
@@ -163,5 +162,69 @@ class ModuleIntegrityWatcherTest {
         ModuleIntegrityWatcher.injectSubEventForTesting(0, FileObserver.DELETE_SELF, null)
         assertTrue(violations.isNotEmpty())
         assertTrue(violations.any { it.any { v -> v.contains("webroot") } })
+    }
+
+    @Test
+    fun singleFileModifyTriggersTargetedVerificationNotFull() {
+        val dir = tempFolder.newFolder("modules", "cleverestricky")
+        val testFile = java.io.File(dir, "test.so")
+        testFile.writeBytes(ByteArray(16))
+        ModuleIntegrityWatcher.start(dir, testManifest) { violations.add(it) }
+
+        ModuleIntegrityWatcher.injectChildEventForTesting(FileObserver.MODIFY, "test.so")
+        Thread.sleep(250)
+
+        assertEquals(1, ModuleIntegrityWatcher.targetedVerificationExecutions.get())
+        assertEquals(0, ModuleIntegrityWatcher.fullVerificationExecutions.get())
+        assertEquals(0, ModuleIntegrityVerifier.fullVerificationCount.get())
+    }
+
+    @Test
+    fun repeatedModifyEventsAreCoalesced() {
+        val dir = tempFolder.newFolder("modules", "cleverestricky")
+        val testFile = java.io.File(dir, "test.so")
+        testFile.writeBytes(ByteArray(16))
+        ModuleIntegrityWatcher.start(dir, testManifest) { violations.add(it) }
+
+        ModuleIntegrityWatcher.injectChildEventForTesting(FileObserver.MODIFY, "test.so")
+        ModuleIntegrityWatcher.injectChildEventForTesting(FileObserver.MODIFY, "test.so")
+        ModuleIntegrityWatcher.injectChildEventForTesting(FileObserver.MODIFY, "test.so")
+
+        assertTrue(ModuleIntegrityWatcher.eventCoalescedCount.get() >= 2)
+        Thread.sleep(250)
+
+        assertEquals(1, ModuleIntegrityWatcher.targetedVerificationExecutions.get())
+        assertEquals(0, ModuleIntegrityWatcher.fullVerificationExecutions.get())
+    }
+
+    @Test
+    fun ignoredFilesDoNotTriggerAnyVerification() {
+        val dir = tempFolder.newFolder("modules", "cleverestricky")
+        ModuleIntegrityWatcher.start(dir, testManifest) { violations.add(it) }
+
+        ModuleIntegrityWatcher.injectChildEventForTesting(FileObserver.MODIFY, "daemon.pid")
+        ModuleIntegrityWatcher.injectChildEventForTesting(FileObserver.MODIFY, "adapter.pid")
+        ModuleIntegrityWatcher.injectChildEventForTesting(FileObserver.CLOSE_WRITE, "spoof_build_vars")
+        Thread.sleep(250)
+
+        assertEquals(0, ModuleIntegrityWatcher.pendingDirtyCountForTesting())
+        assertEquals(0, ModuleIntegrityWatcher.targetedVerificationExecutions.get())
+        assertEquals(0, ModuleIntegrityWatcher.fullVerificationExecutions.get())
+    }
+
+    @Test
+    fun watcherRegistrationCountersTrackActiveObservers() {
+        val dir = tempFolder.newFolder("modules", "cleverestricky")
+        java.io.File(dir, "webroot").mkdirs()
+        val manifestWithSubdir = ParsedManifest(
+            version = 1,
+            files = listOf(
+                ManifestFileEntry("webroot/index.html", "a".repeat(64), "regular"),
+                ManifestFileEntry("test.so", "b".repeat(64), "regular"),
+            ),
+            signature = "c".repeat(64),
+        )
+        ModuleIntegrityWatcher.start(dir, manifestWithSubdir) { violations.add(it) }
+        assertEquals(3, ModuleIntegrityWatcher.watcherRegistrationCount.get())
     }
 }

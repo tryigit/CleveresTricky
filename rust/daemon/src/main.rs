@@ -5,8 +5,8 @@ mod keybox_file_broker;
 use cleverestricky_service_core::backend_auth::{BACKEND_AUTH_ENV, BACKEND_AUTH_HEX_BYTES};
 use cleverestricky_service_core::ipc::{
     read_header, read_header_bounded, relay_exact, write_frame, write_header, FrameHeader,
-    FLAG_ERROR, MAX_FRAME_BYTES, OP_ADAPTER_REGISTER, OP_FILE_WRITE, OP_PING, OP_WEB_REQUEST,
-    STREAM_COPY_BYTES,
+    FLAG_ERROR, MAX_FRAME_BYTES, OP_ADAPTER_REGISTER, OP_FILE_WRITE, OP_INTEGRITY_DELETE_MODULE,
+    OP_INTEGRITY_VERIFY_FILE, OP_INTEGRITY_VERIFY_FULL, OP_PING, OP_WEB_REQUEST, STREAM_COPY_BYTES,
 };
 use cleverestricky_service_core::secure_fs::TrustedDir;
 use cleverestricky_service_core::unix_socket::{
@@ -15,7 +15,7 @@ use cleverestricky_service_core::unix_socket::{
 use std::env;
 use std::ffi::OsString;
 use std::fs;
-use std::io;
+use std::io::{self, Read};
 use std::os::fd::{AsRawFd, RawFd};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::os::unix::process::CommandExt;
@@ -120,7 +120,7 @@ fn main() {
 
 fn run() -> io::Result<()> {
     harden_process()?;
-    let module_dir = module_directory()?;
+    let module_dir = Arc::new(module_directory()?);
     validate_module_directory(&module_dir)?;
 
     let config_root = Arc::new(config_file_broker::prepare_root()?);
@@ -153,10 +153,11 @@ fn run() -> io::Result<()> {
     let adapter_identity = Arc::new(AdapterIdentity::default());
 
     let web_identity = Arc::clone(&adapter_identity);
+    let web_module_dir = Arc::clone(&module_dir);
     thread::Builder::new()
         .name("ct-web-ipc".to_string())
         .spawn(move || {
-            if let Err(error) = serve_web(web_listener, web_identity) {
+            if let Err(error) = serve_web(web_listener, web_identity, web_module_dir) {
                 eprintln!("cleverestrickyd: WebUI IPC service failed: {error}");
                 process::exit(1);
             }
@@ -168,7 +169,7 @@ fn run() -> io::Result<()> {
         Arc::clone(&config_root),
     )?;
 
-    let backend_dir = module_dir.clone();
+    let backend_dir = (*module_dir).clone();
     let backend_root = Arc::clone(&config_root);
     let backend_identity = Arc::clone(&adapter_identity);
     thread::Builder::new()
@@ -639,9 +640,16 @@ struct RegisteredAdapter {
     lease: AdapterLease,
 }
 
-fn serve_web(listener: UnixListener, adapter_identity: Arc<AdapterIdentity>) -> io::Result<()> {
+fn serve_web(
+    listener: UnixListener,
+    adapter_identity: Arc<AdapterIdentity>,
+    module_dir: Arc<PathBuf>,
+) -> io::Result<()> {
     let mut adapter: Option<RegisteredAdapter> = None;
     let mut relay_buffer = vec![0u8; STREAM_COPY_BYTES];
+    let cached_manifest: Arc<
+        std::sync::RwLock<Option<cleverestricky_integrity_core::IntegrityManifest>>,
+    > = Arc::new(std::sync::RwLock::new(None));
     loop {
         let (mut client, _) = match listener.accept() {
             Ok(value) => value,
@@ -723,11 +731,268 @@ fn serve_web(listener: UnixListener, adapter_identity: Arc<AdapterIdentity>) -> 
                     let _ = reply_error(&mut client, OP_WEB_REQUEST, &error);
                 }
             }
+            OP_INTEGRITY_VERIFY_FULL if header.flags == 0 && header.payload_len == 32 => {
+                let mut hmac_key = [0u8; 32];
+                if client.read_exact(&mut hmac_key).is_ok() {
+                    handle_integrity_verify_full(
+                        &mut client,
+                        &module_dir,
+                        &cached_manifest,
+                        &hmac_key,
+                    );
+                }
+            }
+            OP_INTEGRITY_VERIFY_FILE if header.flags == 0 && header.payload_len > 32 => {
+                let mut payload = vec![0u8; header.payload_len as usize];
+                if client.read_exact(&mut payload).is_ok() {
+                    handle_integrity_verify_file(
+                        &mut client,
+                        &module_dir,
+                        &cached_manifest,
+                        &payload,
+                    );
+                }
+            }
+            OP_INTEGRITY_DELETE_MODULE if header.flags == 0 => {
+                handle_integrity_delete_module(&mut client, &module_dir);
+            }
             _ => {
                 let _ = reply_text_error(&mut client, header.opcode, "unsupported IPC operation");
             }
         }
     }
+}
+
+fn handle_integrity_verify_full(
+    client: &mut UnixStream,
+    module_dir: &Path,
+    cached_manifest: &std::sync::RwLock<Option<cleverestricky_integrity_core::IntegrityManifest>>,
+    hmac_key: &[u8; 32],
+) {
+    let module_dir_str = match module_dir.to_str() {
+        Some(s) => s,
+        None => {
+            let _ = reply_text_error(client, OP_INTEGRITY_VERIFY_FULL, "invalid module dir path");
+            return;
+        }
+    };
+    let dir_fd = match cleverestricky_integrity_core::safe_fd::open_dir_nofollow(module_dir_str) {
+        Ok(fd) => fd,
+        Err(e) => {
+            let _ = reply_text_error(
+                client,
+                OP_INTEGRITY_VERIFY_FULL,
+                &format!("failed to open module dir: {e}"),
+            );
+            return;
+        }
+    };
+    let raw_dir_fd = cleverestricky_integrity_core::safe_fd::get_raw_fd(&dir_fd);
+    let manifest_fd = match cleverestricky_integrity_core::safe_fd::open_file_nofollow(
+        raw_dir_fd,
+        "integrity_manifest.json",
+    ) {
+        Ok(fd) => fd,
+        Err(e) => {
+            let _ = reply_text_error(
+                client,
+                OP_INTEGRITY_VERIFY_FULL,
+                &format!("manifest missing: {e}"),
+            );
+            return;
+        }
+    };
+    let mut manifest_file = fs::File::from(manifest_fd);
+    let mut manifest_str = String::new();
+    if let Err(e) = manifest_file.read_to_string(&mut manifest_str) {
+        let _ = reply_text_error(
+            client,
+            OP_INTEGRITY_VERIFY_FULL,
+            &format!("failed to read manifest: {e}"),
+        );
+        return;
+    }
+
+    let manifest = match cleverestricky_integrity_core::IntegrityManifest::parse_and_verify(
+        &manifest_str,
+        hmac_key,
+    ) {
+        Ok(m) => m,
+        Err(e) => {
+            let _ = write_frame(
+                client,
+                OP_INTEGRITY_VERIFY_FULL,
+                FLAG_ERROR,
+                format!("signature invalid: {e}").as_bytes(),
+            );
+            return;
+        }
+    };
+
+    let result = cleverestricky_integrity_core::verify_full(raw_dir_fd, &manifest);
+    if result.is_pass() {
+        if let Ok(mut lock) = cached_manifest.write() {
+            *lock = Some(manifest);
+        }
+        let _ = write_frame(client, OP_INTEGRITY_VERIFY_FULL, 0, &[0]);
+    } else {
+        let mut msg = String::new();
+        for v in result.violations() {
+            msg.push_str(&v.to_string());
+            msg.push('\n');
+        }
+        let _ = write_frame(client, OP_INTEGRITY_VERIFY_FULL, FLAG_ERROR, msg.as_bytes());
+    }
+}
+
+fn handle_integrity_verify_file(
+    client: &mut UnixStream,
+    module_dir: &Path,
+    cached_manifest: &std::sync::RwLock<Option<cleverestricky_integrity_core::IntegrityManifest>>,
+    payload: &[u8],
+) {
+    let hmac_key = &payload[..32];
+    let relative_path = match std::str::from_utf8(&payload[32..]) {
+        Ok(p) => p,
+        Err(_) => {
+            let _ = reply_text_error(client, OP_INTEGRITY_VERIFY_FILE, "invalid utf-8 path");
+            return;
+        }
+    };
+
+    let manifest_guard = cached_manifest.read().unwrap();
+    let manifest = match manifest_guard.as_ref() {
+        Some(m) => m.clone(),
+        None => {
+            drop(manifest_guard);
+            let module_dir_str = match module_dir.to_str() {
+                Some(s) => s,
+                None => {
+                    let _ = reply_text_error(
+                        client,
+                        OP_INTEGRITY_VERIFY_FILE,
+                        "invalid module dir path",
+                    );
+                    return;
+                }
+            };
+            let dir_fd =
+                match cleverestricky_integrity_core::safe_fd::open_dir_nofollow(module_dir_str) {
+                    Ok(fd) => fd,
+                    Err(e) => {
+                        let _ = reply_text_error(
+                            client,
+                            OP_INTEGRITY_VERIFY_FILE,
+                            &format!("failed to open module dir: {e}"),
+                        );
+                        return;
+                    }
+                };
+            let raw_dir_fd = cleverestricky_integrity_core::safe_fd::get_raw_fd(&dir_fd);
+            let manifest_fd = match cleverestricky_integrity_core::safe_fd::open_file_nofollow(
+                raw_dir_fd,
+                "integrity_manifest.json",
+            ) {
+                Ok(fd) => fd,
+                Err(e) => {
+                    let _ = reply_text_error(
+                        client,
+                        OP_INTEGRITY_VERIFY_FILE,
+                        &format!("manifest missing: {e}"),
+                    );
+                    return;
+                }
+            };
+            let mut manifest_file = fs::File::from(manifest_fd);
+            let mut manifest_str = String::new();
+            if let Err(e) = manifest_file.read_to_string(&mut manifest_str) {
+                let _ = reply_text_error(
+                    client,
+                    OP_INTEGRITY_VERIFY_FILE,
+                    &format!("failed to read manifest: {e}"),
+                );
+                return;
+            }
+
+            let m = match cleverestricky_integrity_core::IntegrityManifest::parse_and_verify(
+                &manifest_str,
+                hmac_key,
+            ) {
+                Ok(m) => m,
+                Err(e) => {
+                    let _ = write_frame(
+                        client,
+                        OP_INTEGRITY_VERIFY_FILE,
+                        FLAG_ERROR,
+                        format!("signature invalid: {e}").as_bytes(),
+                    );
+                    return;
+                }
+            };
+            if let Ok(mut lock) = cached_manifest.write() {
+                *lock = Some(m.clone());
+            }
+            m
+        }
+    };
+
+    let module_dir_str = match module_dir.to_str() {
+        Some(s) => s,
+        None => {
+            let _ = reply_text_error(client, OP_INTEGRITY_VERIFY_FILE, "invalid module dir path");
+            return;
+        }
+    };
+    let dir_fd = match cleverestricky_integrity_core::safe_fd::open_dir_nofollow(module_dir_str) {
+        Ok(fd) => fd,
+        Err(e) => {
+            let _ = reply_text_error(
+                client,
+                OP_INTEGRITY_VERIFY_FILE,
+                &format!("failed to open module dir: {e}"),
+            );
+            return;
+        }
+    };
+    let raw_dir_fd = cleverestricky_integrity_core::safe_fd::get_raw_fd(&dir_fd);
+
+    let result = cleverestricky_integrity_core::verify_file(raw_dir_fd, &manifest, relative_path);
+    if result.is_pass() {
+        let _ = write_frame(client, OP_INTEGRITY_VERIFY_FILE, 0, &[0]);
+    } else {
+        let mut msg = String::new();
+        for v in result.violations() {
+            msg.push_str(&v.to_string());
+            msg.push('\n');
+        }
+        let _ = write_frame(client, OP_INTEGRITY_VERIFY_FILE, FLAG_ERROR, msg.as_bytes());
+    }
+}
+
+fn handle_integrity_delete_module(client: &mut UnixStream, module_dir: &Path) {
+    let _ = delete_dir_contents_safe(module_dir);
+    let _ = write_frame(client, OP_INTEGRITY_DELETE_MODULE, 0, &[0]);
+    let _ = Command::new("/system/bin/reboot")
+        .status()
+        .or_else(|_| Command::new("reboot").status());
+}
+
+fn delete_dir_contents_safe(dir: &Path) -> io::Result<()> {
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if let Ok(meta) = fs::symlink_metadata(&path) {
+                if meta.file_type().is_symlink() || meta.is_file() {
+                    let _ = fs::remove_file(&path);
+                } else if meta.is_dir() {
+                    let _ = delete_dir_contents_safe(&path);
+                    let _ = fs::remove_dir(&path);
+                }
+            }
+        }
+    }
+    let _ = fs::remove_dir(dir);
+    Ok(())
 }
 
 fn forward_web_request_with_timeout(

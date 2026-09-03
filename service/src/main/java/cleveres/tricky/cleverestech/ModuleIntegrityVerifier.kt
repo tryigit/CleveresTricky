@@ -1,21 +1,17 @@
 package cleveres.tricky.cleverestech
 
+import android.net.LocalSocket
+import android.net.LocalSocketAddress
 import cleveres.tricky.cleverestech.util.sha256FileSnapshotBounded
 import java.io.File
+import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.security.MessageDigest
+import java.util.concurrent.atomic.AtomicInteger
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
-/**
- * Runtime module integrity verifier using a signed manifest.
- *
- * The manifest contains SHA-256 hashes of all critical module files.
- * It is signed with HMAC-SHA256 using a key derived from build-time
- * constants baked into the APK, providing a trust root independent
- * of files inside the module directory.
- */
 object ModuleIntegrityVerifier {
 
     private const val MANIFEST_VERSION = 1
@@ -26,16 +22,45 @@ object ModuleIntegrityVerifier {
     private const val MAX_PAYLOAD_BYTES = 128L * 1024 * 1024
     private const val MAX_MODULE_ENTRIES = 4096
 
-    /** Injectable for testing. */
+    private const val OP_INTEGRITY_VERIFY_FULL = 0x30
+    private const val OP_INTEGRITY_VERIFY_FILE = 0x31
+    private const val DAEMON_SOCKET_NAME = "cleverestrickyd.v1"
+
+    val fullVerificationCount = AtomicInteger(0)
+    val targetedVerificationCount = AtomicInteger(0)
+
+    @Volatile
+    var cachedManifest: ParsedManifest? = null
+        internal set
+
+    internal var remoteDisabledForTesting = false
     internal var hmacKeyProvider: () -> ByteArray = ::deriveDefaultHmacKey
     internal var moduleDirProvider: () -> String = { getModuleDir() }
 
-    /**
-     * Perform a full integrity verification of all critical module payloads.
-     * Returns [IntegrityResult.Pass] only if the manifest is valid and every
-     * listed file has the correct SHA-256 digest.
-     */
     fun verifyFull(): IntegrityResult {
+        fullVerificationCount.incrementAndGet()
+        val daemonResult = queryDaemon(OP_INTEGRITY_VERIFY_FULL, deriveDefaultHmacKey())
+        if (daemonResult != null) {
+            return daemonResult
+        }
+        return verifyFullLocal()
+    }
+
+    fun verifySingleFile(
+        relativePath: String,
+        providedManifest: ParsedManifest? = cachedManifest,
+    ): IntegrityResult {
+        targetedVerificationCount.incrementAndGet()
+        val payload = deriveDefaultHmacKey() + relativePath.toByteArray(Charsets.UTF_8)
+        val daemonResult = queryDaemon(OP_INTEGRITY_VERIFY_FILE, payload)
+        if (daemonResult != null) {
+            return daemonResult
+        }
+        val manifest = providedManifest ?: cachedManifest ?: loadManifest()
+        return verifySingleFileLocal(relativePath, manifest)
+    }
+
+    private fun verifyFullLocal(): IntegrityResult {
         val violations = mutableListOf<String>()
         val moduleDir = File(moduleDirProvider())
 
@@ -43,17 +68,16 @@ object ModuleIntegrityVerifier {
             return IntegrityResult.Fail(listOf("Module directory does not exist or is a symlink: ${moduleDir.absolutePath}"))
         }
 
-        // Step 1: Load and parse the manifest
         val manifestFile = File(moduleDir, MANIFEST_FILENAME)
         val manifest = try {
-            loadAndVerifyManifest(manifestFile)
+            val loaded = loadAndVerifyManifest(manifestFile)
+            cachedManifest = loaded
+            loaded
         } catch (error: Exception) {
             return IntegrityResult.Fail(listOf("Manifest verification failed: ${error.message}"))
         }
 
-        // Step 2: Verify each file in the manifest
         for (entry in manifest.files) {
-            // Validate path safety
             if (!isPathSafe(entry.path)) {
                 violations.add("Path traversal or unsafe path: ${entry.path}")
                 continue
@@ -62,25 +86,21 @@ object ModuleIntegrityVerifier {
             val file = File(moduleDir, entry.path)
             val filePath = file.toPath()
 
-            // Check symlink
             if (Files.isSymbolicLink(filePath)) {
                 violations.add("Symlink detected for critical payload: ${entry.path}")
                 continue
             }
 
-            // Check existence
             if (!Files.exists(filePath, LinkOption.NOFOLLOW_LINKS)) {
                 violations.add("Missing critical payload: ${entry.path}")
                 continue
             }
 
-            // Check file type
             if (!Files.isRegularFile(filePath, LinkOption.NOFOLLOW_LINKS)) {
                 violations.add("Wrong file type for critical payload: ${entry.path}")
                 continue
             }
 
-            // Hash verification
             try {
                 val actualHash = calculateSha256(file)
                 try {
@@ -95,7 +115,6 @@ object ModuleIntegrityVerifier {
             }
         }
 
-        // Step 3: Check for unexpected critical files (scan directory)
         try {
             scanForUnexpectedFiles(moduleDir, manifest, violations)
         } catch (error: Exception) {
@@ -105,19 +124,14 @@ object ModuleIntegrityVerifier {
         return if (violations.isEmpty()) IntegrityResult.Pass else IntegrityResult.Fail(violations)
     }
 
-    /**
-     * Verify a single file against the manifest. Used for event-driven runtime checks.
-     */
-    fun verifySingleFile(relativePath: String, manifest: ParsedManifest?): IntegrityResult {
+    private fun verifySingleFileLocal(relativePath: String, manifest: ParsedManifest?): IntegrityResult {
         if (manifest == null) {
             return IntegrityResult.Fail(listOf("No manifest available for single-file verification"))
         }
         val moduleDir = File(moduleDirProvider())
 
-        // Is this file in the manifest?
         val entry = manifest.files.find { it.path == relativePath }
         if (entry == null) {
-            // Not a critical file — check if it's an expected non-critical file
             if (isIgnoredFile(relativePath)) return IntegrityResult.Pass
             return IntegrityResult.Fail(listOf("Unexpected file in module directory: $relativePath"))
         }
@@ -151,17 +165,88 @@ object ModuleIntegrityVerifier {
         }
     }
 
-    /**
-     * Load the integrity manifest from the module directory.
-     * Returns null if the manifest is absent or invalid.
-     */
     fun loadManifest(): ParsedManifest? {
+        cachedManifest?.let { return it }
         val moduleDir = File(moduleDirProvider())
         val manifestFile = File(moduleDir, MANIFEST_FILENAME)
         return try {
-            loadAndVerifyManifest(manifestFile)
+            val loaded = loadAndVerifyManifest(manifestFile)
+            cachedManifest = loaded
+            loaded
         } catch (error: Exception) {
             Logger.e("Failed to load integrity manifest", error)
+            null
+        }
+    }
+
+    private fun queryDaemon(opcode: Int, payload: ByteArray): IntegrityResult? {
+        if (remoteDisabledForTesting) return null
+        return try {
+            val socket = LocalSocket()
+            socket.connect(LocalSocketAddress(DAEMON_SOCKET_NAME, LocalSocketAddress.Namespace.ABSTRACT))
+            socket.soTimeout = 5000
+            val output = socket.outputStream
+            val input = socket.inputStream
+
+            val header = ByteArray(16)
+            header[0] = 'C'.code.toByte()
+            header[1] = 'T'.code.toByte()
+            header[2] = 'I'.code.toByte()
+            header[3] = 'P'.code.toByte()
+            header[4] = 0
+            header[5] = 1
+            header[6] = (opcode ushr 8).toByte()
+            header[7] = opcode.toByte()
+            header[8] = 0
+            header[9] = 0
+            header[10] = 0
+            header[11] = 0
+            header[12] = (payload.size ushr 24).toByte()
+            header[13] = (payload.size ushr 16).toByte()
+            header[14] = (payload.size ushr 8).toByte()
+            header[15] = payload.size.toByte()
+
+            output.write(header)
+            output.write(payload)
+            output.flush()
+
+            val respHeader = ByteArray(16)
+            var read = 0
+            while (read < 16) {
+                val count = input.read(respHeader, read, 16 - read)
+                if (count < 0) throw IOException("EOF reading daemon header")
+                read += count
+            }
+
+            val flags = ((respHeader[8].toInt() and 0xff) shl 24) or
+                ((respHeader[9].toInt() and 0xff) shl 16) or
+                ((respHeader[10].toInt() and 0xff) shl 8) or
+                (respHeader[11].toInt() and 0xff)
+            val respLen = ((respHeader[12].toInt() and 0xff) shl 24) or
+                ((respHeader[13].toInt() and 0xff) shl 16) or
+                ((respHeader[14].toInt() and 0xff) shl 8) or
+                (respHeader[15].toInt() and 0xff)
+
+            val respPayload = ByteArray(respLen)
+            var pRead = 0
+            while (pRead < respLen) {
+                val count = input.read(respPayload, pRead, respLen - pRead)
+                if (count < 0) break
+                pRead += count
+            }
+            socket.close()
+
+            if (flags != 0 || (respPayload.isNotEmpty() && respPayload[0] != 0.toByte())) {
+                val msg = if (respPayload.isNotEmpty()) {
+                    String(respPayload, Charsets.UTF_8).trim()
+                } else {
+                    "Integrity check failed"
+                }
+                IntegrityResult.Fail(listOf(msg))
+            } else {
+                IntegrityResult.Pass
+            }
+        } catch (_: Throwable) {
             null
         }
     }
@@ -205,7 +290,6 @@ object ModuleIntegrityVerifier {
         val filesArray = json.optJSONArray("files")
             ?: throw SecurityException("Manifest has no files array")
 
-        // Parse file entries first
         val files = mutableListOf<ManifestFileEntry>()
         val seenPaths = mutableSetOf<String>()
         for (i in 0 until filesArray.length()) {
@@ -229,7 +313,6 @@ object ModuleIntegrityVerifier {
             files.add(ManifestFileEntry(path, sha256, type))
         }
 
-        // Verify HMAC signature using canonical data serialization
         val canonicalBytes = computeCanonicalHmacData(version, files)
         val hmacKey = hmacKeyProvider()
         try {
@@ -267,7 +350,7 @@ object ModuleIntegrityVerifier {
     private fun isPathSafe(path: String): Boolean {
         if (path.isEmpty() || path.length > 512) return false
         if (path.startsWith("/")) return false
-        if (path.contains("\\" )) return false
+        if (path.contains("\\")) return false
         if (path.contains("\u0000")) return false
         val components = path.split("/")
         return components.none { it.isEmpty() || it == ".." || it == "." || it.length > 255 }
@@ -296,15 +379,13 @@ object ModuleIntegrityVerifier {
             if (relativePath in manifestPaths) continue
             if (isIgnoredFile(relativePath)) continue
             if (relativePath.endsWith(".sha256")) continue
-            // This is an unexpected file that is not in the manifest and not ignored
-            // Only flag it if it looks like a critical executable type
             if (isCriticalFileType(relativePath)) {
                 violations.add("Unexpected critical file: $relativePath")
             }
         }
     }
 
-    private fun isIgnoredFile(relativePath: String): Boolean {
+    internal fun isIgnoredFile(relativePath: String): Boolean {
         val name = relativePath.substringAfterLast("/")
         return name in IGNORED_FILES || relativePath.endsWith(".sha256") ||
             relativePath == MANIFEST_FILENAME || relativePath == "module.prop" ||
@@ -314,7 +395,6 @@ object ModuleIntegrityVerifier {
 
     private fun isCriticalFileType(relativePath: String): Boolean {
         val name = relativePath.substringAfterLast("/")
-        // .so files, known binary names, .sh scripts in root
         return name.endsWith(".so") ||
             name.endsWith(".apk") ||
             name in CRITICAL_EXECUTABLE_NAMES ||
@@ -340,6 +420,10 @@ object ModuleIntegrityVerifier {
 
     @androidx.annotation.VisibleForTesting
     internal fun resetForTesting() {
+        cachedManifest = null
+        fullVerificationCount.set(0)
+        targetedVerificationCount.set(0)
+        remoteDisabledForTesting = true
         hmacKeyProvider = ::deriveDefaultHmacKey
         moduleDirProvider = { getModuleDir() }
     }

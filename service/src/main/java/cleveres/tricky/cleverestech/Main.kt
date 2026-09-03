@@ -124,7 +124,6 @@ fun main(args: Array<String>) {
             }
         }
 
-        // Runtime integrity verification: signed manifest check
         val integrityResult = try {
             ModuleIntegrityVerifier.verifyFull()
         } catch (error: Exception) {
@@ -233,7 +232,6 @@ fun main(args: Array<String>) {
         runCatching { KeyboxDirectoryRefreshWatcher.start(Config.keyboxDirectory) }
             .onFailure { Logger.e("Failed to install conflated keybox watcher; keeping legacy observer", it) }
 
-        // Start runtime integrity monitoring
         val integrityManifest = ModuleIntegrityVerifier.loadManifest()
         if (integrityManifest != null) {
             runCatching {

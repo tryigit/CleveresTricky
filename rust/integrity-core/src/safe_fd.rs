@@ -104,14 +104,17 @@ mod imp {
         })
     }
 
+    #[allow(clippy::unnecessary_cast)]
     pub fn is_regular_file(mode: u32) -> bool {
         (mode & (libc::S_IFMT as u32)) == (libc::S_IFREG as u32)
     }
 
+    #[allow(clippy::unnecessary_cast)]
     pub fn is_symlink(mode: u32) -> bool {
         (mode & (libc::S_IFMT as u32)) == (libc::S_IFLNK as u32)
     }
 
+    #[allow(clippy::unnecessary_cast)]
     pub fn list_directory_at(dir_fd: RawFd) -> io::Result<Vec<(String, bool)>> {
         // SAFETY: Calling dup with a potentially valid FD.
         let dup_fd = unsafe { libc::dup(dir_fd) };
