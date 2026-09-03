@@ -390,18 +390,77 @@ afterEvaluate {
                     val payloadFiles =
                         fileTree(moduleDir) {
                             exclude("**/*.sha256")
+                            exclude("integrity_manifest.json")
+                            exclude("**/integrity_manifest.json")
                         }.files
                             .filter(File::isFile)
                             .sortedBy { it.relativeTo(moduleDir.get().asFile).invariantSeparatorsPath }
+
+                    val manifestFilesList = mutableListOf<Map<String, String>>()
+
                     payloadFiles.forEach { payload ->
                         val md = MessageDigest.getInstance("SHA-256")
                         payload.forEachBlock(4096) { bytes, size ->
                             md.update(bytes, 0, size)
                         }
-                        file(payload.path + ".sha256").writeText(
-                            HexFormat.of().formatHex(md.digest()),
+                        val hexHash = HexFormat.of().formatHex(md.digest())
+                        file(payload.path + ".sha256").writeText(hexHash)
+
+                        val relPath = payload.relativeTo(moduleDir.get().asFile).invariantSeparatorsPath
+                        val type = if (relPath.endsWith(".sh") || !relPath.contains(".")) "executable" else "regular"
+                        manifestFilesList.add(
+                            mapOf(
+                                "path" to relPath,
+                                "sha256" to hexHash,
+                                "type" to type,
+                            ),
                         )
                     }
+
+                    // Generate integrity_manifest.json using canonical HMAC data
+                    val sortedEntries = manifestFilesList.sortedBy { it["path"] as String }
+                    val canonicalData =
+                        buildString {
+                            append("1\n")
+                            for (entry in sortedEntries) {
+                                append(entry["path"]).append('\n')
+                                append((entry["sha256"] as String).lowercase()).append('\n')
+                                append(entry["type"]).append('\n')
+                            }
+                        }
+
+                    val checksumString =
+                        MessageDigest.getInstance("SHA-256").run {
+                            update(moduleId.toByteArray(Charsets.UTF_8))
+                            update(moduleName.toByteArray(Charsets.UTF_8))
+                            update("$verName ($verCode-$commitHash-$variantLowered)".toByteArray(Charsets.UTF_8))
+                            update(verCode.toString().toByteArray(Charsets.UTF_8))
+                            update(author.toByteArray(Charsets.UTF_8))
+                            update(moduleDescription.toByteArray(Charsets.UTF_8))
+                            HexFormat.of().formatHex(digest())
+                        }
+
+                    val hmacKey =
+                        MessageDigest.getInstance("SHA-256").run {
+                            update(checksumString.toByteArray(Charsets.UTF_8))
+                            update("INTEGRITY-MANIFEST-V1".toByteArray(Charsets.UTF_8))
+                            digest()
+                        }
+
+                    val mac = javax.crypto.Mac.getInstance("HmacSHA256")
+                    mac.init(javax.crypto.spec.SecretKeySpec(hmacKey, "HmacSHA256"))
+                    val signatureHex = HexFormat.of().formatHex(mac.doFinal(canonicalData.toByteArray(Charsets.UTF_8)))
+
+                    val manifest =
+                        groovy.json.JsonBuilder(
+                            mapOf(
+                                "version" to 1,
+                                "files" to sortedEntries,
+                                "signature" to signatureHex,
+                            ),
+                        ).toPrettyString()
+
+                    file("${moduleDir.get().asFile}/integrity_manifest.json").writeText(manifest)
                 }
             }
 

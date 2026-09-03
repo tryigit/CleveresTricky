@@ -16,6 +16,9 @@ pub const OP_CRYPTO_CBOX_OPEN: u16 = 20;
 pub const OP_CRYPTO_BACKUP_ENCRYPT: u16 = 21;
 pub const OP_CRYPTO_BACKUP_DECRYPT: u16 = 22;
 pub const OP_KEYBOX_PARSE: u16 = 23;
+pub const OP_INTEGRITY_VERIFY_FULL: u16 = 0x30;
+pub const OP_INTEGRITY_VERIFY_FILE: u16 = 0x31;
+pub const OP_INTEGRITY_DELETE_MODULE: u16 = 0x32;
 pub const FLAG_ERROR: u32 = 1;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

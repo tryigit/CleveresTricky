@@ -11,5 +11,6 @@ name = "cleverestrickyd"
 path = "src/main.rs"
 
 [dependencies]
+cleverestricky-integrity-core = { path = "../integrity-core" }
 cleverestricky-service-core = { path = "../service-core" }
 libc = "0.2"

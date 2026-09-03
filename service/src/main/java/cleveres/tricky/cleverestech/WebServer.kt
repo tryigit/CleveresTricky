@@ -1069,6 +1069,38 @@ class WebServer(
         val method = session.method
         val headers = session.headers
 
+        if (IntegrityViolationHandler.isViolated) {
+            if (uri == "/" || uri == "/index.html") {
+                val violationHtml = """
+                    <!DOCTYPE html>
+                    <html lang="en">
+                    <head>
+                        <meta charset="utf-8">
+                        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+                        <title>Integrity Violation</title>
+                        <style>
+                            :root { --bg: #fff3f3; --text: #d00; }
+                            @media (prefers-color-scheme: dark) {
+                                :root { --bg: #1a0505; --text: #ff6b6b; }
+                            }
+                            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; padding: 20px; background: var(--bg); color: var(--text); margin: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; text-align: center; }
+                            h1 { font-size: 1.5em; margin-bottom: 15px; }
+                        </style>
+                    </head>
+                    <body>
+                        <h1>${IntegrityViolationHandler.VIOLATION_MESSAGE}</h1>
+                    </body>
+                    </html>
+                """.trimIndent()
+                return secureResponse(Response.Status.OK, "text/html", violationHtml)
+            }
+            return secureResponse(
+                Response.Status.FORBIDDEN,
+                "text/plain",
+                IntegrityViolationHandler.VIOLATION_MESSAGE,
+            )
+        }
+
         if (isTampered && (trustedBridge || uri.startsWith("/api/"))) {
             return secureResponse(Response.Status.FORBIDDEN, "text/plain", "Module verification failed")
         }

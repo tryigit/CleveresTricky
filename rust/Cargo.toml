@@ -9,6 +9,7 @@ members = [
     "daemon",
     "encryptor-native",
     "injector-core",
+    "integrity-core",
     "keybox-core",
     "native-core",
     "policy-config-core",

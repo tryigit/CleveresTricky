@@ -1,0 +1,18 @@
+# Additional GPLv3 section 7(b) attribution term for tryigit-owned material: see ../../NOTICE.
+[package]
+name = "cleverestricky-integrity-core"
+version = "0.1.0"
+edition = "2021"
+description = "Runtime module integrity verification for CleveresTricky"
+license = "GPL-3.0-only"
+
+[dependencies]
+hmac = "0.12"
+sha2 = "0.10"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+libc = "0.2"
+zeroize = { version = "1.9.0", features = ["zeroize_derive"] }
+
+[dev-dependencies]
+tempfile = "3"

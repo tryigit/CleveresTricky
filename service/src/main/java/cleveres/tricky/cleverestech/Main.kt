@@ -124,6 +124,21 @@ fun main(args: Array<String>) {
             }
         }
 
+        // Runtime integrity verification: signed manifest check
+        val integrityResult = try {
+            ModuleIntegrityVerifier.verifyFull()
+        } catch (error: Exception) {
+            Logger.e("Integrity verification threw unexpected exception", error)
+            IntegrityResult.Fail(listOf("Integrity verification exception: ${error.message}"))
+        }
+        if (integrityResult is IntegrityResult.Fail) {
+            Logger.e("INTEGRITY VERIFICATION FAILED")
+            IntegrityViolationHandler.handleViolation(integrityResult.violations)
+            while (true) {
+                delay(60_000)
+            }
+        }
+
         while (!NativeBackend.awaitReady(BACKEND_STARTUP_TIMEOUT_MS)) {
             if (Thread.currentThread().isInterrupted) {
                 Logger.i("Main: Interrupted while waiting for Rust backend")
@@ -217,6 +232,21 @@ fun main(args: Array<String>) {
 
         runCatching { KeyboxDirectoryRefreshWatcher.start(Config.keyboxDirectory) }
             .onFailure { Logger.e("Failed to install conflated keybox watcher; keeping legacy observer", it) }
+
+        // Start runtime integrity monitoring
+        val integrityManifest = ModuleIntegrityVerifier.loadManifest()
+        if (integrityManifest != null) {
+            runCatching {
+                ModuleIntegrityWatcher.start(
+                    File(getModuleDir()),
+                    integrityManifest,
+                ) { violations ->
+                    IntegrityViolationHandler.handleViolation(violations)
+                }
+            }.onFailure { Logger.e("Failed to start integrity watcher", it) }
+        } else {
+            Logger.w("Integrity manifest not available; runtime integrity monitoring disabled")
+        }
 
         KeyboxAutoCleaner.start()
         CronAutoIdentity.start(configDir)
@@ -405,6 +435,7 @@ fun main(args: Array<String>) {
                 startupRetryJobs.forEach { it.cancel() }
                 CronAutoIdentity.stop()
                 KeyboxDirectoryRefreshWatcher.stop()
+                ModuleIntegrityWatcher.stop()
                 CertificatePolicyWatcher.stop()
                 SubscriptionVisibilityInterceptor.stop()
                 CameraVisibilityInterceptor.stop()

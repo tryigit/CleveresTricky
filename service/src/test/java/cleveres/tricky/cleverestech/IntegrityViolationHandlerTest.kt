@@ -1,0 +1,114 @@
+package cleveres.tricky.cleverestech
+
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.atomic.AtomicInteger
+
+class IntegrityViolationHandlerTest {
+
+    private val deleteCalls = AtomicInteger(0)
+    private val rebootCalls = AtomicInteger(0)
+    private val deletedPaths = CopyOnWriteArrayList<String>()
+
+    @Before
+    fun setUp() {
+        IntegrityViolationHandler.resetForTesting()
+        IntegrityViolationHandler.deleteModule = { path ->
+            deletedPaths.add(path)
+            deleteCalls.incrementAndGet()
+            true
+        }
+        IntegrityViolationHandler.rebootSystem = {
+            rebootCalls.incrementAndGet()
+        }
+    }
+
+    @After
+    fun tearDown() {
+        IntegrityViolationHandler.resetForTesting()
+    }
+
+    @Test
+    fun singleViolationTriggersDeleteAndReboot() {
+        IntegrityViolationHandler.handleViolation(listOf("test violation"))
+        assertTrue(IntegrityViolationHandler.isViolated)
+        assertEquals(1, deleteCalls.get())
+        assertEquals(1, rebootCalls.get())
+    }
+
+    @Test
+    fun multipleViolationsAreIdempotent() {
+        IntegrityViolationHandler.handleViolation(listOf("first"))
+        IntegrityViolationHandler.handleViolation(listOf("second"))
+        IntegrityViolationHandler.handleViolation(listOf("third"))
+        assertEquals(1, deleteCalls.get())
+        assertEquals(1, rebootCalls.get())
+    }
+
+    @Test
+    fun concurrentViolationsAreIdempotent() {
+        val latch = CountDownLatch(1)
+        val threads = (1..10).map { i ->
+            Thread {
+                latch.await()
+                IntegrityViolationHandler.handleViolation(listOf("concurrent $i"))
+            }
+        }
+        threads.forEach { it.start() }
+        latch.countDown()
+        threads.forEach { it.join(5000) }
+        assertEquals(1, deleteCalls.get())
+        assertEquals(1, rebootCalls.get())
+        assertTrue(IntegrityViolationHandler.isViolated)
+    }
+
+    @Test
+    fun deleteFailureStillSetsViolatedFlag() {
+        IntegrityViolationHandler.deleteModule = { false }
+        IntegrityViolationHandler.handleViolation(listOf("delete will fail"))
+        assertTrue(IntegrityViolationHandler.isViolated)
+        assertEquals(1, rebootCalls.get())
+    }
+
+    @Test
+    fun deleteExceptionStillSetsViolatedFlag() {
+        IntegrityViolationHandler.deleteModule = { throw RuntimeException("I/O error") }
+        IntegrityViolationHandler.handleViolation(listOf("delete throws"))
+        assertTrue(IntegrityViolationHandler.isViolated)
+        assertEquals(1, rebootCalls.get())
+    }
+
+    @Test
+    fun rebootFailureStillKeepsViolatedFlag() {
+        IntegrityViolationHandler.rebootSystem = { throw RuntimeException("reboot failed") }
+        IntegrityViolationHandler.handleViolation(listOf("reboot fails"))
+        assertTrue(IntegrityViolationHandler.isViolated)
+        assertEquals(1, deleteCalls.get())
+    }
+
+    @Test
+    fun notViolatedBeforeHandleViolation() {
+        assertFalse(IntegrityViolationHandler.isViolated)
+    }
+
+    @Test
+    fun resetForTestingClearsState() {
+        IntegrityViolationHandler.handleViolation(listOf("test"))
+        assertTrue(IntegrityViolationHandler.isViolated)
+        IntegrityViolationHandler.resetForTesting()
+        assertFalse(IntegrityViolationHandler.isViolated)
+    }
+
+    @Test
+    fun deletedPathMatchesModuleDir() {
+        IntegrityViolationHandler.handleViolation(listOf("check path"))
+        assertEquals(1, deletedPaths.size)
+        assertTrue(deletedPaths[0].contains("cleverestricky"))
+    }
+}
