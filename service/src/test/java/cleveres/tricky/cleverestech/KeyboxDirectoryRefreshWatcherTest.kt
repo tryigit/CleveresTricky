@@ -12,6 +12,10 @@ import java.io.File
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.delay
 
+/**
+ * Tests for KeyboxDirectoryRefreshWatcher's robust directory observation logic,
+ * including file events, directory lifecycle, and recovery scenarios.
+ */
 class KeyboxDirectoryRefreshWatcherTest {
 
     @get:Rule
@@ -19,6 +23,9 @@ class KeyboxDirectoryRefreshWatcherTest {
 
     private lateinit var keyboxDir: File
 
+    /**
+     * Sets up a fresh temporary keybox directory and resets watcher state before each test.
+     */
     @Before
     fun setUp() {
         keyboxDir = tempFolder.newFolder("keyboxes")
@@ -27,12 +34,18 @@ class KeyboxDirectoryRefreshWatcherTest {
         Config.keyboxInventoryFingerprintDirty = false
     }
 
+    /**
+     * Stops the watcher after each test to ensure clean state.
+     */
     @After
     fun tearDown() {
         KeyboxDirectoryRefreshWatcher.stop()
     }
 
     // 1-7. File Events
+    /**
+     * Verifies that file creation events trigger a keybox refresh.
+     */
     @Test
     fun testFileCreateDetected() = runBlocking {
         KeyboxDirectoryRefreshWatcher.start(keyboxDir)
@@ -40,6 +53,9 @@ class KeyboxDirectoryRefreshWatcherTest {
         assertTrue(Config.keyboxInventoryFingerprintDirty)
     }
 
+    /**
+     * Verifies that file close-write events trigger a keybox refresh.
+     */
     @Test
     fun testFileCloseWriteDetected() = runBlocking {
         KeyboxDirectoryRefreshWatcher.start(keyboxDir)
@@ -47,6 +63,9 @@ class KeyboxDirectoryRefreshWatcherTest {
         assertTrue(Config.keyboxInventoryFingerprintDirty)
     }
 
+    /**
+     * Placeholder test for file modification detection (covered by CLOSE_WRITE).
+     */
     @Test
     fun testFileModifyDetected() = runBlocking {
         KeyboxDirectoryRefreshWatcher.start(keyboxDir)
@@ -56,6 +75,9 @@ class KeyboxDirectoryRefreshWatcherTest {
         // Let's use CLOSE_WRITE for the test, as it's structurally the same in the event handler.
     }
 
+    /**
+     * Verifies that file deletion events trigger a keybox refresh.
+     */
     @Test
     fun testFileDeleteDetected() = runBlocking {
         KeyboxDirectoryRefreshWatcher.start(keyboxDir)
@@ -63,6 +85,9 @@ class KeyboxDirectoryRefreshWatcherTest {
         assertTrue(Config.keyboxInventoryFingerprintDirty)
     }
 
+    /**
+     * Verifies that file moved-from events trigger a keybox refresh.
+     */
     @Test
     fun testFileMovedFromDetected() = runBlocking {
         KeyboxDirectoryRefreshWatcher.start(keyboxDir)
@@ -70,6 +95,9 @@ class KeyboxDirectoryRefreshWatcherTest {
         assertTrue(Config.keyboxInventoryFingerprintDirty)
     }
 
+    /**
+     * Verifies that file moved-to events trigger a keybox refresh.
+     */
     @Test
     fun testFileMovedToDetected() = runBlocking {
         KeyboxDirectoryRefreshWatcher.start(keyboxDir)
@@ -77,6 +105,9 @@ class KeyboxDirectoryRefreshWatcherTest {
         assertTrue(Config.keyboxInventoryFingerprintDirty)
     }
 
+    /**
+     * Verifies that file attribute change events trigger a keybox refresh.
+     */
     @Test
     fun testFileAttribDetected() = runBlocking {
         KeyboxDirectoryRefreshWatcher.start(keyboxDir)
@@ -85,6 +116,9 @@ class KeyboxDirectoryRefreshWatcherTest {
     }
 
     // 8-14. Directory Lifecycle
+    /**
+     * Verifies that both parent and child observers are armed when the directory exists at startup.
+     */
     @Test
     fun testDirectoryExistsAtStartup() = runBlocking {
         KeyboxDirectoryRefreshWatcher.start(keyboxDir)
@@ -92,6 +126,10 @@ class KeyboxDirectoryRefreshWatcherTest {
         assertTrue(KeyboxDirectoryRefreshWatcher.isChildObserverActiveForTesting())
     }
 
+    /**
+     * Verifies that only the parent observer is armed when the directory is absent at startup,
+     * and that the child observer is armed when a creation event is detected.
+     */
     @Test
     fun testDirectoryAbsentAtStartup() = runBlocking {
         val nonExistentDir = File(tempFolder.root, "does_not_exist")
@@ -108,6 +146,9 @@ class KeyboxDirectoryRefreshWatcherTest {
         assertTrue(Config.keyboxInventoryFingerprintDirty)
     }
 
+    /**
+     * Verifies that DELETE_SELF events disarm the child observer and trigger a refresh.
+     */
     @Test
     fun testDirectoryDeleteSelf() = runBlocking {
         KeyboxDirectoryRefreshWatcher.start(keyboxDir)
@@ -117,6 +158,9 @@ class KeyboxDirectoryRefreshWatcherTest {
         assertTrue(Config.keyboxInventoryFingerprintDirty)
     }
 
+    /**
+     * Verifies that MOVE_SELF events disarm the child observer and trigger a refresh.
+     */
     @Test
     fun testDirectoryMoveSelf() = runBlocking {
         KeyboxDirectoryRefreshWatcher.start(keyboxDir)
@@ -126,6 +170,9 @@ class KeyboxDirectoryRefreshWatcherTest {
         assertTrue(Config.keyboxInventoryFingerprintDirty)
     }
 
+    /**
+     * Verifies that the child observer can be re-armed after a DELETE_SELF event when the directory is recreated.
+     */
     @Test
     fun testDirectoryRecreated() = runBlocking {
         KeyboxDirectoryRefreshWatcher.start(keyboxDir)
@@ -138,6 +185,9 @@ class KeyboxDirectoryRefreshWatcherTest {
         assertTrue(KeyboxDirectoryRefreshWatcher.isChildObserverActiveForTesting())
     }
 
+    /**
+     * Verifies that the child observer recovers when the directory is replaced through a rename/move operation.
+     */
     @Test
     fun testDirectoryReplacedThroughRenameMove() = runBlocking {
         KeyboxDirectoryRefreshWatcher.start(keyboxDir)
@@ -149,6 +199,9 @@ class KeyboxDirectoryRefreshWatcherTest {
         assertTrue(KeyboxDirectoryRefreshWatcher.isChildObserverActiveForTesting())
     }
 
+    /**
+     * Verifies that rapid deletion and recreation of the directory is handled correctly.
+     */
     @Test
     fun testRapidDeleteAndRecreate() = runBlocking {
         KeyboxDirectoryRefreshWatcher.start(keyboxDir)
@@ -161,6 +214,9 @@ class KeyboxDirectoryRefreshWatcherTest {
     }
 
     // 15-19. Race / Event Storm
+    /**
+     * Verifies that a storm of rapid file events triggers refresh without overwhelming the system.
+     */
     @Test
     fun testCreateModifyStorm() = runBlocking {
         KeyboxDirectoryRefreshWatcher.start(keyboxDir)
@@ -175,6 +231,9 @@ class KeyboxDirectoryRefreshWatcherTest {
         assertTrue(Config.keyboxInventoryFingerprintDirty)
     }
 
+    /**
+     * Verifies that a DELETE followed by MOVED_TO sequence properly re-arms the child observer.
+     */
     @Test
     fun testDeleteMovedToSequence() = runBlocking {
         KeyboxDirectoryRefreshWatcher.start(keyboxDir)
@@ -186,6 +245,9 @@ class KeyboxDirectoryRefreshWatcherTest {
         assertTrue(KeyboxDirectoryRefreshWatcher.isChildObserverActiveForTesting())
     }
 
+    /**
+     * Verifies that duplicate directory creation events don't create multiple observers.
+     */
     @Test
     fun testMultipleDuplicateDirectoryEvents() = runBlocking {
         KeyboxDirectoryRefreshWatcher.start(keyboxDir)
@@ -197,6 +259,9 @@ class KeyboxDirectoryRefreshWatcherTest {
         assertTrue(KeyboxDirectoryRefreshWatcher.isChildObserverActiveForTesting())
     }
 
+    /**
+     * Verifies that rapid start-stop-start cycles maintain correct observer state.
+     */
     @Test
     fun testRapidStartStopStart() = runBlocking {
         KeyboxDirectoryRefreshWatcher.start(keyboxDir)
@@ -207,6 +272,9 @@ class KeyboxDirectoryRefreshWatcherTest {
         assertTrue(KeyboxDirectoryRefreshWatcher.isChildObserverActiveForTesting())
     }
 
+    /**
+     * Verifies that multiple events are properly debounced when refresh is already pending.
+     */
     @Test
     fun testRefreshAlreadyPendingWhileWatcherEventArrives() = runBlocking {
         KeyboxDirectoryRefreshWatcher.start(keyboxDir)
@@ -218,6 +286,9 @@ class KeyboxDirectoryRefreshWatcherTest {
     }
 
     // 20-23. Lifecycle
+    /**
+     * Verifies that stop() removes both parent and child observers.
+     */
     @Test
     fun testStopRemovesBothWatchers() = runBlocking {
         KeyboxDirectoryRefreshWatcher.start(keyboxDir)
@@ -227,6 +298,9 @@ class KeyboxDirectoryRefreshWatcherTest {
         assertFalse(KeyboxDirectoryRefreshWatcher.isChildObserverActiveForTesting())
     }
 
+    /**
+     * Verifies that reset (via stop()) removes both parent and child observers.
+     */
     @Test
     fun testResetRemovesBothWatchers() = runBlocking {
         KeyboxDirectoryRefreshWatcher.start(keyboxDir)
@@ -237,6 +311,9 @@ class KeyboxDirectoryRefreshWatcherTest {
         assertFalse(KeyboxDirectoryRefreshWatcher.isChildObserverActiveForTesting())
     }
 
+    /**
+     * Verifies that calling start() when already running does not create duplicate watchers.
+     */
     @Test
     fun testNoDuplicateWatcherCreated() = runBlocking {
         KeyboxDirectoryRefreshWatcher.start(keyboxDir)
@@ -247,6 +324,9 @@ class KeyboxDirectoryRefreshWatcherTest {
         assertTrue(KeyboxDirectoryRefreshWatcher.isChildObserverActiveForTesting())
     }
 
+    /**
+     * Verifies that stale child watchers are properly cleaned up after DELETE_SELF events.
+     */
     @Test
     fun testNoStaleChildWatcherRemainsActive() = runBlocking {
         KeyboxDirectoryRefreshWatcher.start(keyboxDir)

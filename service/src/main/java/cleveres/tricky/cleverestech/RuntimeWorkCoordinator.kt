@@ -131,6 +131,13 @@ internal object KeyboxDirectoryRefreshWatcher {
     private var isRunning = false
     private val lock = Any()
 
+    /**
+     * Starts watching the keybox directory and its parent for filesystem changes.
+     * Arms both a parent directory watcher (to detect directory recreation) and a child watcher
+     * (to detect file modifications within the directory).
+     *
+     * @param directory The keybox directory to monitor
+     */
     @Synchronized
     fun start(directory: File) {
         synchronized(lock) {
@@ -180,6 +187,12 @@ internal object KeyboxDirectoryRefreshWatcher {
         }
     }
 
+    /**
+     * Attempts to arm the child observer for the keybox directory.
+     * Only arms if the directory exists and no child observer is currently active.
+     *
+     * @param directory The keybox directory to watch
+     */
     private fun tryArmChildLocked(directory: File) {
         if (childObserver != null) return
         if (!directory.exists()) return
@@ -210,16 +223,25 @@ internal object KeyboxDirectoryRefreshWatcher {
         }
     }
 
+    /**
+     * Disarms and clears the child observer if one is active.
+     */
     private fun disarmChildLocked() {
         childObserver?.stopWatching()
         childObserver = null
     }
 
+    /**
+     * Marks the keybox inventory as dirty and schedules a refresh.
+     */
     private fun triggerRefresh() {
         Config.keyboxInventoryFingerprintDirty = true
         scheduler.submit()
     }
 
+    /**
+     * Stops all filesystem watchers and cancels any pending refresh operations.
+     */
     @Synchronized
     fun stop() {
         synchronized(lock) {
@@ -232,12 +254,27 @@ internal object KeyboxDirectoryRefreshWatcher {
         }
     }
 
+    /**
+     * Returns whether the child observer is currently active.
+     *
+     * @return true if the child observer is armed, false otherwise
+     */
     @androidx.annotation.VisibleForTesting
     internal fun isChildObserverActiveForTesting(): Boolean = synchronized(lock) { childObserver != null }
 
+    /**
+     * Returns whether the parent observer is currently active.
+     *
+     * @return true if the parent observer is armed, false otherwise
+     */
     @androidx.annotation.VisibleForTesting
     internal fun isParentObserverActiveForTesting(): Boolean = synchronized(lock) { parentObserver != null }
 
+    /**
+     * Injects a filesystem event into the child observer for testing purposes.
+     *
+     * @param event The FileObserver event mask to inject
+     */
     @androidx.annotation.VisibleForTesting
     internal fun injectChildEventForTesting(event: Int) {
         synchronized(lock) {
@@ -245,6 +282,12 @@ internal object KeyboxDirectoryRefreshWatcher {
         }
     }
 
+    /**
+     * Injects a filesystem event into the parent observer for testing purposes.
+     *
+     * @param event The FileObserver event mask to inject
+     * @param path The path affected by the event (relative to parent directory)
+     */
     @androidx.annotation.VisibleForTesting
     internal fun injectParentEventForTesting(event: Int, path: String?) {
         synchronized(lock) {
