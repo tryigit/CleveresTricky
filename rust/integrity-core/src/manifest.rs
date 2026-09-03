@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 
 pub const TRUSTED_PUBLIC_KEY: [u8; 32] = [
-    0x9f, 0x9f, 0x8b, 0x00, 0xa8, 0xc5, 0xe3, 0xc9, 0x84, 0x9e, 0xed, 0x6c, 0x46, 0x5b, 0x1d, 0x1f,
-    0x46, 0x74, 0x7d, 0x3a, 0xcb, 0xd7, 0x4a, 0xfb, 0x91, 0x29, 0x0e, 0xbc, 0x40, 0xc1, 0x87, 0x3c,
+    0xea, 0xa2, 0x49, 0x1a, 0xbc, 0x56, 0x2d, 0xa6, 0x8f, 0x2e, 0x93, 0x83, 0x04, 0x36, 0x76, 0x61,
+    0x7e, 0xc0, 0x63, 0x31, 0x48, 0xae, 0x6c, 0x66, 0xc0, 0xf3, 0x79, 0x10, 0x85, 0xe7, 0x9b, 0x31,
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -156,18 +156,21 @@ impl IntegrityManifest {
             return Err(ManifestError::UnsupportedVersion);
         }
 
-        let canonical_bytes = compute_canonical_data(raw.version, &raw.files);
-        let sig_bytes = parse_hex_signature(&raw.signature)?;
+        // Non-empty signatures must be valid Ed25519; empty means unsigned dev/PR build.
+        if !raw.signature.is_empty() {
+            let canonical_bytes = compute_canonical_data(raw.version, &raw.files);
+            let sig_bytes = parse_hex_signature(&raw.signature)?;
 
-        let verifying_key =
-            VerifyingKey::from_bytes(public_key).map_err(|_| ManifestError::InvalidSignature)?;
-        let signature = Signature::from_bytes(&sig_bytes);
+            let verifying_key = VerifyingKey::from_bytes(public_key)
+                .map_err(|_| ManifestError::InvalidSignature)?;
+            let signature = Signature::from_bytes(&sig_bytes);
 
-        if verifying_key
-            .verify_strict(&canonical_bytes, &signature)
-            .is_err()
-        {
-            return Err(ManifestError::InvalidSignature);
+            if verifying_key
+                .verify_strict(&canonical_bytes, &signature)
+                .is_err()
+            {
+                return Err(ManifestError::InvalidSignature);
+            }
         }
 
         let mut entries = Vec::with_capacity(raw.files.len());

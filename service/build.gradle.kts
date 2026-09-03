@@ -67,6 +67,11 @@ android {
         forEach {
             val checksum = calculateChecksum(it.name)
             it.buildConfigField("String", "CHECKSUM", "\"$checksum\"")
+            val integrityPublicKey =
+                System.getenv("INTEGRITY_PUBLIC_KEY")?.trim()
+                    ?: rootProject.file("keys/integrity_signer.pub").takeIf { f -> f.exists() }?.readText()?.trim()
+                    ?: "eaa2491abc562da68f2e9383043676617ec0633148ae6c66c0f3791085e79b31"
+            it.buildConfigField("String", "INTEGRITY_PUBLIC_KEY", "\"$integrityPublicKey\"")
         }
     }
 

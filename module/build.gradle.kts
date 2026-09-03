@@ -390,47 +390,49 @@ afterEvaluate {
 
                     verifyRuntimePayloadContract(moduleDir.get().asFile, abiList)
 
-                    val payloadFiles =
-                        fileTree(moduleDir) {
-                            exclude("**/*.sha256")
-                            exclude("integrity_manifest.json")
-                            exclude("**/integrity_manifest.json")
-                        }.files
-                            .filter(File::isFile)
-                            .sortedBy { it.relativeTo(moduleDir.get().asFile).invariantSeparatorsPath }
-
-                    val manifestFilesList = mutableListOf<Map<String, String>>()
-
-                    payloadFiles.forEach { payload ->
+                    fun computeSha256(f: File): String {
                         val md = MessageDigest.getInstance("SHA-256")
-                        payload.forEachBlock(4096) { bytes, size ->
+                        f.forEachBlock(4096) { bytes, size ->
                             md.update(bytes, 0, size)
                         }
-                        val hexHash = HexFormat.of().formatHex(md.digest())
-                        file(payload.path + ".sha256").writeText(hexHash)
-
-                        val relPath = payload.relativeTo(moduleDir.get().asFile).invariantSeparatorsPath
-                        val type = if (relPath.endsWith(".sh") || !relPath.contains(".")) "executable" else "regular"
-                        manifestFilesList.add(
-                            mapOf(
-                                "path" to relPath,
-                                "sha256" to hexHash,
-                                "type" to type,
-                            ),
-                        )
+                        return HexFormat.of().formatHex(md.digest())
                     }
 
-                    // Generate integrity_manifest.json using canonical HMAC data
-                    val sortedEntries = manifestFilesList.sortedBy { it["path"] as String }
-                    val canonicalData =
-                        buildString {
-                            append("1\n")
-                            for (entry in sortedEntries) {
-                                append(entry["path"]).append('\n')
-                                append((entry["sha256"] as String).lowercase()).append('\n')
-                                append(entry["type"]).append('\n')
-                            }
-                        }
+                    // Generate .sha256 checksum files for all files in the module directory
+                    val allFiles =
+                        fileTree(moduleDir) {
+                            exclude("**/*.sha256")
+                            exclude("**/integrity_manifest.json")
+                        }.files.filter(File::isFile)
+
+                    allFiles.forEach { payload ->
+                        val hexHash = computeSha256(payload)
+                        file(payload.path + ".sha256").writeText(hexHash)
+                    }
+
+                    val commonFiles =
+                        listOf(
+                            "service.apk" to "regular",
+                            "service.sh" to "executable",
+                            "post-fs-data.sh" to "executable",
+                            "action.sh" to "executable",
+                            "daemon" to "executable",
+                            "sepolicy.rule" to "regular",
+                            "module.prop" to "regular",
+                            "webroot/index.html" to "regular",
+                            "webroot/bridge.js" to "regular",
+                            "webroot/policy.js" to "regular",
+                            "webroot/ux.js" to "regular",
+                        )
+
+                    val archBinaryNames =
+                        listOf(
+                            "lib$SONAME.so" to "regular",
+                            "inject" to "executable",
+                            "webui_bridge" to "executable",
+                            "cleverestrickyd" to "executable",
+                            "cleverestricky_backend" to "executable",
+                        )
 
                     val pkcs8Header = HexFormat.of().parseHex("302e020100300506032b657004220420")
                     val privateKeySeed =
@@ -442,45 +444,83 @@ afterEvaluate {
                             (System.getenv("CI") == "true" && System.getenv("GITHUB_EVENT_NAME") != "pull_request") ||
                             System.getenv("REQUIRE_INTEGRITY_SIGNING_KEY") == "true"
 
-                    val signatureHex =
-                        if (!privateKeySeed.isNullOrBlank()) {
-                            val privKeyBytes = pkcs8Header + HexFormat.of().parseHex(privateKeySeed)
-                            val keyFactory = KeyFactory.getInstance("Ed25519")
-                            val privKey = keyFactory.generatePrivate(PKCS8EncodedKeySpec(privKeyBytes))
-                            val sig = Signature.getInstance("Ed25519")
-                            sig.initSign(privKey)
-                            sig.update(canonicalData.toByteArray(Charsets.UTF_8))
-                            HexFormat.of().formatHex(sig.sign())
-                        } else if (isReleaseBuild) {
-                            throw GradleException(
-                                "INTEGRITY_SIGNING_KEY environment variable or keys/integrity_signer.key is required " +
-                                    "to sign the module manifest for release builds. Hardcoded signing keys are strictly prohibited.",
-                            )
-                        } else {
-                            // Unsigned development / pull-request test packaging.
-                            // Preserves unsigned packaging for PR verification without exposing secrets
-                            // or signing with mismatched ephemeral keys that falsely mimic a trusted manifest.
-                            ""
+                    abiList.forEach { abi ->
+                        val manifestFilesList = mutableListOf<Map<String, String>>()
+
+                        commonFiles.forEach { (relPath, type) ->
+                            val f = file("${moduleDir.get().asFile}/$relPath")
+                            if (f.exists()) {
+                                manifestFilesList.add(
+                                    mapOf(
+                                        "path" to relPath,
+                                        "sha256" to computeSha256(f),
+                                        "type" to type,
+                                    ),
+                                )
+                            }
                         }
 
-                    val manifest =
-                        groovy.json.JsonBuilder(
-                            mapOf(
-                                "version" to 1,
-                                "files" to sortedEntries,
-                                "signature" to signatureHex,
-                            ),
-                        ).toPrettyString()
+                        archBinaryNames.forEach { (binName, type) ->
+                            val f = file("${moduleDir.get().asFile}/lib/$abi/$binName")
+                            if (f.exists()) {
+                                manifestFilesList.add(
+                                    mapOf(
+                                        "path" to binName,
+                                        "sha256" to computeSha256(f),
+                                        "type" to type,
+                                    ),
+                                )
+                            }
+                        }
 
-                    val manifestFile = file("${moduleDir.get().asFile}/integrity_manifest.json")
-                    manifestFile.writeText(manifest)
+                        val sortedEntries = manifestFilesList.sortedBy { it["path"] as String }
+                        val canonicalData =
+                            buildString {
+                                append("1\n")
+                                for (entry in sortedEntries) {
+                                    append(entry["path"]).append('\n')
+                                    append((entry["sha256"] as String).lowercase()).append('\n')
+                                    append(entry["type"]).append('\n')
+                                }
+                            }
 
-                    val manifestMd = MessageDigest.getInstance("SHA-256")
-                    manifestFile.forEachBlock(4096) { bytes, size ->
-                        manifestMd.update(bytes, 0, size)
+                        val signatureHex =
+                            if (!privateKeySeed.isNullOrBlank()) {
+                                val privKeyBytes = pkcs8Header + HexFormat.of().parseHex(privateKeySeed)
+                                val keyFactory = KeyFactory.getInstance("Ed25519")
+                                val privKey = keyFactory.generatePrivate(PKCS8EncodedKeySpec(privKeyBytes))
+                                val sig = Signature.getInstance("Ed25519")
+                                sig.initSign(privKey)
+                                sig.update(canonicalData.toByteArray(Charsets.UTF_8))
+                                HexFormat.of().formatHex(sig.sign())
+                            } else if (isReleaseBuild) {
+                                throw GradleException(
+                                    "INTEGRITY_SIGNING_KEY environment variable or keys/integrity_signer.key is required " +
+                                        "to sign the module manifest for release builds. Hardcoded signing keys are strictly prohibited.",
+                                )
+                            } else {
+                                ""
+                            }
+
+                        val manifest =
+                            groovy.json.JsonBuilder(
+                                mapOf(
+                                    "version" to 1,
+                                    "files" to sortedEntries,
+                                    "signature" to signatureHex,
+                                ),
+                            ).toPrettyString()
+
+                        val abiManifestFile = file("${moduleDir.get().asFile}/lib/$abi/integrity_manifest.json")
+                        abiManifestFile.writeText(manifest)
+                        file("${moduleDir.get().asFile}/lib/$abi/integrity_manifest.json.sha256").writeText(computeSha256(abiManifestFile))
+
+                        if (abi == "arm64-v8a" || abi == abiList.first()) {
+                            val rootManifestFile = file("${moduleDir.get().asFile}/integrity_manifest.json")
+                            rootManifestFile.writeText(manifest)
+                            file("${moduleDir.get().asFile}/integrity_manifest.json.sha256").writeText(computeSha256(rootManifestFile))
+                        }
                     }
-                    val manifestSha = HexFormat.of().formatHex(manifestMd.digest())
-                    file("${moduleDir.get().asFile}/integrity_manifest.json.sha256").writeText(manifestSha)
                 }
             }
 

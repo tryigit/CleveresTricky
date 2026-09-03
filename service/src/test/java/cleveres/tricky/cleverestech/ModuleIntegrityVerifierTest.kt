@@ -390,4 +390,58 @@ class ModuleIntegrityVerifierTest {
 
         ModuleIntegrityVerifier.daemonResponseLengthForTesting(0x30, header)
     }
+
+    @Test
+    fun unsignedManifestPassesHashVerification() {
+        val moduleDir = tempFolder.newFolder("module_unsigned")
+        ModuleIntegrityVerifier.moduleDirProvider = { moduleDir.absolutePath }
+
+        val content = "sample payload".toByteArray()
+        val entry = ManifestFileEntry("service.apk", sha256Hex(content), "regular")
+
+        val file = File(moduleDir, "service.apk")
+        file.writeBytes(content)
+
+        val filesJson = org.json.JSONArray()
+        val obj = org.json.JSONObject()
+        obj.put("path", entry.path)
+        obj.put("sha256", entry.sha256)
+        obj.put("type", entry.type)
+        filesJson.put(obj)
+
+        val manifest = org.json.JSONObject()
+        manifest.put("version", 1)
+        manifest.put("files", filesJson)
+        manifest.put("signature", "")
+        File(moduleDir, "integrity_manifest.json").writeText(manifest.toString())
+
+        val result = ModuleIntegrityVerifier.verifyFull()
+        assertTrue("Expected Pass for valid unsigned manifest but got: $result", result is IntegrityResult.Pass)
+    }
+
+    @Test
+    fun runtimeDirectoriesKeyboxesAndLogsAreIgnored() {
+        val moduleDir = tempFolder.newFolder("module_runtime_dirs")
+        ModuleIntegrityVerifier.moduleDirProvider = { moduleDir.absolutePath }
+
+        createManifest(moduleDir, listOf(
+            "test.sh" to "content".toByteArray(),
+        ))
+
+        // Create keyboxes and logs subdirectories with arbitrary files
+        val keyboxDir = File(moduleDir, "keyboxes")
+        keyboxDir.mkdirs()
+        File(keyboxDir, "device_keybox.xml").writeText("<keybox>secret</keybox>")
+
+        val logDir = File(moduleDir, "logs")
+        logDir.mkdirs()
+        File(logDir, "runtime.log").writeText("log line 1\nlog line 2")
+
+        val systemDir = File(moduleDir, "system")
+        systemDir.mkdirs()
+        File(systemDir, "placeholder").writeText("overlay")
+
+        val result = ModuleIntegrityVerifier.verifyFull()
+        assertTrue("Runtime directories must not trigger unexpected file violations, got: $result", result is IntegrityResult.Pass)
+    }
 }

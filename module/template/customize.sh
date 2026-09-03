@@ -121,6 +121,7 @@ case "$ARCH" in
     extract "$ZIPFILE" "lib/x86_64/webui_bridge" "$MODPATH" true
     extract "$ZIPFILE" "lib/x86_64/cleverestrickyd" "$MODPATH" true
     extract "$ZIPFILE" "lib/x86_64/cleverestricky_backend" "$MODPATH" true
+    extract "$ZIPFILE" "lib/x86_64/integrity_manifest.json" "$MODPATH" true
     ;;
   "arm64")
     ui_print "- Extracting arm64 libraries"
@@ -129,6 +130,7 @@ case "$ARCH" in
     extract "$ZIPFILE" "lib/arm64-v8a/webui_bridge" "$MODPATH" true
     extract "$ZIPFILE" "lib/arm64-v8a/cleverestrickyd" "$MODPATH" true
     extract "$ZIPFILE" "lib/arm64-v8a/cleverestricky_backend" "$MODPATH" true
+    extract "$ZIPFILE" "lib/arm64-v8a/integrity_manifest.json" "$MODPATH" true
     ;;
   *)
     abort "! Unsupported ARCH: $ARCH"
@@ -136,7 +138,7 @@ case "$ARCH" in
 esac
 
 for module_payload in module.prop post-fs-data.sh service.sh action.sh service.apk sepolicy.rule daemon \
-  "lib$SONAME.so" inject webui_bridge cleverestrickyd cleverestricky_backend; do
+  "lib$SONAME.so" inject webui_bridge cleverestrickyd cleverestricky_backend integrity_manifest.json; do
   payload_path="$MODPATH/$module_payload"
   if [ -L "$payload_path" ] || [ ! -f "$payload_path" ]; then
     abort "! Extracted module payload is unsafe: $module_payload"
@@ -146,6 +148,7 @@ done
 chmod 755 "$MODPATH/inject" "$MODPATH/webui_bridge" "$MODPATH/cleverestrickyd" \
   "$MODPATH/cleverestricky_backend" "$MODPATH/daemon" "$MODPATH/service.sh" "$MODPATH/action.sh" "$MODPATH/post-fs-data.sh" \
   || abort "! Could not set module executable permissions"
+chmod 644 "$MODPATH/integrity_manifest.json" || abort "! Could not set integrity manifest permissions"
 
 CONFIG_DIR=/data/adb/cleverestricky
 if [ -L "$CONFIG_DIR" ]; then

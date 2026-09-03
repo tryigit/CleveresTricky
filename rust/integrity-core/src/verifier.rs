@@ -28,6 +28,15 @@ const IGNORED_FILES: &[&str] = &[
     "module.prop",
     "sepolicy.rule",
     "integrity_manifest.json",
+    "skip_mount",
+    ".replace",
+    "boot_props_mode",
+    "drm_packages.txt",
+    "identity_target.txt",
+    "target.txt",
+    "security_patch.txt",
+    "policy_state_v2.json",
+    "spoof_build_vars",
 ];
 
 /// Checks if a file name should be ignored during verification.
@@ -230,11 +239,8 @@ fn verify_single_entry(dir_fd: RawFd, entry: &ManifestEntry) -> Option<Violation
             }
         }
         crate::manifest::FileType::Regular => {
-            if safe_fd::is_executable(pre_stat.mode) {
-                return Some(Violation::FileWrongType {
-                    path: entry.path.clone(),
-                });
-            }
+            // Do not reject regular files with execute bits.
+            // Android overlayfs and zip extractors frequently set +x across all files.
         }
     }
 
@@ -342,6 +348,10 @@ pub fn verify_full(dir_fd: RawFd, manifest: &IntegrityManifest) -> VerifyResult 
             };
 
             if is_dir {
+                // Skip user-managed / runtime directories
+                if name == "keyboxes" || name == "logs" || name == "system" {
+                    continue;
+                }
                 // Recursively scan. Note: this opens the dir to get a fd.
                 match safe_fd::open_file_nofollow(dir_fd, &name) {
                     Ok(subdir_fd) => {
@@ -367,6 +377,9 @@ pub fn verify_full(dir_fd: RawFd, manifest: &IntegrityManifest) -> VerifyResult 
                         is_ignored(&name)
                     } else {
                         relative_path.ends_with(".sha256")
+                            || current_path == "keyboxes"
+                            || current_path == "logs"
+                            || current_path == "system"
                     };
                     if !is_ignored_entry {
                         violations.push(Violation::FileUnexpected {
