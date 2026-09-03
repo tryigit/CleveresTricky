@@ -5,6 +5,10 @@ import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.util.concurrent.atomic.AtomicBoolean
 
+/**
+ * Handles integrity violations by deleting the module directory and rebooting the system.
+ * Idempotent: multiple calls only execute the violation response once.
+ */
 object IntegrityViolationHandler {
     @Volatile
     var isViolated: Boolean = false
@@ -17,6 +21,10 @@ object IntegrityViolationHandler {
 
     const val VIOLATION_MESSAGE = "Module change detected! Module is being deleted and system is being restarted."
 
+    /**
+     * Handles an integrity violation by attempting to delete the module and reboot the system.
+     * This function is idempotent: only the first call executes the violation response.
+     */
     fun handleViolation(violations: List<String>) {
         if (!violationOnce.compareAndSet(false, true)) return
         isViolated = true
@@ -44,6 +52,9 @@ object IntegrityViolationHandler {
         }
     }
 
+    /**
+     * Resets the violation state and injectable handlers for testing.
+     */
     @androidx.annotation.VisibleForTesting
     internal fun resetForTesting() {
         isViolated = false
@@ -53,6 +64,10 @@ object IntegrityViolationHandler {
     }
 }
 
+/**
+ * Safely deletes the module directory after validating the path and checking for symlinks.
+ * Returns true if deletion succeeded, false otherwise.
+ */
 private fun safeDeleteModule(moduleDir: String): Boolean {
     val dir = File(moduleDir)
     val path = dir.toPath()
@@ -102,6 +117,9 @@ private fun safeDeleteModule(moduleDir: String): Boolean {
     }
 }
 
+/**
+ * Initiates a system reboot using /system/bin/reboot, with a fallback to the 'reboot' command.
+ */
 private fun performReboot() {
     try {
         ProcessBuilder("/system/bin/reboot")

@@ -30,6 +30,7 @@ const IGNORED_FILES: &[&str] = &[
     "integrity_manifest.json",
 ];
 
+/// Checks if a file name should be ignored during verification.
 fn is_ignored(name: &str) -> bool {
     for ignored in IGNORED_FILES {
         if ignored.ends_with(".sha256") {
@@ -117,10 +118,12 @@ pub enum VerifyResult {
 }
 
 impl VerifyResult {
+    /// Returns true if verification passed with no violations.
     pub fn is_pass(&self) -> bool {
         matches!(self, VerifyResult::Pass)
     }
 
+    /// Returns the list of violations, or an empty slice if verification passed.
     pub fn violations(&self) -> &[Violation] {
         match self {
             VerifyResult::Pass => &[],
@@ -129,6 +132,7 @@ impl VerifyResult {
     }
 }
 
+/// Computes the SHA256 hash of a file, verifying size matches and zeroizing buffers.
 fn hash_file_safe(fd: RawFd, expected_size: u64, path: &str) -> Result<[u8; 32], Violation> {
     let dup_fd = safe_fd::duplicate_fd(fd).map_err(|e| Violation::IoError {
         path: path.to_string(),
@@ -177,6 +181,7 @@ fn hash_file_safe(fd: RawFd, expected_size: u64, path: &str) -> Result<[u8; 32],
     Ok(result)
 }
 
+/// Verifies a single manifest entry, checking existence, type, and hash with TOCTOU protection.
 fn verify_single_entry(dir_fd: RawFd, entry: &ManifestEntry) -> Option<Violation> {
     let owned_fd = match safe_fd::open_file_nofollow(dir_fd, &entry.path) {
         Ok(fd) => fd,
@@ -248,6 +253,7 @@ fn verify_single_entry(dir_fd: RawFd, entry: &ManifestEntry) -> Option<Violation
     None
 }
 
+/// Verifies a single file against the manifest, checking if it exists and matches expected hash.
 pub fn verify_file(
     dir_fd: RawFd,
     manifest: &IntegrityManifest,
@@ -279,6 +285,7 @@ pub fn verify_file(
     }
 }
 
+/// Performs full verification of all manifest entries and checks for unexpected files.
 pub fn verify_full(dir_fd: RawFd, manifest: &IntegrityManifest) -> VerifyResult {
     let mut violations = Vec::new();
 
@@ -288,6 +295,7 @@ pub fn verify_full(dir_fd: RawFd, manifest: &IntegrityManifest) -> VerifyResult 
         }
     }
 
+    /// Recursively scans a directory tree for unexpected files not in the manifest.
     fn check_dir_recursive(
         dir_fd: RawFd,
         current_path: &str,
@@ -363,6 +371,7 @@ mod tests {
     use std::os::unix::fs::symlink;
     use tempfile::tempdir;
 
+    /// Creates an empty test manifest.
     fn dummy_manifest() -> IntegrityManifest {
         IntegrityManifest {
             version: 1,

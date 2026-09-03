@@ -35,10 +35,12 @@ pub struct FrameRef<'a> {
     pub payload: &'a [u8],
 }
 
+/// Reads an IPC frame header with the default maximum payload size.
 pub fn read_header<R: Read>(reader: &mut R) -> io::Result<FrameHeader> {
     read_header_bounded(reader, MAX_FRAME_BYTES)
 }
 
+/// Reads an IPC frame header with a custom maximum payload size.
 pub fn read_header_bounded<R: Read>(reader: &mut R, max_payload: usize) -> io::Result<FrameHeader> {
     if max_payload > u32::MAX as usize {
         return Err(io::Error::new(
@@ -84,10 +86,12 @@ pub fn read_header_bounded<R: Read>(reader: &mut R, max_payload: usize) -> io::R
     })
 }
 
+/// Writes an IPC frame header with the default maximum payload size.
 pub fn write_header<W: Write>(writer: &mut W, header: FrameHeader) -> io::Result<()> {
     write_header_bounded(writer, header, MAX_FRAME_BYTES)
 }
 
+/// Writes an IPC frame header with a custom maximum payload size.
 pub fn write_header_bounded<W: Write>(
     writer: &mut W,
     header: FrameHeader,
@@ -112,6 +116,7 @@ pub fn write_header_bounded<W: Write>(
     write_all_retry(writer, &encoded)
 }
 
+/// Reads an IPC frame header and payload into the provided scratch buffer.
 pub fn read_frame_into<'a, R: Read>(
     reader: &mut R,
     scratch: &'a mut [u8],
@@ -131,6 +136,7 @@ pub fn read_frame_into<'a, R: Read>(
     })
 }
 
+/// Writes a complete IPC frame with header and payload using the default size limit.
 pub fn write_frame<W: Write>(
     writer: &mut W,
     opcode: u16,
@@ -140,6 +146,7 @@ pub fn write_frame<W: Write>(
     write_frame_bounded(writer, opcode, flags, payload, MAX_FRAME_BYTES)
 }
 
+/// Writes a complete IPC frame with header and payload using a custom size limit.
 pub fn write_frame_bounded<W: Write>(
     writer: &mut W,
     opcode: u16,
@@ -159,6 +166,7 @@ pub fn write_frame_bounded<W: Write>(
     write_all_retry(writer, payload)
 }
 
+/// Relays exactly `remaining` bytes from reader to writer using a scratch buffer.
 pub fn relay_exact<R: Read, W: Write>(
     reader: &mut R,
     writer: &mut W,
@@ -168,6 +176,7 @@ pub fn relay_exact<R: Read, W: Write>(
     relay_exact_bounded(reader, writer, remaining, scratch, MAX_FRAME_BYTES)
 }
 
+/// Relays exactly `remaining` bytes with a custom maximum payload limit.
 pub fn relay_exact_bounded<R: Read, W: Write>(
     reader: &mut R,
     writer: &mut W,
@@ -193,6 +202,7 @@ pub fn relay_exact_bounded<R: Read, W: Write>(
     Ok(())
 }
 
+/// Reads exactly the required number of bytes, retrying on EINTR.
 fn read_exact_retry<R: Read>(reader: &mut R, mut output: &mut [u8]) -> io::Result<()> {
     while !output.is_empty() {
         match reader.read(output) {
@@ -213,6 +223,7 @@ fn read_exact_retry<R: Read>(reader: &mut R, mut output: &mut [u8]) -> io::Resul
     Ok(())
 }
 
+/// Writes all bytes from input, retrying on EINTR.
 fn write_all_retry<W: Write>(writer: &mut W, mut input: &[u8]) -> io::Result<()> {
     while !input.is_empty() {
         match writer.write(input) {
@@ -236,6 +247,7 @@ mod tests {
     use std::cmp;
     use std::io::Cursor;
 
+    /// A test writer that accepts data in small chunks to exercise retry logic.
     struct ChunkedWriter {
         bytes: Vec<u8>,
         chunk: usize,
@@ -253,6 +265,7 @@ mod tests {
         }
     }
 
+    /// A test reader that provides data in small chunks to exercise retry logic.
     struct ChunkedReader {
         cursor: Cursor<Vec<u8>>,
         chunk: usize,

@@ -63,6 +63,7 @@ impl fmt::Display for ManifestError {
     }
 }
 
+/// Parses a 64-character hex string into a 32-byte SHA256 hash.
 fn parse_hex_sha256(hex_str: &str) -> Result<[u8; 32], ManifestError> {
     if hex_str.len() != 64 {
         return Err(ManifestError::InvalidHex);
@@ -75,6 +76,7 @@ fn parse_hex_sha256(hex_str: &str) -> Result<[u8; 32], ManifestError> {
     Ok(bytes)
 }
 
+/// Validates that a manifest path is relative, safe, and within length limits.
 fn is_valid_path(path: &str) -> bool {
     if path.is_empty()
         || path.starts_with('/')
@@ -99,6 +101,7 @@ fn is_valid_path(path: &str) -> bool {
     true
 }
 
+/// Computes the canonical byte representation of manifest data for HMAC signing.
 pub fn compute_canonical_data(version: u32, files: &[ManifestEntryRaw]) -> Vec<u8> {
     let mut sorted = files.to_vec();
     sorted.sort_by(|a, b| a.path.cmp(&b.path));
@@ -118,6 +121,7 @@ pub fn compute_canonical_data(version: u32, files: &[ManifestEntryRaw]) -> Vec<u
 }
 
 impl IntegrityManifest {
+    /// Parses a JSON manifest and verifies its HMAC signature.
     pub fn parse_and_verify(json_str: &str, hmac_key: &[u8]) -> Result<Self, ManifestError> {
         let raw: IntegrityManifestRaw =
             serde_json::from_str(json_str).map_err(|e| ManifestError::ParseError(e.to_string()))?;
@@ -167,6 +171,7 @@ impl IntegrityManifest {
     }
 }
 
+/// Signs a manifest with the given HMAC key and returns the JSON representation.
 pub fn sign_manifest(
     version: u32,
     files: Vec<ManifestEntryRaw>,
@@ -198,6 +203,7 @@ mod tests {
 
     const TEST_KEY: &[u8] = b"super_secret_key_for_testing";
 
+    /// Creates a test manifest with sample entries.
     fn create_test_manifest_raw() -> Vec<ManifestEntryRaw> {
         vec![
             ManifestEntryRaw {

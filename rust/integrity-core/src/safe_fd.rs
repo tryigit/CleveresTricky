@@ -13,10 +13,12 @@ mod imp {
     use std::io;
     use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
 
+    /// Extracts the raw file descriptor from an OwnedFd.
     pub fn get_raw_fd(fd: &OwnedFd) -> RawFd {
         fd.as_raw_fd()
     }
 
+    /// Opens a file relative to a directory FD without following symlinks.
     pub fn open_file_nofollow(dir_fd: RawFd, relative_path: &str) -> io::Result<OwnedFd> {
         if relative_path.is_empty() {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "empty path"));
@@ -72,6 +74,7 @@ mod imp {
         ))
     }
 
+    /// Opens a directory without following symlinks.
     pub fn open_dir_nofollow(path: &str) -> io::Result<OwnedFd> {
         let c_path =
             CString::new(path).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
@@ -87,6 +90,7 @@ mod imp {
         }
     }
 
+    /// Retrieves file metadata (size, device, inode, mode) for the given file descriptor.
     pub fn fstat_fd(fd: RawFd) -> io::Result<FileIdentity> {
         // SAFETY: stat struct is plain old data and initialized by fstat.
         let mut stat: libc::stat = unsafe { std::mem::zeroed() };
@@ -104,16 +108,19 @@ mod imp {
         })
     }
 
+    /// Checks if a file mode represents a regular file.
     #[allow(clippy::unnecessary_cast)]
     pub fn is_regular_file(mode: u32) -> bool {
         (mode & (libc::S_IFMT as u32)) == (libc::S_IFREG as u32)
     }
 
+    /// Checks if a file mode represents a symlink.
     #[allow(clippy::unnecessary_cast)]
     pub fn is_symlink(mode: u32) -> bool {
         (mode & (libc::S_IFMT as u32)) == (libc::S_IFLNK as u32)
     }
 
+    /// Lists all entries in a directory by file descriptor, returning (name, is_dir) pairs.
     #[allow(clippy::unnecessary_cast)]
     pub fn list_directory_at(dir_fd: RawFd) -> io::Result<Vec<(String, bool)>> {
         // SAFETY: Calling dup with a potentially valid FD.
@@ -175,6 +182,7 @@ mod imp {
         Ok(entries)
     }
 
+    /// Duplicates a file descriptor, returning a new owned FD.
     pub fn duplicate_fd(fd: RawFd) -> io::Result<OwnedFd> {
         let dup_fd = unsafe { libc::dup(fd) };
         if dup_fd < 0 {
@@ -195,10 +203,12 @@ mod imp {
     pub type OwnedFd = OwnedHandle;
     pub type RawFd = RawHandle;
 
+    /// Extracts the raw file descriptor (Windows handle) from an OwnedFd.
     pub fn get_raw_fd(fd: &OwnedFd) -> RawFd {
         fd.as_raw_handle()
     }
 
+    /// Windows stub: opens a file (does not enforce nofollow semantics).
     pub fn open_file_nofollow(_dir_fd: RawFd, relative_path: &str) -> io::Result<OwnedFd> {
         let f = File::open(relative_path)?;
         let handle = f.as_raw_handle();
@@ -207,6 +217,7 @@ mod imp {
         Ok(unsafe { OwnedHandle::from_raw_handle(handle) })
     }
 
+    /// Windows stub: opens a directory (does not enforce nofollow semantics).
     pub fn open_dir_nofollow(path: &str) -> io::Result<OwnedFd> {
         let f = File::open(path)?;
         let handle = f.as_raw_handle();
@@ -215,6 +226,7 @@ mod imp {
         Ok(unsafe { OwnedHandle::from_raw_handle(handle) })
     }
 
+    /// Windows stub: returns dummy file metadata for testing.
     pub fn fstat_fd(_fd: RawFd) -> io::Result<FileIdentity> {
         // Dummy implementation for tests on windows
         Ok(FileIdentity {
@@ -225,18 +237,22 @@ mod imp {
         })
     }
 
+    /// Windows stub: always returns true.
     pub fn is_regular_file(_mode: u32) -> bool {
         true
     }
 
+    /// Windows stub: always returns false.
     pub fn is_symlink(_mode: u32) -> bool {
         false
     }
 
+    /// Windows stub: returns a dummy directory listing.
     pub fn list_directory_at(_dir_fd: RawFd) -> io::Result<Vec<(String, bool)>> {
         Ok(vec![("test.txt".to_string(), false)])
     }
 
+    /// Windows stub: duplicates a file handle.
     #[allow(clippy::not_unsafe_ptr_arg_deref)]
     pub fn duplicate_fd(fd: RawFd) -> io::Result<OwnedFd> {
         // Windows dummy duplicate for tests

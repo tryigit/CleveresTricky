@@ -18,6 +18,10 @@ private const val WEB_UI_START_INITIAL_DELAY_MS = 50L
 private const val WEB_UI_START_MAX_DELAY_MS = 1_000L
 private val DEFERRED_KEYBOX_REFRESH_DELAYS_MS = longArrayOf(1_000L, 5_000L, 15_000L, 30_000L, 60_000L, 120_000L, 300_000L)
 
+/**
+ * Starts the WebUI bridge with exponential backoff retries for adapter registration.
+ * Returns the bridge instance on success, or null if registration fails after all attempts.
+ */
 private fun startWebUiBridge(
     configDir: File,
     isTampered: Boolean,
@@ -48,6 +52,9 @@ private fun startWebUiBridge(
     return null
 }
 
+/**
+ * Returns the count of active keyboxes, or zero if the count cannot be determined.
+ */
 private fun activeKeyboxCountOrZero(): Int =
     try {
         CertHack.getKeyboxCount()
@@ -55,6 +62,10 @@ private fun activeKeyboxCountOrZero(): Int =
         0
     }
 
+/**
+ * Retries a deferred keybox refresh with exponential backoff until the condition is active or attempts are exhausted.
+ * Returns true if keyboxes became active, false otherwise.
+ */
 internal suspend fun retryDeferredKeyboxRefresh(
     isActive: () -> Boolean,
     refresh: () -> Boolean,
@@ -84,11 +95,18 @@ internal suspend fun retryDeferredKeyboxRefresh(
     return isActive()
 }
 
+/**
+ * Checks if the configuration directory contains any configured keybox sources.
+ */
 internal fun hasConfiguredKeyboxSource(configDir: File): Boolean =
     runCatching { StoredKeyboxInventory.list(configDir).isNotEmpty() }
         .onFailure { Logger.w("Could not inspect configured keybox sources: ${it.message}") }
         .getOrDefault(false)
 
+/**
+ * Main entry point for the CleveresTricky Android adapter service.
+ * Initializes integrity verification, starts interceptors, and enters the main runtime loop.
+ */
 fun main(args: Array<String>) {
     Logger.i("Welcome to Service!")
     val isTampered =

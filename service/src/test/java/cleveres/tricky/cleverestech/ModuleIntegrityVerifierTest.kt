@@ -30,11 +30,17 @@ class ModuleIntegrityVerifierTest {
         ModuleIntegrityVerifier.resetForTesting()
     }
 
+    /**
+     * Computes the SHA-256 hash of data and returns it as a lowercase hex string.
+     */
     private fun sha256Hex(data: ByteArray): String {
         val digest = MessageDigest.getInstance("SHA-256").digest(data)
         return digest.joinToString("") { "%02x".format(it) }
     }
 
+    /**
+     * Creates a valid signed manifest and the corresponding files in the module directory.
+     */
     private fun createManifest(
         moduleDir: File,
         files: List<Pair<String, ByteArray>>,

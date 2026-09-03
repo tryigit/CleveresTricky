@@ -52,10 +52,12 @@ struct AdapterIdentity {
 }
 
 impl AdapterIdentity {
+    /// Packs an adapter lease into a 64-bit atomic state word.
     fn pack(lease: AdapterLease) -> u64 {
         ((lease.generation as u64) << 32) | u64::from(lease.pid)
     }
 
+    /// Unpacks a 64-bit atomic state word into an adapter lease, if valid.
     fn unpack(state: u64) -> Option<AdapterLease> {
         let pid = state as u32;
         (pid != 0).then_some(AdapterLease {
@@ -64,10 +66,12 @@ impl AdapterIdentity {
         })
     }
 
+    /// Returns the current adapter lease, if any adapter is registered.
     fn current(&self) -> Option<AdapterLease> {
         Self::unpack(self.state.load(std::sync::atomic::Ordering::Acquire))
     }
 
+    /// Publishes a new adapter lease with an incremented generation number.
     fn publish(&self, pid: u32) -> AdapterLease {
         assert_ne!(pid, 0);
         let mut current = self.state.load(std::sync::atomic::Ordering::Acquire);
@@ -89,6 +93,7 @@ impl AdapterIdentity {
         }
     }
 
+    /// Invalidates the given adapter lease by incrementing its generation.
     fn invalidate(&self, lease: AdapterLease) {
         let invalid = (u64::from(lease.generation.wrapping_add(1))) << 32;
         let _ = self.state.compare_exchange(
@@ -99,6 +104,7 @@ impl AdapterIdentity {
         );
     }
 
+    /// Checks if the given adapter lease is still the current one.
     fn matches(&self, lease: AdapterLease) -> bool {
         self.current() == Some(lease)
     }
@@ -111,6 +117,7 @@ struct AdapterRetryPlan {
     circuit_open: bool,
 }
 
+/// Daemon entry point. Runs the main supervisor loop and exits on error.
 fn main() {
     if let Err(error) = run() {
         eprintln!("cleverestrickyd: {error}");
@@ -118,6 +125,7 @@ fn main() {
     }
 }
 
+/// Initializes the daemon, spawns worker threads, and supervises the Android adapter.
 fn run() -> io::Result<()> {
     harden_process()?;
     let module_dir = Arc::new(module_directory()?);
@@ -224,6 +232,7 @@ fn run() -> io::Result<()> {
     }
 }
 
+/// Determines the module directory from the first argument or the executable's parent.
 fn module_directory() -> io::Result<PathBuf> {
     if let Some(argument) = env::args_os().nth(1) {
         return Ok(PathBuf::from(argument));
@@ -235,6 +244,7 @@ fn module_directory() -> io::Result<PathBuf> {
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "daemon has no module parent"))
 }
 
+/// Validates that the module directory is not a symlink and contains required files.
 fn validate_module_directory(module_dir: &Path) -> io::Result<()> {
     let metadata = fs::symlink_metadata(module_dir)?;
     if metadata.file_type().is_symlink() || !metadata.is_dir() {
@@ -246,6 +256,7 @@ fn validate_module_directory(module_dir: &Path) -> io::Result<()> {
     require_regular_file(&module_dir.join("service.apk"), "service.apk")
 }
 
+/// Ensures the given path is a regular file and not a symlink.
 fn require_regular_file(path: &Path, name: &str) -> io::Result<()> {
     let metadata = fs::symlink_metadata(path)?;
     if metadata.file_type().is_symlink() || !metadata.is_file() {
@@ -257,6 +268,7 @@ fn require_regular_file(path: &Path, name: &str) -> io::Result<()> {
     Ok(())
 }
 
+/// Validates that a backend auth value is a 64-character lowercase hex string with at least one non-zero byte.
 fn valid_backend_auth_value(value: &str) -> bool {
     value.len() == BACKEND_AUTH_HEX_BYTES
         && value
@@ -265,6 +277,7 @@ fn valid_backend_auth_value(value: &str) -> bool {
         && value.bytes().any(|byte| byte != b'0')
 }
 
+/// Retrieves and validates the backend authentication capability from the environment.
 fn backend_auth_env() -> io::Result<OsString> {
     let value = env::var_os(BACKEND_AUTH_ENV)
         .ok_or_else(|| io::Error::other("backend capability is unavailable"))?;
@@ -277,6 +290,7 @@ fn backend_auth_env() -> io::Result<OsString> {
     Ok(value)
 }
 
+/// Hardens the daemon process with prctl to track parent death and disable debugging.
 fn harden_process() -> io::Result<()> {
     let parent_pid = unsafe { libc::getppid() };
     if parent_pid <= 1 {
@@ -307,6 +321,7 @@ fn harden_process() -> io::Result<()> {
     Ok(())
 }
 
+/// Spawns the Android adapter process using app_process with the service APK.
 fn spawn_android_adapter(module_dir: &Path) -> io::Result<Child> {
     let classpath = module_dir.join("service.apk");
     let backend_auth = backend_auth_env()?;
@@ -339,6 +354,7 @@ fn spawn_android_adapter(module_dir: &Path) -> io::Result<Child> {
     command.spawn()
 }
 
+/// Spawns the backend process and returns the child handle along with the IPC socket pair.
 fn spawn_backend(module_dir: &Path, adapter_pid: u32) -> io::Result<(Child, UnixStream)> {
     let path = module_dir.join("cleverestricky_backend");
     require_regular_file(&path, "cleverestricky_backend")?;
@@ -366,6 +382,7 @@ fn spawn_backend(module_dir: &Path, adapter_pid: u32) -> io::Result<(Child, Unix
     Ok((child, daemon_broker))
 }
 
+/// Sets the close-on-exec flag for the given file descriptor.
 fn set_cloexec(fd: RawFd) -> io::Result<()> {
     // SAFETY: F_GETFD/F_SETFD are scalar descriptor operations and retain no pointers.
     let flags = unsafe { libc::fcntl(fd, libc::F_GETFD) };
@@ -379,6 +396,7 @@ fn set_cloexec(fd: RawFd) -> io::Result<()> {
     Ok(())
 }
 
+/// Duplicates the source FD to the fixed backend broker FD slot and clears close-on-exec.
 fn inherit_broker_fd(source: RawFd) -> io::Result<()> {
     if source != BACKEND_BROKER_FD {
         // SAFETY: both descriptors are scalar values. dup2 atomically replaces the target and
@@ -405,6 +423,7 @@ enum BackendRunOutcome {
     AdapterChanged,
 }
 
+/// Runs a single backend instance, monitoring it until exit or adapter change.
 fn run_backend_once(
     module_dir: &Path,
     lease: AdapterLease,
@@ -457,6 +476,7 @@ struct BackendRetryPlan {
     circuit_open: bool,
 }
 
+/// Computes a retry plan for the backend with exponential backoff and circuit breaking.
 fn backend_retry_plan(previous_rapid_failures: u32, runtime: Duration) -> BackendRetryPlan {
     if runtime >= BACKEND_STABLE_INTERVAL {
         return BackendRetryPlan {
@@ -483,6 +503,7 @@ fn backend_retry_plan(previous_rapid_failures: u32, runtime: Duration) -> Backen
     }
 }
 
+/// Computes a retry plan for the adapter with exponential backoff and circuit breaking.
 fn adapter_retry_plan(previous_rapid_failures: u32, runtime: Duration) -> AdapterRetryPlan {
     if runtime >= ADAPTER_STABLE_INTERVAL {
         return AdapterRetryPlan {
@@ -507,6 +528,7 @@ fn adapter_retry_plan(previous_rapid_failures: u32, runtime: Duration) -> Adapte
     }
 }
 
+/// Supervises the backend process, restarting it with backoff on failures.
 fn supervise_backend(
     module_dir: PathBuf,
     adapter_identity: Arc<AdapterIdentity>,
@@ -541,6 +563,7 @@ fn supervise_backend(
     }
 }
 
+/// Spawns worker threads to handle file capability requests from the adapter.
 fn spawn_capability_workers(
     listener: UnixListener,
     adapter_identity: Arc<AdapterIdentity>,
@@ -564,6 +587,7 @@ fn spawn_capability_workers(
     Ok(())
 }
 
+/// Accepts and handles capability IPC requests from the adapter in a worker loop.
 fn serve_capability_worker(
     listener: UnixListener,
     adapter_identity: Arc<AdapterIdentity>,
@@ -613,6 +637,7 @@ fn serve_capability_worker(
     }
 }
 
+/// Handles a single capability request (ping or file write) from a client.
 fn handle_capability_request(
     client: &mut UnixStream,
     peer_is_adapter: bool,
@@ -640,6 +665,7 @@ struct RegisteredAdapter {
     lease: AdapterLease,
 }
 
+/// Serves WebUI IPC requests, relaying them to the registered adapter and handling integrity checks.
 fn serve_web(
     listener: UnixListener,
     adapter_identity: Arc<AdapterIdentity>,
@@ -763,6 +789,7 @@ fn serve_web(
     }
 }
 
+/// Handles a full integrity verification request by loading and verifying the manifest.
 fn handle_integrity_verify_full(
     client: &mut UnixStream,
     module_dir: &Path,
@@ -845,6 +872,7 @@ fn handle_integrity_verify_full(
     }
 }
 
+/// Handles a single-file integrity verification request using a cached or freshly loaded manifest.
 fn handle_integrity_verify_file(
     client: &mut UnixStream,
     module_dir: &Path,
@@ -969,6 +997,7 @@ fn handle_integrity_verify_file(
     }
 }
 
+/// Handles a module deletion request by wiping the module directory and rebooting.
 fn handle_integrity_delete_module(client: &mut UnixStream, module_dir: &Path) {
     let _ = delete_dir_contents_safe(module_dir);
     let _ = write_frame(client, OP_INTEGRITY_DELETE_MODULE, 0, &[0]);
@@ -977,6 +1006,7 @@ fn handle_integrity_delete_module(client: &mut UnixStream, module_dir: &Path) {
         .or_else(|_| Command::new("reboot").status());
 }
 
+/// Recursively deletes all files and subdirectories within the given directory.
 fn delete_dir_contents_safe(dir: &Path) -> io::Result<()> {
     if let Ok(entries) = fs::read_dir(dir) {
         for entry in entries.flatten() {
@@ -995,6 +1025,7 @@ fn delete_dir_contents_safe(dir: &Path) -> io::Result<()> {
     Ok(())
 }
 
+/// Forwards a web request to the registered adapter and relays the response back to the client.
 fn forward_web_request_with_timeout(
     client: &mut UnixStream,
     request: FrameHeader,
@@ -1027,10 +1058,12 @@ fn forward_web_request_with_timeout(
     relay_exact(target, client, response.payload_len, scratch)
 }
 
+/// Replies to a request with an error frame derived from an IO error.
 fn reply_error(stream: &mut UnixStream, opcode: u16, error: &io::Error) -> io::Result<()> {
     reply_text_error(stream, opcode, &error.to_string())
 }
 
+/// Replies to a request with an error frame containing the given message.
 fn reply_text_error(stream: &mut UnixStream, opcode: u16, message: &str) -> io::Result<()> {
     let bytes = message.as_bytes();
     write_frame(
@@ -1053,6 +1086,7 @@ mod tests {
     }
 
     impl TestRoot {
+        /// Creates a new temporary test root directory.
         fn new() -> Self {
             static COUNTER: AtomicU64 = AtomicU64::new(1);
             let path = std::env::temp_dir().join(format!(
@@ -1064,6 +1098,7 @@ mod tests {
             Self { path }
         }
 
+        /// Opens the test root as a TrustedDir.
         fn trusted(&self) -> TrustedDir {
             TrustedDir::open(&self.path).unwrap()
         }
@@ -1075,6 +1110,7 @@ mod tests {
         }
     }
 
+    /// Constructs a configuration file write payload with path and body.
     fn config_payload(path: &str, body: &[u8]) -> Vec<u8> {
         let path = path.as_bytes();
         let body_len = u32::try_from(body.len()).unwrap();
@@ -1088,6 +1124,7 @@ mod tests {
         payload
     }
 
+    /// Reads a frame header and payload from the stream.
     fn read_payload(stream: &mut UnixStream, max: usize) -> (FrameHeader, Vec<u8>) {
         let header = read_header_bounded(stream, max).unwrap();
         let mut body = vec![0u8; header.payload_len];
@@ -1095,6 +1132,7 @@ mod tests {
         (header, body)
     }
 
+    /// Tests that a web request can trigger a file write without deadlock.
     fn exercise_reentrant_web_write(path: &str, body: Vec<u8>) {
         let test = TestRoot::new();
         let root = Arc::new(test.trusted());

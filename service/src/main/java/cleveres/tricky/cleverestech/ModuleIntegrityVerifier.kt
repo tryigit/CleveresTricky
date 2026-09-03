@@ -12,6 +12,10 @@ import java.util.concurrent.atomic.AtomicInteger
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
+/**
+ * Verifies the integrity of the module directory against a signed manifest.
+ * Supports both full verification and targeted single-file verification.
+ */
 object ModuleIntegrityVerifier {
 
     private const val MANIFEST_VERSION = 1
@@ -37,6 +41,10 @@ object ModuleIntegrityVerifier {
     internal var hmacKeyProvider: () -> ByteArray = ::deriveDefaultHmacKey
     internal var moduleDirProvider: () -> String = { getModuleDir() }
 
+    /**
+     * Performs full integrity verification of all files in the manifest.
+     * Queries the daemon for verification if available, otherwise verifies locally.
+     */
     fun verifyFull(): IntegrityResult {
         fullVerificationCount.incrementAndGet()
         val daemonResult = queryDaemon(OP_INTEGRITY_VERIFY_FULL, deriveDefaultHmacKey())
@@ -46,6 +54,10 @@ object ModuleIntegrityVerifier {
         return verifyFullLocal()
     }
 
+    /**
+     * Verifies a single file against the manifest.
+     * Queries the daemon if available, otherwise verifies locally using the provided or cached manifest.
+     */
     fun verifySingleFile(
         relativePath: String,
         providedManifest: ParsedManifest? = cachedManifest,
@@ -60,6 +72,9 @@ object ModuleIntegrityVerifier {
         return verifySingleFileLocal(relativePath, manifest)
     }
 
+    /**
+     * Performs full local integrity verification by checking all manifest entries and scanning for unexpected files.
+     */
     private fun verifyFullLocal(): IntegrityResult {
         val violations = mutableListOf<String>()
         val moduleDir = File(moduleDirProvider())
@@ -124,6 +139,9 @@ object ModuleIntegrityVerifier {
         return if (violations.isEmpty()) IntegrityResult.Pass else IntegrityResult.Fail(violations)
     }
 
+    /**
+     * Verifies a single file locally against the manifest entry.
+     */
     private fun verifySingleFileLocal(relativePath: String, manifest: ParsedManifest?): IntegrityResult {
         if (manifest == null) {
             return IntegrityResult.Fail(listOf("No manifest available for single-file verification"))
@@ -165,6 +183,10 @@ object ModuleIntegrityVerifier {
         }
     }
 
+    /**
+     * Loads and verifies the integrity manifest, caching it on success.
+     * Returns the cached manifest if available, or null if loading fails.
+     */
     fun loadManifest(): ParsedManifest? {
         cachedManifest?.let { return it }
         val moduleDir = File(moduleDirProvider())
@@ -179,6 +201,10 @@ object ModuleIntegrityVerifier {
         }
     }
 
+    /**
+     * Queries the daemon for integrity verification via IPC socket.
+     * Returns the verification result if successful, or null if the daemon is unavailable.
+     */
     private fun queryDaemon(opcode: Int, payload: ByteArray): IntegrityResult? {
         if (remoteDisabledForTesting) return null
         return try {
@@ -251,6 +277,9 @@ object ModuleIntegrityVerifier {
         }
     }
 
+    /**
+     * Loads the manifest file, parses it, and verifies the HMAC signature.
+     */
     private fun loadAndVerifyManifest(manifestFile: File): ParsedManifest {
         if (!Files.isRegularFile(manifestFile.toPath(), LinkOption.NOFOLLOW_LINKS)) {
             throw SecurityException("Manifest file is missing or not a regular file")
@@ -330,6 +359,9 @@ object ModuleIntegrityVerifier {
         return ParsedManifest(version, files, signature)
     }
 
+    /**
+     * Computes the canonical byte representation of the manifest for HMAC signing.
+     */
     internal fun computeCanonicalHmacData(version: Int, files: List<ManifestFileEntry>): ByteArray {
         val sorted = files.sortedBy { it.path }
         val sb = StringBuilder()
@@ -342,11 +374,17 @@ object ModuleIntegrityVerifier {
         return sb.toString().toByteArray(Charsets.UTF_8)
     }
 
+    /**
+     * Calculates the SHA-256 hash of a file with size bounds enforcement.
+     */
     @OptIn(ExperimentalStdlibApi::class)
     private fun calculateSha256(file: File): ByteArray {
         return sha256FileSnapshotBounded(file, 0, MAX_PAYLOAD_BYTES)
     }
 
+    /**
+     * Validates that a path is safe: relative, no traversal, no null bytes, and within length limits.
+     */
     private fun isPathSafe(path: String): Boolean {
         if (path.isEmpty() || path.length > 512) return false
         if (path.startsWith("/")) return false
@@ -356,6 +394,9 @@ object ModuleIntegrityVerifier {
         return components.none { it.isEmpty() || it == ".." || it == "." || it.length > 255 }
     }
 
+    /**
+     * Scans the module directory recursively for unexpected files not listed in the manifest.
+     */
     private fun scanForUnexpectedFiles(
         moduleDir: File,
         manifest: ParsedManifest,
@@ -385,6 +426,9 @@ object ModuleIntegrityVerifier {
         }
     }
 
+    /**
+     * Checks if a file should be ignored during integrity verification (e.g., PID files, manifest itself).
+     */
     internal fun isIgnoredFile(relativePath: String): Boolean {
         val name = relativePath.substringAfterLast("/")
         return name in IGNORED_FILES || relativePath.endsWith(".sha256") ||
@@ -393,6 +437,9 @@ object ModuleIntegrityVerifier {
             relativePath in CONFIG_TEMPLATE_FILES
     }
 
+    /**
+     * Checks if a file type is critical (e.g., .so, .apk, executables).
+     */
     private fun isCriticalFileType(relativePath: String): Boolean {
         val name = relativePath.substringAfterLast("/")
         return name.endsWith(".so") ||
@@ -401,9 +448,15 @@ object ModuleIntegrityVerifier {
             (relativePath.count { it == '/' } == 0 && name.endsWith(".sh"))
     }
 
+    /**
+     * Converts a byte array to a lowercase hex string.
+     */
     @OptIn(ExperimentalStdlibApi::class)
     private fun bytesToHex(bytes: ByteArray): String = bytes.toHexString(HexFormat.Default)
 
+    /**
+     * Converts a hex string to a byte array.
+     */
     private fun hexToBytes(hex: String): ByteArray {
         require(hex.length % 2 == 0) { "Hex string must have even length" }
         return ByteArray(hex.length / 2) { i ->
@@ -411,6 +464,9 @@ object ModuleIntegrityVerifier {
         }
     }
 
+    /**
+     * Derives the default HMAC key from the build checksum and domain constant.
+     */
     private fun deriveDefaultHmacKey(): ByteArray {
         val md = MessageDigest.getInstance("SHA-256")
         md.update(BuildConfig.CHECKSUM.toByteArray(Charsets.UTF_8))
@@ -418,6 +474,9 @@ object ModuleIntegrityVerifier {
         return md.digest()
     }
 
+    /**
+     * Resets verification state and counters for testing.
+     */
     @androidx.annotation.VisibleForTesting
     internal fun resetForTesting() {
         cachedManifest = null

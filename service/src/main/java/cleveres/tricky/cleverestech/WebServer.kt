@@ -35,6 +35,9 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 
+/**
+ * Validates that a package name contains only allowed characters and is within length limits.
+ */
 private fun isValidPkgName(s: String): Boolean {
     if (s.length !in 1..255) return false
     for (i in 0 until s.length) {
@@ -44,6 +47,9 @@ private fun isValidPkgName(s: String): Boolean {
     return true
 }
 
+/**
+ * Validates that a template name contains only alphanumeric, underscore, and hyphen characters.
+ */
 private fun isValidTemplateName(s: String): Boolean {
     if (s.length !in 1..64) return false
     for (i in 0 until s.length) {
@@ -62,6 +68,9 @@ private val clonedKeyboxFilenameSuffix = Regex("""\s*\((\d+)\)(?=\s*(?:\(\d+\)\s
 private fun normalizeKeyboxUploadFilename(name: String): String =
     name.replace(clonedKeyboxFilenameSuffix) { match -> "_${match.groupValues[1]}" }
 
+/**
+ * Returns the current system locale as a BCP 47 language tag, defaulting to "en" if unavailable.
+ */
 private fun currentSystemLocaleTag(): String {
     val locale =
         runCatching { Resources.getSystem().configuration.locales[0] }
@@ -72,6 +81,9 @@ private fun currentSystemLocaleTag(): String {
     return if (tag.isBlank()) "en" else tag
 }
 
+/**
+ * Validates that a keybox filename is within length limits, uses safe characters, and ends with .xml or .cbox.
+ */
 private fun isValidKeyboxFilename(s: String): Boolean {
     if (s.length !in 5..128 || s.startsWith('.')) return false
     for (i in 0 until s.length) {
@@ -82,6 +94,9 @@ private fun isValidKeyboxFilename(s: String): Boolean {
     return lower.endsWith(".xml") || lower.endsWith(".cbox")
 }
 
+/**
+ * Validates that a key=value pair has valid characters in the key portion and is properly formatted.
+ */
 private fun isValidKeyValue(s: String): Boolean {
     if (s.isEmpty()) return false
     val eqIdx = s.indexOf('=')
@@ -93,6 +108,9 @@ private fun isValidKeyValue(s: String): Boolean {
     return true
 }
 
+/**
+ * Validates that a build variable value contains only a safe subset of characters.
+ */
 private fun isValidSafeBuildVarValue(s: String): Boolean {
     for (i in 0 until s.length) {
         val c = s[i]
@@ -106,6 +124,9 @@ private fun isValidSafeBuildVarValue(s: String): Boolean {
     return true
 }
 
+/**
+ * Validates that a target package name contains only allowed characters including wildcards.
+ */
 private fun isValidTargetPkg(s: String): Boolean {
     if (s.length !in 1..255) return false
     for (i in 0 until s.length) {
@@ -115,6 +136,9 @@ private fun isValidTargetPkg(s: String): Boolean {
     return true
 }
 
+/**
+ * Validates that a security patch value is either a valid date format or an allowed special value.
+ */
 private fun isValidSecurityPatchValue(
     value: String,
     allowSpecial: Boolean,
@@ -134,6 +158,9 @@ private fun isValidSecurityPatchValue(
 
 private class RestoreKeyboxActivationException : IOException("Keybox activation failed after restore")
 
+/**
+ * Validates that a filename contains only safe alphanumeric and punctuation characters.
+ */
 private fun isValidFilename(s: String): Boolean {
     if (s.isEmpty()) return false
     for (i in 0 until s.length) {
@@ -143,6 +170,9 @@ private fun isValidFilename(s: String): Boolean {
     return true
 }
 
+/**
+ * Parses an unsigned long from a character sequence within the specified range, returning null on overflow or invalid input.
+ */
 private fun parseUnsignedLong(
     value: CharSequence,
     start: Int,
@@ -158,6 +188,9 @@ private fun parseUnsignedLong(
     return result
 }
 
+/**
+ * Parses the combined user and system CPU ticks from a /proc/[pid]/stat line.
+ */
 internal fun parseProcessCpuTicks(stat: CharSequence): Long? {
     val commandEnd = stat.lastIndexOf(')')
     if (commandEnd < 0) return null
@@ -181,6 +214,9 @@ internal fun parseProcessCpuTicks(stat: CharSequence): Long? {
     return if (user <= Long.MAX_VALUE - system) user + system else null
 }
 
+/**
+ * Parses the total CPU ticks from a /proc/stat cpu line by summing the first 8 fields.
+ */
 internal fun parseTotalCpuTicks(stat: CharSequence): Long? {
     var index = 0
     while (index < stat.length && stat[index].isWhitespace()) index++

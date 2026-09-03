@@ -10,6 +10,10 @@ import java.util.concurrent.atomic.AtomicInteger
 private const val INTEGRITY_DEBOUNCE_MS = 100L
 private const val MAX_PENDING_PATHS = 64
 
+/**
+ * Watches the module directory for filesystem events and triggers integrity verification.
+ * Uses FileObserver to detect modifications, deletions, and moves.
+ */
 internal object ModuleIntegrityWatcher {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var targetedScheduler: ConflatedRefreshScheduler? = null
@@ -32,6 +36,10 @@ internal object ModuleIntegrityWatcher {
     val targetedVerificationExecutions = AtomicInteger(0)
     val fullVerificationExecutions = AtomicInteger(0)
 
+    /**
+     * Starts watching the module directory for integrity violations.
+     * Registers FileObserver instances for the directory, its parent, and subdirectories.
+     */
     @Synchronized
     fun start(
         directory: File,
@@ -114,6 +122,9 @@ internal object ModuleIntegrityWatcher {
         }
     }
 
+    /**
+     * Attempts to register FileObserver instances for the module directory and its subdirectories.
+     */
     private fun tryArmChildLocked(directory: File) {
         if (childObserver != null) return
         if (!directory.exists()) return
@@ -197,6 +208,9 @@ internal object ModuleIntegrityWatcher {
         }
     }
 
+    /**
+     * Schedules a targeted integrity check for a specific file path, coalescing duplicate events.
+     */
     private fun scheduleTargetedCheck(relPath: String) {
         synchronized(lock) {
             if (!isRunning) return
@@ -214,6 +228,9 @@ internal object ModuleIntegrityWatcher {
         }
     }
 
+    /**
+     * Stops and clears all child and subdirectory FileObserver instances.
+     */
     private fun disarmChildLocked() {
         childObserver?.stopWatching()
         childObserver = null
@@ -223,6 +240,9 @@ internal object ModuleIntegrityWatcher {
         subObservers.clear()
     }
 
+    /**
+     * Stops all FileObserver instances and clears watcher state.
+     */
     @Synchronized
     fun stop() {
         synchronized(lock) {
@@ -240,14 +260,23 @@ internal object ModuleIntegrityWatcher {
         }
     }
 
+    /**
+     * Returns true if the child observer is currently active.
+     */
     @androidx.annotation.VisibleForTesting
     internal fun isChildObserverActiveForTesting(): Boolean =
         synchronized(lock) { childObserver != null }
 
+    /**
+     * Returns true if the parent observer is currently active.
+     */
     @androidx.annotation.VisibleForTesting
     internal fun isParentObserverActiveForTesting(): Boolean =
         synchronized(lock) { parentObserver != null }
 
+    /**
+     * Injects a file observer event into the child observer for testing.
+     */
     @androidx.annotation.VisibleForTesting
     internal fun injectChildEventForTesting(event: Int, path: String?) {
         synchronized(lock) {
@@ -255,10 +284,16 @@ internal object ModuleIntegrityWatcher {
         }
     }
 
+    /**
+     * Returns the number of active subdirectory observers.
+     */
     @androidx.annotation.VisibleForTesting
     internal fun subObserverCountForTesting(): Int =
         synchronized(lock) { subObservers.size }
 
+    /**
+     * Injects a file observer event into a specific subdirectory observer for testing.
+     */
     @androidx.annotation.VisibleForTesting
     internal fun injectSubEventForTesting(index: Int, event: Int, path: String?) {
         synchronized(lock) {
@@ -268,6 +303,9 @@ internal object ModuleIntegrityWatcher {
         }
     }
 
+    /**
+     * Injects a file observer event into the parent observer for testing.
+     */
     @androidx.annotation.VisibleForTesting
     internal fun injectParentEventForTesting(event: Int, path: String?) {
         synchronized(lock) {
@@ -275,10 +313,16 @@ internal object ModuleIntegrityWatcher {
         }
     }
 
+    /**
+     * Returns the number of pending dirty paths awaiting verification.
+     */
     @androidx.annotation.VisibleForTesting
     internal fun pendingDirtyCountForTesting(): Int =
         synchronized(lock) { pendingDirtyPaths.size }
 
+    /**
+     * Resets watcher state and counters for testing.
+     */
     @androidx.annotation.VisibleForTesting
     internal fun resetForTesting() {
         stop()
