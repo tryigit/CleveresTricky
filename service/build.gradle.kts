@@ -70,7 +70,7 @@ android {
             val integrityPublicKey =
                 System.getenv("INTEGRITY_PUBLIC_KEY")?.trim()
                     ?: rootProject.file("keys/integrity_signer.pub").takeIf { f -> f.exists() }?.readText()?.trim()
-                    ?: "eaa2491abc562da68f2e9383043676617ec0633148ae6c66c0f3791085e79b31"
+                    ?: "9f9f8b00a8c5e3c9849eed6c465b1d1f46747d3acbd74afb91290ebc40c1873c"
             it.buildConfigField("String", "INTEGRITY_PUBLIC_KEY", "\"$integrityPublicKey\"")
         }
     }
