@@ -37,6 +37,14 @@ For every non-trivial bug fix or behavior change:
 7. Re-search references after editing to verify no old bypass, duplicate implementation, compatibility accessor, or alternate path still violates the invariant.
 8. Inspect the final diff as a whole. Broadly audit; narrowly patch. Do not mix unrelated cleanup into a bug fix merely because the file is already open.
 
+### Mandatory repository-level context and cross-boundary mapping
+
+Engineering analysis, bug fixes, code reviews, and architecture audits must never occur in a single-file vacuum. When presented with a specific file, function, or snippet, agents must not treat that isolated scope as sufficient context:
+
+1. **Whole-repository tree and build topology mapping:** Map the full repository tree, workspace manifests, build scripts, packaging configurations, and module dependency graphs before formulating changes or audits. A runtime expectation in code is invalid if build definitions, linking flags, compilation units, or packaging rules do not uphold it.
+2. **Cross-language contract traversal:** When an invariant spans languages, runtimes, or compilation units (such as managed code, native implementations, bridge layers, or script environments), agents must audit both sides of the boundary. A caller that appears correct in isolation may violate invariants or expose vulnerabilities due to how the callee across the boundary processes, marshals, validates, or frees the underlying resource.
+3. **End-to-end resource and lifecycle symmetry:** Verify that handles, file descriptors, memory buffers, capabilities, and transaction states retain identical security bounds, ownership semantics, and failure-handling guarantees on every hop across language and subsystem boundaries.
+
 ### Mandatory security and resource-boundary reasoning
 
 - Enforce size/count/resource limits before expensive work such as hashing, parsing, decrypting, decompressing, allocating, or reading an entire stream. Metadata checks alone are not sufficient when a file/stream can change during the operation; the operation itself must remain bounded.
@@ -390,6 +398,16 @@ Agents must enforce:
 - **Defensive ingress and egress:** Data entering a shared container must be defensively copied or frozen; data leaving a shared container must be defensively copied or projected through immutable views.
 - **State temporal immutability:** Ensure external mutations cannot retroactively alter previously returned, cached, or scheduled values.
 
+### Multi-file repository context and cross-language invariant verification
+
+Never evaluate, review, or modify code within an isolated single-file or single-snippet context. In multi-tier systems, vulnerabilities and architectural defects rarely reside entirely within one function or file; they emerge at the intersections of languages, compilation units, and boundary bridges.
+
+Agents must enforce:
+- **Comprehensive repository context:** When an instruction or issue focuses on a single file, map the entire repository topology, build manifests, and configuration definitions to understand how that file is built, linked, packaged, and invoked.
+- **Cross-language and cross-layer auditing:** Never assume an abstraction is safe because its high-level wrapper looks sound. Trace calls across foreign function interfaces, native bridges, IPC mechanisms, and script runtimes to verify that receiver implementations uphold the exact invariants, bounds checks, error translations, and resource lifecycles expected by the caller.
+- **Boundary assumption alignment:** Identify and reconcile differing platform or language assumptions (such as error models, nullability, memory layout, resource ownership, file descriptor lifecycles, and concurrency primitives). A caller must never assume guarantees that the foreign callee does not enforce, and a callee must never rely on sanitization that the caller failed to execute.
+- **Whole-system impact analysis:** Audit every sibling producer, consumer, build script, and test suite across all touched languages and layers before committing changes.
+
 ### Zero-Trust adversarial reasoning standard
 
 A zero-trust audit is an adversarial examination of system invariants across space and time, not a passive check that existing tests pass or that code compiles without errors. Tests only verify scenarios their authors anticipated; agents must actively probe what the code failed to prevent.
@@ -401,6 +419,7 @@ During any discovery, audit, or verification pass, agents must systematically qu
 4. **Lifecycle & Resource Determinism:** Where can cancellation, exceptions, crash loops, or early returns leak child processes, file descriptors, daemon threads, or un-zeroized sensitive memory buffers?
 5. **Temporal & Path TOCTOU:** Where can external state (files, paths, symlinks, UID mappings, metadata) change between check and use, invalidating previous verification?
 6. **Failure Masking & Coercion:** Where are non-success states silently coerced into synthetic domain values, collapsing distinct failure modes into false positives or false negatives?
+7. **Cross-Language & Repository Topology Gaps:** Where does a single-file assumption collapse across foreign function interfaces, IPC boundaries, native bridges, or build/packaging manifests?
 
 ### Code comment discipline and signal-to-noise standard
 
