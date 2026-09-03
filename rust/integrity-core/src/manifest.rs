@@ -148,7 +148,19 @@ pub fn compute_canonical_data(version: u32, files: &[ManifestEntryRaw]) -> Vec<u
 }
 
 impl IntegrityManifest {
+    /// Parses and verifies the manifest JSON against the trusted Ed25519 public key using the default build policy.
+    /// In release builds, unsigned manifests are strictly rejected.
+    /// In debug builds, unsigned manifests are accepted for local testing.
     pub fn parse_and_verify(json_str: &str, public_key: &[u8; 32]) -> Result<Self, ManifestError> {
+        Self::parse_and_verify_with_policy(json_str, public_key, cfg!(debug_assertions))
+    }
+
+    /// Parses and verifies the manifest JSON with an explicit policy regarding unsigned manifests.
+    pub fn parse_and_verify_with_policy(
+        json_str: &str,
+        public_key: &[u8; 32],
+        allow_unsigned: bool,
+    ) -> Result<Self, ManifestError> {
         let raw: IntegrityManifestRaw =
             serde_json::from_str(json_str).map_err(|e| ManifestError::ParseError(e.to_string()))?;
 
@@ -156,8 +168,11 @@ impl IntegrityManifest {
             return Err(ManifestError::UnsupportedVersion);
         }
 
-        // Non-empty signatures must be valid Ed25519; empty means unsigned dev/PR build.
-        if !raw.signature.is_empty() {
+        if raw.signature.is_empty() {
+            if !allow_unsigned {
+                return Err(ManifestError::InvalidSignature);
+            }
+        } else {
             let canonical_bytes = compute_canonical_data(raw.version, &raw.files);
             let sig_bytes = parse_hex_signature(&raw.signature)?;
 
@@ -344,5 +359,26 @@ mod tests {
         let json = sign_manifest(1, vec![], &TEST_DEV_SIGNING_KEY).unwrap();
         let manifest = IntegrityManifest::parse_and_verify(&json, &test_verifying_key()).unwrap();
         assert!(manifest.entries.is_empty());
+    }
+
+    #[test]
+    fn test_unsigned_manifest_policy() {
+        let files = create_test_manifest_raw();
+        let raw = IntegrityManifestRaw {
+            version: 1,
+            files,
+            signature: String::new(),
+        };
+        let json = serde_json::to_string(&raw).unwrap();
+
+        // When unsigned manifests are forbidden (e.g. production release), it must fail
+        let res_disallowed =
+            IntegrityManifest::parse_and_verify_with_policy(&json, &test_verifying_key(), false);
+        assert_eq!(res_disallowed.unwrap_err(), ManifestError::InvalidSignature);
+
+        // When unsigned manifests are explicitly allowed (e.g. dev/test), it must succeed
+        let res_allowed =
+            IntegrityManifest::parse_and_verify_with_policy(&json, &test_verifying_key(), true);
+        assert!(res_allowed.is_ok());
     }
 }

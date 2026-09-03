@@ -64,14 +64,31 @@ android {
                 signingConfig = signingConfigs.getByName("release")
             }
         }
+        val isProductionRelease =
+            System.getenv("CI_RELEASE") == "true" ||
+                (System.getenv("CI") == "true" && System.getenv("GITHUB_EVENT_NAME") != "pull_request") ||
+                System.getenv("REQUIRE_INTEGRITY_SIGNING_KEY") == "true"
+
+        fun isValidPublicKeyHex(k: String?): Boolean =
+            !k.isNullOrBlank() && k.length == 64 && k.all { c -> c in '0'..'9' || c in 'a'..'f' || c in 'A'..'F' }
+
         forEach {
             val checksum = calculateChecksum(it.name)
             it.buildConfigField("String", "CHECKSUM", "\"$checksum\"")
-            val integrityPublicKey =
-                System.getenv("INTEGRITY_PUBLIC_KEY")?.trim()
-                    ?: rootProject.file("keys/integrity_signer.pub").takeIf { f -> f.exists() }?.readText()?.trim()
-                    ?: "9f9f8b00a8c5e3c9849eed6c465b1d1f46747d3acbd74afb91290ebc40c1873c"
+
+            val envKey = System.getenv("INTEGRITY_PUBLIC_KEY")?.trim()
+            val fileKey = rootProject.file("keys/integrity_signer.pub").takeIf { f -> f.exists() }?.readText()?.trim()
+            val defaultKey = "9f9f8b00a8c5e3c9849eed6c465b1d1f46747d3acbd74afb91290ebc40c1873c"
+
+            val integrityPublicKey = when {
+                isValidPublicKeyHex(envKey) -> envKey!!.lowercase()
+                isValidPublicKeyHex(fileKey) -> fileKey!!.lowercase()
+                else -> defaultKey
+            }
             it.buildConfigField("String", "INTEGRITY_PUBLIC_KEY", "\"$integrityPublicKey\"")
+
+            val allowUnsigned = !isProductionRelease || it.name == "debug"
+            it.buildConfigField("Boolean", "ALLOW_UNSIGNED_MANIFEST", "$allowUnsigned")
         }
     }
 

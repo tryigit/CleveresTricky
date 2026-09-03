@@ -420,6 +420,39 @@ class ModuleIntegrityVerifierTest {
     }
 
     @Test
+    fun unsignedManifestRejectedWhenPolicyForbidsIt() {
+        val moduleDir = tempFolder.newFolder("module_unsigned_forbidden")
+        ModuleIntegrityVerifier.moduleDirProvider = { moduleDir.absolutePath }
+        ModuleIntegrityVerifier.allowUnsignedManifest = false
+
+        val content = "sample payload".toByteArray()
+        val entry = ManifestFileEntry("service.apk", sha256Hex(content), "regular")
+
+        val file = File(moduleDir, "service.apk")
+        file.writeBytes(content)
+
+        val filesJson = org.json.JSONArray()
+        val obj = org.json.JSONObject()
+        obj.put("path", entry.path)
+        obj.put("sha256", entry.sha256)
+        obj.put("type", entry.type)
+        filesJson.put(obj)
+
+        val manifest = org.json.JSONObject()
+        manifest.put("version", 1)
+        manifest.put("files", filesJson)
+        manifest.put("signature", "")
+        File(moduleDir, "integrity_manifest.json").writeText(manifest.toString())
+
+        val result = ModuleIntegrityVerifier.verifyFull()
+        assertTrue("Expected Fail for unsigned manifest when forbidden but got: $result", result is IntegrityResult.Fail)
+        assertTrue(
+            "Expected unsigned manifest prohibition error",
+            (result as IntegrityResult.Fail).violations.any { it.contains("Unsigned integrity manifest is prohibited") }
+        )
+    }
+
+    @Test
     fun runtimeDirectoriesKeyboxesAndLogsAreIgnored() {
         val moduleDir = tempFolder.newFolder("module_runtime_dirs")
         ModuleIntegrityVerifier.moduleDirProvider = { moduleDir.absolutePath }

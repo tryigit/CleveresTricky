@@ -47,10 +47,23 @@ object ModuleIntegrityVerifier {
 
     internal var remoteDisabledForTesting = false
     internal var trustedPublicKeyProvider: () -> ByteArray = {
-        val keyHex = runCatching { BuildConfig.INTEGRITY_PUBLIC_KEY }.getOrNull()
-            ?.ifEmpty { TRUSTED_PUBLIC_KEY_HEX } ?: TRUSTED_PUBLIC_KEY_HEX
-        hexToBytes(keyHex)
+        val keyHex = runCatching { BuildConfig.INTEGRITY_PUBLIC_KEY }.getOrNull()?.trim()
+        val validKeyHex = if (!keyHex.isNullOrEmpty() && keyHex.length == 64 && keyHex.all { it.digitToIntOrNull(16) != null }) {
+            keyHex
+        } else {
+            TRUSTED_PUBLIC_KEY_HEX
+        }
+        hexToBytes(validKeyHex)
     }
+
+    /**
+     * Whether unsigned manifests are accepted. Controlled by build variant policy.
+     * In production builds, this is false and unsigned manifests are strictly rejected.
+     */
+    @Volatile
+    internal var allowUnsignedManifest: Boolean =
+        runCatching { BuildConfig.ALLOW_UNSIGNED_MANIFEST }.getOrDefault(false)
+
     internal var moduleDirProvider: () -> String = { getModuleDir() }
 
     /**
@@ -203,6 +216,10 @@ object ModuleIntegrityVerifier {
         }
     }
 
+    /**
+     * Validates POSIX file permissions for an entry type.
+     * Enforces execute permissions for executables, while tolerating +x on regular files.
+     */
     private fun checkFileTypeMode(filePath: java.nio.file.Path, expectedType: String): Boolean {
         val posixView = Files.getFileAttributeView(filePath, java.nio.file.attribute.PosixFileAttributeView::class.java)
         if (posixView != null) {
@@ -450,12 +467,18 @@ object ModuleIntegrityVerifier {
                 throw SecurityException("Manifest digital signature verification failed")
             }
         } else {
+            if (!allowUnsignedManifest) {
+                throw SecurityException("Unsigned integrity manifest is prohibited in production builds")
+            }
             Logger.w("Integrity manifest is unsigned (development/PR build) - hash verification only")
         }
 
         return ParsedManifest(version, files, signature)
     }
 
+    /**
+     * Verifies an Ed25519 digital signature over canonical data using the trusted raw 32-byte public key.
+     */
     private fun verifyEd25519(publicKeyRaw: ByteArray, data: ByteArray, signatureBytes: ByteArray): Boolean {
         return try {
             val spkiHeader = byteArrayOf(
@@ -593,6 +616,7 @@ object ModuleIntegrityVerifier {
         targetedVerificationCount.set(0)
         remoteDisabledForTesting = true
         trustedPublicKeyProvider = { hexToBytes(TRUSTED_PUBLIC_KEY_HEX) }
+        allowUnsignedManifest = true
         moduleDirProvider = { getModuleDir() }
     }
 
