@@ -427,7 +427,7 @@ afterEvaluate {
 
                     val archBinaryNames =
                         listOf(
-                            "lib$SONAME.so" to "regular",
+                            "lib$moduleId.so" to "regular",
                             "inject" to "executable",
                             "webui_bridge" to "executable",
                             "cleverestrickyd" to "executable",
