@@ -276,7 +276,7 @@ mod tests {
         let entries = list_directory_at(get_raw_fd(&dir_fd)).unwrap();
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].0, "test.txt");
-        assert_eq!(entries[0].1, false); // not a dir
+        assert!(!entries[0].1);
     }
 
     #[test]
