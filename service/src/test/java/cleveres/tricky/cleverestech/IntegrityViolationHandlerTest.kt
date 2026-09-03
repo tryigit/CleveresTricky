@@ -144,4 +144,41 @@ class IntegrityViolationHandlerTest {
         assertEquals("vital external system data", externalTarget.readText())
         externalTarget.delete()
     }
+
+    @Test
+    fun childDirectorySwappedToSymlinkDoesNotTraverseExternalTarget() {
+        val root = java.nio.file.Files.createTempDirectory("test_module_swap_root").toFile()
+        val externalDir = java.nio.file.Files.createTempDirectory("test_external_dir").toFile()
+        val sensitiveFile = java.io.File(externalDir, "sensitive_system_file.txt")
+        sensitiveFile.writeText("critical system data that must not be deleted")
+
+        val swappedEntry = java.io.File(root, "swapped_dir")
+        try {
+            java.nio.file.Files.createSymbolicLink(swappedEntry.toPath(), externalDir.toPath())
+        } catch (_: Exception) {
+            // Symlinks not supported in host environment
+            root.deleteRecursively()
+            externalDir.deleteRecursively()
+            return
+        }
+
+        val noFollowMethod =
+            Class.forName("cleveres.tricky.cleverestech.IntegrityViolationHandlerKt")
+                .getDeclaredMethod(
+                    "deleteDirectoryRecursivelyNoFollow",
+                    java.nio.file.Path::class.java,
+                    Int::class.javaPrimitiveType,
+                )
+        noFollowMethod.isAccessible = true
+        val deleted = noFollowMethod.invoke(null, root.toPath(), 16) as Boolean
+
+        assertTrue("Expected recursive deletion to succeed", deleted)
+        assertFalse("Module root should be deleted", root.exists())
+        assertFalse("Swapped symlink should be deleted", swappedEntry.exists())
+        assertTrue("External directory MUST NOT be traversed or deleted!", externalDir.exists())
+        assertTrue("Sensitive file in external directory MUST NOT be deleted!", sensitiveFile.exists())
+        assertEquals("critical system data that must not be deleted", sensitiveFile.readText())
+
+        externalDir.deleteRecursively()
+    }
 }

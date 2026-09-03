@@ -85,18 +85,20 @@ private fun safeDeleteModule(moduleDir: String): Boolean {
         return false
     }
 
-    // 1. Authoritative primary path: Request deletion via the privileged Rust daemon.
-    // The daemon executes native descriptor-relative deletion (openat with O_NOFOLLOW | O_DIRECTORY | O_CLOEXEC
-    // and unlinkat) as root, providing atomic, symlink-swap-immune deletion.
+    // 1. Authoritative primary path: On Android, deletion MUST be performed by the privileged
+    // Rust daemon using root descriptor-relative openat(..., O_NOFOLLOW | O_DIRECTORY | O_CLOEXEC)
+    // and unlinkat. If the daemon is unavailable or deletion fails, we fail closed immediately
+    // rather than falling back to an unprivileged, pathname-based recursive deletion.
     if (isAndroidRuntime()) {
         val daemonDeleted = requestDaemonDeleteModule()
         if (daemonDeleted && !dir.exists()) {
             return true
         }
-        Logger.w("Daemon module deletion was not successful; attempting local fallback deletion")
+        Logger.e("Authoritative daemon module deletion failed or was unavailable; refusing insecure pathname fallback")
+        return false
     }
 
-    // 2. Local fallback deletion with strict NOFOLLOW_LINKS protection:
+    // 2. Local fallback deletion on non-Android host/test runtime with strict NOFOLLOW_LINKS protection:
     return deleteDirectoryRecursivelyNoFollow(path)
 }
 
