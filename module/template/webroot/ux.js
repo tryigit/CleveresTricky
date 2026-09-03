@@ -2276,7 +2276,23 @@
         applyTranslations();
     }
 
+    function checkIntegrityViolation() {
+        bridge.fetch('/api/resource_usage').then(r => r.json()).then(data => {
+            if (data && data.module_integrity_violation) {
+                const overlay = document.getElementById('violationOverlay');
+                if (overlay) {
+                    overlay.style.display = 'flex';
+                    const allControls = document.querySelectorAll('button, input, select, textarea');
+                    for (let i = 0; i < allControls.length; i++) {
+                        allControls[i].disabled = true;
+                    }
+                }
+            }
+        }).catch(() => {});
+    }
+
     async function start() {
+        setInterval(checkIntegrityViolation, 2000);
         if (!readSavedLocale()) {
             try { await requestConfig(); } catch (_) {}
             locale = readLocale();

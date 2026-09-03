@@ -2219,6 +2219,9 @@ class WebServer(
             json.put("native_runtime", readNativeRuntimeStatus())
             json.put("keystore_interceptor_running", KeystoreInterceptor.isRunning())
             json.put("telephony_interceptor_running", TelephonyInterceptor.isRunning())
+            if (ServerManager.moduleIntegrityViolation) {
+                json.put("module_integrity_violation", true)
+            }
             return secureResponse(Response.Status.OK, "application/json", json.toString())
         }
 

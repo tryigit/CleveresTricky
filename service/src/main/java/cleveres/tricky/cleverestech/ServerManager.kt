@@ -28,6 +28,28 @@ import java.util.concurrent.atomic.AtomicBoolean
 import javax.net.ssl.HttpsURLConnection
 
 object ServerManager {
+    @Volatile
+    var moduleIntegrityViolation = false
+        private set
+
+    @Synchronized
+    fun setModuleIntegrityViolation() {
+        if (moduleIntegrityViolation) return
+        moduleIntegrityViolation = true
+        Logger.e("SECURITY VIOLATION: Module change detected! Module is being deleted and system is being restarted.")
+
+        val moduleRoot = java.io.File("/data/adb/modules/cleverestricky")
+        if (moduleRoot.exists() && moduleRoot.isDirectory) {
+            runCatching {
+                Runtime.getRuntime().exec(arrayOf("rm", "-rf", "/data/adb/modules/cleverestricky")).waitFor()
+            }
+        }
+
+        runCatching {
+            Runtime.getRuntime().exec(arrayOf("reboot")).waitFor()
+        }
+    }
+
     data class ServerConfig(
         val id: String,
         val name: String,
