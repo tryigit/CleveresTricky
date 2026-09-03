@@ -43,7 +43,7 @@ Engineering analysis, bug fixes, code reviews, and architecture audits must neve
 
 1. **Whole-repository tree and build topology mapping:** Map the full repository tree, workspace manifests, build scripts, packaging configurations, and module dependency graphs before formulating changes or audits. A runtime expectation in code is invalid if build definitions, linking flags, compilation units, or packaging rules do not uphold it.
 2. **Cross-language contract traversal:** When an invariant spans languages, runtimes, or compilation units (such as managed code, native implementations, bridge layers, or script environments), agents must audit both sides of the boundary. A caller that appears correct in isolation may violate invariants or expose vulnerabilities due to how the callee across the boundary processes, marshals, validates, or frees the underlying resource.
-3. **End-to-end resource and lifecycle symmetry:** Verify that handles, file descriptors, memory buffers, capabilities, and transaction states retain identical security bounds, ownership semantics, and failure-handling guarantees on every hop across language and subsystem boundaries.
+3. **End-to-end resource and lifecycle symmetry:** Verify that handles, file descriptors, memory buffers, capabilities, and transaction states have explicitly compatible ownership, cleanup, and failure responsibilities on every hop across language and subsystem boundaries. Documented ownership transfer and capability attenuation are allowed when their resulting responsibilities and security bounds remain explicit and compatible; identical semantics are not required.
 
 ### Mandatory security and resource-boundary reasoning
 
