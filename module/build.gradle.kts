@@ -460,7 +460,15 @@ afterEvaluate {
                             ),
                         ).toPrettyString()
 
-                    file("${moduleDir.get().asFile}/integrity_manifest.json").writeText(manifest)
+                    val manifestFile = file("${moduleDir.get().asFile}/integrity_manifest.json")
+                    manifestFile.writeText(manifest)
+
+                    val manifestMd = MessageDigest.getInstance("SHA-256")
+                    manifestFile.forEachBlock(4096) { bytes, size ->
+                        manifestMd.update(bytes, 0, size)
+                    }
+                    val manifestSha = HexFormat.of().formatHex(manifestMd.digest())
+                    file("${moduleDir.get().asFile}/integrity_manifest.json.sha256").writeText(manifestSha)
                 }
             }
 
