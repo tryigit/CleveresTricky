@@ -47,9 +47,10 @@ class CronAutoIdentityWatcherLifecycleRegressionTest {
         val result = runCatching { CronAutoIdentity.start(root) }
 
         assertTrue(result.isFailure)
+        val attemptedObserver = requireNotNull(attempted) { "Auto Identity watcher start was never attempted" }
         assertTrue(
             "The exact partially armed Auto Identity watcher must be retired",
-            attempted != null && stopped.contains(attempted),
+            stopped.contains(attemptedObserver),
         )
     }
 

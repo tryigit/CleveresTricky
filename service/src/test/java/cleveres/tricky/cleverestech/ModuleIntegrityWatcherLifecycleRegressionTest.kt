@@ -48,7 +48,8 @@ class ModuleIntegrityWatcherLifecycleRegressionTest {
         val result = runCatching { ModuleIntegrityWatcher.start(dir, manifest) { } }
 
         assertTrue(result.isFailure)
-        assertTrue("The exact partially armed parent handle must be retired", attempted != null && stopped.contains(attempted))
+        val attemptedObserver = requireNotNull(attempted) { "Parent watcher start was never attempted" }
+        assertTrue("The exact partially armed parent handle must be retired", stopped.contains(attemptedObserver))
         assertFalse(ModuleIntegrityWatcher.isParentObserverActiveForTesting())
         assertFalse(ModuleIntegrityWatcher.isChildObserverActiveForTesting())
     }
@@ -68,7 +69,8 @@ class ModuleIntegrityWatcherLifecycleRegressionTest {
         val result = runCatching { ModuleIntegrityWatcher.start(dir, manifest) { } }
 
         assertTrue(result.isFailure)
-        assertTrue("The exact partially armed child handle must be retired", attempted != null && stopped.contains(attempted))
+        val attemptedObserver = requireNotNull(attempted) { "Child watcher start was never attempted" }
+        assertTrue("The exact partially armed child handle must be retired", stopped.contains(attemptedObserver))
         assertFalse(ModuleIntegrityWatcher.isParentObserverActiveForTesting())
         assertFalse(ModuleIntegrityWatcher.isChildObserverActiveForTesting())
     }
@@ -99,7 +101,8 @@ class ModuleIntegrityWatcherLifecycleRegressionTest {
         val result = runCatching { ModuleIntegrityWatcher.start(dir, manifestWithSubdir) { } }
 
         assertTrue(result.isFailure)
-        assertTrue("The exact partially armed subdirectory handle must be retired", attemptedSub != null && stopped.contains(attemptedSub))
+        val attemptedObserver = requireNotNull(attemptedSub) { "Subdirectory watcher start was never attempted" }
+        assertTrue("The exact partially armed subdirectory handle must be retired", stopped.contains(attemptedObserver))
         assertFalse(ModuleIntegrityWatcher.isParentObserverActiveForTesting())
         assertFalse(ModuleIntegrityWatcher.isChildObserverActiveForTesting())
         assertTrue(ModuleIntegrityWatcher.subObserverCountForTesting() == 0)
