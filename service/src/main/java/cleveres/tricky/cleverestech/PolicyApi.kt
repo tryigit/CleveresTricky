@@ -56,37 +56,35 @@ internal object PolicyApi {
         invalidMessage: String,
         mutation: () -> Result<JSONObject>,
     ): NanoHTTPD.Response =
-        IdentityCoordinator.withCommitBarrier {
-            PolicyMutationCoordinator.mutate(
-                preflight = { LegacyIdentityMarkers.preflight(Config.getConfigRoot()) },
-                mutation = mutation,
-                synchronizeCompatibility = { state ->
-                    LegacyIdentityMarkers.syncFromPolicyState(Config.getConfigRoot(), state)
-                },
-                captureBefore = { JSONObject(PolicyState.stateJson().toString()) },
-                reconcileRuntime = { previousState, resultingState ->
-                    IdentityCoordinator.reconcilePolicyTransition(Config.getConfigRoot(), previousState, resultingState)
-                },
-            ).fold(
-                onSuccess = { result ->
-                    CronAutoIdentity.onPolicyChanged()
-                    if (result.compatibilitySync == CompatibilitySyncStatus.PENDING) {
-                        result.compatibilityError?.let { error ->
-                            Logger.e("Policy state saved but early-boot identity markers could not be synchronized", error)
-                        }
+        PolicyMutationCoordinator.mutate(
+            preflight = { LegacyIdentityMarkers.preflight(Config.getConfigRoot()) },
+            mutation = mutation,
+            synchronizeCompatibility = { state ->
+                LegacyIdentityMarkers.syncFromPolicyState(Config.getConfigRoot(), state)
+            },
+            captureBefore = { JSONObject(PolicyState.stateJson().toString()) },
+            reconcileRuntime = { previousState, resultingState ->
+                IdentityCoordinator.reconcilePolicyTransition(Config.getConfigRoot(), previousState, resultingState)
+            },
+        ).fold(
+            onSuccess = { result ->
+                CronAutoIdentity.onPolicyChanged()
+                if (result.compatibilitySync == CompatibilitySyncStatus.PENDING) {
+                    result.compatibilityError?.let { error ->
+                        Logger.e("Policy state saved but early-boot identity markers could not be synchronized", error)
                     }
-                    json(NanoHTTPD.Response.Status.OK, mutationResponse(result))
-                },
-                onFailure = { error ->
-                    if (error is CompatibilityPreflightException) {
-                        Logger.e("Refusing policy mutation because identity compatibility markers are unsafe", error.cause ?: error)
-                        text(NanoHTTPD.Response.Status.BAD_REQUEST, "Identity compatibility state is unsafe")
-                    } else {
-                        text(NanoHTTPD.Response.Status.BAD_REQUEST, error.message ?: invalidMessage)
-                    }
-                },
-            )
-        }
+                }
+                json(NanoHTTPD.Response.Status.OK, mutationResponse(result))
+            },
+            onFailure = { error ->
+                if (error is CompatibilityPreflightException) {
+                    Logger.e("Refusing policy mutation because identity compatibility markers are unsafe", error.cause ?: error)
+                    text(NanoHTTPD.Response.Status.BAD_REQUEST, "Identity compatibility state is unsafe")
+                } else {
+                    text(NanoHTTPD.Response.Status.BAD_REQUEST, error.message ?: invalidMessage)
+                }
+            },
+        )
 
     private fun currentPolicyResponse(): JSONObject =
         synchronized(PolicyState) {
