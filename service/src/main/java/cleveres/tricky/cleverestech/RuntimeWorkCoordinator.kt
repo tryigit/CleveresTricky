@@ -1,6 +1,15 @@
 package cleveres.tricky.cleverestech
 
 import android.os.FileObserver
+import android.os.FileObserver.ATTRIB
+import android.os.FileObserver.CLOSE_WRITE
+import android.os.FileObserver.CREATE
+import android.os.FileObserver.DELETE
+import android.os.FileObserver.DELETE_SELF
+import android.os.FileObserver.MODIFY
+import android.os.FileObserver.MOVED_FROM
+import android.os.FileObserver.MOVED_TO
+import android.os.FileObserver.MOVE_SELF
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
