@@ -1,4 +1,7 @@
 // Additional GPLv3 section 7(b) attribution term for tryigit-owned material: see ../../NOTICE.
+#[path = "pidfd_signal.rs"]
+mod pidfd_signal;
+
 use cleverestricky_service_core::secure_fs::TrustedDir;
 use std::io::{self, Read};
 use std::path::Path;
@@ -28,6 +31,9 @@ const FILE_MODE: u32 = 0o600;
 const DIRECTORY_MODE: u32 = 0o700;
 
 pub fn prepare_root() -> io::Result<TrustedDir> {
+    if let Some(exit_code) = pidfd_signal::run_env_request_if_present() {
+        std::process::exit(exit_code);
+    }
     let parent = TrustedDir::open(Path::new(CONFIG_PARENT))?;
     prepare_root_from(&parent)
 }

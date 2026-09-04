@@ -11,6 +11,36 @@ sed -n '/^# BEGIN PID SAFETY HELPERS$/,/^# END PID SAFETY HELPERS$/p' "$SERVICE"
 source "$TEST_ROOT/helpers.sh"
 log() { :; }
 
+# Host-side shim for the production pidfd helper. It exercises shell control flow and
+# identity policy; Rust unit/CI coverage validates the real pidfd syscalls.
+signal_owned_process() {
+  local target_pid=$1 expected_start=$2 signal_number=$3 expected_executable=$4 expected_comm=$5 expected_argument=$6
+  if [[ "${FORCE_HELPER_FAILURE:-0}" == 1 ]]; then
+    return 2
+  fi
+  local current_start
+  current_start=$(process_start_ticks "$target_pid") || return 3
+  [[ "$current_start" == "$expected_start" ]] || return 3
+  if [[ -n "$expected_executable" ]]; then
+    local actual_executable
+    actual_executable=$(readlink "/proc/$target_pid/exe" 2>/dev/null) || return 3
+    [[ "$actual_executable" == "$expected_executable" || "$actual_executable" == "$expected_executable (deleted)" ]] || return 3
+  fi
+  if [[ -n "$expected_comm" ]]; then
+    local actual_comm
+    actual_comm=$(tr -d '\r\n' < "/proc/$target_pid/comm" 2>/dev/null) || return 3
+    [[ "$actual_comm" == "$expected_comm" ]] || return 3
+  fi
+  if [[ -n "$expected_argument" ]]; then
+    tr '\000' '\n' < "/proc/$target_pid/cmdline" 2>/dev/null | grep -F -x -- "$expected_argument" >/dev/null || return 3
+  fi
+  if [[ "$signal_number" == 0 ]]; then
+    kill -0 "$target_pid" 2>/dev/null || return 3
+  else
+    kill -"$signal_number" "$target_pid" 2>/dev/null || return 3
+  fi
+}
+
 python3 -c 'import os, pathlib, time; pathlib.Path(__import__("sys").argv[1]).write_text(str(os.getpid())); time.sleep(30)' "$TEST_ROOT/victim.pid" &
 victim_job=$!
 for _ in {1..50}; do
@@ -40,10 +70,12 @@ pid_file="$TEST_ROOT/runtime.pid"
 printf '%s %s\n' "$victim_pid" "$((victim_start + 1))" > "$pid_file"
 terminate_pid "$pid_file" "test" 1 "$victim_executable" "" ""
 kill -0 "$victim_job"
+[[ ! -e "$pid_file" ]]
 
 printf '%s %s\n' "$victim_pid" "$victim_start" > "$pid_file"
 terminate_pid "$pid_file" "test" 1 "$TEST_ROOT/not-the-process" "" ""
 kill -0 "$victim_job"
+[[ ! -e "$pid_file" ]]
 
 outside="$TEST_ROOT/outside"
 printf 'preserve\n' > "$outside"
@@ -53,6 +85,15 @@ terminate_pid "$pid_file" "test" 1 "$victim_executable" "" ""
 kill -0 "$victim_job"
 
 printf '%s %s\n' "$victim_pid" "$victim_start" > "$pid_file"
+FORCE_HELPER_FAILURE=1
+if terminate_pid "$pid_file" "test" 1 "$victim_executable" "" ""; then
+  echo 'terminate_pid unexpectedly ignored helper failure' >&2
+  exit 1
+fi
+unset FORCE_HELPER_FAILURE
+kill -0 "$victim_job"
+[[ -f "$pid_file" ]]
+
 terminate_pid "$pid_file" "test" 1 "$victim_executable" "" ""
 if [[ "$victim_pid" == "$victim_namespace_pid" ]]; then
   wait "$victim_job" 2>/dev/null || true
@@ -64,9 +105,6 @@ victim_pid=
 victim_job=
 [[ ! -e "$pid_file" ]]
 
-# Releases before the start-time hardening wrote a single numeric PID. On upgrade,
-# identity mismatch must leave the live process alone, while a matching legacy
-# record must still be cleaned up so a second supervisor/daemon is not orphaned.
 python3 -c 'import os, pathlib, time; pathlib.Path(__import__("sys").argv[1]).write_text(str(os.getpid())); time.sleep(30)' "$TEST_ROOT/legacy-victim.pid" &
 legacy_job=$!
 for _ in {1..50}; do
@@ -102,8 +140,15 @@ legacy_pid=
 legacy_job=
 [[ ! -e "$pid_file" ]]
 
+grep -q 'CLEVERES_TRICKY_PIDFD_MODE=support' "$SERVICE"
+grep -q 'CLEVERES_TRICKY_PIDFD_MODE=signal' "$SERVICE"
+if grep -E 'kill[[:space:]].*\$(old_pid|supervisor_pid)' "$SERVICE" >/dev/null; then
+  echo 'raw PID kill reintroduced into service supervisor' >&2
+  exit 1
+fi
+
 config_check=$(grep -n '^if \[ -L "\$CONFIG_DIR" \]; then' "$SERVICE" | head -n1 | cut -d: -f1)
-termination=$(grep -n '^terminate_previous_instances$' "$SERVICE" | head -n1 | cut -d: -f1)
+termination=$(grep -n '^if ! terminate_previous_instances; then' "$SERVICE" | head -n1 | cut -d: -f1)
 [[ -n "$config_check" && -n "$termination" && "$config_check" -lt "$termination" ]]
 
 printf '%s\n' 'service PID identity security tests passed'
