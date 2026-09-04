@@ -1,11 +1,13 @@
 package cleveres.tricky.cleverestech
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.IOException
 import java.io.InputStream
+import java.util.concurrent.Semaphore
 import java.util.concurrent.ThreadPoolExecutor
 
 class InstalledPackagesCompatTest {
@@ -77,6 +79,25 @@ class InstalledPackagesCompatTest {
 
         assertEquals(4, executor.maximumPoolSize)
         assertEquals(0, executor.queue.remainingCapacity())
+    }
+
+    @Test
+    fun `package process admission is capped before worker execution`() {
+        val field = InstalledPackagesCompat::class.java.getDeclaredField("commandPermits").apply { isAccessible = true }
+        val permits = field.get(InstalledPackagesCompat) as Semaphore
+        var acquired = 0
+
+        try {
+            repeat(4) {
+                assertTrue("Expected one permit per allowed package command", permits.tryAcquire())
+                acquired++
+            }
+            assertFalse("A fifth package command must be rejected before spawning", permits.tryAcquire())
+        } finally {
+            repeat(acquired) { permits.release() }
+        }
+
+        assertEquals(4, permits.availablePermits())
     }
 
     @Test
