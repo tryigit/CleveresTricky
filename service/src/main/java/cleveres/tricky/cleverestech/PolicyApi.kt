@@ -68,6 +68,7 @@ internal object PolicyApi {
             },
         ).fold(
             onSuccess = { result ->
+                CronAutoIdentity.onPolicyChanged()
                 if (result.compatibilitySync == CompatibilitySyncStatus.PENDING) {
                     result.compatibilityError?.let { error ->
                         Logger.e("Policy state saved but early-boot identity markers could not be synchronized", error)
