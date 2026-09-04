@@ -32,8 +32,6 @@ internal object ModuleIntegrityWatcher {
     private var childGeneration = 0L
 
     private val pendingDirtyPaths = LinkedHashSet<String>()
-    private var onViolation: ((List<String>) -> Unit)? = null
-    private var manifest: ParsedManifest? = null
 
     val watcherRegistrationCount = AtomicInteger(0)
     val eventCoalescedCount = AtomicInteger(0)
@@ -54,8 +52,6 @@ internal object ModuleIntegrityWatcher {
             if (isRunning) return
             val generation = ++watcherGeneration
             isRunning = true
-            manifest = loadedManifest
-            onViolation = violationHandler
             pendingDirtyPaths.clear()
 
             targetedScheduler = ConflatedRefreshScheduler(scope, INTEGRITY_DEBOUNCE_MS) {
@@ -72,8 +68,9 @@ internal object ModuleIntegrityWatcher {
                 for (relPath in pathsToVerify) {
                     val result = ModuleIntegrityVerifier.verifySingleFile(relPath, loadedManifest)
                     if (result is IntegrityResult.Fail) {
-                        val stillOwned = synchronized(lock) { ownsWatcherGenerationLocked(generation) }
-                        if (stillOwned) violationHandler(result.violations)
+                        if (synchronized(lock) { ownsWatcherGenerationLocked(generation) }) {
+                            violationHandler(result.violations)
+                        }
                         return@ConflatedRefreshScheduler
                     }
                 }
@@ -116,9 +113,8 @@ internal object ModuleIntegrityWatcher {
                     tryArmChildLocked(directory, loadedManifest, violationHandler, generation)
                 } catch (e: Throwable) {
                     Logger.e("Failed to arm integrity child watcher at start - failing closed", e)
-                    val handler = onViolation
                     stop()
-                    handler?.invoke(listOf("Failed to arm integrity child watcher: ${e.message}"))
+                    violationHandler(listOf("Failed to arm integrity child watcher: ${e.message}"))
                     throw e
                 }
             } else {
@@ -357,8 +353,6 @@ internal object ModuleIntegrityWatcher {
             fullScheduler?.cancel()
             fullScheduler = null
             pendingDirtyPaths.clear()
-            onViolation = null
-            manifest = null
         }
     }
 
