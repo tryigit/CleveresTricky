@@ -81,7 +81,7 @@ terminate_pid() {
       ;;
   esac
   case "$old_pid:$old_start" in
-    *[!0-9:]*|0:*|1:*) rm -f "$pid_file" 2>/dev/null || true; return 0 ;;
+    :*|*:|*[!0-9:]*|0:*|1:*) rm -f "$pid_file" 2>/dev/null || true; return 0 ;;
   esac
   if [ "${#old_pid}" -gt 10 ] || [ "${#old_start}" -gt 20 ]; then
     rm -f "$pid_file" 2>/dev/null || true
