@@ -42,7 +42,6 @@ internal object ModuleIntegrityWatcher {
      * Starts watching the module directory for integrity violations.
      * Registers FileObserver instances for the directory, its parent, and subdirectories.
      */
-    @Synchronized
     fun start(
         directory: File,
         loadedManifest: ParsedManifest,
@@ -68,8 +67,10 @@ internal object ModuleIntegrityWatcher {
                 for (relPath in pathsToVerify) {
                     val result = ModuleIntegrityVerifier.verifySingleFile(relPath, loadedManifest)
                     if (result is IntegrityResult.Fail) {
-                        if (synchronized(lock) { ownsWatcherGenerationLocked(generation) }) {
-                            violationHandler(result.violations)
+                        synchronized(lock) {
+                            if (ownsWatcherGenerationLocked(generation)) {
+                                violationHandler(result.violations)
+                            }
                         }
                         return@ConflatedRefreshScheduler
                     }
@@ -82,8 +83,12 @@ internal object ModuleIntegrityWatcher {
                 }
                 fullVerificationExecutions.incrementAndGet()
                 val result = ModuleIntegrityVerifier.verifyFull()
-                if (result is IntegrityResult.Fail && synchronized(lock) { ownsWatcherGenerationLocked(generation) }) {
-                    violationHandler(result.violations)
+                if (result is IntegrityResult.Fail) {
+                    synchronized(lock) {
+                        if (ownsWatcherGenerationLocked(generation)) {
+                            violationHandler(result.violations)
+                        }
+                    }
                 }
             }
 
@@ -132,13 +137,12 @@ internal object ModuleIntegrityWatcher {
         event: Int,
         path: String?,
     ) {
-        var violation: List<String>? = null
         synchronized(lock) {
             if (!ownsWatcherGenerationLocked(generation) || path != directory.name) return
             if ((event and (DELETE or MOVED_FROM)) != 0) {
                 Logger.e("Module directory removed - integrity violation")
                 disarmChildLocked()
-                violation = listOf("Module directory was removed or moved")
+                violationHandler(listOf("Module directory was removed or moved"))
             } else if ((event and (CREATE or MOVED_TO)) != 0) {
                 Logger.w("Module directory recreated - triggering verification")
                 if (directory.exists()) {
@@ -148,12 +152,11 @@ internal object ModuleIntegrityWatcher {
                     } catch (e: Throwable) {
                         Logger.e("Failed to arm child watcher upon recreate - failing closed", e)
                         disarmChildLocked()
-                        violation = listOf("Failed to arm integrity child watcher upon recreate: ${e.message}")
+                        violationHandler(listOf("Failed to arm integrity child watcher upon recreate: ${e.message}"))
                     }
                 }
             }
         }
-        violation?.let(violationHandler)
     }
 
     /**
@@ -230,31 +233,27 @@ internal object ModuleIntegrityWatcher {
         event: Int,
         path: String?,
     ) {
-        var violation: List<String>? = null
-        var targetedPath: String? = null
         synchronized(lock) {
             if (!ownsChildGenerationLocked(generation, childToken)) return
             if ((event and DELETE_SELF) != 0 || (event and MOVE_SELF) != 0) {
                 Logger.e("Module directory lost - integrity violation")
                 disarmChildLocked()
-                violation = listOf("Module directory was deleted or moved (self event)")
+                violationHandler(listOf("Module directory was deleted or moved (self event)"))
             } else if ((event and DELETE) != 0) {
                 val deletedPath = path ?: return
                 if (loadedManifest.files.any { it.path == deletedPath }) {
                     Logger.e("Critical payload deleted: $deletedPath")
-                    violation = listOf("Critical payload deleted: $deletedPath")
+                    violationHandler(listOf("Critical payload deleted: $deletedPath"))
                 } else if (!ModuleIntegrityVerifier.isIgnoredFile(deletedPath)) {
-                    targetedPath = deletedPath
+                    scheduleTargetedCheckLocked(deletedPath, generation, childToken)
                 }
             } else {
                 val modifiedPath = path ?: return
                 if (!ModuleIntegrityVerifier.isIgnoredFile(modifiedPath)) {
-                    targetedPath = modifiedPath
+                    scheduleTargetedCheckLocked(modifiedPath, generation, childToken)
                 }
             }
         }
-        violation?.let(violationHandler)
-        targetedPath?.let { scheduleTargetedCheck(it, generation, childToken) }
     }
 
     private fun handleSubdirectoryEvent(
@@ -266,54 +265,49 @@ internal object ModuleIntegrityWatcher {
         event: Int,
         path: String?,
     ) {
-        var violation: List<String>? = null
-        var targetedPath: String? = null
         synchronized(lock) {
             if (!ownsChildGenerationLocked(generation, childToken)) return
             if ((event and (DELETE_SELF or MOVE_SELF)) != 0) {
                 Logger.e("Critical subdirectory $subdirRel removed")
-                violation = listOf("Critical subdirectory removed: $subdirRel")
+                violationHandler(listOf("Critical subdirectory removed: $subdirRel"))
             } else if ((event and DELETE) != 0) {
                 val deletedPath = path?.let { "$subdirRel/$it" } ?: return
                 if (loadedManifest.files.any { it.path == deletedPath }) {
                     Logger.e("Critical payload deleted: $deletedPath")
-                    violation = listOf("Critical payload deleted: $deletedPath")
+                    violationHandler(listOf("Critical payload deleted: $deletedPath"))
                 } else if (!ModuleIntegrityVerifier.isIgnoredFile(deletedPath)) {
-                    targetedPath = deletedPath
+                    scheduleTargetedCheckLocked(deletedPath, generation, childToken)
                 }
             } else {
                 val modifiedPath = path?.let { "$subdirRel/$it" } ?: return
                 if (!ModuleIntegrityVerifier.isIgnoredFile(modifiedPath)) {
-                    targetedPath = modifiedPath
+                    scheduleTargetedCheckLocked(modifiedPath, generation, childToken)
                 }
             }
         }
-        violation?.let(violationHandler)
-        targetedPath?.let { scheduleTargetedCheck(it, generation, childToken) }
     }
 
     /**
      * Schedules a targeted integrity check for a specific file path, coalescing duplicate events.
+     * The caller already owns [lock], which keeps callback ownership and queue mutation atomic.
      */
-    private fun scheduleTargetedCheck(
+    private fun scheduleTargetedCheckLocked(
         relPath: String,
         generation: Long,
         childToken: Long,
     ) {
-        synchronized(lock) {
-            if (!ownsChildGenerationLocked(generation, childToken)) return
-            if (pendingDirtyPaths.contains(relPath)) {
-                eventCoalescedCount.incrementAndGet()
-                return
-            }
-            if (pendingDirtyPaths.size >= MAX_PENDING_PATHS) {
-                pendingDirtyPaths.clear()
-                fullScheduler?.submit()
-                return
-            }
-            pendingDirtyPaths.add(relPath)
-            targetedScheduler?.submit()
+        if (!ownsChildGenerationLocked(generation, childToken)) return
+        if (pendingDirtyPaths.contains(relPath)) {
+            eventCoalescedCount.incrementAndGet()
+            return
         }
+        if (pendingDirtyPaths.size >= MAX_PENDING_PATHS) {
+            pendingDirtyPaths.clear()
+            fullScheduler?.submit()
+            return
+        }
+        pendingDirtyPaths.add(relPath)
+        targetedScheduler?.submit()
     }
 
     private fun ownsWatcherGenerationLocked(generation: Long): Boolean =
@@ -340,7 +334,6 @@ internal object ModuleIntegrityWatcher {
     /**
      * Stops all FileObserver instances and clears watcher state.
      */
-    @Synchronized
     fun stop() {
         synchronized(lock) {
             isRunning = false
