@@ -12,6 +12,9 @@ mkdir -p "$CONFIG_DIR" "$MODDIR/keyboxes"
 sed -n '/^mirror_root_keyboxes() {$/,/^}$/p' "$SERVICE" > "$TEST_ROOT/mirror.sh"
 # shellcheck source=/dev/null
 source "$TEST_ROOT/mirror.sh"
+# The production supervisor runs as root. Keep this fixture focused on path/resource
+# safety without requiring the hosted CI runner to change ownership to UID 0.
+chown() { :; }
 chcon() { :; }
 export CONFIG_DIR MODDIR
 
