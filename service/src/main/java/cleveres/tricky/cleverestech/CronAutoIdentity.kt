@@ -218,15 +218,19 @@ internal object CronAutoIdentity {
                 stopWorkerLocked()
                 return
             }
+            val failure = result.exceptionOrNull()
             if (result.isSuccess) {
                 failureCount = 0
                 lastError = null
                 lastSuccessMs = System.currentTimeMillis()
                 scheduleLocked(root, generation, SUCCESS_DELAY_MS)
                 Logger.i("Auto Identity refresh completed; next run is scheduled in 24 hours")
+            } else if (failure is IdentityRefreshCancelledException) {
+                scheduleLocked(root, generation, INITIAL_DELAY_MS)
+                Logger.d("Auto Identity policy ownership changed; refresh is rescheduled without failure backoff")
             } else {
                 failureCount = (failureCount + 1).coerceAtMost(Int.MAX_VALUE)
-                lastError = result.exceptionOrNull()?.javaClass?.simpleName ?: "UnknownFailure"
+                lastError = failure?.javaClass?.simpleName ?: "UnknownFailure"
                 val delay = failureBackoffMs[minOf(failureCount - 1, failureBackoffMs.lastIndex)]
                 scheduleLocked(root, generation, delay)
                 Logger.w("Auto Identity refresh deferred after failure; bounded retry is scheduled")
