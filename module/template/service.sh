@@ -75,11 +75,20 @@ terminate_pid() {
     return 0
   fi
   case "$pid_record" in
-    *' '* ) ;;
-    *) rm -f "$pid_file" 2>/dev/null || true; return 0 ;;
+    *' '* )
+      old_pid=${pid_record%% *}
+      old_start=${pid_record#* }
+      ;;
+    *)
+      # Releases before the start-time binding wrote PID-only records. Preserve upgrade
+      # cleanup without restoring the old trust model: bind the live PID to its current
+      # start time, then require the same executable/comm/argv identity checks below.
+      old_pid=$pid_record
+      case "$old_pid" in ''|*[!0-9]*|0|1) rm -f "$pid_file" 2>/dev/null || true; return 0 ;; esac
+      [ "${#old_pid}" -le 10 ] || { rm -f "$pid_file" 2>/dev/null || true; return 0; }
+      old_start=$(process_start_ticks "$old_pid") || { rm -f "$pid_file" 2>/dev/null || true; return 0; }
+      ;;
   esac
-  old_pid=${pid_record%% *}
-  old_start=${pid_record#* }
   case "$old_pid:$old_start" in
     *[!0-9:]*|0:*|1:*) rm -f "$pid_file" 2>/dev/null || true; return 0 ;;
   esac
