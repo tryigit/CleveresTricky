@@ -82,11 +82,11 @@ object ModuleIntegrityVerifier {
 
     /**
      * Verifies a single file against the manifest.
-     * Queries the daemon if available, otherwise verifies locally using the provided or cached manifest.
+     * Queries the daemon if available, otherwise verifies locally using an explicit manifest or the current cache/disk manifest.
      */
     fun verifySingleFile(
         relativePath: String,
-        providedManifest: ParsedManifest? = cachedManifest,
+        providedManifest: ParsedManifest? = null,
     ): IntegrityResult {
         targetedVerificationCount.incrementAndGet()
         val payload =
@@ -97,12 +97,12 @@ object ModuleIntegrityVerifier {
             is DaemonQueryResult.Verdict -> return daemonResult.result
             DaemonQueryResult.OperationalError, null -> Unit
         }
-        val manifest = providedManifest ?: cachedManifest ?: loadManifest()
+        val manifest = providedManifest ?: loadManifest()
         if (manifest != null) {
             try {
                 validateManifestTrust(manifest)
             } catch (error: Exception) {
-                cachedManifest = null
+                if (providedManifest == null) cachedManifest = null
                 return IntegrityResult.Fail(listOf("Manifest verification failed: ${error.message}"))
             }
         }
