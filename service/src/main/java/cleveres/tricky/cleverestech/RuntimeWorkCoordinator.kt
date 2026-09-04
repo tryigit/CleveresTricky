@@ -240,15 +240,16 @@ internal object KeyboxDirectoryRefreshWatcher {
         val childToken = ++childGeneration
         var replacement: RuntimeWatchHandle? = null
         return try {
-            replacement =
+            val handle =
                 watchFactory.create(
                     directory,
                     CREATE or CLOSE_WRITE or DELETE or MOVED_FROM or MOVED_TO or MODIFY or ATTRIB or DELETE_SELF or MOVE_SELF,
                 ) { event, _ ->
                     handleChildEvent(generation, childToken, event)
                 }
-            childObserver = replacement
-            replacement.startWatching()
+            replacement = handle
+            childObserver = handle
+            handle.startWatching()
             Logger.i("Keybox directory watcher armed on ${directory.absolutePath}")
             true
         } catch (e: Throwable) {
@@ -353,14 +354,14 @@ internal object KeyboxDirectoryRefreshWatcher {
     }
 
     private fun defaultWatchFactory(): RuntimeWatchFactory =
-        RuntimeWatchFactory { file, mask, onEvent ->
+        RuntimeWatchFactory { file, mask, callback ->
             val observer =
                 object : FileObserver(file, mask) {
                     override fun onEvent(
                         event: Int,
                         path: String?,
                     ) {
-                        onEvent(event, path)
+                        callback(event, path)
                     }
                 }
             object : RuntimeWatchHandle {
