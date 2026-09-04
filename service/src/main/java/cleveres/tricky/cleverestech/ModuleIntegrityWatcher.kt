@@ -33,6 +33,7 @@ internal object ModuleIntegrityWatcher {
     private var parentObserver: FileObserver? = null
     internal var parentObserverStarter: (FileObserver) -> Unit = { it.startWatching() }
     internal var childObserverStarter: (FileObserver) -> Unit = { it.startWatching() }
+    internal var observerStopper: (FileObserver) -> Unit = { it.stopWatching() }
 
     @Volatile
     private var isRunning = false
@@ -332,12 +333,17 @@ internal object ModuleIntegrityWatcher {
      */
     private fun disarmChildLocked() {
         childGeneration++
-        childObserver?.stopWatching()
+        val retiredChild = childObserver
         childObserver = null
-        for (observer in subObservers) {
-            observer.stopWatching()
-        }
+        val retiredSubs = subObservers.toList()
         subObservers.clear()
+
+        runCatching { retiredChild?.let(observerStopper) }
+            .onFailure { Logger.w("Failed to stop retired integrity child watcher", it) }
+        for (observer in retiredSubs) {
+            runCatching { observerStopper(observer) }
+                .onFailure { Logger.w("Failed to stop retired integrity subdirectory watcher", it) }
+        }
     }
 
     /**
@@ -347,9 +353,11 @@ internal object ModuleIntegrityWatcher {
         synchronized(lock) {
             isRunning = false
             watcherGeneration++
-            disarmChildLocked()
-            parentObserver?.stopWatching()
+            val retiredParent = parentObserver
             parentObserver = null
+            disarmChildLocked()
+            runCatching { retiredParent?.let(observerStopper) }
+                .onFailure { Logger.w("Failed to stop retired integrity parent watcher", it) }
             targetedScheduler?.cancel()
             targetedScheduler = null
             fullScheduler?.cancel()
@@ -426,6 +434,7 @@ internal object ModuleIntegrityWatcher {
         stop()
         parentObserverStarter = { it.startWatching() }
         childObserverStarter = { it.startWatching() }
+        observerStopper = { it.stopWatching() }
         watcherRegistrationCount.set(0)
         eventCoalescedCount.set(0)
         targetedVerificationExecutions.set(0)

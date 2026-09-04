@@ -63,6 +63,52 @@ class CodeRabbitRegressionTest {
         }
     }
 
+    @Test
+    fun `integrity watcher cleanup survives stop failures and can restart`() {
+        val root = java.nio.file.Files.createTempDirectory("integrity-stop-failure").toFile()
+        val directory = java.io.File(root, "modules/cleverestricky")
+        val subdirectory = java.io.File(directory, "webroot")
+        assertTrue(subdirectory.mkdirs())
+        val manifest =
+            ParsedManifest(
+                version = 1,
+                files = listOf(ManifestFileEntry("webroot/index.html", "a".repeat(64), "regular")),
+                signature = "b".repeat(64),
+            )
+        val parentStarts = AtomicInteger(0)
+        val childStarts = AtomicInteger(0)
+
+        ModuleIntegrityWatcher.resetForTesting()
+        ModuleIntegrityWatcher.parentObserverStarter = { parentStarts.incrementAndGet() }
+        ModuleIntegrityWatcher.childObserverStarter = { childStarts.incrementAndGet() }
+        ModuleIntegrityWatcher.observerStopper = { throw IOException("injected observer stop failure") }
+        try {
+            ModuleIntegrityWatcher.start(directory, manifest) { }
+            assertTrue(ModuleIntegrityWatcher.isParentObserverActiveForTesting())
+            assertTrue(ModuleIntegrityWatcher.isChildObserverActiveForTesting())
+            assertEquals(1, ModuleIntegrityWatcher.subObserverCountForTesting())
+
+            ModuleIntegrityWatcher.stop()
+
+            assertFalse("Parent reference must clear despite stop failure", ModuleIntegrityWatcher.isParentObserverActiveForTesting())
+            assertFalse("Child reference must clear despite stop failure", ModuleIntegrityWatcher.isChildObserverActiveForTesting())
+            assertEquals("Sub-observer references must clear despite stop failure", 0, ModuleIntegrityWatcher.subObserverCountForTesting())
+
+            ModuleIntegrityWatcher.observerStopper = { }
+            ModuleIntegrityWatcher.start(directory, manifest) { }
+            assertEquals("Restart must arm a fresh parent observer", 2, parentStarts.get())
+            assertEquals("Restart must arm a fresh child and subdirectory observer", 4, childStarts.get())
+            assertTrue(ModuleIntegrityWatcher.isParentObserverActiveForTesting())
+            assertTrue(ModuleIntegrityWatcher.isChildObserverActiveForTesting())
+            assertEquals(1, ModuleIntegrityWatcher.subObserverCountForTesting())
+        } finally {
+            ModuleIntegrityWatcher.observerStopper = { }
+            ModuleIntegrityWatcher.stop()
+            ModuleIntegrityWatcher.resetForTesting()
+            root.deleteRecursively()
+        }
+    }
+
     private class InterruptOnceProcess : Process() {
         var destroyed = false
         val waitCalls = AtomicInteger(0)
