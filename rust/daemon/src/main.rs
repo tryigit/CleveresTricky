@@ -22,7 +22,7 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{self, Child, Command, Stdio};
-use std::sync::Arc;
+use std::sync::{mpsc, Arc};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -468,6 +468,21 @@ enum BackendRunOutcome {
     AdapterChanged,
 }
 
+/// Spawns the keybox broker and reports transport failures back to the child-owning supervisor.
+fn spawn_keybox_broker(
+    broker: UnixStream,
+    broker_root: Arc<TrustedDir>,
+    failure_tx: mpsc::SyncSender<io::Error>,
+) -> io::Result<thread::JoinHandle<()>> {
+    thread::Builder::new()
+        .name("ct-keybox-broker".to_string())
+        .spawn(move || {
+            if let Err(error) = keybox_file_broker::serve(broker, &broker_root) {
+                let _ = failure_tx.send(error);
+            }
+        })
+}
+
 /// Runs a single backend instance, monitoring it until exit or adapter change.
 fn run_backend_once(
     module_dir: &Path,
@@ -476,17 +491,10 @@ fn run_backend_once(
     root: Arc<TrustedDir>,
 ) -> io::Result<BackendRunOutcome> {
     let (mut child, broker) = spawn_backend(module_dir, lease.pid)?;
-    let backend_pid = child.id();
-    write_process_identity(&root, "backend.pid", backend_pid);
+    write_process_identity(&root, "backend.pid", child.id());
     let broker_root = Arc::clone(&root);
-    let broker_thread = match thread::Builder::new()
-        .name("ct-keybox-broker".to_string())
-        .spawn(move || {
-            if let Err(error) = keybox_file_broker::serve(broker, &broker_root) {
-                eprintln!("cleverestrickyd: keybox broker failed: {error}");
-                let _ = unsafe { libc::kill(backend_pid as libc::pid_t, libc::SIGTERM) };
-            }
-        }) {
+    let (broker_failure_tx, broker_failure_rx) = mpsc::sync_channel(1);
+    let broker_thread = match spawn_keybox_broker(broker, broker_root, broker_failure_tx) {
         Ok(handle) => handle,
         Err(error) => {
             let _ = root.unlink_file("backend.pid");
@@ -500,10 +508,27 @@ fn run_backend_once(
         if !adapter_identity.matches(lease) {
             let _ = child.kill();
             let _ = child.wait();
-            break BackendRunOutcome::AdapterChanged;
+            break Ok(BackendRunOutcome::AdapterChanged);
         }
-        if let Some(status) = child.try_wait()? {
-            break BackendRunOutcome::Exited(format!("backend exited with {status}"));
+        if let Ok(error) = broker_failure_rx.try_recv() {
+            let _ = child.kill();
+            let _ = child.wait();
+            break Ok(BackendRunOutcome::Exited(format!(
+                "keybox broker failed: {error}"
+            )));
+        }
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                break Ok(BackendRunOutcome::Exited(format!(
+                    "backend exited with {status}"
+                )))
+            }
+            Ok(None) => {}
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                break Err(error);
+            }
         }
         thread::sleep(ADAPTER_POLL_INTERVAL);
     };
@@ -511,7 +536,7 @@ fn run_backend_once(
     broker_thread
         .join()
         .map_err(|_| io::Error::other("keybox broker thread panicked"))?;
-    Ok(outcome)
+    outcome
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1215,10 +1240,8 @@ fn delete_dir_descriptor_safe(dir_fd: RawFd) -> io::Result<()> {
             if unsafe { libc::unlinkat(dir_fd, c_name.as_ptr(), libc::AT_REMOVEDIR) } < 0 {
                 return Err(io::Error::last_os_error());
             }
-        } else {
-            if unsafe { libc::unlinkat(dir_fd, c_name.as_ptr(), 0) } < 0 {
-                return Err(io::Error::last_os_error());
-            }
+        } else if unsafe { libc::unlinkat(dir_fd, c_name.as_ptr(), 0) } < 0 {
+            return Err(io::Error::last_os_error());
         }
     }
     Ok(())
@@ -1641,6 +1664,31 @@ mod tests {
         assert_eq!(header.flags, FLAG_ERROR);
         assert_eq!(body, b"file operation rejected");
         assert!(read_header_bounded(&mut client, MAX_ERROR_BYTES).is_err());
+    }
+
+    #[test]
+    fn keybox_broker_failure_is_reported_to_child_owner() {
+        let test = TestRoot::new();
+        let root = Arc::new(test.trusted());
+        let (mut client, broker) = UnixStream::pair().unwrap();
+        let (failure_tx, failure_rx) = mpsc::sync_channel(1);
+        let handle = spawn_keybox_broker(broker, root, failure_tx).unwrap();
+
+        write_header(
+            &mut client,
+            FrameHeader {
+                opcode: keybox_file_broker::OP_KEYBOX_BROKER_OPEN,
+                flags: 0,
+                payload_len: keybox_file_broker::MAX_REQUEST_BYTES + 1,
+            },
+        )
+        .unwrap();
+
+        let error = failure_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("broker failure should reach the child-owning supervisor");
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        handle.join().unwrap();
     }
 
     #[test]
