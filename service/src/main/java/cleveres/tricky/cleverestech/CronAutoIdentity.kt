@@ -46,20 +46,22 @@ internal object CronAutoIdentity {
 
     fun start(root: File) {
         IdentityCoordinator.initialize(root)
-        synchronized(lock) {
-            if (configDir?.absoluteFile != root.absoluteFile) {
-                observer?.stopWatching()
-                observer = null
-                shutdownExecutorLocked()
-                configDir = root
-            }
-            if (observer == null) {
-                observer =
-                    object : FileObserver(root, CREATE or CLOSE_WRITE or DELETE or MOVED_FROM or MOVED_TO) {
-                        override fun onEvent(event: Int, path: String?) {
-                            if (path == TOGGLE_FILE) refreshEnabled()
-                        }
-                    }.also { it.startWatching() }
+        IdentityCoordinator.withCommitBarrier {
+            synchronized(lock) {
+                if (configDir?.absoluteFile != root.absoluteFile) {
+                    observer?.stopWatching()
+                    observer = null
+                    shutdownExecutorLocked()
+                    configDir = root
+                }
+                if (observer == null) {
+                    observer =
+                        object : FileObserver(root, CREATE or CLOSE_WRITE or DELETE or MOVED_FROM or MOVED_TO) {
+                            override fun onEvent(event: Int, path: String?) {
+                                if (path == TOGGLE_FILE) refreshEnabled()
+                            }
+                        }.also { it.startWatching() }
+                }
             }
         }
         refreshEnabled()
@@ -69,8 +71,10 @@ internal object CronAutoIdentity {
         root: File,
         enabled: Boolean,
     ) {
-        SafeConfigStore.setMarker(root, TOGGLE_FILE, enabled)
-        if (configDir?.absoluteFile == root.absoluteFile) refreshEnabled()
+        IdentityCoordinator.withCommitBarrier {
+            SafeConfigStore.setMarker(root, TOGGLE_FILE, enabled)
+            if (configDir?.absoluteFile == root.absoluteFile) refreshEnabled()
+        }
     }
 
     fun isEnabled(root: File): Boolean = runCatching { SafeConfigStore.markerEnabled(root, TOGGLE_FILE) }.getOrDefault(false)
@@ -80,25 +84,29 @@ internal object CronAutoIdentity {
     }
 
     fun stop() {
-        synchronized(lock) {
-            observer?.stopWatching()
-            observer = null
-            shutdownExecutorLocked()
-            configDir = null
+        IdentityCoordinator.withCommitBarrier {
+            synchronized(lock) {
+                observer?.stopWatching()
+                observer = null
+                shutdownExecutorLocked()
+                configDir = null
+            }
         }
     }
 
     internal fun refreshEnabled() {
-        synchronized(lock) {
-            val root = configDir ?: return
-            val decision = currentDecision(root)
-            if (!decision.shouldRun) {
-                shutdownExecutorLocked()
-                return
-            }
-            ensureExecutorLocked()
-            if (!inFlight && scheduled == null) {
-                scheduleLocked(root, workerGeneration, INITIAL_DELAY_MS)
+        IdentityCoordinator.withCommitBarrier {
+            synchronized(lock) {
+                val root = configDir ?: return@synchronized
+                val decision = currentDecision(root)
+                if (!decision.shouldRun) {
+                    shutdownExecutorLocked()
+                    return@synchronized
+                }
+                ensureExecutorLocked()
+                if (!inFlight && scheduled == null) {
+                    scheduleLocked(root, workerGeneration, INITIAL_DELAY_MS)
+                }
             }
         }
     }
@@ -171,6 +179,7 @@ internal object CronAutoIdentity {
     private fun runCheck(
         root: File,
         generation: Long,
+        fetcher: () -> AutoIdentityManager.Result = { AutoIdentityManager.fetchLatest() },
     ) {
         val decision =
             synchronized(lock) {
@@ -193,6 +202,12 @@ internal object CronAutoIdentity {
                 persistGlobal = decision.globalLiveApply,
                 persistProfile = decision.profileScoped,
                 liveApplyGlobal = decision.globalLiveApply,
+                fetcher = fetcher,
+                commitAllowed = {
+                    synchronized(lock) {
+                        ownsWorkLocked(root, generation) && currentDecision(root) == decision
+                    }
+                },
             )
 
         synchronized(lock) {
@@ -232,11 +247,13 @@ internal object CronAutoIdentity {
 
     @VisibleForTesting
     internal fun configureForTesting(root: File) {
-        synchronized(lock) {
-            observer?.stopWatching()
-            observer = null
-            shutdownExecutorLocked()
-            configDir = root
+        IdentityCoordinator.withCommitBarrier {
+            synchronized(lock) {
+                observer?.stopWatching()
+                observer = null
+                shutdownExecutorLocked()
+                configDir = root
+            }
         }
     }
 
@@ -245,4 +262,21 @@ internal object CronAutoIdentity {
         synchronized(lock) {
             executor?.let { !it.isShutdown && (scheduled != null || inFlight) } == true
         }
+
+    @VisibleForTesting
+    internal fun runNowForTesting(fetcher: () -> AutoIdentityManager.Result) {
+        val work =
+            IdentityCoordinator.withCommitBarrier {
+                synchronized(lock) {
+                    val root = configDir ?: error("Auto Identity test root is not configured")
+                    check(currentDecision(root).shouldRun) { "Auto Identity test worker is disabled" }
+                    ensureExecutorLocked()
+                    scheduled?.cancel(false)
+                    scheduled = null
+                    nextRunMs = 0L
+                    root to workerGeneration
+                }
+            }
+        runCheck(work.first, work.second, fetcher)
+    }
 }
