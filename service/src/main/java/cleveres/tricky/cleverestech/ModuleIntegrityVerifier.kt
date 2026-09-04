@@ -98,6 +98,14 @@ object ModuleIntegrityVerifier {
             DaemonQueryResult.OperationalError, null -> Unit
         }
         val manifest = providedManifest ?: cachedManifest ?: loadManifest()
+        if (manifest != null) {
+            try {
+                validateManifestTrust(manifest)
+            } catch (error: Exception) {
+                cachedManifest = null
+                return IntegrityResult.Fail(listOf("Manifest verification failed: ${error.message}"))
+            }
+        }
         return verifySingleFileLocal(relativePath, manifest)
     }
 
@@ -251,7 +259,15 @@ object ModuleIntegrityVerifier {
      * Returns the cached manifest if available, or null if loading fails.
      */
     fun loadManifest(): ParsedManifest? {
-        cachedManifest?.let { return it }
+        cachedManifest?.let { cached ->
+            try {
+                validateManifestTrust(cached)
+                return cached
+            } catch (_: Exception) {
+                cachedManifest = null
+                Logger.w("Discarding integrity manifest cache that is invalid under the current trust policy")
+            }
+        }
         val moduleDir = File(moduleDirProvider())
         val manifestFile = File(moduleDir, MANIFEST_FILENAME)
         return try {
@@ -402,7 +418,7 @@ object ModuleIntegrityVerifier {
     ): Int = parseDaemonResponseHeader(expectedOpcode, header).payloadLength
 
     /**
-     * Loads the manifest file, parses it, and verifies the HMAC signature.
+     * Loads the manifest file, parses it, and verifies the configured signature policy.
      */
     private fun loadAndVerifyManifest(manifestFile: File): ParsedManifest {
         if (!Files.isRegularFile(manifestFile.toPath(), LinkOption.NOFOLLOW_LINKS)) {
@@ -463,24 +479,37 @@ object ModuleIntegrityVerifier {
             files.add(ManifestFileEntry(path, sha256, type))
         }
 
-        if (signature.isNotEmpty()) {
-            if (signature.length != 128 || signature.any { it.digitToIntOrNull(16) == null }) {
-                throw SecurityException("Invalid manifest signature length or format")
-            }
-            val canonicalBytes = computeCanonicalData(version, files)
-            val trustedPublicKey = trustedPublicKeyProvider()
-            val signatureBytes = hexToBytes(signature)
-            if (!verifyEd25519(trustedPublicKey, canonicalBytes, signatureBytes)) {
-                throw SecurityException("Manifest digital signature verification failed")
-            }
-        } else {
+        val parsed = ParsedManifest(version, files, signature)
+        validateManifestTrust(parsed)
+        if (signature.isEmpty()) {
+            Logger.w("Integrity manifest is unsigned (development/PR build) - hash verification only")
+        }
+        return parsed
+    }
+
+    /**
+     * Revalidates a parsed manifest against the current trust context before reuse.
+     */
+    private fun validateManifestTrust(manifest: ParsedManifest) {
+        if (manifest.version != MANIFEST_VERSION) {
+            throw SecurityException("Unsupported manifest version: ${manifest.version}")
+        }
+        val signature = manifest.signature
+        if (signature.isEmpty()) {
             if (!allowUnsignedManifest) {
                 throw SecurityException("Unsigned integrity manifest is prohibited in production builds")
             }
-            Logger.w("Integrity manifest is unsigned (development/PR build) - hash verification only")
+            return
         }
-
-        return ParsedManifest(version, files, signature)
+        if (signature.length != 128 || signature.any { it.digitToIntOrNull(16) == null }) {
+            throw SecurityException("Invalid manifest signature length or format")
+        }
+        val canonicalBytes = computeCanonicalData(manifest.version, manifest.files)
+        val trustedPublicKey = trustedPublicKeyProvider()
+        val signatureBytes = hexToBytes(signature)
+        if (!verifyEd25519(trustedPublicKey, canonicalBytes, signatureBytes)) {
+            throw SecurityException("Manifest digital signature verification failed")
+        }
     }
 
     /**
