@@ -13,6 +13,9 @@ import org.junit.Before
 import org.junit.Test
 import java.io.File
 import java.nio.file.Files
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 
 class CronAutoIdentityPolicyWiringTest {
     private lateinit var root: File
@@ -82,6 +85,55 @@ class CronAutoIdentityPolicyWiringTest {
             "successful policy mutations must re-evaluate and stop stale Auto Identity ownership",
             CronAutoIdentity.isRunningForTesting(),
         )
+    }
+
+    @Test
+    fun `policy api never acquires identity commit barrier before policy state`() {
+        PolicyState.installStateForTesting(policy(profileRefresh = true).toString())
+        CronAutoIdentity.refreshEnabled()
+        assertTrue(PolicyState.hasProfileAutoIdentityWork())
+
+        val finished = CountDownLatch(1)
+        val response = AtomicReference<NanoHTTPD.Response?>()
+        val worker =
+            Thread {
+                try {
+                    response.set(
+                        PolicyApi.serve(
+                            MockIHTTPSession(
+                                uri = "/api/policy_state",
+                                method = NanoHTTPD.Method.POST,
+                                parameters = mapOf("data" to listOf(policy(profileRefresh = false).toString())),
+                            ),
+                        ),
+                    )
+                } finally {
+                    finished.countDown()
+                }
+            }.apply {
+                isDaemon = true
+                name = "policy-lock-order-regression"
+            }
+
+        IdentityCoordinator.withCommitBarrier {
+            worker.start()
+            val deadlineNanos = System.nanoTime() + TimeUnit.SECONDS.toNanos(2)
+            while (PolicyState.hasProfileAutoIdentityWork() && System.nanoTime() < deadlineNanos) {
+                Thread.sleep(5)
+            }
+            assertFalse(
+                "Policy publication must not wait for the identity barrier before acquiring PolicyState",
+                PolicyState.hasProfileAutoIdentityWork(),
+            )
+            assertFalse(
+                "Published policy should wait at the scheduler commit barrier until its current owner releases it",
+                finished.await(25, TimeUnit.MILLISECONDS),
+            )
+        }
+
+        assertTrue("Policy API did not finish after the identity barrier was released", finished.await(5, TimeUnit.SECONDS))
+        assertEquals(NanoHTTPD.Response.Status.OK, response.get()?.status)
+        assertFalse(CronAutoIdentity.isRunningForTesting())
     }
 
     private fun policy(profileRefresh: Boolean): JSONObject {
