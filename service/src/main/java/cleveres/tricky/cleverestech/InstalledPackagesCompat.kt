@@ -8,6 +8,7 @@ import java.io.InputStream
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.FutureTask
 import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.Semaphore
 import java.util.concurrent.SynchronousQueue
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
@@ -25,12 +26,14 @@ internal object InstalledPackagesCompat {
     private const val PROCESS_EXIT_GRACE_MS = 250L
     private const val MAX_COMMAND_OUTPUT_BYTES = 1024 * 1024
     private const val MAX_COMMAND_PACKAGES = 100_000
+    private const val MAX_CONCURRENT_COMMANDS = 4
     private const val PACKAGE_PREFIX = "package:"
     private val packageNamePattern = Regex("[A-Za-z0-9_.]{1,255}")
+    private val commandPermits = Semaphore(MAX_CONCURRENT_COMMANDS, true)
     private val workerExecutor =
         java.util.concurrent.ThreadPoolExecutor(
             0,
-            4,
+            MAX_CONCURRENT_COMMANDS,
             30L,
             TimeUnit.SECONDS,
             SynchronousQueue(),
@@ -71,56 +74,64 @@ internal object InstalledPackagesCompat {
 
     private fun getInstalledPackageNamesViaCommand(userId: Int): List<String> {
         require(userId >= 0) { "Package-list user id must be non-negative" }
-        val process =
-            try {
-                ProcessBuilder(
-                    "/system/bin/cmd",
-                    "package",
-                    "list",
-                    "packages",
-                    "--user",
-                    userId.toString(),
-                ).redirectErrorStream(true).start()
-            } catch (error: Exception) {
-                Logger.e("Package-list command could not be started", error)
-                return emptyList()
-            }
+        if (!commandPermits.tryAcquire()) {
+            throw IOException("Package-list command capacity is exhausted")
+        }
 
-        val reader =
-            FutureTask {
-                val packages = parsePackageListStream(process.inputStream)
-                if (!process.waitFor(PROCESS_EXIT_GRACE_MS, TimeUnit.MILLISECONDS)) {
-                    throw IOException("Package-list command did not terminate after closing its output")
-                }
-                if (process.exitValue() != 0) {
-                    throw IOException("Package-list command failed with exit code ${process.exitValue()}")
-                }
-                packages
-            }
         try {
+            val process =
+                try {
+                    ProcessBuilder(
+                        "/system/bin/cmd",
+                        "package",
+                        "list",
+                        "packages",
+                        "--user",
+                        userId.toString(),
+                    ).redirectErrorStream(true).start()
+                } catch (error: Exception) {
+                    Logger.e("Package-list command could not be started", error)
+                    return emptyList()
+                }
+
+            val reader =
+                FutureTask {
+                    val packages = parsePackageListStream(process.inputStream)
+                    if (!process.waitFor(PROCESS_EXIT_GRACE_MS, TimeUnit.MILLISECONDS)) {
+                        throw IOException("Package-list command did not terminate after closing its output")
+                    }
+                    if (process.exitValue() != 0) {
+                        throw IOException("Package-list command failed with exit code ${process.exitValue()}")
+                    }
+                    packages
+                }
             try {
-                workerExecutor.execute(reader)
-            } catch (error: RejectedExecutionException) {
-                throw IOException("Package-list command capacity is exhausted", error)
+                try {
+                    workerExecutor.execute(reader)
+                } catch (error: RejectedExecutionException) {
+                    throw IOException("Package-list command worker capacity is exhausted", error)
+                }
+                return reader.get(COMMAND_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            } catch (error: TimeoutException) {
+                throw IOException("Package-list command timed out", error)
+            } catch (error: InterruptedException) {
+                Thread.currentThread().interrupt()
+                throw IOException("Package-list command was interrupted", error)
+            } catch (error: ExecutionException) {
+                val cause = error.cause
+                if (cause is IOException) throw cause
+                throw IOException("Package-list command failed", cause)
+            } finally {
+                reader.cancel(true)
+                if (process.isAlive) {
+                    process.destroyForcibly()
+                }
+                runCatching { process.inputStream.close() }
+                runCatching { process.errorStream.close() }
+                runCatching { process.outputStream.close() }
             }
-            return reader.get(COMMAND_TIMEOUT_MS, TimeUnit.MILLISECONDS)
-        } catch (error: TimeoutException) {
-            throw IOException("Package-list command timed out", error)
-        } catch (error: InterruptedException) {
-            Thread.currentThread().interrupt()
-            throw IOException("Package-list command was interrupted", error)
-        } catch (error: ExecutionException) {
-            val cause = error.cause
-            if (cause is IOException) throw cause
-            throw IOException("Package-list command failed", cause)
         } finally {
-            reader.cancel(true)
-            if (process.isAlive) {
-                process.destroyForcibly()
-            }
-            runCatching { process.inputStream.close() }
-            runCatching { process.errorStream.close() }
-            runCatching { process.outputStream.close() }
+            commandPermits.release()
         }
     }
 
