@@ -50,9 +50,11 @@ signal_owned_process_original() {
   if [[ "${FORCE_HELPER_FAILURE:-0}" == 1 ]]; then
     return 2
   fi
-  local current_start
-  current_start=$(process_start_ticks "$target_pid") || return 3
-  [[ "$current_start" == "$expected_start" ]] || return 3
+  if [[ "$expected_start" != "-" ]]; then
+    local current_start
+    current_start=$(process_start_ticks "$target_pid") || return 3
+    [[ "$current_start" == "$expected_start" ]] || return 3
+  fi
   if [[ -n "$expected_executable" ]]; then
     local actual_executable
     actual_executable=$(readlink "/proc/$target_pid/exe" 2>/dev/null) || return 3
@@ -173,22 +175,26 @@ if [[ ! -r "/proc/$legacy_pid/stat" ]]; then
 fi
 legacy_executable=$(readlink "/proc/$legacy_pid/exe")
 
+# A stale/mismatched legacy record can be discarded after a non-destructive pidfd probe.
 printf '%s\n' "$legacy_pid" > "$pid_file"
 terminate_pid "$pid_file" "legacy-test" 1 "$TEST_ROOT/not-the-process" "" ""
 kill -0 "$legacy_job"
 [[ ! -e "$pid_file" ]]
 
+# A matching PID-only record is still ambiguous: PID reuse can produce the same process
+# shape. Preserve the record and fail closed instead of sending TERM/KILL to that occupant.
 printf '%s\n' "$legacy_pid" > "$pid_file"
-terminate_pid "$pid_file" "legacy-test" 1 "$legacy_executable" "" ""
-if [[ "$legacy_pid" == "$legacy_namespace_pid" ]]; then
-  wait "$legacy_job" 2>/dev/null || true
-else
-  kill "$legacy_job" 2>/dev/null || true
-  wait "$legacy_job" 2>/dev/null || true
+if terminate_pid "$pid_file" "legacy-test" 1 "$legacy_executable" "" ""; then
+  echo 'terminate_pid unexpectedly signaled an ambiguous legacy PID-only record' >&2
+  exit 1
 fi
+kill -0 "$legacy_job"
+[[ -f "$pid_file" ]]
+rm -f "$pid_file"
+kill "$legacy_job" 2>/dev/null || true
+wait "$legacy_job" 2>/dev/null || true
 legacy_pid=
 legacy_job=
-[[ ! -e "$pid_file" ]]
 
 grep -q 'CLEVERES_TRICKY_PIDFD_MODE=support' "$SERVICE"
 grep -q 'CLEVERES_TRICKY_PIDFD_MODE=signal' "$SERVICE"

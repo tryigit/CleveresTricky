@@ -72,12 +72,20 @@ terminate_pid() {
       old_start=${pid_record#* }
       ;;
     *)
-      # Legacy PID-only records are accepted only after binding the current process instance
-      # and still requiring the expected executable/comm/argv predicates in the pidfd helper.
+      # A PID-only legacy record cannot prove which same-boot process instance created it.
+      # Probe the current occupant through pidfd without a destructive signal: stale or
+      # identity-mismatched records are safe to discard, while a matching occupant remains
+      # ambiguous and must block startup rather than be signaled.
       old_pid=$pid_record
       case "$old_pid" in ''|*[!0-9]*|0|1) rm -f "$pid_file" 2>/dev/null || true; return 0 ;; esac
       [ "${#old_pid}" -le 10 ] || { rm -f "$pid_file" 2>/dev/null || true; return 0; }
-      old_start=$(process_start_ticks "$old_pid") || { rm -f "$pid_file" 2>/dev/null || true; return 0; }
+      helper_status=0
+      signal_owned_process "$old_pid" "-" 0 "$expected_executable" "$expected_comm" "$expected_argument" || helper_status=$?
+      if [ "$helper_status" -eq 3 ]; then
+        rm -f "$pid_file" 2>/dev/null || true
+        return 0
+      fi
+      return 1
       ;;
   esac
   case "$old_pid:$old_start" in

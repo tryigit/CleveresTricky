@@ -62,6 +62,12 @@ fn signal_owned_process() -> io::Result<bool> {
             "pidfd helper requires an identity predicate",
         ));
     }
+    if signal != 0 && expected_start.is_none() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "destructive pidfd signal requires process start time",
+        ));
+    }
 
     let pidfd = match open_pidfd(pid) {
         Ok(fd) => fd,
