@@ -739,6 +739,7 @@ struct RegisteredAdapter {
 struct CachedManifest {
     manifest: cleverestricky_integrity_core::IntegrityManifest,
     public_key_fingerprint: [u8; 32],
+    allow_unsigned: bool,
 }
 
 /// Serves WebUI IPC requests, relaying them to the registered adapter and handling integrity checks.
@@ -961,6 +962,7 @@ fn handle_integrity_verify_full(
             *lock = Some(CachedManifest {
                 manifest,
                 public_key_fingerprint: public_key_fingerprint(public_key),
+                allow_unsigned,
             });
         }
         let _ = write_frame(client, OP_INTEGRITY_VERIFY_FULL, 0, &[0]);
@@ -1031,7 +1033,7 @@ fn handle_integrity_verify_file(
         )
     };
 
-    let manifest = match cached_manifest_for_key(cached_manifest, public_key) {
+    let manifest = match cached_manifest_for_key(cached_manifest, public_key, allow_unsigned) {
         Some(manifest) => manifest,
         None => {
             let module_dir_str = match module_dir.to_str() {
@@ -1104,6 +1106,7 @@ fn handle_integrity_verify_file(
                 *lock = Some(CachedManifest {
                     manifest: m.clone(),
                     public_key_fingerprint: public_key_fingerprint(public_key),
+                    allow_unsigned,
                 });
             }
             m
@@ -1163,16 +1166,20 @@ fn public_key_fingerprint(public_key: &[u8; 32]) -> [u8; 32] {
     Sha256::digest(public_key).into()
 }
 
-/// Retrieves a cached manifest only when it was authenticated by the current public key.
+/// Retrieves a cached manifest only when it was authenticated under the current verification policy.
 fn cached_manifest_for_key(
     cached_manifest: &std::sync::RwLock<Option<CachedManifest>>,
     public_key: &[u8; 32],
+    allow_unsigned: bool,
 ) -> Option<cleverestricky_integrity_core::IntegrityManifest> {
     let fingerprint = public_key_fingerprint(public_key);
     cached_manifest.read().ok().and_then(|cached| {
         cached
             .as_ref()
-            .filter(|entry| entry.public_key_fingerprint == fingerprint)
+            .filter(|entry| {
+                entry.public_key_fingerprint == fingerprint
+                    && entry.allow_unsigned == allow_unsigned
+            })
             .map(|entry| entry.manifest.clone())
     })
 }
@@ -1502,7 +1509,7 @@ mod tests {
     }
 
     #[test]
-    fn manifest_cache_is_bound_to_public_key_fingerprint() {
+    fn manifest_cache_is_bound_to_verification_policy() {
         let first_key = [0x11; 32];
         let second_key = [0x22; 32];
         let manifest = cleverestricky_integrity_core::IntegrityManifest {
@@ -1512,10 +1519,12 @@ mod tests {
         let cache = std::sync::RwLock::new(Some(CachedManifest {
             manifest,
             public_key_fingerprint: public_key_fingerprint(&first_key),
+            allow_unsigned: true,
         }));
 
-        assert!(cached_manifest_for_key(&cache, &first_key).is_some());
-        assert!(cached_manifest_for_key(&cache, &second_key).is_none());
+        assert!(cached_manifest_for_key(&cache, &first_key, true).is_some());
+        assert!(cached_manifest_for_key(&cache, &first_key, false).is_none());
+        assert!(cached_manifest_for_key(&cache, &second_key, true).is_none());
     }
 
     #[test]
