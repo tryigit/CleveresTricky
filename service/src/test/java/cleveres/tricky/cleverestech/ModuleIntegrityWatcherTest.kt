@@ -117,6 +117,67 @@ class ModuleIntegrityWatcherTest {
     }
 
     @Test
+    fun `retired callbacks cannot affect a restarted watcher generation`() {
+        val dir = tempFolder.newFolder("modules", "cleverestricky_generation")
+        val parentObservers = mutableListOf<FileObserver>()
+        val childObservers = mutableListOf<FileObserver>()
+        val currentViolations = CopyOnWriteArrayList<List<String>>()
+        ModuleIntegrityWatcher.parentObserverStarter = { parentObservers += it }
+        ModuleIntegrityWatcher.childObserverStarter = { childObservers += it }
+
+        ModuleIntegrityWatcher.start(dir, testManifest) { violations.add(it) }
+        assertEquals(1, parentObservers.size)
+        assertEquals(1, childObservers.size)
+        val retiredParent = parentObservers.single()
+        val retiredChild = childObservers.single()
+
+        ModuleIntegrityWatcher.stop()
+        ModuleIntegrityWatcher.start(dir, testManifest) { currentViolations.add(it) }
+        assertEquals(2, parentObservers.size)
+        assertEquals(2, childObservers.size)
+        assertTrue(ModuleIntegrityWatcher.isChildObserverActiveForTesting())
+
+        retiredChild.onEvent(FileObserver.DELETE_SELF, null)
+        retiredParent.onEvent(FileObserver.DELETE, dir.name)
+
+        assertTrue(
+            "Retired callbacks must not disarm child coverage owned by the restarted generation",
+            ModuleIntegrityWatcher.isChildObserverActiveForTesting(),
+        )
+        assertTrue("Retired callbacks must not report violations to the new handler", currentViolations.isEmpty())
+    }
+
+    @Test
+    fun `retired child cannot affect a rearmed child in the same watcher generation`() {
+        val dir = tempFolder.newFolder("modules", "cleverestricky_rearm")
+        val childObservers = mutableListOf<FileObserver>()
+        ModuleIntegrityWatcher.parentObserverStarter = { }
+        ModuleIntegrityWatcher.childObserverStarter = { childObservers += it }
+
+        ModuleIntegrityWatcher.start(dir, testManifest) { violations.add(it) }
+        assertEquals(1, childObservers.size)
+        val retiredChild = childObservers.single()
+
+        ModuleIntegrityWatcher.injectParentEventForTesting(FileObserver.DELETE, dir.name)
+        assertFalse(ModuleIntegrityWatcher.isChildObserverActiveForTesting())
+        ModuleIntegrityWatcher.injectParentEventForTesting(FileObserver.CREATE, dir.name)
+        assertTrue(ModuleIntegrityWatcher.isChildObserverActiveForTesting())
+        assertEquals(2, childObservers.size)
+
+        // The current parent CREATE schedules a full fail-closed verification. Let that current
+        // generation work finish, then isolate the effect of the retired child callback itself.
+        Thread.sleep(250)
+        violations.clear()
+        retiredChild.onEvent(FileObserver.DELETE_SELF, null)
+
+        assertTrue(
+            "A child retired before re-arm must not disarm the current child observer",
+            ModuleIntegrityWatcher.isChildObserverActiveForTesting(),
+        )
+        assertTrue("A retired child callback must not report a new violation", violations.isEmpty())
+    }
+
+    @Test
     fun nonCriticalDeleteDoesNotTriggerViolation() {
         val dir = tempFolder.newFolder("modules", "cleverestricky")
         ModuleIntegrityWatcher.start(dir, testManifest) { violations.add(it) }
