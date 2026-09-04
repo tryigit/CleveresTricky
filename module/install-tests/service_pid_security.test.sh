@@ -3,13 +3,45 @@ set -euo pipefail
 
 REPO_ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 SERVICE="$REPO_ROOT/module/template/service.sh"
+POST_FS="$REPO_ROOT/module/template/post-fs-data.sh"
 TEST_ROOT=$(mktemp -d)
 trap 'if [[ -n "${victim_job:-}" ]]; then kill "$victim_job" 2>/dev/null || true; wait "$victim_job" 2>/dev/null || true; fi; if [[ -n "${legacy_job:-}" ]]; then kill "$legacy_job" 2>/dev/null || true; wait "$legacy_job" 2>/dev/null || true; fi; rm -rf "$TEST_ROOT"' EXIT
 
 sed -n '/^# BEGIN PID SAFETY HELPERS$/,/^# END PID SAFETY HELPERS$/p' "$SERVICE" > "$TEST_ROOT/helpers.sh"
+sed -n '/^# BEGIN BOOT EPOCH HELPERS$/,/^# END BOOT EPOCH HELPERS$/p' "$POST_FS" > "$TEST_ROOT/boot-epoch-helpers.sh"
 # shellcheck source=/dev/null
 source "$TEST_ROOT/helpers.sh"
+# shellcheck source=/dev/null
+source "$TEST_ROOT/boot-epoch-helpers.sh"
 log() { :; }
+chown() { :; }
+chcon() { :; }
+
+# Persistent PID records are meaningful only within the boot that created them.
+# A mismatched boot marker must discard every runtime PID record without signaling.
+CONFIG_DIR="$TEST_ROOT/boot-config"
+MODDIR="$TEST_ROOT/module"
+CONFIG_ROOT_SAFE=true
+mkdir -p "$CONFIG_DIR" "$MODDIR"
+TEST_BOOT_ID=11111111-2222-3333-4444-555555555555
+current_boot_id() { printf '%s' "$TEST_BOOT_ID"; }
+printf '%s\n' 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' > "$CONFIG_DIR/runtime.boot_id"
+for record in supervisor.pid daemon.pid adapter.pid backend.pid; do
+  printf '123 456\n' > "$CONFIG_DIR/$record"
+done
+printf '123 456\n' > "$MODDIR/supervisor.pid"
+prepare_runtime_boot_epoch
+for record in supervisor.pid daemon.pid adapter.pid backend.pid; do
+  [[ ! -e "$CONFIG_DIR/$record" ]]
+done
+[[ ! -e "$MODDIR/supervisor.pid" ]]
+[[ $(tr -d '\r\n' < "$CONFIG_DIR/runtime.boot_id") == "$TEST_BOOT_ID" ]]
+
+# Same-boot restarts retain PID records so the pidfd cleanup below can stop owned processes.
+printf '123 456\n' > "$CONFIG_DIR/daemon.pid"
+prepare_runtime_boot_epoch
+[[ -f "$CONFIG_DIR/daemon.pid" ]]
+rm -f "$CONFIG_DIR/daemon.pid"
 
 # Host-side shim for the production pidfd helper. It exercises shell control flow and
 # identity policy; Rust unit/CI coverage validates the real pidfd syscalls.
@@ -160,6 +192,7 @@ legacy_job=
 
 grep -q 'CLEVERES_TRICKY_PIDFD_MODE=support' "$SERVICE"
 grep -q 'CLEVERES_TRICKY_PIDFD_MODE=signal' "$SERVICE"
+grep -q 'prepare_runtime_boot_epoch' "$POST_FS"
 if grep -E 'kill[[:space:]].*\$(old_pid|supervisor_pid)' "$SERVICE" >/dev/null; then
   echo 'raw PID kill reintroduced into service supervisor' >&2
   exit 1
