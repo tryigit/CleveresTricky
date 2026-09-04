@@ -1,4 +1,5 @@
 #!/system/bin/sh
+MODDIR=${0%/*}
 CONFIG_DIR="${CLEVERES_TRICKY_CONFIG_DIR:-/data/adb/cleverestricky}"
 CONFIG_ROOT_SAFE=false
 
@@ -10,6 +11,66 @@ if [ -d "$CONFIG_DIR" ] && [ ! -L "$CONFIG_DIR" ]; then
   fi
   chcon u:object_r:system_file:s0 "$CONFIG_DIR" 2>/dev/null
 fi
+
+# BEGIN BOOT EPOCH HELPERS
+current_boot_id() {
+  boot_id=$(dd if=/proc/sys/kernel/random/boot_id bs=65 count=1 2>/dev/null) || return 1
+  boot_id=$(printf '%s' "$boot_id" | tr -d '\r\n')
+  [ "${#boot_id}" -eq 36 ] || return 1
+  case "$boot_id" in
+    *[!0-9a-f-]*) return 1 ;;
+  esac
+  printf '%s' "$boot_id"
+}
+
+clear_persisted_runtime_pids() {
+  rm -f \
+    "$CONFIG_DIR/supervisor.pid" \
+    "$CONFIG_DIR/daemon.pid" \
+    "$CONFIG_DIR/adapter.pid" \
+    "$CONFIG_DIR/backend.pid" \
+    "$MODDIR/supervisor.pid" \
+    2>/dev/null || true
+}
+
+prepare_runtime_boot_epoch() {
+  [ "$CONFIG_ROOT_SAFE" = true ] || return 0
+  marker="$CONFIG_DIR/runtime.boot_id"
+  if [ -L "$marker" ] || { [ -e "$marker" ] && [ ! -f "$marker" ]; }; then
+    clear_persisted_runtime_pids
+    rm -f "$marker" 2>/dev/null || true
+  fi
+
+  current_id=$(current_boot_id) || {
+    clear_persisted_runtime_pids
+    log -t CleveresTricky "Kernel boot identity is unavailable; stale runtime PID records were discarded"
+    return 0
+  }
+
+  previous_id=
+  if [ -f "$marker" ] && [ ! -L "$marker" ]; then
+    previous_id=$(dd if="$marker" bs=65 count=1 2>/dev/null) || previous_id=
+    previous_id=$(printf '%s' "$previous_id" | tr -d '\r\n')
+  fi
+  if [ "$previous_id" != "$current_id" ]; then
+    clear_persisted_runtime_pids
+  fi
+
+  tmp="$CONFIG_DIR/.runtime.boot_id.$$"
+  rm -f "$tmp" 2>/dev/null || return 0
+  umask 077
+  if ! printf '%s\n' "$current_id" > "$tmp" 2>/dev/null; then
+    rm -f "$tmp" 2>/dev/null || true
+    return 0
+  fi
+  chown 0:0 "$tmp" 2>/dev/null || { rm -f "$tmp"; return 0; }
+  chmod 600 "$tmp" 2>/dev/null || { rm -f "$tmp"; return 0; }
+  chcon u:object_r:system_file:s0 "$tmp" 2>/dev/null
+  mv -f "$tmp" "$marker" 2>/dev/null || rm -f "$tmp" 2>/dev/null || true
+}
+# END BOOT EPOCH HELPERS
+
+prepare_runtime_boot_epoch
 
 boot_policy_feature_enabled() {
   feature=$1
