@@ -3,7 +3,6 @@ package cleveres.tricky.cleverestech
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.ByteArrayInputStream
@@ -11,7 +10,6 @@ import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
-import java.lang.reflect.InvocationTargetException
 import java.util.concurrent.atomic.AtomicInteger
 
 class CodeRabbitRegressionTest {
@@ -32,7 +30,7 @@ class CodeRabbitRegressionTest {
     }
 
     @Test
-    fun `keybox child observer reference clears even when stop throws`() {
+    fun `keybox child observer cleanup failure is isolated after retirement`() {
         val watcher = KeyboxDirectoryRefreshWatcher
         val type = watcher::class.java
         val childField = type.getDeclaredField("childObserver").apply { isAccessible = true }
@@ -51,12 +49,14 @@ class CodeRabbitRegressionTest {
 
         childField.set(watcher, throwingHandle)
         try {
-            val failure =
-                assertThrows(InvocationTargetException::class.java) {
-                    disarmMethod.invoke(watcher)
-                }
-            assertTrue(failure.cause is IOException)
+            disarmMethod.invoke(watcher)
+
             assertNull("Retired child handle must be cleared before stopWatching", childField.get(watcher))
+            assertEquals(
+                "Retiring the child must invalidate callbacks even when cleanup fails",
+                originalGeneration + 1,
+                generationField.getLong(watcher),
+            )
         } finally {
             childField.set(watcher, originalChild)
             generationField.setLong(watcher, originalGeneration)
