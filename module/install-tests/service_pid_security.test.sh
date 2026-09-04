@@ -192,7 +192,11 @@ legacy_job=
 
 grep -q 'CLEVERES_TRICKY_PIDFD_MODE=support' "$SERVICE"
 grep -q 'CLEVERES_TRICKY_PIDFD_MODE=signal' "$SERVICE"
-grep -q 'prepare_runtime_boot_epoch' "$POST_FS"
+awk '
+  /^# END BOOT EPOCH HELPERS$/ { after_helpers = 1; next }
+  after_helpers && /^[[:space:]]*prepare_runtime_boot_epoch[[:space:]]*$/ { found = 1 }
+  END { exit !found }
+' "$POST_FS"
 if grep -E 'kill[[:space:]].*\$(old_pid|supervisor_pid)' "$SERVICE" >/dev/null; then
   echo 'raw PID kill reintroduced into service supervisor' >&2
   exit 1
