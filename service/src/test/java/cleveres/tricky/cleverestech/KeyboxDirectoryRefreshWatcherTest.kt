@@ -99,7 +99,7 @@ class KeyboxDirectoryRefreshWatcherTest {
 
         // Emulate parent creation event
         assertTrue(nonExistentDir.mkdirs())
-        KeyboxDirectoryRefreshWatcher.injectParentEventForTesting(FileObserver.CREATE, "does_not_exist")
+        KeyboxDirectoryRefreshWatcher.injectParentEventForTesting(nonExistentDir, FileObserver.CREATE, "does_not_exist")
 
         assertTrue(KeyboxDirectoryRefreshWatcher.isChildObserverActiveForTesting())
         assertTrue(Config.keyboxInventoryFingerprintDirty)
@@ -131,7 +131,7 @@ class KeyboxDirectoryRefreshWatcherTest {
         assertFalse(KeyboxDirectoryRefreshWatcher.isChildObserverActiveForTesting())
 
         // Recreate it via parent watcher
-        KeyboxDirectoryRefreshWatcher.injectParentEventForTesting(FileObserver.CREATE, keyboxDir.name)
+        KeyboxDirectoryRefreshWatcher.injectParentEventForTesting(keyboxDir, FileObserver.CREATE, keyboxDir.name)
         assertTrue(KeyboxDirectoryRefreshWatcher.isChildObserverActiveForTesting())
     }
 
@@ -142,7 +142,7 @@ class KeyboxDirectoryRefreshWatcherTest {
         KeyboxDirectoryRefreshWatcher.injectChildEventForTesting(FileObserver.MOVE_SELF)
         assertFalse(KeyboxDirectoryRefreshWatcher.isChildObserverActiveForTesting())
 
-        KeyboxDirectoryRefreshWatcher.injectParentEventForTesting(FileObserver.MOVED_TO, keyboxDir.name)
+        KeyboxDirectoryRefreshWatcher.injectParentEventForTesting(keyboxDir, FileObserver.MOVED_TO, keyboxDir.name)
         assertTrue(KeyboxDirectoryRefreshWatcher.isChildObserverActiveForTesting())
     }
 
@@ -150,10 +150,10 @@ class KeyboxDirectoryRefreshWatcherTest {
     fun testRapidDeleteAndRecreate() {
         KeyboxDirectoryRefreshWatcher.start(keyboxDir)
 
-        KeyboxDirectoryRefreshWatcher.injectParentEventForTesting(FileObserver.DELETE, keyboxDir.name)
+        KeyboxDirectoryRefreshWatcher.injectParentEventForTesting(keyboxDir, FileObserver.DELETE, keyboxDir.name)
         assertFalse(KeyboxDirectoryRefreshWatcher.isChildObserverActiveForTesting())
 
-        KeyboxDirectoryRefreshWatcher.injectParentEventForTesting(FileObserver.CREATE, keyboxDir.name)
+        KeyboxDirectoryRefreshWatcher.injectParentEventForTesting(keyboxDir, FileObserver.CREATE, keyboxDir.name)
         assertTrue(KeyboxDirectoryRefreshWatcher.isChildObserverActiveForTesting())
     }
 
@@ -176,10 +176,10 @@ class KeyboxDirectoryRefreshWatcherTest {
     fun testDeleteMovedToSequence() {
         KeyboxDirectoryRefreshWatcher.start(keyboxDir)
 
-        KeyboxDirectoryRefreshWatcher.injectParentEventForTesting(FileObserver.DELETE, keyboxDir.name)
+        KeyboxDirectoryRefreshWatcher.injectParentEventForTesting(keyboxDir, FileObserver.DELETE, keyboxDir.name)
         assertFalse(KeyboxDirectoryRefreshWatcher.isChildObserverActiveForTesting())
 
-        KeyboxDirectoryRefreshWatcher.injectParentEventForTesting(FileObserver.MOVED_TO, keyboxDir.name)
+        KeyboxDirectoryRefreshWatcher.injectParentEventForTesting(keyboxDir, FileObserver.MOVED_TO, keyboxDir.name)
         assertTrue(KeyboxDirectoryRefreshWatcher.isChildObserverActiveForTesting())
     }
 
@@ -188,8 +188,8 @@ class KeyboxDirectoryRefreshWatcherTest {
         KeyboxDirectoryRefreshWatcher.start(keyboxDir)
 
         // Creating while already existing shouldn't duplicate
-        KeyboxDirectoryRefreshWatcher.injectParentEventForTesting(FileObserver.CREATE, keyboxDir.name)
-        KeyboxDirectoryRefreshWatcher.injectParentEventForTesting(FileObserver.CREATE, keyboxDir.name)
+        KeyboxDirectoryRefreshWatcher.injectParentEventForTesting(keyboxDir, FileObserver.CREATE, keyboxDir.name)
+        KeyboxDirectoryRefreshWatcher.injectParentEventForTesting(keyboxDir, FileObserver.CREATE, keyboxDir.name)
 
         assertTrue(KeyboxDirectoryRefreshWatcher.isChildObserverActiveForTesting())
     }
