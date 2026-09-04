@@ -4,9 +4,14 @@ import org.json.JSONObject
 import java.io.File
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutionException
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 
 internal class IdentityRuntimeSnapshotException(cause: Throwable) :
     IllegalStateException("Live Identity rollback snapshot is unavailable", cause)
+
+internal class IdentityRefreshCancelledException :
+    IllegalStateException("Identity refresh no longer owns the current policy generation")
 
 /** Single owner for Identity fetch, persistence, live apply/rollback and diagnostics. */
 internal object IdentityCoordinator {
@@ -39,6 +44,7 @@ internal object IdentityCoordinator {
     )
 
     private val fetchLock = Any()
+    private val commitLock = ReentrantLock()
     private var fetchFlight: CompletableFuture<AutoIdentityManager.Result>? = null
 
     @Volatile
@@ -64,12 +70,15 @@ internal object IdentityCoordinator {
             }
     }
 
+    internal fun <T> withCommitBarrier(block: () -> T): T = commitLock.withLock(block)
+
     fun refresh(
         root: File,
         persistGlobal: Boolean,
         persistProfile: Boolean,
         liveApplyGlobal: Boolean,
         fetcher: () -> AutoIdentityManager.Result = { AutoIdentityManager.fetchLatest() },
+        commitAllowed: (() -> Boolean)? = null,
     ): Result<RefreshOutcome> {
         require(persistGlobal || persistProfile) { "Identity refresh has no persistence scope" }
         lastAttemptMs = System.currentTimeMillis()
@@ -81,21 +90,30 @@ internal object IdentityCoordinator {
             }
         return runCatching {
             val resolved = fetchShared(fetcher)
-            if (persistProfile) ProfileAutoIdentityStore.save(root, resolved).getOrThrow()
-            if (persistGlobal) AutoIdentityPersistence.save(root, resolved).getOrThrow()
-            val runtime =
-                if (liveApplyGlobal && persistGlobal && PolicyState.isTopLevelFeatureEnabled(PolicyState.Feature.BUILD_IDENTITY)) {
-                    IdentityRuntimeApplier.apply(root)
-                } else {
-                    null
+            val outcome =
+                withCommitBarrier {
+                    if (commitAllowed?.invoke() == false) throw IdentityRefreshCancelledException()
+                    if (persistProfile) ProfileAutoIdentityStore.save(root, resolved).getOrThrow()
+                    if (persistGlobal) AutoIdentityPersistence.save(root, resolved).getOrThrow()
+                    val runtime =
+                        if (liveApplyGlobal && persistGlobal && PolicyState.isTopLevelFeatureEnabled(PolicyState.Feature.BUILD_IDENTITY)) {
+                            IdentityRuntimeApplier.apply(root)
+                        } else {
+                            null
+                        }
+                    RefreshOutcome(resolved, runtime, persistGlobal, persistProfile)
                 }
-            lastRuntime = runtime
+            lastRuntime = outcome.runtime
             lastSuccessMs = System.currentTimeMillis()
             lastError = null
-            RefreshOutcome(resolved, runtime, persistGlobal, persistProfile)
+            outcome
         }.onFailure { error ->
-            lastError = error.javaClass.simpleName
-            Logger.e("Identity refresh failed", error)
+            if (error is IdentityRefreshCancelledException) {
+                Logger.d("Discarding Auto Identity refresh whose scheduler ownership changed before commit")
+            } else {
+                lastError = error.javaClass.simpleName
+                Logger.e("Identity refresh failed", error)
+            }
         }
     }
 
@@ -107,41 +125,44 @@ internal object IdentityCoordinator {
             IdentityRuntimeSnapshot::capture,
         restoreRuntime: (File, Boolean, Boolean) -> IdentityRuntimeApplier.Result = IdentityRuntimeApplier::restore,
         applyRuntime: (File) -> IdentityRuntimeApplier.Result = IdentityRuntimeApplier::apply,
-    ): Result<TransitionOutcome> = runCatching {
-        val previous = topLevel(before)
-        val current = topLevel(after)
-        val enableBuild = !previous.build && current.build
-        val enableRegion = !previous.region && current.region
-        val disableBuild = previous.build && !current.build
-        val disableRegion = previous.region && !current.region
-        if (!enableBuild && !enableRegion && !disableBuild && !disableRegion) {
-            return@runCatching TransitionOutcome(rollbackPrepared = true, restore = null, apply = null)
-        }
-
-        val rollbackPrepared =
-            if (enableBuild || enableRegion) {
-                capture(root, enableBuild, enableRegion).getOrElse { error ->
-                    throw IdentityRuntimeSnapshotException(error)
+    ): Result<TransitionOutcome> =
+        withCommitBarrier {
+            runCatching {
+                val previous = topLevel(before)
+                val current = topLevel(after)
+                val enableBuild = !previous.build && current.build
+                val enableRegion = !previous.region && current.region
+                val disableBuild = previous.build && !current.build
+                val disableRegion = previous.region && !current.region
+                if (!enableBuild && !enableRegion && !disableBuild && !disableRegion) {
+                    return@runCatching TransitionOutcome(rollbackPrepared = true, restore = null, apply = null)
                 }
-                true
-            } else {
-                true
+
+                val rollbackPrepared =
+                    if (enableBuild || enableRegion) {
+                        capture(root, enableBuild, enableRegion).getOrElse { error ->
+                            throw IdentityRuntimeSnapshotException(error)
+                        }
+                        true
+                    } else {
+                        true
+                    }
+                val restore =
+                    if (disableBuild || disableRegion) {
+                        restoreRuntime(root, disableBuild, disableRegion)
+                    } else {
+                        null
+                    }
+                val apply =
+                    if (current.build || current.region) {
+                        applyRuntime(root)
+                    } else {
+                        null
+                    }
+                lastRuntime = apply ?: restore
+                TransitionOutcome(rollbackPrepared, restore, apply)
             }
-        val restore =
-            if (disableBuild || disableRegion) {
-                restoreRuntime(root, disableBuild, disableRegion)
-            } else {
-                null
-            }
-        val apply =
-            if (current.build || current.region) {
-                applyRuntime(root)
-            } else {
-                null
-            }
-        lastRuntime = apply ?: restore
-        TransitionOutcome(rollbackPrepared, restore, apply)
-    }
+        }
 
     fun diagnosticsJson(): JSONObject =
         JSONObject()
