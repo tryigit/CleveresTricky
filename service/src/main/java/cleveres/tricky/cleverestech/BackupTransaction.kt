@@ -139,9 +139,12 @@ internal object BackupRestoreTransaction {
                                         StandardOpenOption.CREATE_NEW,
                                         StandardOpenOption.WRITE,
                                     ).use { output ->
-                                        Channels.newInputStream(channel).use { input ->
-                                            BackupIo.copyBounded(input, output, remaining, remaining)
-                                        }
+                                        BackupIo.copyBounded(
+                                            Channels.newInputStream(channel),
+                                            output,
+                                            remaining,
+                                            remaining,
+                                        )
                                     }.also { streamed ->
                                         if (streamed != initialSize || channel.size() != initialSize) {
                                             throw IOException("Restore transaction source changed while snapshotting")

@@ -54,7 +54,10 @@ fn parse_process_start_ticks(stat: &str) -> Option<u64> {
 
 fn process_identity_record(pid: u32) -> io::Result<String> {
     if pid == 0 {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "process id is zero"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "process id is zero",
+        ));
     }
     let mut stat = String::new();
     fs::File::open(format!("/proc/{pid}/stat"))?
