@@ -4,7 +4,7 @@ set -euo pipefail
 REPO_ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 SERVICE="$REPO_ROOT/module/template/service.sh"
 TEST_ROOT=$(mktemp -d)
-trap 'if [[ -n "${victim_job:-}" ]]; then kill "$victim_job" 2>/dev/null || true; wait "$victim_job" 2>/dev/null || true; fi; rm -rf "$TEST_ROOT"' EXIT
+trap 'if [[ -n "${victim_job:-}" ]]; then kill "$victim_job" 2>/dev/null || true; wait "$victim_job" 2>/dev/null || true; fi; if [[ -n "${legacy_job:-}" ]]; then kill "$legacy_job" 2>/dev/null || true; wait "$legacy_job" 2>/dev/null || true; fi; rm -rf "$TEST_ROOT"' EXIT
 
 sed -n '/^# BEGIN PID SAFETY HELPERS$/,/^# END PID SAFETY HELPERS$/p' "$SERVICE" > "$TEST_ROOT/helpers.sh"
 # shellcheck source=/dev/null
@@ -62,6 +62,44 @@ else
 fi
 victim_pid=
 victim_job=
+[[ ! -e "$pid_file" ]]
+
+# Releases before the start-time hardening wrote a single numeric PID. On upgrade,
+# identity mismatch must leave the live process alone, while a matching legacy
+# record must still be cleaned up so a second supervisor/daemon is not orphaned.
+python3 -c 'import os, pathlib, time; pathlib.Path(__import__("sys").argv[1]).write_text(str(os.getpid())); time.sleep(30)' "$TEST_ROOT/legacy-victim.pid" &
+legacy_job=$!
+for _ in {1..50}; do
+  [[ -s "$TEST_ROOT/legacy-victim.pid" ]] && break
+  sleep 0.01
+done
+legacy_namespace_pid=$(< "$TEST_ROOT/legacy-victim.pid")
+legacy_pid=$legacy_namespace_pid
+if [[ ! -r "/proc/$legacy_pid/stat" ]]; then
+  for process_dir in /proc/[0-9]*; do
+    if tr '\000' '\n' < "$process_dir/cmdline" 2>/dev/null | grep -F -x -- "$TEST_ROOT/legacy-victim.pid" >/dev/null; then
+      legacy_pid=${process_dir##*/}
+      break
+    fi
+  done
+fi
+legacy_executable=$(readlink "/proc/$legacy_pid/exe")
+
+printf '%s\n' "$legacy_pid" > "$pid_file"
+terminate_pid "$pid_file" "legacy-test" 1 "$TEST_ROOT/not-the-process" "" ""
+kill -0 "$legacy_job"
+[[ ! -e "$pid_file" ]]
+
+printf '%s\n' "$legacy_pid" > "$pid_file"
+terminate_pid "$pid_file" "legacy-test" 1 "$legacy_executable" "" ""
+if [[ "$legacy_pid" == "$legacy_namespace_pid" ]]; then
+  wait "$legacy_job" 2>/dev/null || true
+else
+  kill "$legacy_job" 2>/dev/null || true
+  wait "$legacy_job" 2>/dev/null || true
+fi
+legacy_pid=
+legacy_job=
 [[ ! -e "$pid_file" ]]
 
 config_check=$(grep -n '^if \[ -L "\$CONFIG_DIR" \]; then' "$SERVICE" | head -n1 | cut -d: -f1)
