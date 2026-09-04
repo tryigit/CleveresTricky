@@ -123,9 +123,7 @@ internal object InstalledPackagesCompat {
                 throw IOException("Package-list command failed", cause)
             } finally {
                 reader.cancel(true)
-                if (process.isAlive) {
-                    process.destroyForcibly()
-                }
+                terminateProcessBeforePermitRelease(process)
                 runCatching { process.inputStream.close() }
                 runCatching { process.errorStream.close() }
                 runCatching { process.outputStream.close() }
@@ -133,6 +131,22 @@ internal object InstalledPackagesCompat {
         } finally {
             commandPermits.release()
         }
+    }
+
+    @androidx.annotation.VisibleForTesting
+    internal fun terminateProcessBeforePermitRelease(process: Process) {
+        if (!process.isAlive) return
+        process.destroyForcibly()
+        var interrupted = false
+        while (true) {
+            try {
+                process.waitFor()
+                break
+            } catch (_: InterruptedException) {
+                interrupted = true
+            }
+        }
+        if (interrupted) Thread.currentThread().interrupt()
     }
 
     @androidx.annotation.VisibleForTesting

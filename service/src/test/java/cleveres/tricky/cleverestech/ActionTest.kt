@@ -127,6 +127,7 @@ class ActionTest {
     fun tearDown() {
         server.stop()
         CronAutoIdentity.stop()
+        PolicyState.resetForTesting()
         ManagedOpaqueKeyOracle.readFromXml(null)
         Config.reset()
         ManagedKeyboxParserOracle.reset()

@@ -295,8 +295,9 @@ internal object KeyboxDirectoryRefreshWatcher {
 
     private fun disarmChildLocked() {
         childGeneration++
-        childObserver?.stopWatching()
+        val retired = childObserver
         childObserver = null
+        retired?.stopWatching()
     }
 
     private fun cleanupReplacementLocked() {
