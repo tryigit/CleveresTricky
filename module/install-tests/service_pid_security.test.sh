@@ -47,6 +47,7 @@ rm -f "$CONFIG_DIR/daemon.pid"
 # identity policy; Rust unit/CI coverage validates the real pidfd syscalls.
 signal_owned_process_original() {
   local target_pid=$1 expected_start=$2 signal_number=$3 expected_executable=$4 expected_comm=$5 expected_argument=$6
+  local signal_pid=$target_pid
   if [[ "${FORCE_HELPER_FAILURE:-0}" == 1 ]]; then
     return 2
   fi
@@ -68,10 +69,16 @@ signal_owned_process_original() {
   if [[ -n "$expected_argument" ]]; then
     tr '\000' '\n' < "/proc/$target_pid/cmdline" 2>/dev/null | grep -F -x -- "$expected_argument" >/dev/null || return 3
   fi
+  # Some test sandboxes expose host PIDs through procfs while shell signals use a nested PID namespace.
+  if [[ "${victim_pid:-}" == "$target_pid" && -n "${victim_namespace_pid:-}" ]]; then
+    signal_pid=$victim_namespace_pid
+  elif [[ "${legacy_pid:-}" == "$target_pid" && -n "${legacy_namespace_pid:-}" ]]; then
+    signal_pid=$legacy_namespace_pid
+  fi
   if [[ "$signal_number" == 0 ]]; then
-    kill -0 "$target_pid" 2>/dev/null || return 3
+    [[ -r "/proc/$target_pid/stat" ]] || return 3
   else
-    kill -"$signal_number" "$target_pid" 2>/dev/null || return 3
+    kill -"$signal_number" "$signal_pid" 2>/dev/null || return 3
   fi
 }
 
