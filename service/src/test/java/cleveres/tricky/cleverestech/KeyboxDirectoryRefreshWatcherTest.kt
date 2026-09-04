@@ -157,6 +157,32 @@ class KeyboxDirectoryRefreshWatcherTest {
         assertTrue(KeyboxDirectoryRefreshWatcher.isChildObserverActiveForTesting())
     }
 
+    @Test
+    fun testDeleteSelfRefreshSurvivesChildStopFailure() {
+        KeyboxDirectoryRefreshWatcher.watchFactory =
+            RuntimeWatchFactory { file, _, _ ->
+                object : RuntimeWatchHandle {
+                    override fun startWatching() = Unit
+
+                    override fun stopWatching() {
+                        if (file == keyboxDir) throw IllegalStateException("synthetic child stop failure")
+                    }
+                }
+            }
+        try {
+            KeyboxDirectoryRefreshWatcher.start(keyboxDir)
+            Config.keyboxInventoryFingerprintDirty = false
+
+            KeyboxDirectoryRefreshWatcher.injectChildEventForTesting(FileObserver.DELETE_SELF)
+
+            assertFalse(KeyboxDirectoryRefreshWatcher.isChildObserverActiveForTesting())
+            assertTrue(Config.keyboxInventoryFingerprintDirty)
+        } finally {
+            KeyboxDirectoryRefreshWatcher.stop()
+            KeyboxDirectoryRefreshWatcher.resetWatchFactoryForTesting()
+        }
+    }
+
     // 15-19. Race / Event Storm
     @Test
     fun testCreateModifyStorm() {

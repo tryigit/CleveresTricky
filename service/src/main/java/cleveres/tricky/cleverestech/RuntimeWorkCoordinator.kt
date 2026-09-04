@@ -297,7 +297,8 @@ internal object KeyboxDirectoryRefreshWatcher {
         childGeneration++
         val retired = childObserver
         childObserver = null
-        retired?.stopWatching()
+        runCatching { retired?.stopWatching() }
+            .onFailure { Logger.w("Failed to stop retired keybox directory watcher", it) }
     }
 
     private fun cleanupReplacementLocked() {
