@@ -374,7 +374,9 @@ run_daemon_with_bounded_log() {
         fi
       fi
     done < "$runtime_pipe"
-    [ "$capture_ok" = true ] && rotate_native_log || true
+    if [ "$capture_ok" = true ]; then
+      rotate_native_log || true
+    fi
   ) &
   log_reader_pid=$!
   "$MODDIR/daemon" > "$runtime_pipe" 2>&1
