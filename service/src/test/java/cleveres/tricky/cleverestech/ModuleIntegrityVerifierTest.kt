@@ -453,6 +453,64 @@ class ModuleIntegrityVerifierTest {
     }
 
     @Test
+    fun cachedUnsignedManifestIsRejectedAfterPolicyTightens() {
+        val moduleDir = tempFolder.newFolder("module_unsigned_cached")
+        ModuleIntegrityVerifier.moduleDirProvider = { moduleDir.absolutePath }
+        ModuleIntegrityVerifier.allowUnsignedManifest = true
+
+        val content = "cached payload".toByteArray()
+        val entry = ManifestFileEntry("service.apk", sha256Hex(content), "regular")
+        File(moduleDir, "service.apk").writeBytes(content)
+        val filesJson = org.json.JSONArray().put(
+            org.json.JSONObject()
+                .put("path", entry.path)
+                .put("sha256", entry.sha256)
+                .put("type", entry.type)
+        )
+        File(moduleDir, "integrity_manifest.json").writeText(
+            org.json.JSONObject()
+                .put("version", 1)
+                .put("files", filesJson)
+                .put("signature", "")
+                .toString()
+        )
+
+        val permissiveManifest = ModuleIntegrityVerifier.loadManifest()
+        assertTrue("Permissive policy should admit the unsigned manifest", permissiveManifest != null)
+
+        ModuleIntegrityVerifier.allowUnsignedManifest = false
+
+        assertNull("Strict policy must not reuse the permissive cache", ModuleIntegrityVerifier.loadManifest())
+        val targeted = ModuleIntegrityVerifier.verifySingleFile("service.apk", permissiveManifest)
+        assertTrue("Explicit stale manifest must also fail strict trust validation", targeted is IntegrityResult.Fail)
+        assertTrue(
+            (targeted as IntegrityResult.Fail).violations.any { it.contains("Unsigned integrity manifest is prohibited") }
+        )
+    }
+
+    @Test
+    fun cachedSignedManifestIsRejectedAfterTrustedKeyChanges() {
+        val moduleDir = tempFolder.newFolder("module_signed_cached")
+        ModuleIntegrityVerifier.moduleDirProvider = { moduleDir.absolutePath }
+        createManifest(moduleDir, listOf("service.apk" to "signed payload".toByteArray()))
+
+        val originalManifest = ModuleIntegrityVerifier.loadManifest()
+        assertTrue("Original trust key should admit the signed manifest", originalManifest != null)
+
+        val replacementKeyPair = java.security.KeyPairGenerator.getInstance("Ed25519").generateKeyPair()
+        val encoded = replacementKeyPair.public.encoded
+        val replacementPublicKey = encoded.copyOfRange(encoded.size - 32, encoded.size)
+        ModuleIntegrityVerifier.trustedPublicKeyProvider = { replacementPublicKey.copyOf() }
+
+        assertNull("Changed trust key must invalidate the cached manifest", ModuleIntegrityVerifier.loadManifest())
+        val targeted = ModuleIntegrityVerifier.verifySingleFile("service.apk", originalManifest)
+        assertTrue("Explicit manifest verified by the old key must fail", targeted is IntegrityResult.Fail)
+        assertTrue(
+            (targeted as IntegrityResult.Fail).violations.any { it.contains("digital signature verification failed") }
+        )
+    }
+
+    @Test
     fun runtimeDirectoriesKeyboxesAndLogsAreIgnored() {
         val moduleDir = tempFolder.newFolder("module_runtime_dirs")
         ModuleIntegrityVerifier.moduleDirProvider = { moduleDir.absolutePath }
