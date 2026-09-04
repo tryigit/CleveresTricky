@@ -35,6 +35,12 @@ internal object CronAutoIdentity {
     @Volatile
     private var observer: FileObserver? = null
 
+    @Volatile
+    internal var observerStarter: (FileObserver) -> Unit = { it.startWatching() }
+
+    @Volatile
+    internal var observerStopper: (FileObserver) -> Unit = { it.stopWatching() }
+
     private var scheduled: ScheduledFuture<*>? = null
     private var workerGeneration = 0L
     private var inFlight = false
@@ -49,22 +55,39 @@ internal object CronAutoIdentity {
         IdentityCoordinator.withCommitBarrier {
             synchronized(lock) {
                 if (configDir?.absoluteFile != root.absoluteFile) {
-                    observer?.stopWatching()
-                    observer = null
+                    retireObserverLocked()
                     shutdownExecutorLocked()
                     configDir = root
                 }
                 if (observer == null) {
-                    observer =
-                        object : FileObserver(root, CREATE or CLOSE_WRITE or DELETE or MOVED_FROM or MOVED_TO) {
-                            override fun onEvent(event: Int, path: String?) {
-                                if (path == TOGGLE_FILE) refreshEnabled()
-                            }
-                        }.also { it.startWatching() }
+                    armObserverLocked(root)
                 }
             }
         }
         refreshEnabled()
+    }
+
+    private fun armObserverLocked(root: File) {
+        val replacement =
+            object : FileObserver(root, CREATE or CLOSE_WRITE or DELETE or MOVED_FROM or MOVED_TO) {
+                override fun onEvent(event: Int, path: String?) {
+                    if (path == TOGGLE_FILE) refreshEnabled()
+                }
+            }
+        observer = replacement
+        try {
+            observerStarter(replacement)
+        } catch (error: Throwable) {
+            retireObserverLocked()
+            throw error
+        }
+    }
+
+    private fun retireObserverLocked() {
+        val retired = observer
+        observer = null
+        runCatching { retired?.let { observerStopper(it) } }
+            .onFailure { Logger.w("Failed to stop retired Auto Identity policy watcher", it) }
     }
 
     fun setEnabled(
@@ -86,8 +109,7 @@ internal object CronAutoIdentity {
     fun stop() {
         IdentityCoordinator.withCommitBarrier {
             synchronized(lock) {
-                observer?.stopWatching()
-                observer = null
+                retireObserverLocked()
                 shutdownExecutorLocked()
                 configDir = null
             }
@@ -253,11 +275,19 @@ internal object CronAutoIdentity {
     internal fun configureForTesting(root: File) {
         IdentityCoordinator.withCommitBarrier {
             synchronized(lock) {
-                observer?.stopWatching()
-                observer = null
+                retireObserverLocked()
                 shutdownExecutorLocked()
                 configDir = root
             }
+        }
+    }
+
+    @VisibleForTesting
+    internal fun resetObserverHooksForTesting() {
+        synchronized(lock) {
+            check(observer == null) { "Cannot reset Auto Identity watcher hooks while observer is active" }
+            observerStarter = { it.startWatching() }
+            observerStopper = { it.stopWatching() }
         }
     }
 
