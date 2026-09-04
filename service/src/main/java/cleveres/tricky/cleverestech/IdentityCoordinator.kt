@@ -72,6 +72,11 @@ internal object IdentityCoordinator {
 
     internal fun <T> withCommitBarrier(block: () -> T): T = commitLock.withLock(block)
 
+    private fun <T> withManagedCommitBarrier(block: () -> T): T =
+        synchronized(ManagedFileCoordinator.monitor) {
+            withCommitBarrier(block)
+        }
+
     fun refresh(
         root: File,
         persistGlobal: Boolean,
@@ -91,7 +96,7 @@ internal object IdentityCoordinator {
         return runCatching {
             val resolved = fetchShared(fetcher)
             val outcome =
-                withCommitBarrier {
+                withManagedCommitBarrier {
                     if (commitAllowed?.invoke() == false) throw IdentityRefreshCancelledException()
                     if (persistProfile) ProfileAutoIdentityStore.save(root, resolved).getOrThrow()
                     if (persistGlobal) AutoIdentityPersistence.save(root, resolved).getOrThrow()
