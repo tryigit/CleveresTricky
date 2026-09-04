@@ -233,7 +233,7 @@ mod tests {
     fn pidfd_can_pin_current_process_when_supported() {
         match open_pidfd(std::process::id()) {
             Ok(fd) => send_signal(&fd, 0).expect("signal-zero through current-process pidfd"),
-            Err(error) if error.raw_os_error() == Some(libc::ENOSYS) => return,
+            Err(error) if error.raw_os_error() == Some(libc::ENOSYS) => (),
             Err(error) => panic!("pidfd_open current process failed: {error}"),
         }
     }
