@@ -1,0 +1,35 @@
+name: Installer Security
+
+on:
+  pull_request:
+    branches: [ "master" ]
+    paths:
+      - "module/install-tests/**"
+      - "module/template/*.sh"
+      - "rust/daemon/**"
+      - ".github/workflows/installer-security.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: installer-security-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  installer-security:
+    name: "🔐 Installer Security Regressions"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Run installer security tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          for test_file in module/install-tests/*.test.sh; do
+            echo "Running $test_file"
+            bash "$test_file"
+          done
