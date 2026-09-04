@@ -50,7 +50,7 @@ object Logger {
             msg: String,
             t: Throwable?,
         ) {
-            w(tag, if (t?.message.isNullOrBlank()) msg else "$msg: ${t?.message}")
+            w(tag, if (t?.message.isNullOrBlank()) msg else "$msg: ${t.message}")
         }
     }
 
