@@ -114,8 +114,8 @@ internal object ModuleIntegrityWatcher {
                             handleParentEvent(directory, loadedManifest, violationHandler, generation, event, path)
                         }
                     }
-                    parentObserverStarter(pObserver)
                     parentObserver = pObserver
+                    parentObserverStarter(pObserver)
                     watcherRegistrationCount.incrementAndGet()
                 } catch (e: Throwable) {
                     Logger.e("Failed to arm integrity parent watcher", e)
@@ -195,8 +195,8 @@ internal object ModuleIntegrityWatcher {
                     handleChildEvent(loadedManifest, violationHandler, generation, childToken, event, path)
                 }
             }
-            childObserverStarter(cObserver)
             childObserver = cObserver
+            childObserverStarter(cObserver)
             watcherRegistrationCount.incrementAndGet()
 
             val subdirs = loadedManifest.files.mapNotNull {
@@ -224,8 +224,8 @@ internal object ModuleIntegrityWatcher {
                             )
                         }
                     }
-                    childObserverStarter(sObserver)
                     subObservers.add(sObserver)
+                    childObserverStarter(sObserver)
                     watcherRegistrationCount.incrementAndGet()
                 }
             }
