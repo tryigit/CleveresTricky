@@ -5,9 +5,11 @@ import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
+import java.nio.channels.Channels
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.StandardCopyOption
+import java.nio.file.StandardOpenOption
 import java.util.UUID
 
 /** Shared bounded streaming used while creating backups. */
@@ -60,11 +62,13 @@ internal object BackupRestoreTransaction {
     fun apply(
         configDir: File,
         mutations: List<Mutation>,
+        maxSnapshotBytes: Long,
         beforeMutation: ((Int, File) -> Unit)? = null,
     ) {
         apply(
             configDir,
             mutations,
+            maxSnapshotBytes,
             afterMutation = null,
             onRollback = null,
             beforeMutation = beforeMutation,
@@ -75,45 +79,94 @@ internal object BackupRestoreTransaction {
     fun apply(
         configDir: File,
         mutations: List<Mutation>,
+        maxSnapshotBytes: Long,
         afterMutation: (() -> Unit)?,
         onRollback: (() -> Unit)?,
         beforeMutation: ((Int, File) -> Unit)? = null,
     ) {
         if (mutations.isEmpty()) return
-        val canonicalRoot = configDir.canonicalFile
-        require(Files.isDirectory(canonicalRoot.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+        require(maxSnapshotBytes >= 0) { "Restore snapshot limit must be non-negative" }
+        val rootPath = configDir.absoluteFile.toPath().normalize()
+        require(!Files.isSymbolicLink(rootPath) && Files.isDirectory(rootPath, LinkOption.NOFOLLOW_LINKS)) {
             "Configuration directory is unavailable"
         }
 
         val unique = LinkedHashMap<String, Mutation>()
         mutations.forEach { mutation ->
-            val canonical = mutation.target.canonicalFile
-            if (canonical != canonicalRoot && !canonical.path.startsWith(canonicalRoot.path + File.separator)) {
+            val normalized = mutation.target.absoluteFile.toPath().normalize()
+            if (normalized == rootPath || !normalized.startsWith(rootPath)) {
                 throw SecurityException("Restore transaction escaped configuration directory")
             }
-            unique[canonical.path] = Mutation(canonical, mutation.replacement)
+            var parent = normalized.parent
+            while (parent != null && parent != rootPath) {
+                if (Files.exists(parent, LinkOption.NOFOLLOW_LINKS) &&
+                    (Files.isSymbolicLink(parent) || !Files.isDirectory(parent, LinkOption.NOFOLLOW_LINKS))
+                ) {
+                    throw SecurityException("Restore transaction parent is unsafe")
+                }
+                parent = parent.parent
+            }
+            if (parent != rootPath) throw SecurityException("Restore transaction escaped configuration directory")
+            unique[normalized.toString()] = Mutation(normalized.toFile(), mutation.replacement)
         }
 
-        val transactionDir = File(canonicalRoot, ".restore-txn-${UUID.randomUUID()}")
+        val transactionDir = File(rootPath.toFile(), ".restore-txn-${UUID.randomUUID()}")
         SecureFile.mkdirs(transactionDir, 448)
         val originals = ArrayList<Original>(unique.size)
+        var retainRecoveryArtifacts = false
         try {
+            var snapshotBytes = 0L
             unique.values.forEachIndexed { index, mutation ->
                 val path = mutation.target.toPath()
-                val existed = Files.exists(path)
-                if (existed && !Files.isRegularFile(path)) {
+                val existed = Files.exists(path, LinkOption.NOFOLLOW_LINKS)
+                if (existed && !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
                     throw SecurityException("Refusing non-regular restore transaction target")
                 }
                 val backup =
                     if (existed) {
                         val copy = File(transactionDir, index.toString().padStart(4, '0') + ".bak")
                         try {
-                            Files.copy(path, copy.toPath(), StandardCopyOption.COPY_ATTRIBUTES)
-                        } catch (e: java.io.IOException) {
-                            throw SecurityException("Refusing symbolic-link or unreadable destination", e)
-                        }
-                        if (!Files.isRegularFile(copy.toPath())) {
-                            throw SecurityException("Restore transaction source changed while snapshotting")
+                            val remaining = maxSnapshotBytes - snapshotBytes
+                            if (remaining < 0) throw IOException("Restore snapshot exceeds its size limit")
+                            val copied =
+                                Files.newByteChannel(path, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS).use { channel ->
+                                    val initialSize = channel.size()
+                                    if (initialSize !in 0..remaining) {
+                                        throw IOException("Restore snapshot exceeds its size limit")
+                                    }
+                                    Files.newOutputStream(
+                                        copy.toPath(),
+                                        StandardOpenOption.CREATE_NEW,
+                                        StandardOpenOption.WRITE,
+                                    ).use { output ->
+                                        Channels.newInputStream(channel).use { input ->
+                                            BackupIo.copyBounded(input, output, remaining, remaining)
+                                        }
+                                    }.also { streamed ->
+                                        if (streamed != initialSize || channel.size() != initialSize) {
+                                            throw IOException("Restore transaction source changed while snapshotting")
+                                        }
+                                    }
+                                }
+                            if (!Files.isRegularFile(copy.toPath(), LinkOption.NOFOLLOW_LINKS) || copy.length() != copied) {
+                                throw IOException("Restore transaction snapshot is incomplete")
+                            }
+                            runCatching {
+                                Files.setPosixFilePermissions(
+                                    copy.toPath(),
+                                    Files.getPosixFilePermissions(path, LinkOption.NOFOLLOW_LINKS),
+                                )
+                            }
+                            runCatching {
+                                Files.setLastModifiedTime(
+                                    copy.toPath(),
+                                    Files.getLastModifiedTime(path, LinkOption.NOFOLLOW_LINKS),
+                                )
+                            }
+                            snapshotBytes += copied
+                        } catch (e: IOException) {
+                            runCatching { Files.deleteIfExists(copy.toPath()) }
+                            throw SecurityException("Refusing unsafe, unreadable, or oversized restore snapshot", e)
                         }
                         copy
                     } else {
@@ -131,7 +184,7 @@ internal object BackupRestoreTransaction {
                         Files.deleteIfExists(mutation.target.toPath())
                     } else {
                         mutation.target.parentFile?.let { parent ->
-                            if (parent != canonicalRoot && !Files.isDirectory(parent.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+                            if (parent.toPath() != rootPath && !Files.isDirectory(parent.toPath(), LinkOption.NOFOLLOW_LINKS)) {
                                 SecureFile.mkdirs(parent, 448)
                             }
                         }
@@ -149,6 +202,9 @@ internal object BackupRestoreTransaction {
                         if (original.existed) {
                             val backup = requireNotNull(original.backup)
                             original.target.parentFile?.let { parent ->
+                                if (Files.isSymbolicLink(parent.toPath())) {
+                                    throw SecurityException("Restore rollback parent became a symbolic link")
+                                }
                                 if (!Files.isDirectory(parent.toPath(), LinkOption.NOFOLLOW_LINKS)) {
                                     SecureFile.mkdirs(parent, 448)
                                 }
@@ -171,6 +227,7 @@ internal object BackupRestoreTransaction {
                             Files.deleteIfExists(original.target.toPath())
                         }
                     } catch (error: Throwable) {
+                        if (original.existed && original.backup?.exists() == true) retainRecoveryArtifacts = true
                         val existingFailure = rollbackFailure
                         if (existingFailure == null) {
                             rollbackFailure = error
@@ -191,14 +248,21 @@ internal object BackupRestoreTransaction {
                         }
                     }
                 }
+                if (retainRecoveryArtifacts) {
+                    failure.addSuppressed(
+                        IOException("Rollback recovery data retained in ${transactionDir.absolutePath}"),
+                    )
+                }
                 rollbackFailure?.let { failure.addSuppressed(it) }
                 throw failure
             }
         } finally {
-            originals.forEach { original ->
-                runCatching { original.backup?.let { Files.deleteIfExists(it.toPath()) } }
+            if (!retainRecoveryArtifacts) {
+                originals.forEach { original ->
+                    runCatching { original.backup?.let { Files.deleteIfExists(it.toPath()) } }
+                }
+                runCatching { Files.deleteIfExists(transactionDir.toPath()) }
             }
-            runCatching { Files.deleteIfExists(transactionDir.toPath()) }
         }
     }
 }

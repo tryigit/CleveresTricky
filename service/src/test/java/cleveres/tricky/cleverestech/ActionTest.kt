@@ -126,6 +126,7 @@ class ActionTest {
     @After
     fun tearDown() {
         server.stop()
+        CronAutoIdentity.stop()
         ManagedOpaqueKeyOracle.readFromXml(null)
         Config.reset()
         ManagedKeyboxParserOracle.reset()
@@ -343,6 +344,43 @@ class ActionTest {
 
         assertEquals(400, postForm("/api/toggle", mapOf("setting" to "telephony", "value" to "true")).first)
         assertFalse(getConfig().getBoolean("telephony"))
+        assertEquals("unchanged", outside.readText())
+    }
+
+    @Test
+    fun `bridge runtime markers use the service owner and synchronously refresh cron`() {
+        PolicyState.installStateForTesting(
+            """
+            {"version":2,"features":{"buildIdentity":true,"attestationIdentity":false,"telephonyIdentity":false,"regionIdentity":false,"identityRefresh":false,"securityPatch":false},"securityPatch":{"automaticThresholdMonths":6,"system":{"mode":"automatic"},"vendor":{"mode":"automatic"},"boot":{"mode":"automatic"}},"profiles":[],"activeProfile":null}
+            """.trimIndent(),
+        )
+        CronAutoIdentity.configureForTesting(configDir)
+
+        assertFalse(getConfig().getBoolean("debug_logging"))
+        assertFalse(getConfig().getBoolean(CronAutoIdentity.TOGGLE_FILE))
+
+        assertEquals(200, postForm("/api/toggle", mapOf("setting" to "debug_logging", "value" to "true")).first)
+        assertTrue(getConfig().getBoolean("debug_logging"))
+        assertTrue(File(configDir, "debug_logging").isFile)
+
+        assertEquals(
+            200,
+            postForm("/api/toggle", mapOf("setting" to CronAutoIdentity.TOGGLE_FILE, "value" to "true")).first,
+        )
+        assertTrue(getConfig().getBoolean(CronAutoIdentity.TOGGLE_FILE))
+        assertTrue("Cron must be scheduled before the API reports success", CronAutoIdentity.isRunningForTesting())
+
+        assertEquals(
+            200,
+            postForm("/api/toggle", mapOf("setting" to CronAutoIdentity.TOGGLE_FILE, "value" to "false")).first,
+        )
+        assertFalse(getConfig().getBoolean(CronAutoIdentity.TOGGLE_FILE))
+        assertFalse("Cron must be stopped before the API reports success", CronAutoIdentity.isRunningForTesting())
+
+        val outside = tempFolder.newFile("outside-debug-marker").apply { writeText("unchanged") }
+        Files.delete(File(configDir, "debug_logging").toPath())
+        Files.createSymbolicLink(File(configDir, "debug_logging").toPath(), outside.toPath())
+        assertEquals(400, postForm("/api/toggle", mapOf("setting" to "debug_logging", "value" to "false")).first)
         assertEquals("unchanged", outside.readText())
     }
 

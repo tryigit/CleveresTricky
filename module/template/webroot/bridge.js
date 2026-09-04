@@ -14,7 +14,6 @@
     const responseFields = new Set(['version', 'status', 'statusText', 'mimeType', 'size', 'body', 'downloadId']);
     const communityUrl = 'https://t.me/cleverestech';
     const keyboxHubUrl = 'https://keybox.tryigit.dev/';
-    const debugFlag = '/data/adb/cleverestricky/debug_logging';
     const nativeSuccessMarker = '__CT_NATIVE_OK__';
     const nativeFilePickerIds = new Set(['kbFilePicker', 'restoreInput']);
     const languageStorageKey = 'cleverestricky.language.v1';
@@ -23,7 +22,6 @@
     let callbackCounter = 0;
 
     const configRoot = '/data/adb/cleverestricky';
-    const cronAutoIdentityFlag = `${configRoot}/cron_auto_identity`;
     const nativeRuntimeLog = `${configRoot}/native_runtime.log`;
     const policyResponsePaths = new Set(['/api/policy_state', '/api/profile_v2']);
     let latestPolicyState = null;
@@ -554,16 +552,28 @@ ${nativeSuccessMarker}\
         return openExternalUrl(keyboxHubUrl);
     }
 
-    function getDebugLogging() {
-        return execHostCommand(`[ -f '${debugFlag}' ] && [ ! -L '${debugFlag}' ] && printf on || printf off`, 5000).then(output => output === 'on');
+    async function getRuntimeMarker(setting) {
+        const response = await nativeFetch('/api/config');
+        if (!response.ok) throw new Error(await response.text());
+        const config = await response.json();
+        return config && config[setting] === true;
     }
 
-    async function setDebugLogging(enabled) {
-        const command = enabled
-            ? `umask 077; [ ! -L '${debugFlag}' ] || exit 2; : > '${debugFlag}'; chmod 0600 '${debugFlag}'`
-            : `[ ! -L '${debugFlag}' ] || exit 2; rm -f '${debugFlag}'`;
-        await execHostCommand(command, 5000);
+    async function setRuntimeMarker(setting, enabled) {
+        const body = new URLSearchParams();
+        body.set('setting', setting);
+        body.set('value', String(Boolean(enabled)));
+        const response = await nativeFetch('/api/toggle', { method: 'POST', body });
+        if (!response.ok) throw new Error(await response.text());
         return Boolean(enabled);
+    }
+
+    function getDebugLogging() {
+        return getRuntimeMarker('debug_logging');
+    }
+
+    function setDebugLogging(enabled) {
+        return setRuntimeMarker('debug_logging', enabled);
     }
 
     async function createStage(kind, timeoutMs, signal = null) {
@@ -1131,16 +1141,11 @@ ${nativeSuccessMarker}\
     }
 
     function getCronAutoIdentity() {
-        return execHostCommand(`[ -f '${cronAutoIdentityFlag}' ] && [ ! -L '${cronAutoIdentityFlag}' ] && printf on || printf off`, 5000)
-            .then(value => value === 'on');
+        return getRuntimeMarker('cron_auto_identity');
     }
 
-    async function setCronAutoIdentity(enabled) {
-        const command = enabled
-            ? `umask 077; [ -d '${configRoot}' ] && [ ! -L '${configRoot}' ] || exit 2; [ ! -L '${cronAutoIdentityFlag}' ] || exit 2; : > '${cronAutoIdentityFlag}'; chmod 0600 '${cronAutoIdentityFlag}'`
-            : `[ ! -L '${cronAutoIdentityFlag}' ] || exit 2; rm -f '${cronAutoIdentityFlag}'`;
-        await execHostCommand(command, 5000);
-        return Boolean(enabled);
+    function setCronAutoIdentity(enabled) {
+        return setRuntimeMarker('cron_auto_identity', enabled);
     }
     async function installCronAutoIdentity() {
         const document = global.document;
@@ -1201,12 +1206,8 @@ ${nativeSuccessMarker}\
         const body = new URLSearchParams();
         body.set('setting', 'spoof_build_identity');
         body.set('value', 'false');
-        try {
-            const response = await nativeFetch('/api/toggle', { method: 'POST', body });
-            if (!response.ok) throw new Error(await response.text());
-        } catch (_) {
-            await execHostCommand(`[ ! -L '${configRoot}/spoof_build_identity' ] || exit 2; rm -f '${configRoot}/spoof_build_identity'`, 5000);
-        }
+        const response = await nativeFetch('/api/toggle', { method: 'POST', body });
+        if (!response.ok) throw new Error(await response.text());
     }
 
     const liveIdentityCommand =

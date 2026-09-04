@@ -61,7 +61,7 @@ class DeepBugSweepRegressionTest {
                 )
 
             assertThrows(IOException::class.java) {
-                BackupRestoreTransaction.apply(root, mutations) { index, _ ->
+                BackupRestoreTransaction.apply(root, mutations, maxSnapshotBytes = 4_096) { index, _ ->
                     if (index == 2) throw IOException("injected restore failure")
                 }
             }
@@ -278,12 +278,71 @@ class DeepBugSweepRegressionTest {
                     BackupRestoreTransaction.Mutation(second, null),
                     BackupRestoreTransaction.Mutation(created, "new-created".toByteArray()),
                 ),
+                maxSnapshotBytes = 4_096,
             )
 
             assertEquals("new-first", first.readText())
             assertFalse(second.exists())
             assertEquals("new-created", created.readText())
             assertFalse(root.listFiles().orEmpty().any { it.name.startsWith(".restore-txn-") })
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `restore refuses an oversized rollback snapshot before mutating any target`() {
+        val root = Files.createTempDirectory("cleveres-restore-snapshot-bound").toFile()
+        try {
+            val oversized = root.resolve("oversized.txt").apply { writeBytes(ByteArray(4_097) { 7 }) }
+            val untouched = root.resolve("untouched.txt").apply { writeText("old") }
+
+            assertThrows(SecurityException::class.java) {
+                BackupRestoreTransaction.apply(
+                    root,
+                    listOf(
+                        BackupRestoreTransaction.Mutation(oversized, null),
+                        BackupRestoreTransaction.Mutation(untouched, "new".toByteArray()),
+                    ),
+                    maxSnapshotBytes = 4_096,
+                )
+            }
+
+            assertEquals(4_097L, oversized.length())
+            assertEquals("old", untouched.readText())
+            assertFalse(root.listFiles().orEmpty().any { it.name.startsWith(".restore-txn-") })
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `restore retains the original snapshot when disk rollback cannot complete`() {
+        val root = Files.createTempDirectory("cleveres-restore-recovery-retention").toFile()
+        try {
+            val directory = root.resolve("keyboxes").apply { mkdirs() }
+            val target = directory.resolve("original.xml").apply { writeText("original") }
+
+            val failure =
+                assertThrows(IOException::class.java) {
+                    BackupRestoreTransaction.apply(
+                        root,
+                        listOf(BackupRestoreTransaction.Mutation(target, "replacement".toByteArray())),
+                        maxSnapshotBytes = 4_096,
+                        afterMutation = {
+                            assertTrue(target.delete())
+                            assertTrue(directory.delete())
+                            directory.writeText("blocks rollback")
+                            throw IOException("injected runtime failure")
+                        },
+                        onRollback = null,
+                    )
+                }
+
+            val recoveryDirectory = root.listFiles().orEmpty().single { it.name.startsWith(".restore-txn-") }
+            val recovery = recoveryDirectory.listFiles().orEmpty().single { it.extension == "bak" }
+            assertEquals("original", recovery.readText())
+            assertTrue(failure.suppressed.any { it.message?.contains("recovery data retained") == true })
         } finally {
             root.deleteRecursively()
         }

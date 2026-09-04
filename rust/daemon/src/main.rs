@@ -41,6 +41,50 @@ const BACKEND_BROKER_FD: RawFd = 9;
 const FILE_SOCKET_NAME: &[u8] = b"cleverestrickyd.files.v1";
 const CAPABILITY_WORKERS: usize = 2;
 const MAX_MANIFEST_BYTES: usize = 64 * 1024;
+const MAX_PROC_STAT_BYTES: u64 = 16 * 1024;
+
+fn parse_process_start_ticks(stat: &str) -> Option<u64> {
+    let command_end = stat.rfind(')')?;
+    stat.get(command_end + 1..)?
+        .split_ascii_whitespace()
+        .nth(19)?
+        .parse()
+        .ok()
+}
+
+fn process_identity_record(pid: u32) -> io::Result<String> {
+    if pid == 0 {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "process id is zero"));
+    }
+    let mut stat = String::new();
+    fs::File::open(format!("/proc/{pid}/stat"))?
+        .take(MAX_PROC_STAT_BYTES + 1)
+        .read_to_string(&mut stat)?;
+    if stat.len() as u64 > MAX_PROC_STAT_BYTES {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "process status exceeds its size limit",
+        ));
+    }
+    let start_ticks = parse_process_start_ticks(&stat)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "process status is malformed"))?;
+    Ok(format!("{pid} {start_ticks}\n"))
+}
+
+fn write_process_identity(root: &TrustedDir, filename: &str, pid: u32) {
+    match process_identity_record(pid) {
+        Ok(record) => {
+            if let Err(error) = root.atomic_write(filename, record.as_bytes(), 0o600) {
+                let _ = root.unlink_file(filename);
+                eprintln!("cleverestrickyd: could not record {filename}: {error}");
+            }
+        }
+        Err(error) => {
+            let _ = root.unlink_file(filename);
+            eprintln!("cleverestrickyd: could not identify pid {pid}: {error}");
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct AdapterLease {
@@ -159,7 +203,7 @@ fn run() -> io::Result<()> {
         Err(error) => return Err(error),
     };
     let file_listener = bind_abstract(FILE_SOCKET_NAME)?;
-    let _ = config_root.atomic_write("daemon.pid", process::id().to_string().as_bytes(), 0o600);
+    write_process_identity(&config_root, "daemon.pid", process::id());
     let adapter_identity = Arc::new(AdapterIdentity::default());
 
     let web_identity = Arc::clone(&adapter_identity);
@@ -192,11 +236,7 @@ fn run() -> io::Result<()> {
         match spawn_android_adapter(&module_dir) {
             Ok(mut adapter) => {
                 let lease = adapter_identity.publish(adapter.id());
-                let _ = config_root.atomic_write(
-                    "adapter.pid",
-                    adapter.id().to_string().as_bytes(),
-                    0o600,
-                );
+                write_process_identity(&config_root, "adapter.pid", adapter.id());
                 eprintln!(
                     "cleverestrickyd: Android adapter generation {} started as pid {}",
                     lease.generation, lease.pid
@@ -434,7 +474,7 @@ fn run_backend_once(
 ) -> io::Result<BackendRunOutcome> {
     let (mut child, broker) = spawn_backend(module_dir, lease.pid)?;
     let backend_pid = child.id();
-    let _ = root.atomic_write("backend.pid", backend_pid.to_string().as_bytes(), 0o600);
+    write_process_identity(&root, "backend.pid", backend_pid);
     let broker_root = Arc::clone(&root);
     let broker_thread = match thread::Builder::new()
         .name("ct-keybox-broker".to_string())
@@ -1708,5 +1748,22 @@ mod tests {
         assert_eq!(stable.rapid_failures, 0);
         assert_eq!(stable.delay, Duration::from_secs(1));
         assert!(!stable.circuit_open);
+    }
+
+    #[test]
+    fn process_identity_records_bind_pid_to_linux_start_ticks() {
+        let mut fields = vec!["0"; 20];
+        fields[0] = "S";
+        fields[19] = "987654";
+        let stat = format!("42 (daemon worker) {}", fields.join(" "));
+        assert_eq!(parse_process_start_ticks(&stat), Some(987654));
+        assert_eq!(parse_process_start_ticks("42 malformed"), None);
+
+        let pid = process::id();
+        let record = process_identity_record(pid).expect("current process identity");
+        let values: Vec<&str> = record.split_ascii_whitespace().collect();
+        assert_eq!(values.len(), 2);
+        assert_eq!(values[0], pid.to_string());
+        assert!(values[1].parse::<u64>().is_ok_and(|ticks| ticks > 0));
     }
 }

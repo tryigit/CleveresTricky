@@ -457,6 +457,13 @@ class WebServer(
         }
     }
 
+    private fun runtimeMarkerEnabled(filename: String): Boolean =
+        when (filename) {
+            CronAutoIdentity.TOGGLE_FILE -> CronAutoIdentity.isEnabled(configDir)
+            DEBUG_LOGGING_FILE -> runCatching { SafeConfigStore.markerEnabled(configDir, filename) }.getOrDefault(false)
+            else -> false
+        }
+
     private fun identityJson(): JSONObject {
         val identity = Config.getIdentityOverrides()
         return JSONObject()
@@ -868,7 +875,7 @@ class WebServer(
     }
 
     private fun isValidSetting(name: String): Boolean {
-        return name in WEB_UI_SETTINGS
+        return name in WEB_UI_SETTINGS || name in RUNTIME_MARKER_SETTINGS
     }
 
     private fun isValidProfile(name: String): Boolean = name.lowercase() in setOf("maximum", "daily", "minimal", "default")
@@ -879,9 +886,16 @@ class WebServer(
     ): Boolean {
         if (!isValidSetting(filename)) return false
         synchronized(fileLock) {
-            val f = getSafeFile(configDir, filename)
-            if (f == null) return false
             return try {
+                if (filename == CronAutoIdentity.TOGGLE_FILE) {
+                    CronAutoIdentity.setEnabled(configDir, enable)
+                    return true
+                }
+                if (filename == DEBUG_LOGGING_FILE) {
+                    SafeConfigStore.setMarker(configDir, filename, enable)
+                    return true
+                }
+                val f = getSafeFile(configDir, filename) ?: return false
                 val path = f.toPath()
                 if (Files.isSymbolicLink(path)) return false
                 if (enable) {
@@ -1294,6 +1308,7 @@ class WebServer(
             val json = JSONObject()
             json.put("system_locale", currentSystemLocaleTag())
             WEB_UI_SETTINGS.forEach { setting -> json.put(setting, fileExists(setting)) }
+            RUNTIME_MARKER_SETTINGS.forEach { setting -> json.put(setting, runtimeMarkerEnabled(setting)) }
             val files = JSONArray()
             files.put("keybox.xml")
             files.put("target.txt")
@@ -2279,6 +2294,7 @@ class WebServer(
                 }
             json.put("app_config_size", appConfigSize)
             WEB_UI_SETTINGS.forEach { setting -> json.put(setting, fileExists(setting)) }
+            RUNTIME_MARKER_SETTINGS.forEach { setting -> json.put(setting, runtimeMarkerEnabled(setting)) }
             json.put("real_ram_kb", getRamUsageKb())
             json.put("real_cpu", getCpuUsagePercent())
             json.put("environment", getEnvironmentInfo())
@@ -2453,6 +2469,10 @@ class WebServer(
         private const val MAX_BACKUP_XML_ENTRY_BYTES = 10 * 1024 * 1024
         private const val MAX_BACKUP_CBOX_ENTRY_BYTES = CboxWireLimits.MAX_BYTES
         private const val MAX_BACKUP_UNCOMPRESSED_BYTES = 16 * 1024 * 1024
+        private const val MAX_CBOX_CACHE_BYTES = 64 * 1024
+        private const val MAX_RESTORE_SNAPSHOT_BYTES =
+            MAX_BACKUP_UNCOMPRESSED_BYTES +
+                (MAX_LISTED_KEYBOX_FILES + MAX_BACKUP_KEYBOXES) * MAX_CBOX_CACHE_BYTES
         private const val MAX_SECURITY_PATCH_RULES = 512
         private const val MAX_DRM_PACKAGE_RULES = 256
         private const val MAX_APP_CONFIG_RULES = 1024
@@ -2512,6 +2532,8 @@ class WebServer(
             )
         private const val BUILD_IDENTITY_BLOCK_START = "# BEGIN CLEVERESTRICKY BUILD IDENTITY"
         private const val BUILD_IDENTITY_BLOCK_END = "# END CLEVERESTRICKY BUILD IDENTITY"
+        private const val DEBUG_LOGGING_FILE = "debug_logging"
+        private val RUNTIME_MARKER_SETTINGS = setOf(CronAutoIdentity.TOGGLE_FILE, DEBUG_LOGGING_FILE)
         private val WEB_UI_SETTINGS =
             linkedSetOf(
                 "spoof_enabled",
@@ -3115,6 +3137,7 @@ class WebServer(
                 BackupRestoreTransaction.apply(
                     configDir,
                     mutations,
+                    maxSnapshotBytes = MAX_RESTORE_SNAPSHOT_BYTES.toLong(),
                     afterMutation = afterMutation,
                     onRollback = onRollback,
                 )

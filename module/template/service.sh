@@ -5,40 +5,119 @@ NATIVE_LOG="$CONFIG_DIR/native_runtime.log"
 SUPERVISOR_PID_FILE="$CONFIG_DIR/supervisor.pid"
 DAEMON_PID_FILE="$CONFIG_DIR/daemon.pid"
 
+# BEGIN PID SAFETY HELPERS
+process_start_ticks() {
+  target_pid=$1
+  proc_stat=$(dd if="/proc/$target_pid/stat" bs=16384 count=1 2>/dev/null) || return 1
+  case "$proc_stat" in
+    *') '*) ;;
+    *) return 1 ;;
+  esac
+  stat_fields=${proc_stat##*) }
+  # All fields after the parenthesized command are kernel-generated scalar tokens.
+  # shellcheck disable=SC2086
+  set -- $stat_fields
+  [ "$#" -ge 20 ] || return 1
+  start_ticks=${20}
+  case "$start_ticks" in ''|*[!0-9]*) return 1 ;; esac
+  printf '%s' "$start_ticks"
+}
+
+process_matches_expected() {
+  target_pid=$1
+  expected_executable=$2
+  expected_comm=$3
+  expected_argument=$4
+
+  if [ -n "$expected_executable" ]; then
+    actual_executable=$(readlink "/proc/$target_pid/exe" 2>/dev/null) || return 1
+    [ "$actual_executable" = "$expected_executable" ] ||
+      [ "$actual_executable" = "$expected_executable (deleted)" ] || return 1
+  fi
+  if [ -n "$expected_comm" ]; then
+    actual_comm=$(dd if="/proc/$target_pid/comm" bs=64 count=1 2>/dev/null) || return 1
+    [ "$actual_comm" = "$expected_comm" ] || return 1
+  fi
+  if [ -n "$expected_argument" ]; then
+    dd if="/proc/$target_pid/cmdline" bs=4096 count=1 2>/dev/null |
+      tr '\000' '\n' | grep -F -x -- "$expected_argument" >/dev/null 2>&1 || return 1
+  fi
+  return 0
+}
+
+owned_process_alive() {
+  target_pid=$1
+  expected_start=$2
+  expected_executable=$3
+  expected_comm=$4
+  expected_argument=$5
+  [ -d "/proc/$target_pid" ] || return 1
+  current_start=$(process_start_ticks "$target_pid") || return 1
+  [ "$current_start" = "$expected_start" ] || return 1
+  process_matches_expected "$target_pid" "$expected_executable" "$expected_comm" "$expected_argument"
+}
+
 terminate_pid() {
   pid_file=$1
   name=$2
   max_wait=$3
+  expected_executable=$4
+  expected_comm=$5
+  expected_argument=$6
+  if [ -L "$pid_file" ] || { [ -e "$pid_file" ] && [ ! -f "$pid_file" ]; }; then
+    rm -f "$pid_file" 2>/dev/null || true
+    return 0
+  fi
   [ -f "$pid_file" ] || return 0
-  old_pid=$(cat "$pid_file" 2>/dev/null)
-  if [ -n "$old_pid" ] && [ -d "/proc/$old_pid" ]; then
+  pid_record=$(dd if="$pid_file" bs=65 count=1 2>/dev/null) || pid_record=
+  if [ -z "$pid_record" ] || [ "${#pid_record}" -gt 64 ]; then
+    rm -f "$pid_file" 2>/dev/null || true
+    return 0
+  fi
+  case "$pid_record" in
+    *' '* ) ;;
+    *) rm -f "$pid_file" 2>/dev/null || true; return 0 ;;
+  esac
+  old_pid=${pid_record%% *}
+  old_start=${pid_record#* }
+  case "$old_pid:$old_start" in
+    *[!0-9:]*|0:*|1:*) rm -f "$pid_file" 2>/dev/null || true; return 0 ;;
+  esac
+  if [ "${#old_pid}" -gt 10 ] || [ "${#old_start}" -gt 20 ]; then
+    rm -f "$pid_file" 2>/dev/null || true
+    return 0
+  fi
+  if owned_process_alive "$old_pid" "$old_start" "$expected_executable" "$expected_comm" "$expected_argument"; then
     log -t CleveresTricky "Stopping previous $name (PID $old_pid)"
     kill -TERM "$old_pid" 2>/dev/null || true
     wait_count=0
-    while [ -d "/proc/$old_pid" ] && [ "$wait_count" -lt "$max_wait" ]; do
+    while owned_process_alive "$old_pid" "$old_start" "$expected_executable" "$expected_comm" "$expected_argument" &&
+      [ "$wait_count" -lt "$max_wait" ]; do
       sleep 0.1
       wait_count=$((wait_count + 1))
     done
-    if [ -d "/proc/$old_pid" ]; then
+    if owned_process_alive "$old_pid" "$old_start" "$expected_executable" "$expected_comm" "$expected_argument"; then
       kill -9 "$old_pid" 2>/dev/null || true
     fi
   fi
-  rm -f "$pid_file"
+  rm -f "$pid_file" 2>/dev/null || true
 }
+# END PID SAFETY HELPERS
 
 terminate_previous_instances() {
-  terminate_pid "$CONFIG_DIR/supervisor.pid" "supervisor" 15
-  terminate_pid "$MODDIR/supervisor.pid" "supervisor" 15
-  terminate_pid "$CONFIG_DIR/daemon.pid" "daemon" 10
-  terminate_pid "$CONFIG_DIR/adapter.pid" "adapter" 20
-  terminate_pid "$CONFIG_DIR/backend.pid" "backend" 10
-  rm -f "$CONFIG_DIR"/.native_runtime.pipe.* "$CONFIG_DIR"/.native_runtime.log.* "$CONFIG_DIR"/.policy_state_v2.json.* "$CONFIG_DIR"/keyboxes/.*.tmp.* 2>/dev/null || true
+  terminate_pid "$CONFIG_DIR/supervisor.pid" "supervisor" 15 "" "" "$MODDIR/service.sh"
+  terminate_pid "$MODDIR/supervisor.pid" "supervisor" 15 "" "" "$MODDIR/service.sh"
+  terminate_pid "$CONFIG_DIR/daemon.pid" "daemon" 10 "$MODDIR/cleverestrickyd" "" ""
+  terminate_pid "$CONFIG_DIR/adapter.pid" "adapter" 20 "" "CleveresTricky" ""
+  terminate_pid "$CONFIG_DIR/backend.pid" "backend" 10 "$MODDIR/cleverestricky_backend" "" ""
+  rm -f "$CONFIG_DIR"/.native_runtime.pipe.* "$CONFIG_DIR"/.native_runtime.log.* "$CONFIG_DIR"/.policy_state_v2.json.* 2>/dev/null || true
+  if [ -d "$CONFIG_DIR/keyboxes" ] && [ ! -L "$CONFIG_DIR/keyboxes" ]; then
+    rm -f "$CONFIG_DIR"/keyboxes/.*.tmp.* 2>/dev/null || true
+  fi
   if [ -f "$NATIVE_LOG" ] && [ ! -L "$NATIVE_LOG" ]; then
     : > "$NATIVE_LOG" 2>/dev/null || true
   fi
 }
-
-terminate_previous_instances
 
 if [ -L "$CONFIG_DIR" ]; then
   log -t CleveresTricky "Config directory is a symlink; refusing supervisor startup"
@@ -54,7 +133,14 @@ if [ ! -d "$CONFIG_DIR" ]; then
   chcon u:object_r:system_file:s0 "$CONFIG_DIR" 2>/dev/null || true
 fi
 
-if ! : > "$SUPERVISOR_PID_FILE" 2>/dev/null; then
+if [ ! -d "$CONFIG_DIR" ] || [ -L "$CONFIG_DIR" ]; then
+  log -t CleveresTricky "Config path is not a safe directory; refusing supervisor startup"
+  exit 1
+fi
+
+terminate_previous_instances
+
+if ! : > "$SUPERVISOR_PID_FILE" 2>/dev/null || ! chmod 600 "$SUPERVISOR_PID_FILE" 2>/dev/null; then
   log -t CleveresTricky "Failed to initialize supervisor PID file; refusing supervisor startup"
   exit 1
 fi
@@ -332,9 +418,9 @@ while true; do
     break
   fi
 
-  terminate_pid "$DAEMON_PID_FILE" "daemon" 5
-  terminate_pid "$CONFIG_DIR/backend.pid" "backend" 5
-  terminate_pid "$CONFIG_DIR/adapter.pid" "adapter" 5
+  terminate_pid "$DAEMON_PID_FILE" "daemon" 5 "$MODDIR/cleverestrickyd" "" ""
+  terminate_pid "$CONFIG_DIR/backend.pid" "backend" 5 "$MODDIR/cleverestricky_backend" "" ""
+  terminate_pid "$CONFIG_DIR/adapter.pid" "adapter" 5 "" "CleveresTricky" ""
 
   log -t CleveresTricky \
     "Daemon exited with code $exit_code after ${runtime}s; retrying in ${retry_delay}s"
@@ -347,7 +433,16 @@ while true; do
 done
 ) &
 supervisor_pid=$!
-if ! echo "$supervisor_pid" > "$SUPERVISOR_PID_FILE" 2>/dev/null || [ ! -s "$SUPERVISOR_PID_FILE" ]; then
+supervisor_start=
+start_probe=0
+while [ "$start_probe" -lt 10 ] && [ -z "$supervisor_start" ]; do
+  supervisor_start=$(process_start_ticks "$supervisor_pid") || supervisor_start=
+  [ -n "$supervisor_start" ] || sleep 0.01
+  start_probe=$((start_probe + 1))
+done
+if [ -z "$supervisor_start" ] ||
+  ! printf '%s %s\n' "$supervisor_pid" "$supervisor_start" > "$SUPERVISOR_PID_FILE" 2>/dev/null ||
+  [ ! -s "$SUPERVISOR_PID_FILE" ]; then
   log -t CleveresTricky "Failed to record supervisor PID; terminating supervisor"
   kill -9 "$supervisor_pid" 2>/dev/null || true
   rm -f "$SUPERVISOR_PID_FILE" 2>/dev/null || true

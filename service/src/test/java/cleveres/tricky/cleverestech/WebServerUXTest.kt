@@ -131,7 +131,7 @@ class WebServerUXTest {
         assertTrue(html.contains("height: min(500px, 60dvh) !important"))
         assertTrue(html.contains("async function fetchAuth"))
         assertTrue(html.contains("window.CleveresBridge.fetch(url, options)"))
-        assertTrue(html.contains("<script src=\"bridge.js?revision=14\"></script>"))
+        assertTrue(html.contains("<script src=\"bridge.js?revision=15\"></script>"))
         assertTrue(html.contains("<script src=\"policy.js?revision=5\"></script>"))
         assertTrue(html.contains("function downloadBlob"))
         assertTrue(html.contains("if (files && files[0]) loadFileContent(files[0]);"))

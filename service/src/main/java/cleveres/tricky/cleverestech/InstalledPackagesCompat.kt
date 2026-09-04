@@ -2,10 +2,13 @@ package cleveres.tricky.cleverestech
 
 import android.content.pm.IPackageManager
 import android.os.Build
-import java.io.ByteArrayOutputStream
+import java.io.FilterInputStream
 import java.io.IOException
+import java.io.InputStream
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.FutureTask
+import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.SynchronousQueue
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 
@@ -30,7 +33,7 @@ internal object InstalledPackagesCompat {
             4,
             30L,
             TimeUnit.SECONDS,
-            java.util.concurrent.LinkedBlockingQueue(),
+            SynchronousQueue(),
             { runnable -> Thread(runnable, "ct-package-list").apply { isDaemon = true } }
         ).apply {
             allowCoreThreadTimeOut(true)
@@ -94,9 +97,12 @@ internal object InstalledPackagesCompat {
                 }
                 packages
             }
-        workerExecutor.execute(reader)
-
         try {
+            try {
+                workerExecutor.execute(reader)
+            } catch (error: RejectedExecutionException) {
+                throw IOException("Package-list command capacity is exhausted", error)
+            }
             return reader.get(COMMAND_TIMEOUT_MS, TimeUnit.MILLISECONDS)
         } catch (error: TimeoutException) {
             throw IOException("Package-list command timed out", error)
@@ -119,15 +125,10 @@ internal object InstalledPackagesCompat {
     }
 
     @androidx.annotation.VisibleForTesting
-    internal fun parsePackageListStream(input: java.io.InputStream): List<String> {
+    internal fun parsePackageListStream(input: InputStream): List<String> {
         val packages = ArrayList<String>()
-        var totalBytes = 0
-        input.bufferedReader(Charsets.UTF_8).useLines { lines ->
+        SizeLimitedInputStream(input, MAX_COMMAND_OUTPUT_BYTES.toLong()).bufferedReader(Charsets.UTF_8).useLines { lines ->
             for (rawLine in lines) {
-                totalBytes += rawLine.length + 1
-                if (totalBytes > MAX_COMMAND_OUTPUT_BYTES) {
-                    throw IOException("Package-list command output exceeds its size limit")
-                }
                 val line = rawLine.trim()
                 if (!line.startsWith(PACKAGE_PREFIX)) continue
                 val packageName = line.substring(PACKAGE_PREFIX.length)
@@ -147,4 +148,34 @@ internal object InstalledPackagesCompat {
 
     @androidx.annotation.VisibleForTesting
     internal fun resetForTesting() = Unit
+
+    private class SizeLimitedInputStream(
+        input: InputStream,
+        private var remaining: Long,
+    ) : FilterInputStream(input) {
+        override fun read(): Int {
+            if (remaining == 0L) return probeEndOfInput()
+            val value = super.read()
+            if (value >= 0) remaining--
+            return value
+        }
+
+        override fun read(
+            bytes: ByteArray,
+            offset: Int,
+            length: Int,
+        ): Int {
+            if (length == 0) return 0
+            if (remaining == 0L) return probeEndOfInput()
+            val allowed = minOf(length.toLong(), remaining).toInt()
+            val count = super.read(bytes, offset, allowed)
+            if (count > 0) remaining -= count.toLong()
+            return count
+        }
+
+        private fun probeEndOfInput(): Int {
+            if (super.read() < 0) return -1
+            throw IOException("Package-list command output exceeds its size limit")
+        }
+    }
 }

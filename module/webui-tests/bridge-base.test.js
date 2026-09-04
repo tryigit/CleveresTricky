@@ -195,6 +195,44 @@ async function main() {
         JSON.parse(resourceBody)
     );
 
+    let markerCommand = '';
+    const markerRequests = [];
+    const markerState = { debug_logging: false, cron_auto_identity: true };
+    const markerBridge = createBridge(
+        callback => {
+            const encoded = markerCommand.match(/'call' '([^']+)'/);
+            assert.ok(encoded, 'runtime marker operation must use the native service bridge');
+            const request = JSON.parse(Buffer.from(encoded[1], 'base64url').toString('utf8'));
+            markerRequests.push(request);
+            if (request.path === '/api/toggle') {
+                const setting = request.parameters.setting[0];
+                markerState[setting] = request.parameters.value[0] === 'true';
+                callback(0, envelope('Toggled'), '');
+            } else {
+                assert.strictEqual(request.path, '/api/config');
+                callback(0, envelope(JSON.stringify(markerState)), '');
+            }
+        },
+        null,
+        command => { markerCommand = command; }
+    );
+    assert.strictEqual(await markerBridge.getDebugLogging(), false);
+    assert.strictEqual(await markerBridge.getCronAutoIdentity(), true);
+    assert.strictEqual(await markerBridge.setDebugLogging(true), true);
+    assert.strictEqual(await markerBridge.setCronAutoIdentity(false), false);
+    assert.deepStrictEqual(
+        markerRequests.map(request => `${request.method} ${request.path}`),
+        ['GET /api/config', 'GET /api/config', 'POST /api/toggle', 'POST /api/toggle']
+    );
+    assert.deepStrictEqual(
+        markerRequests.slice(2).map(request => [request.parameters.setting[0], request.parameters.value[0]]),
+        [['debug_logging', 'true'], ['cron_auto_identity', 'false']]
+    );
+    assert.ok(
+        markerRequests.every(request => !JSON.stringify(request).includes('/data/adb/cleverestricky')),
+        'runtime marker ownership must stay behind the service API'
+    );
+
     let profileMutationCommand = '';
     const profileState = JSON.stringify({
         features: {},
@@ -293,7 +331,7 @@ async function main() {
     });
     assert.strictEqual(normalizeUiMessage(oversized), 'HTTP 500 Server Error: response body is too large to display');
     assert.ok(indexSource.includes('text.textContent = normalizeUiMessage(msg);'));
-    assert.ok(indexSource.includes('<script src="bridge.js?revision=14"></script>'));
+    assert.ok(indexSource.includes('<script src="bridge.js?revision=15"></script>'));
     assert.match(bridgeSource, /ux\.js\?revision=9/);
     assert.ok(!bridgeSource.includes('ux.js?revision=3'), 'Bridge must not request the retired cached UX loader');
 
