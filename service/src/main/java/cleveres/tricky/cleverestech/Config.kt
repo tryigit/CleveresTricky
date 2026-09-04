@@ -584,6 +584,10 @@ object Config {
     ): Boolean =
         KeyboxActivation.coordinateRefresh {
             val refreshTicket = KeyboxActivation.beginRefresh()
+            // An explicit refresh scans the filesystem regardless of whether a watcher event
+            // invalidated the inventory cache. This also ensures a failed publication retains a
+            // fresh fingerprint that ensureFreshKeyboxes() can compare and retry.
+            keyboxInventoryFingerprintDirty = true
             val observedInventoryFingerprint = computeKeyboxInventoryFingerprint()
             runCatching {
                 Logger.d("updateKeyBoxes: starting keybox scan (root=${root.absolutePath})")
