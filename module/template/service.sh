@@ -198,6 +198,8 @@ EOF
 }
 
 mirror_root_keyboxes() {
+  max_mirrored_keyboxes=256
+  mirror_count=0
   [ -d "$CONFIG_DIR" ] && [ ! -L "$CONFIG_DIR" ] || return 0
   keybox_dir="$CONFIG_DIR/keyboxes"
   if [ -e "$keybox_dir" ] || [ -L "$keybox_dir" ]; then
@@ -215,6 +217,7 @@ mirror_root_keyboxes() {
     fi
 
     for source in "$source_dir"/*.xml "$source_dir"/*.cbox; do
+      [ "$mirror_count" -lt "$max_mirrored_keyboxes" ] || return 0
       if [ ! -f "$source" ] || [ -L "$source" ]; then
         continue
       fi
@@ -227,16 +230,31 @@ mirror_root_keyboxes() {
         .*|*[!A-Za-z0-9_.-]*) continue ;;
       esac
       lower=$(printf '%s' "$base" | tr '[:upper:]' '[:lower:]')
-      case "$lower" in *.xml|*.cbox) ;; *) continue ;; esac
+      case "$lower" in
+        *.xml) max_mirrored_keybox_bytes=10485760 ;;
+        *.cbox) max_mirrored_keybox_bytes=10485812 ;;
+        *) continue ;;
+      esac
 
       destination="$keybox_dir/$base"
       [ ! -L "$destination" ] || continue
       tmp="$keybox_dir/.${base}.tmp.$$"
-      if cp -f "$source" "$tmp" 2>/dev/null; then
+      rm -f "$tmp" 2>/dev/null || continue
+      if dd if="$source" of="$tmp" bs=65536 count=161 2>/dev/null; then
+        copied_size=$(wc -c < "$tmp" 2>/dev/null) || copied_size=
+        case "$copied_size" in ''|*[!0-9]*) rm -f "$tmp"; continue ;; esac
+        if [ "$copied_size" -lt 1 ] || [ "$copied_size" -gt "$max_mirrored_keybox_bytes" ]; then
+          rm -f "$tmp"
+          continue
+        fi
         chown 0:0 "$tmp" 2>/dev/null
         chmod 600 "$tmp" 2>/dev/null
         chcon u:object_r:system_file:s0 "$tmp" 2>/dev/null
-        mv -f "$tmp" "$destination" 2>/dev/null || rm -f "$tmp"
+        if mv -f "$tmp" "$destination" 2>/dev/null; then
+          mirror_count=$((mirror_count + 1))
+        else
+          rm -f "$tmp"
+        fi
       else
         rm -f "$tmp"
       fi
