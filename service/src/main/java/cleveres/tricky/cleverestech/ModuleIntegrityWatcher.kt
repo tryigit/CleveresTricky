@@ -18,6 +18,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 private const val INTEGRITY_DEBOUNCE_MS = 100L
 private const val MAX_PENDING_PATHS = 64
+private const val INTEGRITY_MANIFEST_FILENAME = "integrity_manifest.json"
 
 /**
  * Watches the module directory for filesystem events and triggers integrity verification.
@@ -249,19 +250,24 @@ internal object ModuleIntegrityWatcher {
                 Logger.e("Module directory lost - integrity violation")
                 disarmChildLocked()
                 violationHandler(listOf("Module directory was deleted or moved (self event)"))
-            } else if ((event and DELETE) != 0) {
-                val deletedPath = path ?: return
-                if (loadedManifest.files.any { it.path == deletedPath }) {
-                    Logger.e("Critical payload deleted: $deletedPath")
-                    violationHandler(listOf("Critical payload deleted: $deletedPath"))
-                } else if (!ModuleIntegrityVerifier.isIgnoredFile(deletedPath)) {
-                    scheduleTargetedCheckLocked(deletedPath, generation, childToken)
+                return
+            }
+
+            val affectedPath = path ?: return
+            if (affectedPath == INTEGRITY_MANIFEST_FILENAME) {
+                fullScheduler?.submit()
+                return
+            }
+
+            if ((event and DELETE) != 0) {
+                if (loadedManifest.files.any { it.path == affectedPath }) {
+                    Logger.e("Critical payload deleted: $affectedPath")
+                    violationHandler(listOf("Critical payload deleted: $affectedPath"))
+                } else if (!ModuleIntegrityVerifier.isIgnoredFile(affectedPath)) {
+                    scheduleTargetedCheckLocked(affectedPath, generation, childToken)
                 }
-            } else {
-                val modifiedPath = path ?: return
-                if (!ModuleIntegrityVerifier.isIgnoredFile(modifiedPath)) {
-                    scheduleTargetedCheckLocked(modifiedPath, generation, childToken)
-                }
+            } else if (!ModuleIntegrityVerifier.isIgnoredFile(affectedPath)) {
+                scheduleTargetedCheckLocked(affectedPath, generation, childToken)
             }
         }
     }

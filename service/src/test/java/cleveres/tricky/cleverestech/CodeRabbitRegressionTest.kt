@@ -109,6 +109,39 @@ class CodeRabbitRegressionTest {
         }
     }
 
+    @Test
+    fun `integrity manifest deletion triggers full verification`() {
+        val root = java.nio.file.Files.createTempDirectory("integrity-manifest-delete").toFile()
+        val directory = java.io.File(root, "modules/cleverestricky").apply { mkdirs() }
+        val violations = java.util.concurrent.CopyOnWriteArrayList<List<String>>()
+        val loadedManifest = ParsedManifest(version = 1, files = emptyList(), signature = "")
+
+        ModuleIntegrityVerifier.resetForTesting()
+        ModuleIntegrityVerifier.moduleDirProvider = { directory.absolutePath }
+        ModuleIntegrityVerifier.remoteDisabledForTesting = true
+        ModuleIntegrityWatcher.resetForTesting()
+        ModuleIntegrityWatcher.parentObserverStarter = { }
+        ModuleIntegrityWatcher.childObserverStarter = { }
+        ModuleIntegrityWatcher.observerStopper = { }
+        try {
+            ModuleIntegrityWatcher.start(directory, loadedManifest) { violations += it }
+            ModuleIntegrityWatcher.injectChildEventForTesting(android.os.FileObserver.DELETE, "integrity_manifest.json")
+
+            val deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(2)
+            while (violations.isEmpty() && System.nanoTime() < deadline) {
+                Thread.sleep(10)
+            }
+
+            assertEquals("Manifest deletion must escalate to a full verification", 1, ModuleIntegrityWatcher.fullVerificationExecutions.get())
+            assertTrue("Missing trust metadata must be reported as an integrity violation", violations.flatten().any { it.contains("Manifest") })
+        } finally {
+            ModuleIntegrityWatcher.stop()
+            ModuleIntegrityWatcher.resetForTesting()
+            ModuleIntegrityVerifier.resetForTesting()
+            root.deleteRecursively()
+        }
+    }
+
     private class InterruptOnceProcess : Process() {
         var destroyed = false
         val waitCalls = AtomicInteger(0)
