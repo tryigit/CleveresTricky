@@ -13,7 +13,7 @@ log() { :; }
 
 # Host-side shim for the production pidfd helper. It exercises shell control flow and
 # identity policy; Rust unit/CI coverage validates the real pidfd syscalls.
-signal_owned_process() {
+signal_owned_process_original() {
   local target_pid=$1 expected_start=$2 signal_number=$3 expected_executable=$4 expected_comm=$5 expected_argument=$6
   if [[ "${FORCE_HELPER_FAILURE:-0}" == 1 ]]; then
     return 2
@@ -41,6 +41,12 @@ signal_owned_process() {
   fi
 }
 
+SIGNAL_CALLS=0
+signal_owned_process() {
+  SIGNAL_CALLS=$((SIGNAL_CALLS + 1))
+  signal_owned_process_original "$@"
+}
+
 python3 -c 'import os, pathlib, time; pathlib.Path(__import__("sys").argv[1]).write_text(str(os.getpid())); time.sleep(30)' "$TEST_ROOT/victim.pid" &
 victim_job=$!
 for _ in {1..50}; do
@@ -66,6 +72,18 @@ done
 [[ -n "$victim_start" ]]
 victim_executable=$(readlink "/proc/$victim_pid/exe")
 pid_file="$TEST_ROOT/runtime.pid"
+
+printf '%s \n' "$victim_pid" > "$pid_file"
+terminate_pid "$pid_file" "test" 1 "$victim_executable" "" ""
+kill -0 "$victim_job"
+[[ ! -e "$pid_file" ]]
+[[ "$SIGNAL_CALLS" -eq 0 ]]
+
+printf ' %s\n' "$victim_start" > "$pid_file"
+terminate_pid "$pid_file" "test" 1 "$victim_executable" "" ""
+kill -0 "$victim_job"
+[[ ! -e "$pid_file" ]]
+[[ "$SIGNAL_CALLS" -eq 0 ]]
 
 printf '%s %s\n' "$victim_pid" "$((victim_start + 1))" > "$pid_file"
 terminate_pid "$pid_file" "test" 1 "$victim_executable" "" ""
