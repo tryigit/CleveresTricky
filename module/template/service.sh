@@ -88,8 +88,8 @@ terminate_pid() {
     return 0
   fi
 
-  signal_owned_process "$old_pid" "$old_start" 0 "$expected_executable" "$expected_comm" "$expected_argument"
-  helper_status=$?
+  helper_status=0
+  signal_owned_process "$old_pid" "$old_start" 0 "$expected_executable" "$expected_comm" "$expected_argument" || helper_status=$?
   if [ "$helper_status" -eq 3 ]; then
     rm -f "$pid_file" 2>/dev/null || true
     return 0
@@ -97,8 +97,8 @@ terminate_pid() {
   [ "$helper_status" -eq 0 ] || return 1
 
   log -t CleveresTricky "Stopping previous $name (PID $old_pid)"
-  signal_owned_process "$old_pid" "$old_start" 15 "$expected_executable" "$expected_comm" "$expected_argument"
-  helper_status=$?
+  helper_status=0
+  signal_owned_process "$old_pid" "$old_start" 15 "$expected_executable" "$expected_comm" "$expected_argument" || helper_status=$?
   if [ "$helper_status" -eq 3 ]; then
     rm -f "$pid_file" 2>/dev/null || true
     return 0
@@ -107,8 +107,8 @@ terminate_pid() {
 
   wait_count=0
   while [ "$wait_count" -lt "$max_wait" ]; do
-    signal_owned_process "$old_pid" "$old_start" 0 "$expected_executable" "$expected_comm" "$expected_argument"
-    helper_status=$?
+    helper_status=0
+    signal_owned_process "$old_pid" "$old_start" 0 "$expected_executable" "$expected_comm" "$expected_argument" || helper_status=$?
     if [ "$helper_status" -eq 3 ]; then
       rm -f "$pid_file" 2>/dev/null || true
       return 0
@@ -118,8 +118,8 @@ terminate_pid() {
     wait_count=$((wait_count + 1))
   done
 
-  signal_owned_process "$old_pid" "$old_start" 9 "$expected_executable" "$expected_comm" "$expected_argument"
-  helper_status=$?
+  helper_status=0
+  signal_owned_process "$old_pid" "$old_start" 9 "$expected_executable" "$expected_comm" "$expected_argument" || helper_status=$?
   if [ "$helper_status" -ne 0 ] && [ "$helper_status" -ne 3 ]; then
     return 1
   fi
