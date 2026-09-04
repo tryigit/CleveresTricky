@@ -44,6 +44,14 @@ object Logger {
         ) {
             i(tag, msg)
         }
+
+        fun w(
+            tag: String,
+            msg: String,
+            t: Throwable?,
+        ) {
+            w(tag, if (t?.message.isNullOrBlank()) msg else "$msg: ${t?.message}")
+        }
     }
 
     private var impl: LogImpl =
@@ -88,6 +96,20 @@ object Logger {
                 msg: String,
             ) {
                 runCatching { Log.w(tag, msg) }
+            }
+
+            override fun w(
+                tag: String,
+                msg: String,
+                t: Throwable?,
+            ) {
+                runCatching {
+                    if (t != null) {
+                        Log.w(tag, msg, t)
+                    } else {
+                        Log.w(tag, msg)
+                    }
+                }
             }
         }
 
@@ -169,10 +191,27 @@ object Logger {
 
     @JvmStatic
     fun w(
+        msg: String,
+        t: Throwable?,
+    ) {
+        impl.w(TAG, msg, t)
+    }
+
+    @JvmStatic
+    fun w(
         tag: String,
         msg: String,
     ) {
         impl.w(tag, msg)
+    }
+
+    @JvmStatic
+    fun w(
+        tag: String,
+        msg: String,
+        t: Throwable?,
+    ) {
+        impl.w(tag, msg, t)
     }
 
     @JvmStatic
