@@ -27,6 +27,14 @@ pidfd_expected() {
   [ -n "$1" ] && printf '%s' "$1" || printf '%s' '-'
 }
 
+helper_pid_valid() {
+  candidate=$1
+  case "$candidate" in ''|*[!0-9]*) return 1 ;; esac
+  [ "${#candidate}" -le 10 ] || return 1
+  [ "$candidate" -gt 1 ] 2>/dev/null || return 1
+  [ "$candidate" -le 2147483647 ] 2>/dev/null || return 1
+}
+
 pidfd_supported() {
   CLEVERES_TRICKY_PIDFD_MODE=support \
     "$MODDIR/cleverestrickyd" "$MODDIR" >/dev/null 2>&1
@@ -77,8 +85,10 @@ terminate_pid() {
       # identity-mismatched records are safe to discard, while a matching occupant remains
       # ambiguous and must block startup rather than be signaled.
       old_pid=$pid_record
-      case "$old_pid" in ''|*[!0-9]*|0|1) rm -f "$pid_file" 2>/dev/null || true; return 0 ;; esac
-      [ "${#old_pid}" -le 10 ] || { rm -f "$pid_file" 2>/dev/null || true; return 0; }
+      if ! helper_pid_valid "$old_pid"; then
+        rm -f "$pid_file" 2>/dev/null || true
+        return 0
+      fi
       helper_status=0
       signal_owned_process "$old_pid" "-" 0 "$expected_executable" "$expected_comm" "$expected_argument" || helper_status=$?
       if [ "$helper_status" -eq 3 ]; then
@@ -89,9 +99,9 @@ terminate_pid() {
       ;;
   esac
   case "$old_pid:$old_start" in
-    :*|*:|*[!0-9:]*|0:*|1:*) rm -f "$pid_file" 2>/dev/null || true; return 0 ;;
+    :*|*:|*[!0-9:]*) rm -f "$pid_file" 2>/dev/null || true; return 0 ;;
   esac
-  if [ "${#old_pid}" -gt 10 ] || [ "${#old_start}" -gt 20 ]; then
+  if ! helper_pid_valid "$old_pid" || [ "${#old_start}" -gt 20 ]; then
     rm -f "$pid_file" 2>/dev/null || true
     return 0
   fi

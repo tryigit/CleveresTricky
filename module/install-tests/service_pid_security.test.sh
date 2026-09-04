@@ -119,6 +119,15 @@ kill -0 "$victim_job"
 [[ ! -e "$pid_file" ]]
 [[ "$SIGNAL_CALLS" -eq 0 ]]
 
+invalid_calls=$SIGNAL_CALLS
+for invalid_record in '2147483648' "2147483648 $victim_start" '0000000001'; do
+  printf '%s\n' "$invalid_record" > "$pid_file"
+  terminate_pid "$pid_file" "test" 1 "$victim_executable" "" ""
+  kill -0 "$victim_job"
+  [[ ! -e "$pid_file" ]]
+  [[ "$SIGNAL_CALLS" -eq "$invalid_calls" ]]
+done
+
 printf '%s %s\n' "$victim_pid" "$((victim_start + 1))" > "$pid_file"
 terminate_pid "$pid_file" "test" 1 "$victim_executable" "" ""
 kill -0 "$victim_job"
