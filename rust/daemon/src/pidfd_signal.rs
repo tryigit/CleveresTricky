@@ -23,7 +23,10 @@ pub(super) fn run_env_request_if_present() -> Option<i32> {
     let result = match mode.as_str() {
         "support" => support_probe(),
         "signal" => signal_owned_process(),
-        _ => Err(io::Error::new(io::ErrorKind::InvalidInput, "invalid pidfd helper mode")),
+        _ => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "invalid pidfd helper mode",
+        )),
     };
     Some(match result {
         Ok(true) => EXIT_OK,
@@ -49,8 +52,15 @@ fn signal_owned_process() -> io::Result<bool> {
     let expected_exe = optional_env(EXE_ENV);
     let expected_comm = optional_env(COMM_ENV);
     let expected_arg = optional_env(ARG_ENV);
-    if expected_start.is_none() && expected_exe.is_none() && expected_comm.is_none() && expected_arg.is_none() {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "pidfd helper requires an identity predicate"));
+    if expected_start.is_none()
+        && expected_exe.is_none()
+        && expected_comm.is_none()
+        && expected_arg.is_none()
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "pidfd helper requires an identity predicate",
+        ));
     }
 
     let pidfd = match open_pidfd(pid) {
@@ -76,8 +86,9 @@ fn signal_owned_process() -> io::Result<bool> {
     }
     if let Some(expected) = expected_comm.as_deref() {
         let actual = match read_bounded(format!("/proc/{pid}/comm"), 128) {
-            Ok(bytes) => String::from_utf8(bytes)
-                .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "process comm is not UTF-8"))?,
+            Ok(bytes) => String::from_utf8(bytes).map_err(|_| {
+                io::Error::new(io::ErrorKind::InvalidData, "process comm is not UTF-8")
+            })?,
             Err(error) if is_stale_error(&error) => return Ok(false),
             Err(error) => return Err(error),
         };
@@ -91,7 +102,10 @@ fn signal_owned_process() -> io::Result<bool> {
             Err(error) if is_stale_error(&error) => return Ok(false),
             Err(error) => return Err(error),
         };
-        if !bytes.split(|byte| *byte == 0).any(|arg| arg == expected.as_bytes()) {
+        if !bytes
+            .split(|byte| *byte == 0)
+            .any(|arg| arg == expected.as_bytes())
+        {
             return Ok(false);
         }
     }
@@ -104,11 +118,14 @@ fn signal_owned_process() -> io::Result<bool> {
 }
 
 fn required_env(name: &str) -> io::Result<String> {
-    env::var(name).map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, format!("missing {name}")))
+    env::var(name)
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, format!("missing {name}")))
 }
 
 fn optional_env(name: &str) -> Option<String> {
-    env::var(name).ok().filter(|value| !value.is_empty() && value != "-")
+    env::var(name)
+        .ok()
+        .filter(|value| !value.is_empty() && value != "-")
 }
 
 fn parse_pid(value: &str) -> io::Result<u32> {
@@ -126,7 +143,10 @@ fn parse_signal(value: &str) -> io::Result<i32> {
         .parse::<i32>()
         .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid signal"))?;
     if !matches!(signal, 0 | libc::SIGTERM | libc::SIGKILL) {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "unsupported signal"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "unsupported signal",
+        ));
     }
     Ok(signal)
 }
@@ -172,14 +192,21 @@ fn process_start_ticks(pid: u32) -> io::Result<Option<String>> {
 
 fn parse_start_ticks(stat: &str) -> Option<&str> {
     let command_end = stat.rfind(')')?;
-    stat.get(command_end + 1..)?.split_ascii_whitespace().nth(19)
+    stat.get(command_end + 1..)?
+        .split_ascii_whitespace()
+        .nth(19)
 }
 
 fn read_bounded(path: String, limit: u64) -> io::Result<Vec<u8>> {
     let mut bytes = Vec::new();
-    fs::File::open(path)?.take(limit + 1).read_to_end(&mut bytes)?;
+    fs::File::open(path)?
+        .take(limit + 1)
+        .read_to_end(&mut bytes)?;
     if bytes.len() as u64 > limit {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, "proc file exceeds size limit"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "proc file exceeds size limit",
+        ));
     }
     Ok(bytes)
 }
