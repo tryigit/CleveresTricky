@@ -6,6 +6,7 @@ import java.io.File
 import java.util.ArrayDeque
 import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -71,6 +72,27 @@ class ConfigKeyboxActivationTest {
             assertThrows(IllegalStateException::class.java) {
                 CertHack.getKeyboxCount()
             }
+        }
+    }
+
+    @Test
+    fun `failed keybox publication remains dirty and retries without another file event`() {
+        withKeyboxRoot { root ->
+            File(root, "retry.xml").writeText(TestKeyboxFixtures.validEcKeyboxXml)
+            ManagedKeyboxParserOracle.install()
+
+            var commits = 0
+            KeyboxLoader.activeSetOverride = { ids ->
+                commits++
+                ids.all(ManagedOpaqueKeyOracle::contains) && commits > 1
+            }
+
+            assertFalse(Config.updateKeyBoxesSync(emptySet()) { _, _ -> KeyboxVerifier.Status.VALID })
+            assertEquals(1, commits)
+
+            assertTrue(Config.ensureFreshKeyboxes())
+            assertEquals(2, commits)
+            assertEquals(1, CertHack.getKeyboxSourceCount())
         }
     }
 

@@ -584,7 +584,7 @@ object Config {
     ): Boolean =
         KeyboxActivation.coordinateRefresh {
             val refreshTicket = KeyboxActivation.beginRefresh()
-            lastKeyboxInventoryFingerprint = computeKeyboxInventoryFingerprint()
+            val observedInventoryFingerprint = computeKeyboxInventoryFingerprint()
             runCatching {
                 Logger.d("updateKeyBoxes: starting keybox scan (root=${root.absolutePath})")
                 val allKeyboxes = ArrayList<CertHack.KeyBox>(KeyboxLoader.MAX_ACTIVE_KEYS)
@@ -672,6 +672,7 @@ object Config {
 
                 when (KeyboxActivation.commitAndPublish(refreshTicket, verifiedKeyboxes)) {
                     KeyboxActivation.PublicationResult.COMMITTED -> {
+                        lastKeyboxInventoryFingerprint = observedInventoryFingerprint
                         Logger.i(
                             "updateKeyBoxes: ${verifiedKeyboxes.size}/${allKeyboxes.size} verified keyboxes active",
                         )
