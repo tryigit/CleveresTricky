@@ -60,6 +60,7 @@ impl Drop for RestoreOriginal {
 }
 
 struct RestoreTransaction {
+    keyboxes: Option<TrustedDir>,
     max_snapshot_bytes: usize,
     snapshot_bytes: usize,
     originals: Vec<RestoreOriginal>,
@@ -369,17 +370,17 @@ fn read_optional(dir: &TrustedDir, name: &str, max_bytes: usize) -> io::Result<O
     }
 }
 
-fn read_restore_target(
+fn read_transaction_restore_target(
     root: &TrustedDir,
+    transaction: &RestoreTransaction,
     path: &str,
     max_bytes: usize,
 ) -> io::Result<Option<Vec<u8>>> {
     match parse_restore_target(path)? {
         RestoreTarget::Root(name) => read_optional(root, name, max_bytes),
-        RestoreTarget::Keybox(name) => match root.open_child(KEYBOX_DIRECTORY) {
-            Ok(keyboxes) => read_optional(&keyboxes, name, max_bytes),
-            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
-            Err(error) => Err(error),
+        RestoreTarget::Keybox(name) => match transaction.keyboxes.as_ref() {
+            Some(keyboxes) => read_optional(keyboxes, name, max_bytes),
+            None => Ok(None),
         },
     }
 }
@@ -397,6 +398,66 @@ fn restore_target(root: &TrustedDir, path: &str, bytes: Option<&[u8]>) -> io::Re
             Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
             Err(error) => Err(error),
         },
+    }
+}
+
+fn restore_transaction_target(
+    root: &TrustedDir,
+    transaction: &RestoreTransaction,
+    path: &str,
+    bytes: Option<&[u8]>,
+) -> io::Result<()> {
+    match (parse_restore_target(path)?, bytes) {
+        (RestoreTarget::Root(name), Some(bytes)) => root.atomic_write(name, bytes, FILE_MODE),
+        (RestoreTarget::Root(name), None) => root.unlink_file(name).and_then(|_| root.sync()),
+        (RestoreTarget::Keybox(name), Some(bytes)) => {
+            let keyboxes = transaction.keyboxes.as_ref().ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::NotFound,
+                    "pinned keybox restore directory is unavailable",
+                )
+            })?;
+            keyboxes.atomic_write(name, bytes, FILE_MODE)
+        }
+        (RestoreTarget::Keybox(name), None) => match transaction.keyboxes.as_ref() {
+            Some(keyboxes) => keyboxes.unlink_file(name).and_then(|_| keyboxes.sync()),
+            None => Ok(()),
+        },
+    }
+}
+
+fn atomic_write_transaction_target_from<R: Read>(
+    root: &TrustedDir,
+    transaction: &RestoreTransaction,
+    path: &str,
+    reader: &mut R,
+    body_len: usize,
+    scratch: &mut [u8],
+) -> io::Result<()> {
+    let confirm = |source: &mut R| {
+        let mut marker = [0u8; 1];
+        source.read_exact(&mut marker)?;
+        if marker[0] != WRITE_COMMIT_MARKER {
+            return Err(invalid("config file commit marker rejected"));
+        }
+        Ok(())
+    };
+
+    match parse_restore_target(path)? {
+        RestoreTarget::Root(name) => {
+            root.atomic_write_from_confirmed(name, reader, body_len, FILE_MODE, scratch, confirm)
+        }
+        RestoreTarget::Keybox(name) => {
+            let keyboxes = transaction.keyboxes.as_ref().ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::NotFound,
+                    "pinned keybox restore directory is unavailable",
+                )
+            })?;
+            keyboxes.atomic_write_from_confirmed(
+                name, reader, body_len, FILE_MODE, scratch, confirm,
+            )
+        }
     }
 }
 
@@ -479,8 +540,8 @@ fn restore_write_from<R: Read>(
         .lock()
         .map_err(|_| io::Error::other("restore transaction state poisoned"))?;
     prune_stale_restore_transactions(root, &mut transactions);
-    transaction_for_snapshotted_target(&mut transactions, token, path)?;
-    atomic_write_target_from(root, path, reader, body_len, scratch)
+    let transaction = transaction_for_snapshotted_target(&mut transactions, token, path)?;
+    atomic_write_transaction_target_from(root, transaction, path, reader, body_len, scratch)
 }
 
 fn restore_delete(root: &TrustedDir, request: &str) -> io::Result<()> {
@@ -489,8 +550,8 @@ fn restore_delete(root: &TrustedDir, request: &str) -> io::Result<()> {
         .lock()
         .map_err(|_| io::Error::other("restore transaction state poisoned"))?;
     prune_stale_restore_transactions(root, &mut transactions);
-    transaction_for_snapshotted_target(&mut transactions, token, path)?;
-    restore_target(root, path, None)
+    let transaction = transaction_for_snapshotted_target(&mut transactions, token, path)?;
+    restore_transaction_target(root, transaction, path, None)
 }
 
 fn encode_hex(value: &[u8]) -> String {
@@ -577,9 +638,15 @@ fn restore_begin(root: &TrustedDir, request: &str) -> io::Result<()> {
     if transactions.len() >= MAX_ACTIVE_RESTORE_TRANSACTIONS {
         return Err(io::Error::other("restore transaction capacity exhausted"));
     }
+    let keyboxes = match root.open_child(KEYBOX_DIRECTORY) {
+        Ok(keyboxes) => Some(keyboxes),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+        Err(error) => return Err(error),
+    };
     transactions.insert(
         token.to_string(),
         RestoreTransaction {
+            keyboxes,
             max_snapshot_bytes,
             snapshot_bytes: 0,
             originals: Vec::new(),
@@ -622,7 +689,12 @@ fn restore_snapshot(root: &TrustedDir, request: &str) -> io::Result<()> {
     let global_remaining = MAX_GLOBAL_RESTORE_SNAPSHOT_BYTES
         .checked_sub(global_used)
         .ok_or_else(|| invalid("global restore snapshot accounting overflow"))?;
-    let bytes = read_restore_target(root, path, own_remaining.min(global_remaining))?;
+    let bytes = read_transaction_restore_target(
+        root,
+        transaction,
+        path,
+        own_remaining.min(global_remaining),
+    )?;
     let added = bytes.as_ref().map_or(0, Vec::len);
     transaction.snapshot_bytes = transaction
         .snapshot_bytes
@@ -649,7 +721,12 @@ fn restore_rollback(root: &TrustedDir, token: &str) -> io::Result<()> {
     let mut first_error = None;
     let mut failure_count = 0usize;
     for original in transaction.originals.iter().rev() {
-        if let Err(error) = restore_target(root, &original.path, original.bytes.as_deref()) {
+        if let Err(error) = restore_transaction_target(
+            root,
+            transaction,
+            &original.path,
+            original.bytes.as_deref(),
+        ) {
             failure_count += 1;
             if first_error.is_none() {
                 first_error = Some(error);
@@ -1120,9 +1197,7 @@ mod tests {
     fn restore_rollback_continues_after_an_independent_target_failure() {
         let test = TestRoot::new();
         fs::write(test.path.join("state.txt"), b"old-state").unwrap();
-        let keyboxes = test.path.join(KEYBOX_DIRECTORY);
-        fs::create_dir(&keyboxes).unwrap();
-        fs::write(keyboxes.join("device.xml"), b"old-keybox").unwrap();
+        fs::write(test.path.join("blocked.txt"), b"old-blocked").unwrap();
         let root = test.trusted();
         let token = "15000000000000000000000000000005";
         handle_from(&root, &restore_pair(ACTION_RESTORE_BEGIN, token, "4096")).unwrap();
@@ -1133,21 +1208,17 @@ mod tests {
         .unwrap();
         handle_from(
             &root,
-            &restore_pair(ACTION_RESTORE_SNAPSHOT, token, "keyboxes/device.xml"),
+            &restore_pair(ACTION_RESTORE_SNAPSHOT, token, "blocked.txt"),
         )
         .unwrap();
 
         fs::write(test.path.join("state.txt"), b"new-state").unwrap();
-        let moved = test.path.join("moved-keyboxes");
-        let outside = test.path.join("outside-keyboxes");
-        fs::rename(&keyboxes, &moved).unwrap();
-        fs::create_dir(&outside).unwrap();
-        fs::write(outside.join("device.xml"), b"outside").unwrap();
-        symlink(&outside, &keyboxes).unwrap();
+        fs::remove_file(test.path.join("blocked.txt")).unwrap();
+        fs::create_dir(test.path.join("blocked.txt")).unwrap();
 
         assert!(handle_from(&root, &request(ACTION_RESTORE_ROLLBACK, token, b"")).is_err());
         assert_eq!(fs::read(test.path.join("state.txt")).unwrap(), b"old-state");
-        assert_eq!(fs::read(outside.join("device.xml")).unwrap(), b"outside");
+        assert!(test.path.join("blocked.txt").is_dir());
         handle_from(&root, &request(ACTION_RESTORE_ABORT, token, b"")).unwrap();
     }
 
@@ -1182,7 +1253,7 @@ mod tests {
     }
 
     #[test]
-    fn keybox_parent_symlink_swap_fails_closed_and_exports_recovery() {
+    fn keybox_parent_symlink_swap_stays_bound_to_pinned_directory() {
         let test = TestRoot::new();
         let keyboxes = test.path.join(KEYBOX_DIRECTORY);
         fs::create_dir(&keyboxes).unwrap();
@@ -1203,21 +1274,58 @@ mod tests {
         fs::write(outside.join("device.xml"), b"outside").unwrap();
         symlink(&outside, &keyboxes).unwrap();
 
-        assert!(handle_from(&root, &request(ACTION_RESTORE_ROLLBACK, token, b"")).is_err());
+        handle_from(
+            &root,
+            &request(
+                ACTION_WRITE,
+                &format!("{token}\0keyboxes/device.xml"),
+                b"new",
+            ),
+        )
+        .unwrap();
+        assert_eq!(fs::read(moved.join("device.xml")).unwrap(), b"new");
         assert_eq!(fs::read(outside.join("device.xml")).unwrap(), b"outside");
-        handle_from(&root, &request(ACTION_RESTORE_EXPORT, token, b"")).unwrap();
-        assert_eq!(
-            fs::read(
-                test.path
-                    .join(format!(".restore-recovery-{token}-0000.bak"))
-            )
-            .unwrap(),
-            b"old"
-        );
-        assert!(test
-            .path
-            .join(format!(".restore-recovery-{token}.manifest"))
-            .is_file());
+
+        handle_from(&root, &request(ACTION_RESTORE_ROLLBACK, token, b"")).unwrap();
+        assert_eq!(fs::read(moved.join("device.xml")).unwrap(), b"old");
+        assert_eq!(fs::read(outside.join("device.xml")).unwrap(), b"outside");
+    }
+
+    #[test]
+    fn keybox_parent_real_directory_swap_cannot_redirect_transaction() {
+        let test = TestRoot::new();
+        let keyboxes = test.path.join(KEYBOX_DIRECTORY);
+        fs::create_dir(&keyboxes).unwrap();
+        fs::write(keyboxes.join("device.xml"), b"old").unwrap();
+        let root = test.trusted();
+        let token = "35000000000000000000000000000005";
+        handle_from(&root, &restore_pair(ACTION_RESTORE_BEGIN, token, "4096")).unwrap();
+        handle_from(
+            &root,
+            &restore_pair(ACTION_RESTORE_SNAPSHOT, token, "keyboxes/device.xml"),
+        )
+        .unwrap();
+
+        let moved = test.path.join("moved-keyboxes");
+        fs::rename(&keyboxes, &moved).unwrap();
+        fs::create_dir(&keyboxes).unwrap();
+        fs::write(keyboxes.join("device.xml"), b"replacement").unwrap();
+
+        handle_from(
+            &root,
+            &request(
+                ACTION_WRITE,
+                &format!("{token}\0keyboxes/device.xml"),
+                b"new",
+            ),
+        )
+        .unwrap();
+        assert_eq!(fs::read(moved.join("device.xml")).unwrap(), b"new");
+        assert_eq!(fs::read(keyboxes.join("device.xml")).unwrap(), b"replacement");
+
+        handle_from(&root, &request(ACTION_RESTORE_ROLLBACK, token, b"")).unwrap();
+        assert_eq!(fs::read(moved.join("device.xml")).unwrap(), b"old");
+        assert_eq!(fs::read(keyboxes.join("device.xml")).unwrap(), b"replacement");
     }
 
     #[test]
@@ -1234,6 +1342,7 @@ mod tests {
         transactions.insert(
             token.to_string(),
             RestoreTransaction {
+                keyboxes: None,
                 max_snapshot_bytes: 4096,
                 snapshot_bytes: 3,
                 originals: vec![RestoreOriginal {
