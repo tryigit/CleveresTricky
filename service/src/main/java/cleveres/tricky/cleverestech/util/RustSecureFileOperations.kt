@@ -30,7 +30,7 @@ internal class RustSecureFileOperations : SecureFileOperations, RestoreFileOpera
     ) {
         require(content.size <= MAX_FILE_BYTES) { "File exceeds the Rust broker size limit" }
         ByteArrayInputStream(content).use { input ->
-            transactAtomicWrite(file, input, content.size)
+            transactAtomicWrite(relativePath(file), input, content.size)
         }
     }
 
@@ -54,7 +54,7 @@ internal class RustSecureFileOperations : SecureFileOperations, RestoreFileOpera
         // known (for example the fixed-size privacy seed). Keep that path atomic through the
         // descriptor-relative broker. WebUI download staging above is the maximum-bound stream
         // where the final length is intentionally unknown in advance.
-        transactAtomicWrite(file, inputStream, limit.toInt())
+        transactAtomicWrite(relative, inputStream, limit.toInt())
     }
 
     override fun mkdirs(
@@ -114,11 +114,14 @@ internal class RustSecureFileOperations : SecureFileOperations, RestoreFileOpera
     ) {
         requireConfigRoot(configDir)
         validateRestoreToken(token)
+        require(content.size <= MAX_FILE_BYTES) { "File exceeds the Rust broker size limit" }
         val relative = restoreRelativePath(target)
         if (relative.startsWith("$KEYBOX_DIRECTORY/")) {
             transactControl(ACTION_MKDIR, KEYBOX_DIRECTORY.toByteArray(Charsets.UTF_8))
         }
-        writeBytes(target, content)
+        ByteArrayInputStream(content).use { input ->
+            transactAtomicWrite(restorePair(token, relative), input, content.size)
+        }
     }
 
     override fun delete(
@@ -128,7 +131,10 @@ internal class RustSecureFileOperations : SecureFileOperations, RestoreFileOpera
     ) {
         requireConfigRoot(configDir)
         validateRestoreToken(token)
-        transactControl(ACTION_DELETE, restoreRelativePath(target).toByteArray(Charsets.UTF_8))
+        transactControl(
+            ACTION_DELETE,
+            restorePairBytes(token, restoreRelativePath(target)),
+        )
     }
 
     override fun rollback(
@@ -189,11 +195,11 @@ internal class RustSecureFileOperations : SecureFileOperations, RestoreFileOpera
     }
 
     private fun transactAtomicWrite(
-        file: File,
+        relativePath: String,
         input: InputStream,
         declaredBodyLength: Int,
     ) {
-        val pathBytes = relativePath(file).toByteArray(Charsets.UTF_8)
+        val pathBytes = relativePath.toByteArray(Charsets.UTF_8)
         val scratch = ByteArray(STREAM_BUFFER_BYTES)
         try {
             require(pathBytes.size <= MAX_RELATIVE_PATH_BYTES)
@@ -339,16 +345,21 @@ internal class RustSecureFileOperations : SecureFileOperations, RestoreFileOpera
         }
     }
 
-    private fun restorePairBytes(
+    private fun restorePair(
         token: String,
         argument: String,
-    ): ByteArray {
+    ): String {
         validateRestoreToken(token)
         if (argument.isEmpty() || '\u0000' in argument) {
             throw SecurityException("Invalid restore transaction argument")
         }
-        return "$token\u0000$argument".toByteArray(Charsets.UTF_8)
+        return "$token\u0000$argument"
     }
+
+    private fun restorePairBytes(
+        token: String,
+        argument: String,
+    ): ByteArray = restorePair(token, argument).toByteArray(Charsets.UTF_8)
 
     private fun validateRestoreToken(token: String) {
         if (token.length != RESTORE_TOKEN_LENGTH || token.any { it !in '0'..'9' && it !in 'a'..'f' }) {
