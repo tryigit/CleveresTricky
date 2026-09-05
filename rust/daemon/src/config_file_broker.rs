@@ -267,6 +267,31 @@ fn atomic_write_relative_from<R: Read>(
     body_len: usize,
     scratch: &mut [u8],
 ) -> io::Result<()> {
+    if path.contains('\0') {
+        return restore_write_from(root, path, reader, body_len, scratch);
+    }
+    let mut transactions = restore_transactions()
+        .lock()
+        .map_err(|_| io::Error::other("restore transaction state poisoned"))?;
+    prune_stale_restore_transactions(root, &mut transactions);
+    if transactions.values().any(|transaction| {
+        transaction
+            .originals
+            .iter()
+            .any(|original| original.path == path)
+    }) {
+        return Err(invalid("active restore target requires a transaction-scoped write"));
+    }
+    atomic_write_target_from(root, path, reader, body_len, scratch)
+}
+
+fn atomic_write_target_from<R: Read>(
+    root: &TrustedDir,
+    path: &str,
+    reader: &mut R,
+    body_len: usize,
+    scratch: &mut [u8],
+) -> io::Result<()> {
     let confirm = |source: &mut R| {
         let mut marker = [0u8; 1];
         source.read_exact(&mut marker)?;
@@ -374,6 +399,21 @@ fn restore_target(root: &TrustedDir, path: &str, bytes: Option<&[u8]>) -> io::Re
 }
 
 fn delete_allowed(root: &TrustedDir, path: &str) -> io::Result<()> {
+    if path.contains('\0') {
+        return restore_delete(root, path);
+    }
+    let mut transactions = restore_transactions()
+        .lock()
+        .map_err(|_| io::Error::other("restore transaction state poisoned"))?;
+    prune_stale_restore_transactions(root, &mut transactions);
+    if transactions.values().any(|transaction| {
+        transaction
+            .originals
+            .iter()
+            .any(|original| original.path == path)
+    }) {
+        return Err(invalid("active restore target requires a transaction-scoped delete"));
+    }
     restore_target(root, path, None)
 }
 
@@ -401,6 +441,52 @@ fn parse_restore_pair(value: &str) -> io::Result<(&str, &str)> {
         return Err(invalid("restore transaction argument is empty"));
     }
     Ok((token, argument))
+}
+
+fn transaction_for_snapshotted_target<'a>(
+    transactions: &'a mut HashMap<String, RestoreTransaction>,
+    token: &str,
+    path: &str,
+) -> io::Result<&'a mut RestoreTransaction> {
+    parse_restore_target(path)?;
+    let transaction = transactions
+        .get_mut(token)
+        .ok_or_else(|| invalid("restore transaction is not active"))?;
+    if !transaction
+        .originals
+        .iter()
+        .any(|original| original.path == path)
+    {
+        return Err(invalid("restore mutation target was not snapshotted"));
+    }
+    transaction.touched = Instant::now();
+    Ok(transaction)
+}
+
+fn restore_write_from<R: Read>(
+    root: &TrustedDir,
+    request: &str,
+    reader: &mut R,
+    body_len: usize,
+    scratch: &mut [u8],
+) -> io::Result<()> {
+    let (token, path) = parse_restore_pair(request)?;
+    let mut transactions = restore_transactions()
+        .lock()
+        .map_err(|_| io::Error::other("restore transaction state poisoned"))?;
+    prune_stale_restore_transactions(root, &mut transactions);
+    transaction_for_snapshotted_target(&mut transactions, token, path)?;
+    atomic_write_target_from(root, path, reader, body_len, scratch)
+}
+
+fn restore_delete(root: &TrustedDir, request: &str) -> io::Result<()> {
+    let (token, path) = parse_restore_pair(request)?;
+    let mut transactions = restore_transactions()
+        .lock()
+        .map_err(|_| io::Error::other("restore transaction state poisoned"))?;
+    prune_stale_restore_transactions(root, &mut transactions);
+    transaction_for_snapshotted_target(&mut transactions, token, path)?;
+    restore_target(root, path, None)
 }
 
 fn encode_hex(value: &[u8]) -> String {
@@ -923,6 +1009,57 @@ mod tests {
         assert_eq!(fs::read(&outside).unwrap(), b"outside");
         assert_eq!(fs::read(test.path.join("target.txt")).unwrap(), b"inside");
         let _ = fs::remove_file(outside);
+    }
+
+    #[test]
+    fn restore_transaction_mutations_require_matching_snapshot_token() {
+        let test = TestRoot::new();
+        let root = test.trusted();
+        fs::write(test.path.join("state.txt"), b"old").unwrap();
+        fs::write(test.path.join("other.txt"), b"other").unwrap();
+        let token = "05000000000000000000000000000005";
+        let wrong_token = "06000000000000000000000000000006";
+        handle_from(&root, &restore_pair(ACTION_RESTORE_BEGIN, token, "4096")).unwrap();
+        handle_from(
+            &root,
+            &restore_pair(ACTION_RESTORE_SNAPSHOT, token, "state.txt"),
+        )
+        .unwrap();
+
+        assert!(handle_from(&root, &request(ACTION_WRITE, "state.txt", b"unscoped")).is_err());
+        assert_eq!(fs::read(test.path.join("state.txt")).unwrap(), b"old");
+        assert!(handle_from(
+            &root,
+            &request(
+                ACTION_WRITE,
+                &format!("{wrong_token}\0state.txt"),
+                b"wrong-token",
+            ),
+        )
+        .is_err());
+        assert!(handle_from(
+            &root,
+            &request(ACTION_WRITE, &format!("{token}\0other.txt"), b"not-snapshotted"),
+        )
+        .is_err());
+        handle_from(
+            &root,
+            &request(ACTION_WRITE, &format!("{token}\0state.txt"), b"new"),
+        )
+        .unwrap();
+        assert_eq!(fs::read(test.path.join("state.txt")).unwrap(), b"new");
+
+        assert!(handle_from(&root, &request(ACTION_DELETE, "state.txt", b"")).is_err());
+        handle_from(
+            &root,
+            &request(ACTION_DELETE, &format!("{token}\0state.txt"), b""),
+        )
+        .unwrap();
+        assert!(!test.path.join("state.txt").exists());
+
+        handle_from(&root, &request(ACTION_RESTORE_ROLLBACK, token, b"")).unwrap();
+        assert_eq!(fs::read(test.path.join("state.txt")).unwrap(), b"old");
+        assert_eq!(fs::read(test.path.join("other.txt")).unwrap(), b"other");
     }
 
     #[test]
