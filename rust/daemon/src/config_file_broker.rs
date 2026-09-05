@@ -418,7 +418,7 @@ fn export_transaction_to_root(
     token: &str,
     transaction: &RestoreTransaction,
 ) -> io::Result<()> {
-    let mut created = Vec::new();
+    let mut created: Vec<String> = Vec::new();
     let mut manifest = String::new();
     for (index, original) in transaction.originals.iter().enumerate() {
         let encoded_path = encode_hex(original.path.as_bytes());
