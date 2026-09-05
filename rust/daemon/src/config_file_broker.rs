@@ -328,7 +328,9 @@ fn parse_restore_target(path: &str) -> io::Result<RestoreTarget<'_>> {
             validate_component(name)?;
             Ok(RestoreTarget::Keybox(name))
         }
-        _ => Err(invalid("restore target is outside an allowed capability subtree")),
+        _ => Err(invalid(
+            "restore target is outside an allowed capability subtree",
+        )),
     }
 }
 
@@ -340,7 +342,11 @@ fn read_optional(dir: &TrustedDir, name: &str, max_bytes: usize) -> io::Result<O
     }
 }
 
-fn read_restore_target(root: &TrustedDir, path: &str, max_bytes: usize) -> io::Result<Option<Vec<u8>>> {
+fn read_restore_target(
+    root: &TrustedDir,
+    path: &str,
+    max_bytes: usize,
+) -> io::Result<Option<Vec<u8>>> {
     match parse_restore_target(path)? {
         RestoreTarget::Root(name) => read_optional(root, name, max_bytes),
         RestoreTarget::Keybox(name) => match root.open_child(KEYBOX_DIRECTORY) {
@@ -454,9 +460,9 @@ fn prune_stale_restore_transactions(
         })
         .collect();
     for token in stale {
-        let exported = transactions
-            .get(&token)
-            .is_some_and(|transaction| export_transaction_to_root(root, &token, transaction).is_ok());
+        let exported = transactions.get(&token).is_some_and(|transaction| {
+            export_transaction_to_root(root, &token, transaction).is_ok()
+        });
         if exported {
             transactions.remove(&token);
         }
@@ -500,15 +506,24 @@ fn restore_snapshot(root: &TrustedDir, request: &str) -> io::Result<()> {
         .lock()
         .map_err(|_| io::Error::other("restore transaction state poisoned"))?;
     prune_stale_restore_transactions(root, &mut transactions);
-    let global_used: usize = transactions.values().map(|transaction| transaction.snapshot_bytes).sum();
+    let global_used: usize = transactions
+        .values()
+        .map(|transaction| transaction.snapshot_bytes)
+        .sum();
     let transaction = transactions
         .get_mut(token)
         .ok_or_else(|| invalid("restore transaction is not active"))?;
     if transaction.originals.len() >= MAX_RESTORE_TARGETS {
         return Err(invalid("restore transaction target count exceeds bound"));
     }
-    if transaction.originals.iter().any(|original| original.path == path) {
-        return Err(invalid("restore transaction target was already snapshotted"));
+    if transaction
+        .originals
+        .iter()
+        .any(|original| original.path == path)
+    {
+        return Err(invalid(
+            "restore transaction target was already snapshotted",
+        ));
     }
     let own_remaining = transaction
         .max_snapshot_bytes
@@ -903,15 +918,35 @@ mod tests {
         let root = test.trusted();
         fs::write(test.path.join("first.txt"), b"old-first").unwrap();
         fs::create_dir(test.path.join(KEYBOX_DIRECTORY)).unwrap();
-        fs::write(test.path.join(KEYBOX_DIRECTORY).join("device.xml"), b"old-keybox").unwrap();
+        fs::write(
+            test.path.join(KEYBOX_DIRECTORY).join("device.xml"),
+            b"old-keybox",
+        )
+        .unwrap();
         let token = "10000000000000000000000000000001";
 
         handle_from(&root, &restore_pair(ACTION_RESTORE_BEGIN, token, "4096")).unwrap();
-        handle_from(&root, &restore_pair(ACTION_RESTORE_SNAPSHOT, token, "first.txt")).unwrap();
-        handle_from(&root, &restore_pair(ACTION_RESTORE_SNAPSHOT, token, "keyboxes/device.xml")).unwrap();
-        handle_from(&root, &restore_pair(ACTION_RESTORE_SNAPSHOT, token, "created.txt")).unwrap();
+        handle_from(
+            &root,
+            &restore_pair(ACTION_RESTORE_SNAPSHOT, token, "first.txt"),
+        )
+        .unwrap();
+        handle_from(
+            &root,
+            &restore_pair(ACTION_RESTORE_SNAPSHOT, token, "keyboxes/device.xml"),
+        )
+        .unwrap();
+        handle_from(
+            &root,
+            &restore_pair(ACTION_RESTORE_SNAPSHOT, token, "created.txt"),
+        )
+        .unwrap();
         fs::write(test.path.join("first.txt"), b"new-first").unwrap();
-        fs::write(test.path.join(KEYBOX_DIRECTORY).join("device.xml"), b"new-keybox").unwrap();
+        fs::write(
+            test.path.join(KEYBOX_DIRECTORY).join("device.xml"),
+            b"new-keybox",
+        )
+        .unwrap();
         fs::write(test.path.join("created.txt"), b"created").unwrap();
 
         handle_from(&root, &request(ACTION_RESTORE_ROLLBACK, token, b"")).unwrap();
@@ -930,7 +965,11 @@ mod tests {
         let root = test.trusted();
         let token = "20000000000000000000000000000002";
         handle_from(&root, &restore_pair(ACTION_RESTORE_BEGIN, token, "4096")).unwrap();
-        handle_from(&root, &restore_pair(ACTION_RESTORE_SNAPSHOT, token, "state.txt")).unwrap();
+        handle_from(
+            &root,
+            &restore_pair(ACTION_RESTORE_SNAPSHOT, token, "state.txt"),
+        )
+        .unwrap();
 
         let moved = test.path.with_extension("moved-root");
         let outside = test.path.with_extension("outside-root");
@@ -958,7 +997,11 @@ mod tests {
         let root = test.trusted();
         let token = "30000000000000000000000000000003";
         handle_from(&root, &restore_pair(ACTION_RESTORE_BEGIN, token, "4096")).unwrap();
-        handle_from(&root, &restore_pair(ACTION_RESTORE_SNAPSHOT, token, "keyboxes/device.xml")).unwrap();
+        handle_from(
+            &root,
+            &restore_pair(ACTION_RESTORE_SNAPSHOT, token, "keyboxes/device.xml"),
+        )
+        .unwrap();
 
         let moved = test.path.join("moved-keyboxes");
         let outside = test.path.join("outside-keyboxes");
@@ -971,10 +1014,17 @@ mod tests {
         assert_eq!(fs::read(outside.join("device.xml")).unwrap(), b"outside");
         handle_from(&root, &request(ACTION_RESTORE_EXPORT, token, b"")).unwrap();
         assert_eq!(
-            fs::read(test.path.join(format!(".restore-recovery-{token}-0000.bak"))).unwrap(),
+            fs::read(
+                test.path
+                    .join(format!(".restore-recovery-{token}-0000.bak"))
+            )
+            .unwrap(),
             b"old"
         );
-        assert!(test.path.join(format!(".restore-recovery-{token}.manifest")).is_file());
+        assert!(test
+            .path
+            .join(format!(".restore-recovery-{token}.manifest"))
+            .is_file());
     }
 
     #[test]
@@ -982,7 +1032,7 @@ mod tests {
         let test = TestRoot::new();
         let outside = test.path.with_extension("delete-outside");
         fs::write(&outside, b"outside").unwrap();
-        symlink(&outside, test.path.join("victim")) .unwrap();
+        symlink(&outside, test.path.join("victim")).unwrap();
         let root = test.trusted();
 
         handle_from(&root, &request(ACTION_DELETE, "victim", b"")).unwrap();
