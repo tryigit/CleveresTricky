@@ -1,6 +1,7 @@
 package cleveres.tricky.cleverestech
 
 import cleveres.tricky.cleverestech.util.RestoreFiles
+import cleveres.tricky.cleverestech.util.SecureFile
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
@@ -98,6 +99,19 @@ internal object BackupRestoreTransaction {
             unique[normalized.toString()] = Mutation(normalized.toFile(), mutation.replacement)
         }
 
+        val needsKeyboxDirectory =
+            unique.values.any { mutation ->
+                if (mutation.replacement == null) return@any false
+                val relative = rootPath.relativize(mutation.target.toPath())
+                relative.nameCount == 2 && relative.getName(0).toString() == KEYBOX_DIRECTORY
+            }
+        if (needsKeyboxDirectory) {
+            // Creation happens before the transaction boundary. The backend then pins this exact
+            // directory handle before snapshotting, so later pathname replacement cannot redirect
+            // restore writes or rollback.
+            SecureFile.mkdirs(configDir.resolve(KEYBOX_DIRECTORY), DIRECTORY_MODE)
+        }
+
         val restoreFiles = RestoreFiles.current()
         val token = UUID.randomUUID().toString().replace("-", "")
         var transactionActive = false
@@ -179,4 +193,5 @@ internal object BackupRestoreTransaction {
         value.isNotEmpty() && value != "." && value != ".." && '/' !in value && '\u0000' !in value
 
     private const val KEYBOX_DIRECTORY = "keyboxes"
+    private const val DIRECTORY_MODE = 448
 }
