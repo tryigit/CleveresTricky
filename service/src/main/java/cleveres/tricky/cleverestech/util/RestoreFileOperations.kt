@@ -85,6 +85,7 @@ private class JvmSecureRestoreFileOperations : RestoreFileOperations {
         val maxSnapshotBytes: Long,
     ) {
         var snapshotBytes: Long = 0L
+        var keyboxesVerified: Boolean = false
         val originals = ArrayList<Original>()
 
         fun closeAndWipe() {
@@ -138,7 +139,6 @@ private class JvmSecureRestoreFileOperations : RestoreFileOperations {
             }
         try {
             verifyReplacementSemantics(root)
-            keyboxes?.let(::verifyReplacementSemantics)
         } catch (error: Throwable) {
             runCatching { keyboxes?.close() }
             runCatching { root.close() }
@@ -536,6 +536,10 @@ private class JvmSecureRestoreFileOperations : RestoreFileOperations {
             block(transaction.root, leaf)
         } else {
             val parent = transaction.keyboxes ?: throw NoSuchFileException(KEYBOX_DIRECTORY)
+            if (!transaction.keyboxesVerified) {
+                verifyReplacementSemantics(parent)
+                transaction.keyboxesVerified = true
+            }
             block(parent, leaf)
         }
     }
