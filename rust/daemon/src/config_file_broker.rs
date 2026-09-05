@@ -3,8 +3,11 @@
 mod pidfd_signal;
 
 use cleverestricky_service_core::secure_fs::TrustedDir;
+use std::collections::HashMap;
 use std::io::{self, Read};
 use std::path::Path;
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 pub const MAX_FILE_BYTES: usize = 20 * 1024 * 1024;
 pub const MAX_RELATIVE_PATH_BYTES: usize = 511;
@@ -26,9 +29,44 @@ const ACTION_TOUCH: u8 = 2;
 const ACTION_ROOT_VALIDATE: u8 = 3;
 const ACTION_STAGE_CREATE: u8 = 4;
 const ACTION_STAGE_APPEND: u8 = 5;
+const ACTION_RESTORE_BEGIN: u8 = 6;
+const ACTION_RESTORE_SNAPSHOT: u8 = 7;
+const ACTION_RESTORE_ROLLBACK: u8 = 8;
+const ACTION_RESTORE_COMMIT: u8 = 9;
+const ACTION_RESTORE_ABORT: u8 = 10;
+const ACTION_DELETE: u8 = 11;
+const ACTION_RESTORE_EXPORT: u8 = 12;
 const WRITE_COMMIT_MARKER: u8 = 0xa5;
 const FILE_MODE: u32 = 0o600;
 const DIRECTORY_MODE: u32 = 0o700;
+const RESTORE_TOKEN_BYTES: usize = 32;
+const MAX_RESTORE_SNAPSHOT_BYTES: usize = 32 * 1024 * 1024;
+const MAX_GLOBAL_RESTORE_SNAPSHOT_BYTES: usize = 64 * 1024 * 1024;
+const MAX_ACTIVE_RESTORE_TRANSACTIONS: usize = 4;
+const MAX_RESTORE_TARGETS: usize = 512;
+const RESTORE_TRANSACTION_TTL: Duration = Duration::from_secs(15 * 60);
+
+struct RestoreOriginal {
+    path: String,
+    bytes: Option<Vec<u8>>,
+}
+
+impl Drop for RestoreOriginal {
+    fn drop(&mut self) {
+        if let Some(bytes) = self.bytes.as_mut() {
+            bytes.fill(0);
+        }
+    }
+}
+
+struct RestoreTransaction {
+    max_snapshot_bytes: usize,
+    snapshot_bytes: usize,
+    originals: Vec<RestoreOriginal>,
+    touched: Instant,
+}
+
+static RESTORE_TRANSACTIONS: OnceLock<Mutex<HashMap<String, RestoreTransaction>>> = OnceLock::new();
 
 pub fn prepare_root() -> io::Result<TrustedDir> {
     if let Some(exit_code) = pidfd_signal::run_env_request_if_present() {
@@ -107,6 +145,13 @@ pub(crate) fn handle_stream_from<R: Read>(
             }
             ACTION_STAGE_CREATE => stage_create(root, path),
             ACTION_STAGE_APPEND => stage_append(root, path, reader, declared_body_len, scratch),
+            ACTION_RESTORE_BEGIN => restore_begin(root, path),
+            ACTION_RESTORE_SNAPSHOT => restore_snapshot(root, path),
+            ACTION_RESTORE_ROLLBACK => restore_rollback(root, path),
+            ACTION_RESTORE_COMMIT => restore_commit(path),
+            ACTION_RESTORE_ABORT => restore_abort(path),
+            ACTION_DELETE => delete_allowed(root, path),
+            ACTION_RESTORE_EXPORT => restore_export(root, path),
             _ => Err(invalid("unsupported config file action")),
         }
     })();
@@ -262,6 +307,273 @@ fn atomic_write_relative_from<R: Read>(
     }
 }
 
+enum RestoreTarget<'a> {
+    Root(&'a str),
+    Keybox(&'a str),
+}
+
+fn parse_restore_target(path: &str) -> io::Result<RestoreTarget<'_>> {
+    let mut components = path.split('/');
+    let first = components.next().unwrap_or_default();
+    let second = components.next();
+    if components.next().is_some() {
+        return Err(invalid("restore target path depth exceeds bound"));
+    }
+    match second {
+        None => {
+            validate_component(first)?;
+            Ok(RestoreTarget::Root(first))
+        }
+        Some(name) if first == KEYBOX_DIRECTORY => {
+            validate_component(name)?;
+            Ok(RestoreTarget::Keybox(name))
+        }
+        _ => Err(invalid("restore target is outside an allowed capability subtree")),
+    }
+}
+
+fn read_optional(dir: &TrustedDir, name: &str, max_bytes: usize) -> io::Result<Option<Vec<u8>>> {
+    match dir.read_bounded(name, max_bytes) {
+        Ok(bytes) => Ok(Some(bytes)),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error),
+    }
+}
+
+fn read_restore_target(root: &TrustedDir, path: &str, max_bytes: usize) -> io::Result<Option<Vec<u8>>> {
+    match parse_restore_target(path)? {
+        RestoreTarget::Root(name) => read_optional(root, name, max_bytes),
+        RestoreTarget::Keybox(name) => match root.open_child(KEYBOX_DIRECTORY) {
+            Ok(keyboxes) => read_optional(&keyboxes, name, max_bytes),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+            Err(error) => Err(error),
+        },
+    }
+}
+
+fn restore_target(root: &TrustedDir, path: &str, bytes: Option<&[u8]>) -> io::Result<()> {
+    match (parse_restore_target(path)?, bytes) {
+        (RestoreTarget::Root(name), Some(bytes)) => root.atomic_write(name, bytes, FILE_MODE),
+        (RestoreTarget::Root(name), None) => root.unlink_file(name).and_then(|_| root.sync()),
+        (RestoreTarget::Keybox(name), Some(bytes)) => {
+            let keyboxes = root.mkdir_child(KEYBOX_DIRECTORY, DIRECTORY_MODE)?;
+            keyboxes.atomic_write(name, bytes, FILE_MODE)
+        }
+        (RestoreTarget::Keybox(name), None) => match root.open_child(KEYBOX_DIRECTORY) {
+            Ok(keyboxes) => keyboxes.unlink_file(name).and_then(|_| keyboxes.sync()),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(error),
+        },
+    }
+}
+
+fn delete_allowed(root: &TrustedDir, path: &str) -> io::Result<()> {
+    restore_target(root, path, None)
+}
+
+fn restore_transactions() -> &'static Mutex<HashMap<String, RestoreTransaction>> {
+    RESTORE_TRANSACTIONS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn parse_restore_token(value: &str) -> io::Result<&str> {
+    if value.len() != RESTORE_TOKEN_BYTES
+        || !value
+            .bytes()
+            .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
+    {
+        return Err(invalid("restore transaction token rejected"));
+    }
+    Ok(value)
+}
+
+fn parse_restore_pair(value: &str) -> io::Result<(&str, &str)> {
+    let (token, argument) = value
+        .split_once('\0')
+        .ok_or_else(|| invalid("restore transaction request is malformed"))?;
+    parse_restore_token(token)?;
+    if argument.is_empty() {
+        return Err(invalid("restore transaction argument is empty"));
+    }
+    Ok((token, argument))
+}
+
+fn encode_hex(value: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut output = String::with_capacity(value.len() * 2);
+    for byte in value {
+        output.push(HEX[(byte >> 4) as usize] as char);
+        output.push(HEX[(byte & 0x0f) as usize] as char);
+    }
+    output
+}
+
+fn export_transaction_to_root(
+    root: &TrustedDir,
+    token: &str,
+    transaction: &RestoreTransaction,
+) -> io::Result<()> {
+    let mut created = Vec::new();
+    let mut manifest = String::new();
+    for (index, original) in transaction.originals.iter().enumerate() {
+        let encoded_path = encode_hex(original.path.as_bytes());
+        if let Some(bytes) = original.bytes.as_deref() {
+            let name = format!(".restore-recovery-{token}-{index:04}.bak");
+            if let Err(error) = root.atomic_write(&name, bytes, FILE_MODE) {
+                for created_name in &created {
+                    let _ = root.unlink_file(created_name);
+                }
+                return Err(error);
+            }
+            created.push(name);
+            manifest.push_str(&format!("{index:04}\tpresent\t{encoded_path}\n"));
+        } else {
+            manifest.push_str(&format!("{index:04}\tabsent\t{encoded_path}\n"));
+        }
+    }
+    let manifest_name = format!(".restore-recovery-{token}.manifest");
+    if let Err(error) = root.atomic_write(&manifest_name, manifest.as_bytes(), FILE_MODE) {
+        for created_name in &created {
+            let _ = root.unlink_file(created_name);
+        }
+        return Err(error);
+    }
+    root.sync()
+}
+
+fn prune_stale_restore_transactions(
+    root: &TrustedDir,
+    transactions: &mut HashMap<String, RestoreTransaction>,
+) {
+    let now = Instant::now();
+    let stale: Vec<String> = transactions
+        .iter()
+        .filter_map(|(token, transaction)| {
+            now.checked_duration_since(transaction.touched)
+                .filter(|age| *age >= RESTORE_TRANSACTION_TTL)
+                .map(|_| token.clone())
+        })
+        .collect();
+    for token in stale {
+        let exported = transactions
+            .get(&token)
+            .is_some_and(|transaction| export_transaction_to_root(root, &token, transaction).is_ok());
+        if exported {
+            transactions.remove(&token);
+        }
+    }
+}
+
+fn restore_begin(root: &TrustedDir, request: &str) -> io::Result<()> {
+    let (token, max_snapshot) = parse_restore_pair(request)?;
+    let max_snapshot_bytes = max_snapshot
+        .parse::<usize>()
+        .map_err(|_| invalid("restore snapshot limit rejected"))?;
+    if max_snapshot_bytes > MAX_RESTORE_SNAPSHOT_BYTES {
+        return Err(invalid("restore snapshot limit exceeds broker bound"));
+    }
+    let mut transactions = restore_transactions()
+        .lock()
+        .map_err(|_| io::Error::other("restore transaction state poisoned"))?;
+    prune_stale_restore_transactions(root, &mut transactions);
+    if transactions.contains_key(token) {
+        return Err(invalid("restore transaction token already active"));
+    }
+    if transactions.len() >= MAX_ACTIVE_RESTORE_TRANSACTIONS {
+        return Err(io::Error::other("restore transaction capacity exhausted"));
+    }
+    transactions.insert(
+        token.to_string(),
+        RestoreTransaction {
+            max_snapshot_bytes,
+            snapshot_bytes: 0,
+            originals: Vec::new(),
+            touched: Instant::now(),
+        },
+    );
+    Ok(())
+}
+
+fn restore_snapshot(root: &TrustedDir, request: &str) -> io::Result<()> {
+    let (token, path) = parse_restore_pair(request)?;
+    parse_restore_target(path)?;
+    let mut transactions = restore_transactions()
+        .lock()
+        .map_err(|_| io::Error::other("restore transaction state poisoned"))?;
+    prune_stale_restore_transactions(root, &mut transactions);
+    let global_used: usize = transactions.values().map(|transaction| transaction.snapshot_bytes).sum();
+    let transaction = transactions
+        .get_mut(token)
+        .ok_or_else(|| invalid("restore transaction is not active"))?;
+    if transaction.originals.len() >= MAX_RESTORE_TARGETS {
+        return Err(invalid("restore transaction target count exceeds bound"));
+    }
+    if transaction.originals.iter().any(|original| original.path == path) {
+        return Err(invalid("restore transaction target was already snapshotted"));
+    }
+    let own_remaining = transaction
+        .max_snapshot_bytes
+        .checked_sub(transaction.snapshot_bytes)
+        .ok_or_else(|| invalid("restore snapshot accounting underflow"))?;
+    let global_remaining = MAX_GLOBAL_RESTORE_SNAPSHOT_BYTES
+        .checked_sub(global_used)
+        .ok_or_else(|| invalid("global restore snapshot accounting overflow"))?;
+    let bytes = read_restore_target(root, path, own_remaining.min(global_remaining))?;
+    let added = bytes.as_ref().map_or(0, Vec::len);
+    transaction.snapshot_bytes = transaction
+        .snapshot_bytes
+        .checked_add(added)
+        .ok_or_else(|| invalid("restore snapshot accounting overflow"))?;
+    transaction.originals.push(RestoreOriginal {
+        path: path.to_string(),
+        bytes,
+    });
+    transaction.touched = Instant::now();
+    Ok(())
+}
+
+fn restore_rollback(root: &TrustedDir, token: &str) -> io::Result<()> {
+    parse_restore_token(token)?;
+    let mut transactions = restore_transactions()
+        .lock()
+        .map_err(|_| io::Error::other("restore transaction state poisoned"))?;
+    prune_stale_restore_transactions(root, &mut transactions);
+    let transaction = transactions
+        .get_mut(token)
+        .ok_or_else(|| invalid("restore transaction is not active"))?;
+    transaction.touched = Instant::now();
+    for original in transaction.originals.iter().rev() {
+        restore_target(root, &original.path, original.bytes.as_deref())?;
+    }
+    transactions.remove(token);
+    Ok(())
+}
+
+fn restore_commit(token: &str) -> io::Result<()> {
+    parse_restore_token(token)?;
+    let mut transactions = restore_transactions()
+        .lock()
+        .map_err(|_| io::Error::other("restore transaction state poisoned"))?;
+    transactions.remove(token);
+    Ok(())
+}
+
+fn restore_abort(token: &str) -> io::Result<()> {
+    restore_commit(token)
+}
+
+fn restore_export(root: &TrustedDir, token: &str) -> io::Result<()> {
+    parse_restore_token(token)?;
+    let mut transactions = restore_transactions()
+        .lock()
+        .map_err(|_| io::Error::other("restore transaction state poisoned"))?;
+    let transaction = transactions
+        .get(token)
+        .ok_or_else(|| invalid("restore transaction is not active"))?;
+    export_transaction_to_root(root, token, transaction)?;
+    transactions.remove(token);
+    Ok(())
+}
+
 fn validate_webui_download_name(value: &str) -> io::Result<()> {
     let id = value
         .strip_suffix(WEBUI_DOWNLOAD_SUFFIX)
@@ -352,6 +664,10 @@ mod tests {
             output.push(marker);
         }
         output
+    }
+
+    fn restore_pair(action: u8, token: &str, argument: &str) -> Vec<u8> {
+        request(action, &format!("{token}\0{argument}"), b"")
     }
 
     #[test]
@@ -578,6 +894,101 @@ mod tests {
         handle_from(&root, &request(ACTION_WRITE, "target.txt", b"inside")).unwrap();
         assert_eq!(fs::read(&outside).unwrap(), b"outside");
         assert_eq!(fs::read(test.path.join("target.txt")).unwrap(), b"inside");
+        let _ = fs::remove_file(outside);
+    }
+
+    #[test]
+    fn restore_transaction_rolls_back_existing_and_created_targets() {
+        let test = TestRoot::new();
+        let root = test.trusted();
+        fs::write(test.path.join("first.txt"), b"old-first").unwrap();
+        fs::create_dir(test.path.join(KEYBOX_DIRECTORY)).unwrap();
+        fs::write(test.path.join(KEYBOX_DIRECTORY).join("device.xml"), b"old-keybox").unwrap();
+        let token = "10000000000000000000000000000001";
+
+        handle_from(&root, &restore_pair(ACTION_RESTORE_BEGIN, token, "4096")).unwrap();
+        handle_from(&root, &restore_pair(ACTION_RESTORE_SNAPSHOT, token, "first.txt")).unwrap();
+        handle_from(&root, &restore_pair(ACTION_RESTORE_SNAPSHOT, token, "keyboxes/device.xml")).unwrap();
+        handle_from(&root, &restore_pair(ACTION_RESTORE_SNAPSHOT, token, "created.txt")).unwrap();
+        fs::write(test.path.join("first.txt"), b"new-first").unwrap();
+        fs::write(test.path.join(KEYBOX_DIRECTORY).join("device.xml"), b"new-keybox").unwrap();
+        fs::write(test.path.join("created.txt"), b"created").unwrap();
+
+        handle_from(&root, &request(ACTION_RESTORE_ROLLBACK, token, b"")).unwrap();
+        assert_eq!(fs::read(test.path.join("first.txt")).unwrap(), b"old-first");
+        assert_eq!(
+            fs::read(test.path.join(KEYBOX_DIRECTORY).join("device.xml")).unwrap(),
+            b"old-keybox"
+        );
+        assert!(!test.path.join("created.txt").exists());
+    }
+
+    #[test]
+    fn restore_rollback_stays_bound_to_root_after_pathname_swap() {
+        let test = TestRoot::new();
+        fs::write(test.path.join("state.txt"), b"old").unwrap();
+        let root = test.trusted();
+        let token = "20000000000000000000000000000002";
+        handle_from(&root, &restore_pair(ACTION_RESTORE_BEGIN, token, "4096")).unwrap();
+        handle_from(&root, &restore_pair(ACTION_RESTORE_SNAPSHOT, token, "state.txt")).unwrap();
+
+        let moved = test.path.with_extension("moved-root");
+        let outside = test.path.with_extension("outside-root");
+        fs::rename(&test.path, &moved).unwrap();
+        fs::create_dir(&outside).unwrap();
+        fs::write(outside.join("state.txt"), b"outside").unwrap();
+        symlink(&outside, &test.path).unwrap();
+        fs::write(moved.join("state.txt"), b"new").unwrap();
+
+        handle_from(&root, &request(ACTION_RESTORE_ROLLBACK, token, b"")).unwrap();
+        assert_eq!(fs::read(moved.join("state.txt")).unwrap(), b"old");
+        assert_eq!(fs::read(outside.join("state.txt")).unwrap(), b"outside");
+
+        let _ = fs::remove_file(&test.path);
+        let _ = fs::remove_dir_all(&outside);
+        let _ = fs::remove_dir_all(&moved);
+    }
+
+    #[test]
+    fn keybox_parent_symlink_swap_fails_closed_and_exports_recovery() {
+        let test = TestRoot::new();
+        let keyboxes = test.path.join(KEYBOX_DIRECTORY);
+        fs::create_dir(&keyboxes).unwrap();
+        fs::write(keyboxes.join("device.xml"), b"old").unwrap();
+        let root = test.trusted();
+        let token = "30000000000000000000000000000003";
+        handle_from(&root, &restore_pair(ACTION_RESTORE_BEGIN, token, "4096")).unwrap();
+        handle_from(&root, &restore_pair(ACTION_RESTORE_SNAPSHOT, token, "keyboxes/device.xml")).unwrap();
+
+        let moved = test.path.join("moved-keyboxes");
+        let outside = test.path.join("outside-keyboxes");
+        fs::rename(&keyboxes, &moved).unwrap();
+        fs::create_dir(&outside).unwrap();
+        fs::write(outside.join("device.xml"), b"outside").unwrap();
+        symlink(&outside, &keyboxes).unwrap();
+
+        assert!(handle_from(&root, &request(ACTION_RESTORE_ROLLBACK, token, b"")).is_err());
+        assert_eq!(fs::read(outside.join("device.xml")).unwrap(), b"outside");
+        handle_from(&root, &request(ACTION_RESTORE_EXPORT, token, b"")).unwrap();
+        assert_eq!(
+            fs::read(test.path.join(format!(".restore-recovery-{token}-0000.bak"))).unwrap(),
+            b"old"
+        );
+        assert!(test.path.join(format!(".restore-recovery-{token}.manifest")).is_file());
+    }
+
+    #[test]
+    fn descriptor_relative_delete_never_follows_final_symlink() {
+        let test = TestRoot::new();
+        let outside = test.path.with_extension("delete-outside");
+        fs::write(&outside, b"outside").unwrap();
+        symlink(&outside, test.path.join("victim")) .unwrap();
+        let root = test.trusted();
+
+        handle_from(&root, &request(ACTION_DELETE, "victim", b"")).unwrap();
+        assert!(!test.path.join("victim").exists());
+        assert_eq!(fs::read(&outside).unwrap(), b"outside");
+        assert!(handle_from(&root, &request(ACTION_DELETE, "../outside", b"")).is_err());
         let _ = fs::remove_file(outside);
     }
 }
