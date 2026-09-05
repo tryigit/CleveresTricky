@@ -244,7 +244,7 @@ private class JvmSecureRestoreFileOperations : RestoreFileOperations {
                         val name = ".restore-recovery-$token-${index.toString().padStart(4, '0')}.bak"
                         val path = FileSystems.getDefault().getPath(name)
                         atomicWrite(transaction.root, path, bytes)
-                        created += path
+                        created.add(path)
                         manifest.append(index.toString().padStart(4, '0'))
                             .append("\tpresent\t")
                             .append(encodedPath)
