@@ -114,7 +114,10 @@ internal class RustSecureFileOperations : SecureFileOperations, RestoreFileOpera
     ) {
         requireConfigRoot(configDir)
         validateRestoreToken(token)
-        restoreRelativePath(target)
+        val relative = restoreRelativePath(target)
+        if (relative.startsWith("$KEYBOX_DIRECTORY/")) {
+            transactControl(ACTION_MKDIR, KEYBOX_DIRECTORY.toByteArray(Charsets.UTF_8))
+        }
         writeBytes(target, content)
     }
 
