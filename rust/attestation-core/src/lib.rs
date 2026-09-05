@@ -456,7 +456,7 @@ fn validate_security_level(encoded: &[u8]) -> Result<(), Error> {
     let level = parse_any(encoded)?;
     if level.tag() != Tag::Enumerated
         || level.value().len() != 1
-        || !matches!(level.value()[0], 0 | 1 | 2)
+        || !matches!(level.value()[0], 0..=2)
     {
         return Err(Error::InvalidStructure);
     }
