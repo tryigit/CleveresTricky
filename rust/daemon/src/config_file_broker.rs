@@ -454,9 +454,8 @@ fn atomic_write_transaction_target_from<R: Read>(
                     "pinned keybox restore directory is unavailable",
                 )
             })?;
-            keyboxes.atomic_write_from_confirmed(
-                name, reader, body_len, FILE_MODE, scratch, confirm,
-            )
+            keyboxes
+                .atomic_write_from_confirmed(name, reader, body_len, FILE_MODE, scratch, confirm)
         }
     }
 }
@@ -721,12 +720,9 @@ fn restore_rollback(root: &TrustedDir, token: &str) -> io::Result<()> {
     let mut first_error = None;
     let mut failure_count = 0usize;
     for original in transaction.originals.iter().rev() {
-        if let Err(error) = restore_transaction_target(
-            root,
-            transaction,
-            &original.path,
-            original.bytes.as_deref(),
-        ) {
+        if let Err(error) =
+            restore_transaction_target(root, transaction, &original.path, original.bytes.as_deref())
+        {
             failure_count += 1;
             if first_error.is_none() {
                 first_error = Some(error);
@@ -1321,11 +1317,17 @@ mod tests {
         )
         .unwrap();
         assert_eq!(fs::read(moved.join("device.xml")).unwrap(), b"new");
-        assert_eq!(fs::read(keyboxes.join("device.xml")).unwrap(), b"replacement");
+        assert_eq!(
+            fs::read(keyboxes.join("device.xml")).unwrap(),
+            b"replacement"
+        );
 
         handle_from(&root, &request(ACTION_RESTORE_ROLLBACK, token, b"")).unwrap();
         assert_eq!(fs::read(moved.join("device.xml")).unwrap(), b"old");
-        assert_eq!(fs::read(keyboxes.join("device.xml")).unwrap(), b"replacement");
+        assert_eq!(
+            fs::read(keyboxes.join("device.xml")).unwrap(),
+            b"replacement"
+        );
     }
 
     #[test]
