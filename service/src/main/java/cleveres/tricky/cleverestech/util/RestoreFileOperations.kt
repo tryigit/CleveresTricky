@@ -72,7 +72,9 @@ internal object RestoreFiles {
         (SecureFile.impl as? RestoreFileOperations) ?: jvmBackend
 }
 
-private class JvmSecureRestoreFileOperations : RestoreFileOperations {
+internal class JvmSecureRestoreFileOperations(
+    private val nowNanos: () -> Long = System::nanoTime,
+) : RestoreFileOperations {
     private data class Original(
         val relativePath: String,
         val bytes: ByteArray?,
@@ -83,6 +85,7 @@ private class JvmSecureRestoreFileOperations : RestoreFileOperations {
         val root: SecureDirectoryStream<Path>,
         val keyboxes: SecureDirectoryStream<Path>?,
         val maxSnapshotBytes: Long,
+        var touchedNanos: Long,
     ) {
         var snapshotBytes: Long = 0L
         var keyboxesVerified: Boolean = false
@@ -145,6 +148,7 @@ private class JvmSecureRestoreFileOperations : RestoreFileOperations {
             throw error
         }
         synchronized(lock) {
+            pruneExpiredTransactions()
             if (transactions.containsKey(token)) {
                 keyboxes?.close()
                 root.close()
@@ -155,7 +159,14 @@ private class JvmSecureRestoreFileOperations : RestoreFileOperations {
                 root.close()
                 throw IOException("Restore transaction capacity exhausted")
             }
-            transactions[token] = Transaction(rootPath, root, keyboxes, maxSnapshotBytes)
+            transactions[token] =
+                Transaction(
+                    rootPath = rootPath,
+                    root = root,
+                    keyboxes = keyboxes,
+                    maxSnapshotBytes = maxSnapshotBytes,
+                    touchedNanos = nowNanos(),
+                )
         }
     }
 
@@ -318,11 +329,29 @@ private class JvmSecureRestoreFileOperations : RestoreFileOperations {
         token: String,
     ): Transaction {
         validateToken(token)
+        pruneExpiredTransactions()
         val transaction = transactions[token] ?: throw IOException("Restore transaction is not active")
         if (transaction.rootPath != normalizedRoot(configDir)) {
             throw SecurityException("Restore transaction root changed")
         }
+        transaction.touchedNanos = nowNanos()
         return transaction
+    }
+
+    private fun pruneExpiredTransactions() {
+        val now = nowNanos()
+        val expired =
+            transactions.entries
+                .asSequence()
+                .filter { (_, transaction) ->
+                    now - transaction.touchedNanos >= RESTORE_TRANSACTION_TTL_NANOS
+                }
+                .map { it.key }
+                .toList()
+        expired.forEach { token ->
+            val transaction = transactions.remove(token) ?: return@forEach
+            runCatching { transaction.closeAndWipe() }
+        }
     }
 
     private fun removeTransaction(token: String) {
@@ -616,6 +645,7 @@ private class JvmSecureRestoreFileOperations : RestoreFileOperations {
         const val MAX_GLOBAL_RESTORE_SNAPSHOT_BYTES = 64L * 1024L * 1024L
         const val MAX_ACTIVE_RESTORE_TRANSACTIONS = 4
         const val MAX_RESTORE_TARGETS = 512
+        const val RESTORE_TRANSACTION_TTL_NANOS = 15L * 60L * 1_000_000_000L
         val PRIVATE_FILE_PERMISSIONS = PosixFilePermissions.fromString("rw-------")
     }
 }
