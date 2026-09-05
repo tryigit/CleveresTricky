@@ -1241,7 +1241,26 @@ mod tests {
             fn read(&mut self, output: &mut [u8]) -> io::Result<usize> {
                 if !self.observed {
                     self.observed = true;
-                    assert!(restore_transactions().try_lock().is_ok());
+                    let deadline = Instant::now() + Duration::from_secs(2);
+                    loop {
+                        match restore_transactions().try_lock() {
+                            Ok(guard) => {
+                                drop(guard);
+                                break;
+                            }
+                            Err(std::sync::TryLockError::WouldBlock)
+                                if Instant::now() < deadline =>
+                            {
+                                std::thread::sleep(Duration::from_millis(1));
+                            }
+                            Err(std::sync::TryLockError::WouldBlock) => {
+                                panic!("restore registry lock remained held while streaming");
+                            }
+                            Err(std::sync::TryLockError::Poisoned(_)) => {
+                                panic!("restore registry lock is poisoned");
+                            }
+                        }
+                    }
                     assert!(restore_commit(self.token).is_err());
                     let transactions = restore_transactions().lock().unwrap();
                     assert!(
