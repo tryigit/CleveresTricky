@@ -540,18 +540,14 @@ fn begin_streaming_restore_mutation(
     let transaction = transaction_for_snapshotted_target(transactions, token, path)?;
     let keyboxes = match target {
         RestoreTarget::Root(_) => None,
-        RestoreTarget::Keybox(_) => Some(
-            transaction
-                .keyboxes
-                .as_ref()
-                .cloned()
-                .ok_or_else(|| {
-                    io::Error::new(
-                        io::ErrorKind::NotFound,
-                        "pinned keybox restore directory is unavailable",
-                    )
-                })?,
-        ),
+        RestoreTarget::Keybox(_) => {
+            Some(transaction.keyboxes.as_ref().cloned().ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::NotFound,
+                    "pinned keybox restore directory is unavailable",
+                )
+            })?)
+        }
     };
     transaction.mutation_in_progress = true;
     Ok(keyboxes)
@@ -565,7 +561,9 @@ fn finish_streaming_restore_mutation(token: &str) -> io::Result<()> {
         .get_mut(token)
         .ok_or_else(|| invalid("restore transaction is not active"))?;
     if !transaction.mutation_in_progress {
-        return Err(io::Error::other("restore transaction mutation lease was not active"));
+        return Err(io::Error::other(
+            "restore transaction mutation lease was not active",
+        ));
     }
     transaction.mutation_in_progress = false;
     transaction.touched = Instant::now();
@@ -1246,10 +1244,12 @@ mod tests {
                     assert!(restore_transactions().try_lock().is_ok());
                     assert!(restore_commit(self.token).is_err());
                     let transactions = restore_transactions().lock().unwrap();
-                    assert!(transactions
-                        .get(self.token)
-                        .expect("transaction must stay active")
-                        .mutation_in_progress);
+                    assert!(
+                        transactions
+                            .get(self.token)
+                            .expect("transaction must stay active")
+                            .mutation_in_progress
+                    );
                 }
                 std::io::Read::read(&mut self.inner, output)
             }
@@ -1284,10 +1284,12 @@ mod tests {
         assert_eq!(fs::read(test.path.join("state.txt")).unwrap(), b"new");
         {
             let transactions = restore_transactions().lock().unwrap();
-            assert!(!transactions
-                .get(token)
-                .expect("transaction must stay active")
-                .mutation_in_progress);
+            assert!(
+                !transactions
+                    .get(token)
+                    .expect("transaction must stay active")
+                    .mutation_in_progress
+            );
         }
         handle_from(&root, &request(ACTION_RESTORE_ROLLBACK, token, b"")).unwrap();
         assert_eq!(fs::read(test.path.join("state.txt")).unwrap(), b"old");
