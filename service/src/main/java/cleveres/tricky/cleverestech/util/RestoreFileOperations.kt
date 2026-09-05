@@ -80,6 +80,7 @@ private class JvmSecureRestoreFileOperations : RestoreFileOperations {
     private class Transaction(
         val rootPath: Path,
         val root: SecureDirectoryStream<Path>,
+        val keyboxes: SecureDirectoryStream<Path>?,
         val maxSnapshotBytes: Long,
     ) {
         var snapshotBytes: Long = 0L
@@ -88,6 +89,7 @@ private class JvmSecureRestoreFileOperations : RestoreFileOperations {
         fun closeAndWipe() {
             originals.forEach { original -> original.bytes?.fill(0) }
             originals.clear()
+            keyboxes?.close()
             root.close()
         }
     }
@@ -106,16 +108,30 @@ private class JvmSecureRestoreFileOperations : RestoreFileOperations {
         }
         val rootPath = normalizedRoot(configDir)
         val root = openAbsoluteSecureDirectory(rootPath)
+        val keyboxes =
+            try {
+                root.newDirectoryStream(
+                    FileSystems.getDefault().getPath(KEYBOX_DIRECTORY),
+                    LinkOption.NOFOLLOW_LINKS,
+                )
+            } catch (_: NoSuchFileException) {
+                null
+            } catch (error: Throwable) {
+                root.close()
+                throw error
+            }
         synchronized(lock) {
             if (transactions.containsKey(token)) {
+                keyboxes?.close()
                 root.close()
                 throw IOException("Restore transaction token is already active")
             }
             if (transactions.size >= MAX_ACTIVE_RESTORE_TRANSACTIONS) {
+                keyboxes?.close()
                 root.close()
                 throw IOException("Restore transaction capacity exhausted")
             }
-            transactions[token] = Transaction(rootPath, root, maxSnapshotBytes)
+            transactions[token] = Transaction(rootPath, root, keyboxes, maxSnapshotBytes)
         }
     }
 
@@ -140,7 +156,7 @@ private class JvmSecureRestoreFileOperations : RestoreFileOperations {
             if (ownRemaining < 0L || globalRemaining < 0L) {
                 throw IOException("Restore snapshot accounting is inconsistent")
             }
-            val bytes = readOptional(transaction.root, relative, minOf(ownRemaining, globalRemaining))
+            val bytes = readOptional(transaction, relative, minOf(ownRemaining, globalRemaining))
             val added = bytes?.size?.toLong() ?: 0L
             transaction.snapshotBytes = Math.addExact(transaction.snapshotBytes, added)
             transaction.originals += Original(relative, bytes)
@@ -156,7 +172,7 @@ private class JvmSecureRestoreFileOperations : RestoreFileOperations {
         synchronized(lock) {
             val transaction = requireTransaction(configDir, token)
             val relative = requireSnapshotted(transaction, target)
-            withParent(transaction.root, relative) { parent, leaf ->
+            withParent(transaction, relative) { parent, leaf ->
                 atomicWrite(parent, leaf, content)
             }
         }
@@ -171,7 +187,7 @@ private class JvmSecureRestoreFileOperations : RestoreFileOperations {
             val transaction = requireTransaction(configDir, token)
             val relative = requireSnapshotted(transaction, target)
             try {
-                withParent(transaction.root, relative) { parent, leaf ->
+                withParent(transaction, relative) { parent, leaf ->
                     try {
                         parent.deleteFile(leaf)
                     } catch (_: NoSuchFileException) {
@@ -179,7 +195,7 @@ private class JvmSecureRestoreFileOperations : RestoreFileOperations {
                     }
                 }
             } catch (_: NoSuchFileException) {
-                // A missing approved parent also means the target is absent.
+                // A parent that was absent at begin also means the target is absent.
             }
         }
     }
@@ -193,7 +209,7 @@ private class JvmSecureRestoreFileOperations : RestoreFileOperations {
             var failure: Throwable? = null
             transaction.originals.asReversed().forEach { original ->
                 try {
-                    restoreOriginal(transaction.root, original)
+                    restoreOriginal(transaction, original)
                 } catch (error: Throwable) {
                     val first = failure
                     if (first == null) {
@@ -301,13 +317,13 @@ private class JvmSecureRestoreFileOperations : RestoreFileOperations {
     }
 
     private fun restoreOriginal(
-        root: SecureDirectoryStream<Path>,
+        transaction: Transaction,
         original: Original,
     ) {
         val bytes = original.bytes
         if (bytes == null) {
             try {
-                withParent(root, original.relativePath) { parent, leaf ->
+                withParent(transaction, original.relativePath) { parent, leaf ->
                     try {
                         parent.deleteFile(leaf)
                     } catch (_: NoSuchFileException) {
@@ -315,23 +331,23 @@ private class JvmSecureRestoreFileOperations : RestoreFileOperations {
                     }
                 }
             } catch (_: NoSuchFileException) {
-                // Missing approved parent is also equivalent to the original absent state.
+                // A parent absent at begin is equivalent to the original absent state.
             }
         } else {
-            withParent(root, original.relativePath) { parent, leaf ->
+            withParent(transaction, original.relativePath) { parent, leaf ->
                 atomicWrite(parent, leaf, bytes)
             }
         }
     }
 
     private fun readOptional(
-        root: SecureDirectoryStream<Path>,
+        transaction: Transaction,
         relative: String,
         maxBytes: Long,
     ): ByteArray? {
         if (maxBytes < 0L) throw IOException("Restore snapshot exceeds its size limit")
         return try {
-            withParent(root, relative) { parent, leaf ->
+            withParent(transaction, relative) { parent, leaf ->
                 val options = setOf<OpenOption>(StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS)
                 parent.newByteChannel(leaf, options).use { channel ->
                     val size = channel.size()
@@ -393,19 +409,17 @@ private class JvmSecureRestoreFileOperations : RestoreFileOperations {
     }
 
     private inline fun <T> withParent(
-        root: SecureDirectoryStream<Path>,
+        transaction: Transaction,
         relative: String,
         block: (SecureDirectoryStream<Path>, Path) -> T,
     ): T {
         val components = relative.split('/')
         val leaf = FileSystems.getDefault().getPath(components.last())
         return if (components.size == 1) {
-            block(root, leaf)
+            block(transaction.root, leaf)
         } else {
-            val parentName = FileSystems.getDefault().getPath(components.first())
-            root.newDirectoryStream(parentName, LinkOption.NOFOLLOW_LINKS).use { parent ->
-                block(parent, leaf)
-            }
+            val parent = transaction.keyboxes ?: throw NoSuchFileException(KEYBOX_DIRECTORY)
+            block(parent, leaf)
         }
     }
 
