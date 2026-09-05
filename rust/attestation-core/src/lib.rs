@@ -18,7 +18,6 @@ const VENDOR_PATCH_TAG: u32 = 718;
 const BOOT_PATCH_TAG: u32 = 719;
 const MODULE_HASH_TAG: u32 = 724;
 const ATTESTATION_ID_TAGS: [u32; 9] = [710, 711, 712, 713, 714, 715, 716, 717, 723];
-const ENUMERATED_TRUSTED_ENVIRONMENT: &[u8] = &[0x0a, 0x01, 0x01];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PatchDisposition {
@@ -150,7 +149,9 @@ pub fn rewrite_extension(request: &RewriteRequest<'_>) -> Result<RewriteResult, 
     }
 
     let attestation_version = decode_i32(&fields[0])?;
+    validate_security_level(&fields[1])?;
     let keymint_version = decode_i32(&fields[2])?;
+    validate_security_level(&fields[3])?;
     let supports_module_hash = attestation_version >= 400 && keymint_version >= 400;
 
     let list_six = parse_authorization_list(&fields[AUTHORIZATION_LIST_SOFTWARE_INDEX])?;
@@ -268,8 +269,6 @@ pub fn rewrite_extension(request: &RewriteRequest<'_>) -> Result<RewriteResult, 
     tee.sort_by_key(|field| field.tag);
     software.sort_by_key(|field| field.tag);
 
-    fields[1] = ENUMERATED_TRUSTED_ENVIRONMENT.to_vec();
-    fields[3] = ENUMERATED_TRUSTED_ENVIRONMENT.to_vec();
     fields[tee_index] = encode_sequence(tee.iter().map(|field| field.encoded.as_slice()))?;
     fields[software_index] =
         encode_sequence(software.iter().map(|field| field.encoded.as_slice()))?;
@@ -451,6 +450,17 @@ fn is_attestation_id_tag(tag: u32) -> bool {
 
 fn decode_i32(encoded: &[u8]) -> Result<i32, Error> {
     i32::from_der(encoded).map_err(|_| Error::InvalidStructure)
+}
+
+fn validate_security_level(encoded: &[u8]) -> Result<(), Error> {
+    let level = parse_any(encoded)?;
+    if level.tag() != Tag::Enumerated
+        || level.value().len() != 1
+        || !matches!(level.value()[0], 0 | 1 | 2)
+    {
+        return Err(Error::InvalidStructure);
+    }
+    Ok(())
 }
 
 fn decode_explicit_i32(encoded: &[u8]) -> Result<i32, Error> {
@@ -647,25 +657,18 @@ mod tests {
     }
 
     #[test]
-    fn rewrites_strongbox_security_levels_to_trusted_environment() {
+    fn preserves_strongbox_security_levels_during_rewrite() {
         let tee = auth_list([
             explicit_tag_raw(ROOT_OF_TRUST_TAG, &root_of_trust([7; 32], [8; 32])),
             explicit_integer_raw(VENDOR_PATCH_TAG, 20240101),
         ]);
         let software = auth_list([explicit_integer_raw(SYSTEM_PATCH_TAG, 202402)]);
+        let strongbox = Any::new(Tag::Enumerated, vec![2]).unwrap().to_der().unwrap();
         let extension = encode_sequence([
             300i32.to_der().unwrap().as_slice(),
-            Any::new(Tag::Enumerated, vec![2])
-                .unwrap()
-                .to_der()
-                .unwrap()
-                .as_slice(),
+            strongbox.as_slice(),
             300i32.to_der().unwrap().as_slice(),
-            Any::new(Tag::Enumerated, vec![2])
-                .unwrap()
-                .to_der()
-                .unwrap()
-                .as_slice(),
+            strongbox.as_slice(),
             Any::new(Tag::OctetString, Vec::<u8>::new())
                 .unwrap()
                 .to_der()
@@ -693,8 +696,48 @@ mod tests {
         let rewritten = rewrite_extension(&request).unwrap();
         let outer = parse_any(&rewritten.extension_der).unwrap();
         let fields = split_tlvs(outer.value(), MAX_KEY_DESCRIPTION_FIELDS).unwrap();
-        assert_eq!(fields[1], ENUMERATED_TRUSTED_ENVIRONMENT);
-        assert_eq!(fields[3], ENUMERATED_TRUSTED_ENVIRONMENT);
+        assert_eq!(fields[1], strongbox);
+        assert_eq!(fields[3], strongbox);
+    }
+
+    #[test]
+    fn rejects_unknown_attestation_security_level() {
+        let tee = auth_list([explicit_tag_raw(
+            ROOT_OF_TRUST_TAG,
+            &root_of_trust([7; 32], [8; 32]),
+        )]);
+        let software = auth_list([]);
+        let unknown = Any::new(Tag::Enumerated, vec![3]).unwrap().to_der().unwrap();
+        let trusted = Any::new(Tag::Enumerated, vec![1]).unwrap().to_der().unwrap();
+        let extension = encode_sequence([
+            300i32.to_der().unwrap().as_slice(),
+            unknown.as_slice(),
+            300i32.to_der().unwrap().as_slice(),
+            trusted.as_slice(),
+            Any::new(Tag::OctetString, Vec::<u8>::new())
+                .unwrap()
+                .to_der()
+                .unwrap()
+                .as_slice(),
+            Any::new(Tag::OctetString, Vec::<u8>::new())
+                .unwrap()
+                .to_der()
+                .unwrap()
+                .as_slice(),
+            software.as_slice(),
+            tee.as_slice(),
+        ])
+        .unwrap();
+        let request = RewriteRequest {
+            extension_der: &extension,
+            patch_levels: PatchLevels::default(),
+            id_overrides: &[],
+            module_hash: None,
+            verified_boot_key: &BOOT_KEY,
+            verified_boot_hash: &BOOT_HASH,
+        };
+
+        assert_eq!(rewrite_extension(&request), Err(Error::InvalidStructure));
     }
 
     #[test]
