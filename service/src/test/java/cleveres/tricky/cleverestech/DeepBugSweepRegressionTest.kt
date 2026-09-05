@@ -69,9 +69,48 @@ class DeepBugSweepRegressionTest {
             assertEquals("old-first", first.readText())
             assertEquals("old-second", second.readText())
             assertFalse(created.exists())
-            assertFalse(root.listFiles().orEmpty().any { it.name.startsWith(".restore-txn-") })
+            assertFalse(root.listFiles().orEmpty().any { it.name.startsWith(".restore-recovery-") })
         } finally {
             root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `restore rollback remains bound to original root after pathname swap`() {
+        val rootPath = Files.createTempDirectory("cleveres-restore-root-swap")
+        val root = rootPath.toFile()
+        val moved = rootPath.resolveSibling("${root.fileName}-moved")
+        val outside = rootPath.resolveSibling("${root.fileName}-outside")
+        try {
+            root.resolve("state.txt").writeText("old-state")
+
+            assertThrows(IOException::class.java) {
+                BackupRestoreTransaction.apply(
+                    root,
+                    listOf(
+                        BackupRestoreTransaction.Mutation(
+                            root.resolve("state.txt"),
+                            "new-state".toByteArray(),
+                        ),
+                    ),
+                    maxSnapshotBytes = 4_096,
+                    afterMutation = {
+                        Files.move(rootPath, moved)
+                        Files.createDirectory(outside)
+                        Files.writeString(outside.resolve("state.txt"), "outside")
+                        Files.createSymbolicLink(rootPath, outside)
+                        throw IOException("injected runtime failure after root swap")
+                    },
+                    onRollback = null,
+                )
+            }
+
+            assertEquals("old-state", Files.readString(moved.resolve("state.txt")))
+            assertEquals("outside", Files.readString(outside.resolve("state.txt")))
+        } finally {
+            Files.deleteIfExists(rootPath)
+            outside.toFile().deleteRecursively()
+            moved.toFile().deleteRecursively()
         }
     }
 
@@ -284,7 +323,7 @@ class DeepBugSweepRegressionTest {
             assertEquals("new-first", first.readText())
             assertFalse(second.exists())
             assertEquals("new-created", created.readText())
-            assertFalse(root.listFiles().orEmpty().any { it.name.startsWith(".restore-txn-") })
+            assertFalse(root.listFiles().orEmpty().any { it.name.startsWith(".restore-recovery-") })
         } finally {
             root.deleteRecursively()
         }
@@ -310,14 +349,14 @@ class DeepBugSweepRegressionTest {
 
             assertEquals(4_097L, oversized.length())
             assertEquals("old", untouched.readText())
-            assertFalse(root.listFiles().orEmpty().any { it.name.startsWith(".restore-txn-") })
+            assertFalse(root.listFiles().orEmpty().any { it.name.startsWith(".restore-recovery-") })
         } finally {
             root.deleteRecursively()
         }
     }
 
     @Test
-    fun `restore retains the original snapshot when disk rollback cannot complete`() {
+    fun `restore exports original snapshot when rollback cannot complete`() {
         val root = Files.createTempDirectory("cleveres-restore-recovery-retention").toFile()
         try {
             val directory = root.resolve("keyboxes").apply { mkdirs() }
@@ -339,8 +378,10 @@ class DeepBugSweepRegressionTest {
                     )
                 }
 
-            val recoveryDirectory = root.listFiles().orEmpty().single { it.name.startsWith(".restore-txn-") }
-            val recovery = recoveryDirectory.listFiles().orEmpty().single { it.extension == "bak" }
+            val recovery = root.listFiles().orEmpty().single { it.name.endsWith(".bak") }
+            val manifest = root.listFiles().orEmpty().single { it.name.endsWith(".manifest") }
+            assertTrue(recovery.name.startsWith(".restore-recovery-"))
+            assertTrue(manifest.name.startsWith(".restore-recovery-"))
             assertEquals("original", recovery.readText())
             assertTrue(failure.suppressed.any { it.message?.contains("recovery data retained") == true })
         } finally {
