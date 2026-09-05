@@ -79,8 +79,8 @@ class DeepBugSweepRegressionTest {
     fun `restore rollback remains bound to original root after pathname swap`() {
         val rootPath = Files.createTempDirectory("cleveres-restore-root-swap")
         val root = rootPath.toFile()
-        val moved = rootPath.resolveSibling("${root.fileName}-moved")
-        val outside = rootPath.resolveSibling("${root.fileName}-outside")
+        val moved = rootPath.resolveSibling("${root.name}-moved")
+        val outside = rootPath.resolveSibling("${root.name}-outside")
         try {
             root.resolve("state.txt").writeText("old-state")
 
