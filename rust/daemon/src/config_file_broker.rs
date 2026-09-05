@@ -6,7 +6,7 @@ use cleverestricky_service_core::secure_fs::TrustedDir;
 use std::collections::HashMap;
 use std::io::{self, Read};
 use std::path::Path;
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 pub const MAX_FILE_BYTES: usize = 20 * 1024 * 1024;
@@ -60,7 +60,8 @@ impl Drop for RestoreOriginal {
 }
 
 struct RestoreTransaction {
-    keyboxes: Option<TrustedDir>,
+    keyboxes: Option<Arc<TrustedDir>>,
+    mutation_in_progress: bool,
     max_snapshot_bytes: usize,
     snapshot_bytes: usize,
     originals: Vec<RestoreOriginal>,
@@ -271,19 +272,21 @@ fn atomic_write_relative_from<R: Read>(
     if path.contains('\0') {
         return restore_write_from(root, path, reader, body_len, scratch);
     }
-    let mut transactions = restore_transactions()
-        .lock()
-        .map_err(|_| io::Error::other("restore transaction state poisoned"))?;
-    prune_stale_restore_transactions(root, &mut transactions);
-    if transactions.values().any(|transaction| {
-        transaction
-            .originals
-            .iter()
-            .any(|original| original.path == path)
-    }) {
-        return Err(invalid(
-            "active restore target requires a transaction-scoped write",
-        ));
+    {
+        let mut transactions = restore_transactions()
+            .lock()
+            .map_err(|_| io::Error::other("restore transaction state poisoned"))?;
+        prune_stale_restore_transactions(root, &mut transactions);
+        if transactions.values().any(|transaction| {
+            transaction
+                .originals
+                .iter()
+                .any(|original| original.path == path)
+        }) {
+            return Err(invalid(
+                "active restore target requires a transaction-scoped write",
+            ));
+        }
     }
     atomic_write_target_from(root, path, reader, body_len, scratch)
 }
@@ -428,7 +431,7 @@ fn restore_transaction_target(
 
 fn atomic_write_transaction_target_from<R: Read>(
     root: &TrustedDir,
-    transaction: &RestoreTransaction,
+    keyboxes: Option<&TrustedDir>,
     path: &str,
     reader: &mut R,
     body_len: usize,
@@ -448,7 +451,7 @@ fn atomic_write_transaction_target_from<R: Read>(
             root.atomic_write_from_confirmed(name, reader, body_len, FILE_MODE, scratch, confirm)
         }
         RestoreTarget::Keybox(name) => {
-            let keyboxes = transaction.keyboxes.as_ref().ok_or_else(|| {
+            let keyboxes = keyboxes.ok_or_else(|| {
                 io::Error::new(
                     io::ErrorKind::NotFound,
                     "pinned keybox restore directory is unavailable",
@@ -516,6 +519,7 @@ fn transaction_for_snapshotted_target<'a>(
     let transaction = transactions
         .get_mut(token)
         .ok_or_else(|| invalid("restore transaction is not active"))?;
+    ensure_transaction_idle(transaction)?;
     if !transaction
         .originals
         .iter()
@@ -527,6 +531,58 @@ fn transaction_for_snapshotted_target<'a>(
     Ok(transaction)
 }
 
+fn begin_streaming_restore_mutation(
+    transactions: &mut HashMap<String, RestoreTransaction>,
+    token: &str,
+    path: &str,
+) -> io::Result<Option<Arc<TrustedDir>>> {
+    let target = parse_restore_target(path)?;
+    let transaction = transaction_for_snapshotted_target(transactions, token, path)?;
+    let keyboxes = match target {
+        RestoreTarget::Root(_) => None,
+        RestoreTarget::Keybox(_) => Some(
+            transaction
+                .keyboxes
+                .as_ref()
+                .cloned()
+                .ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::NotFound,
+                        "pinned keybox restore directory is unavailable",
+                    )
+                })?,
+        ),
+    };
+    transaction.mutation_in_progress = true;
+    Ok(keyboxes)
+}
+
+fn finish_streaming_restore_mutation(token: &str) -> io::Result<()> {
+    let mut transactions = restore_transactions()
+        .lock()
+        .map_err(|_| io::Error::other("restore transaction state poisoned"))?;
+    let transaction = transactions
+        .get_mut(token)
+        .ok_or_else(|| invalid("restore transaction is not active"))?;
+    if !transaction.mutation_in_progress {
+        return Err(io::Error::other("restore transaction mutation lease was not active"));
+    }
+    transaction.mutation_in_progress = false;
+    transaction.touched = Instant::now();
+    Ok(())
+}
+
+fn ensure_transaction_idle(transaction: &RestoreTransaction) -> io::Result<()> {
+    if transaction.mutation_in_progress {
+        Err(io::Error::new(
+            io::ErrorKind::WouldBlock,
+            "restore transaction mutation is in progress",
+        ))
+    } else {
+        Ok(())
+    }
+}
+
 fn restore_write_from<R: Read>(
     root: &TrustedDir,
     request: &str,
@@ -535,12 +591,34 @@ fn restore_write_from<R: Read>(
     scratch: &mut [u8],
 ) -> io::Result<()> {
     let (token, path) = parse_restore_pair(request)?;
-    let mut transactions = restore_transactions()
-        .lock()
-        .map_err(|_| io::Error::other("restore transaction state poisoned"))?;
-    prune_stale_restore_transactions(root, &mut transactions);
-    let transaction = transaction_for_snapshotted_target(&mut transactions, token, path)?;
-    atomic_write_transaction_target_from(root, transaction, path, reader, body_len, scratch)
+    let keyboxes = {
+        let mut transactions = restore_transactions()
+            .lock()
+            .map_err(|_| io::Error::other("restore transaction state poisoned"))?;
+        prune_stale_restore_transactions(root, &mut transactions);
+        begin_streaming_restore_mutation(&mut transactions, token, path)?
+    };
+
+    let write_result = atomic_write_transaction_target_from(
+        root,
+        keyboxes.as_deref(),
+        path,
+        reader,
+        body_len,
+        scratch,
+    );
+    let finish_result = finish_streaming_restore_mutation(token);
+    match (write_result, finish_result) {
+        (Ok(()), Ok(())) => Ok(()),
+        (Err(error), Ok(())) => Err(error),
+        (Ok(()), Err(error)) => Err(error),
+        (Err(error), Err(finish_error)) => Err(io::Error::new(
+            error.kind(),
+            format!(
+                "{error}; additionally failed to release restore mutation lease: {finish_error}"
+            ),
+        )),
+    }
 }
 
 fn restore_delete(root: &TrustedDir, request: &str) -> io::Result<()> {
@@ -604,6 +682,9 @@ fn prune_stale_restore_transactions(
     let stale: Vec<String> = transactions
         .iter()
         .filter_map(|(token, transaction)| {
+            if transaction.mutation_in_progress {
+                return None;
+            }
             now.checked_duration_since(transaction.touched)
                 .filter(|age| *age >= RESTORE_TRANSACTION_TTL)
                 .map(|_| token.clone())
@@ -638,7 +719,7 @@ fn restore_begin(root: &TrustedDir, request: &str) -> io::Result<()> {
         return Err(io::Error::other("restore transaction capacity exhausted"));
     }
     let keyboxes = match root.open_child(KEYBOX_DIRECTORY) {
-        Ok(keyboxes) => Some(keyboxes),
+        Ok(keyboxes) => Some(Arc::new(keyboxes)),
         Err(error) if error.kind() == io::ErrorKind::NotFound => None,
         Err(error) => return Err(error),
     };
@@ -646,6 +727,7 @@ fn restore_begin(root: &TrustedDir, request: &str) -> io::Result<()> {
         token.to_string(),
         RestoreTransaction {
             keyboxes,
+            mutation_in_progress: false,
             max_snapshot_bytes,
             snapshot_bytes: 0,
             originals: Vec::new(),
@@ -669,6 +751,7 @@ fn restore_snapshot(root: &TrustedDir, request: &str) -> io::Result<()> {
     let transaction = transactions
         .get_mut(token)
         .ok_or_else(|| invalid("restore transaction is not active"))?;
+    ensure_transaction_idle(transaction)?;
     if transaction.originals.len() >= MAX_RESTORE_TARGETS {
         return Err(invalid("restore transaction target count exceeds bound"));
     }
@@ -716,6 +799,7 @@ fn restore_rollback(root: &TrustedDir, token: &str) -> io::Result<()> {
     let transaction = transactions
         .get_mut(token)
         .ok_or_else(|| invalid("restore transaction is not active"))?;
+    ensure_transaction_idle(transaction)?;
     transaction.touched = Instant::now();
     let mut first_error = None;
     let mut failure_count = 0usize;
@@ -744,6 +828,9 @@ fn restore_commit(token: &str) -> io::Result<()> {
     let mut transactions = restore_transactions()
         .lock()
         .map_err(|_| io::Error::other("restore transaction state poisoned"))?;
+    if let Some(transaction) = transactions.get(token) {
+        ensure_transaction_idle(transaction)?;
+    }
     transactions.remove(token);
     Ok(())
 }
@@ -760,6 +847,7 @@ fn restore_export(root: &TrustedDir, token: &str) -> io::Result<()> {
     let transaction = transactions
         .get(token)
         .ok_or_else(|| invalid("restore transaction is not active"))?;
+    ensure_transaction_idle(transaction)?;
     export_transaction_to_root(root, token, transaction)?;
     transactions.remove(token);
     Ok(())
@@ -1144,6 +1232,68 @@ mod tests {
     }
 
     #[test]
+    fn streamed_restore_write_releases_registry_lock_and_blocks_commit() {
+        struct LockObservingReader {
+            inner: io::Cursor<Vec<u8>>,
+            token: &'static str,
+            observed: bool,
+        }
+
+        impl std::io::Read for LockObservingReader {
+            fn read(&mut self, output: &mut [u8]) -> io::Result<usize> {
+                if !self.observed {
+                    self.observed = true;
+                    assert!(restore_transactions().try_lock().is_ok());
+                    assert!(restore_commit(self.token).is_err());
+                    let transactions = restore_transactions().lock().unwrap();
+                    assert!(transactions
+                        .get(self.token)
+                        .expect("transaction must stay active")
+                        .mutation_in_progress);
+                }
+                std::io::Read::read(&mut self.inner, output)
+            }
+        }
+
+        let test = TestRoot::new();
+        let root = test.trusted();
+        fs::write(test.path.join("state.txt"), b"old").unwrap();
+        let token = "07000000000000000000000000000007";
+        handle_from(&root, &restore_pair(ACTION_RESTORE_BEGIN, token, "4096")).unwrap();
+        handle_from(
+            &root,
+            &restore_pair(ACTION_RESTORE_SNAPSHOT, token, "state.txt"),
+        )
+        .unwrap();
+
+        let mut reader = LockObservingReader {
+            inner: io::Cursor::new(vec![b'n', b'e', b'w', WRITE_COMMIT_MARKER]),
+            token,
+            observed: false,
+        };
+        let mut scratch = [0u8; 8];
+        restore_write_from(
+            &root,
+            &format!("{token}\0state.txt"),
+            &mut reader,
+            3,
+            &mut scratch,
+        )
+        .unwrap();
+        assert!(reader.observed);
+        assert_eq!(fs::read(test.path.join("state.txt")).unwrap(), b"new");
+        {
+            let transactions = restore_transactions().lock().unwrap();
+            assert!(!transactions
+                .get(token)
+                .expect("transaction must stay active")
+                .mutation_in_progress);
+        }
+        handle_from(&root, &request(ACTION_RESTORE_ROLLBACK, token, b"")).unwrap();
+        assert_eq!(fs::read(test.path.join("state.txt")).unwrap(), b"old");
+    }
+
+    #[test]
     fn restore_transaction_rolls_back_existing_and_created_targets() {
         let test = TestRoot::new();
         let root = test.trusted();
@@ -1345,6 +1495,7 @@ mod tests {
             token.to_string(),
             RestoreTransaction {
                 keyboxes: None,
+                mutation_in_progress: false,
                 max_snapshot_bytes: 4096,
                 snapshot_bytes: 3,
                 originals: vec![RestoreOriginal {
