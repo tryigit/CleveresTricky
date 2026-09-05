@@ -460,12 +460,12 @@ fn prune_stale_restore_transactions(
         })
         .collect();
     for token in stale {
-        let exported = transactions.get(&token).is_some_and(|transaction| {
-            export_transaction_to_root(root, &token, transaction).is_ok()
-        });
-        if exported {
-            transactions.remove(&token);
+        if let Some(transaction) = transactions.get(&token) {
+            let _ = export_transaction_to_root(root, &token, transaction);
         }
+        // The TTL is a hard capacity bound. Best-effort recovery export must never let an expired
+        // transaction permanently consume one of the limited active slots.
+        transactions.remove(&token);
     }
 }
 
@@ -556,8 +556,21 @@ fn restore_rollback(root: &TrustedDir, token: &str) -> io::Result<()> {
         .get_mut(token)
         .ok_or_else(|| invalid("restore transaction is not active"))?;
     transaction.touched = Instant::now();
+    let mut first_error = None;
+    let mut failure_count = 0usize;
     for original in transaction.originals.iter().rev() {
-        restore_target(root, &original.path, original.bytes.as_deref())?;
+        if let Err(error) = restore_target(root, &original.path, original.bytes.as_deref()) {
+            failure_count += 1;
+            if first_error.is_none() {
+                first_error = Some(error);
+            }
+        }
+    }
+    if let Some(error) = first_error {
+        return Err(io::Error::new(
+            error.kind(),
+            format!("restore rollback failed for {failure_count} target(s): {error}"),
+        ));
     }
     transactions.remove(token);
     Ok(())
@@ -959,6 +972,41 @@ mod tests {
     }
 
     #[test]
+    fn restore_rollback_continues_after_an_independent_target_failure() {
+        let test = TestRoot::new();
+        fs::write(test.path.join("state.txt"), b"old-state").unwrap();
+        let keyboxes = test.path.join(KEYBOX_DIRECTORY);
+        fs::create_dir(&keyboxes).unwrap();
+        fs::write(keyboxes.join("device.xml"), b"old-keybox").unwrap();
+        let root = test.trusted();
+        let token = "15000000000000000000000000000005";
+        handle_from(&root, &restore_pair(ACTION_RESTORE_BEGIN, token, "4096")).unwrap();
+        handle_from(
+            &root,
+            &restore_pair(ACTION_RESTORE_SNAPSHOT, token, "state.txt"),
+        )
+        .unwrap();
+        handle_from(
+            &root,
+            &restore_pair(ACTION_RESTORE_SNAPSHOT, token, "keyboxes/device.xml"),
+        )
+        .unwrap();
+
+        fs::write(test.path.join("state.txt"), b"new-state").unwrap();
+        let moved = test.path.join("moved-keyboxes");
+        let outside = test.path.join("outside-keyboxes");
+        fs::rename(&keyboxes, &moved).unwrap();
+        fs::create_dir(&outside).unwrap();
+        fs::write(outside.join("device.xml"), b"outside").unwrap();
+        symlink(&outside, &keyboxes).unwrap();
+
+        assert!(handle_from(&root, &request(ACTION_RESTORE_ROLLBACK, token, b"")).is_err());
+        assert_eq!(fs::read(test.path.join("state.txt")).unwrap(), b"old-state");
+        assert_eq!(fs::read(outside.join("device.xml")).unwrap(), b"outside");
+        handle_from(&root, &request(ACTION_RESTORE_ABORT, token, b"")).unwrap();
+    }
+
+    #[test]
     fn restore_rollback_stays_bound_to_root_after_pathname_swap() {
         let test = TestRoot::new();
         fs::write(test.path.join("state.txt"), b"old").unwrap();
@@ -1025,6 +1073,36 @@ mod tests {
             .path
             .join(format!(".restore-recovery-{token}.manifest"))
             .is_file());
+    }
+
+    #[test]
+    fn stale_transaction_is_evicted_even_when_recovery_export_fails() {
+        let test = TestRoot::new();
+        let root = test.trusted();
+        let token = "40000000000000000000000000000004";
+        fs::create_dir(
+            test.path
+                .join(format!(".restore-recovery-{token}-0000.bak")),
+        )
+        .unwrap();
+        let mut transactions = HashMap::new();
+        transactions.insert(
+            token.to_string(),
+            RestoreTransaction {
+                max_snapshot_bytes: 4096,
+                snapshot_bytes: 3,
+                originals: vec![RestoreOriginal {
+                    path: "state.txt".to_string(),
+                    bytes: Some(b"old".to_vec()),
+                }],
+                touched: Instant::now()
+                    .checked_sub(RESTORE_TRANSACTION_TTL + Duration::from_secs(1))
+                    .unwrap(),
+            },
+        );
+
+        prune_stale_restore_transactions(&root, &mut transactions);
+        assert!(transactions.is_empty());
     }
 
     #[test]
