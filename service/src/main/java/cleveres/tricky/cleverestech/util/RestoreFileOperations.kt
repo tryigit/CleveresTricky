@@ -5,6 +5,7 @@ import java.io.IOException
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 import java.nio.file.DirectoryStream
+import java.nio.file.FileAlreadyExistsException
 import java.nio.file.FileSystems
 import java.nio.file.LinkOption
 import java.nio.file.NoSuchFileException
@@ -89,8 +90,23 @@ private class JvmSecureRestoreFileOperations : RestoreFileOperations {
         fun closeAndWipe() {
             originals.forEach { original -> original.bytes?.fill(0) }
             originals.clear()
-            keyboxes?.close()
-            root.close()
+            var closeFailure: Throwable? = null
+            try {
+                keyboxes?.close()
+            } catch (error: Throwable) {
+                closeFailure = error
+            }
+            try {
+                root.close()
+            } catch (error: Throwable) {
+                val first = closeFailure
+                if (first == null) {
+                    closeFailure = error
+                } else {
+                    first.addSuppressed(error)
+                }
+            }
+            closeFailure?.let { throw IOException("Could not close secure restore directory capabilities", it) }
         }
     }
 
@@ -120,6 +136,14 @@ private class JvmSecureRestoreFileOperations : RestoreFileOperations {
                 root.close()
                 throw error
             }
+        try {
+            verifyReplacementSemantics(root)
+            keyboxes?.let(::verifyReplacementSemantics)
+        } catch (error: Throwable) {
+            runCatching { keyboxes?.close() }
+            runCatching { root.close() }
+            throw error
+        }
         synchronized(lock) {
             if (transactions.containsKey(token)) {
                 keyboxes?.close()
@@ -405,6 +429,99 @@ private class JvmSecureRestoreFileOperations : RestoreFileOperations {
             created = false
         } finally {
             if (created) runCatching { parent.deleteFile(temporary) }
+        }
+    }
+
+    /**
+     * Verifies that this exact secure-directory provider replaces an existing regular target.
+     * SecureDirectoryStream.move has provider-specific replacement semantics and exposes no
+     * REPLACE_EXISTING option, so unsupported providers are rejected before any restore mutation.
+     */
+    private fun verifyReplacementSemantics(directory: SecureDirectoryStream<Path>) {
+        val source = FileSystems.getDefault().getPath(".restore-probe-${UUID.randomUUID()}.src")
+        val destination = FileSystems.getDefault().getPath(".restore-probe-${UUID.randomUUID()}.dst")
+        val sourceBytes = byteArrayOf(0x51, 0x52, 0x53)
+        val destinationBytes = byteArrayOf(0x21, 0x22)
+        try {
+            createProbeFile(directory, source, sourceBytes)
+            createProbeFile(directory, destination, destinationBytes)
+            try {
+                directory.move(source, directory, destination)
+            } catch (error: FileAlreadyExistsException) {
+                throw IOException(
+                    "Secure restore provider cannot replace an existing target through a pinned directory",
+                    error,
+                )
+            }
+            requireProbeSourceGone(directory, source)
+            verifyProbeContent(directory, destination, sourceBytes)
+        } finally {
+            sourceBytes.fill(0)
+            destinationBytes.fill(0)
+            runCatching { directory.deleteFile(source) }
+            runCatching { directory.deleteFile(destination) }
+        }
+    }
+
+    private fun createProbeFile(
+        directory: SecureDirectoryStream<Path>,
+        name: Path,
+        content: ByteArray,
+    ) {
+        val options =
+            setOf<OpenOption>(
+                StandardOpenOption.CREATE_NEW,
+                StandardOpenOption.WRITE,
+                LinkOption.NOFOLLOW_LINKS,
+            )
+        val attribute = PosixFilePermissions.asFileAttribute(PRIVATE_FILE_PERMISSIONS)
+        directory.newByteChannel(name, options, attribute).use { channel ->
+            val fileChannel = channel as? FileChannel
+                ?: throw IOException("Secure restore provider does not expose a durable file channel")
+            val buffer = ByteBuffer.wrap(content)
+            while (buffer.hasRemaining()) fileChannel.write(buffer)
+            fileChannel.force(true)
+        }
+    }
+
+    private fun requireProbeSourceGone(
+        directory: SecureDirectoryStream<Path>,
+        source: Path,
+    ) {
+        val options = setOf<OpenOption>(StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS)
+        try {
+            directory.newByteChannel(source, options).use { }
+        } catch (_: NoSuchFileException) {
+            return
+        }
+        throw IOException("Secure restore provider did not move the replacement source")
+    }
+
+    private fun verifyProbeContent(
+        directory: SecureDirectoryStream<Path>,
+        destination: Path,
+        expected: ByteArray,
+    ) {
+        val options = setOf<OpenOption>(StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS)
+        val actual = ByteArray(expected.size)
+        try {
+            directory.newByteChannel(destination, options).use { channel ->
+                val buffer = ByteBuffer.wrap(actual)
+                while (buffer.hasRemaining()) {
+                    val count = channel.read(buffer)
+                    if (count < 0) throw IOException("Secure restore replacement probe ended early")
+                    if (count == 0) continue
+                }
+                val trailing = ByteBuffer.allocate(1)
+                if (channel.read(trailing) > 0 || channel.size() != expected.size.toLong()) {
+                    throw IOException("Secure restore replacement probe produced an unexpected target size")
+                }
+            }
+            if (!actual.contentEquals(expected)) {
+                throw IOException("Secure restore provider did not replace the existing target")
+            }
+        } finally {
+            actual.fill(0)
         }
     }
 
