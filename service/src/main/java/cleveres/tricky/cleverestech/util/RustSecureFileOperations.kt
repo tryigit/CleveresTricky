@@ -116,9 +116,6 @@ internal class RustSecureFileOperations : SecureFileOperations, RestoreFileOpera
         validateRestoreToken(token)
         require(content.size <= MAX_FILE_BYTES) { "File exceeds the Rust broker size limit" }
         val relative = restoreRelativePath(target)
-        if (relative.startsWith("$KEYBOX_DIRECTORY/")) {
-            transactControl(ACTION_MKDIR, KEYBOX_DIRECTORY.toByteArray(Charsets.UTF_8))
-        }
         ByteArrayInputStream(content).use { input ->
             transactAtomicWrite(restorePair(token, relative), input, content.size)
         }
