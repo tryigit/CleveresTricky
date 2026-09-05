@@ -1,5 +1,6 @@
 package cleveres.tricky.cleverestech
 
+import cleveres.tricky.cleverestech.util.RestoreFileOperations
 import cleveres.tricky.cleverestech.util.SecureFile
 import cleveres.tricky.cleverestech.util.SecureFileOperations
 import org.junit.After
@@ -30,7 +31,7 @@ class WebServerZipBombTest {
         configDir = tempFolder.newFolder("config")
         originalImpl = SecureFile.impl
         SecureFile.impl =
-            object : SecureFileOperations {
+            object : SecureFileOperations, RestoreFileOperations {
                 override fun writeText(
                     file: File,
                     content: String,
@@ -52,6 +53,53 @@ class WebServerZipBombTest {
                     file: File,
                     mode: Int,
                 ) = Unit
+
+                override fun begin(
+                    configDir: File,
+                    token: String,
+                    maxSnapshotBytes: Long,
+                ) = Unit
+
+                override fun snapshot(
+                    configDir: File,
+                    token: String,
+                    target: File,
+                ) = Unit
+
+                override fun replace(
+                    configDir: File,
+                    token: String,
+                    target: File,
+                    content: ByteArray,
+                ) {
+                    writeBytesCalled = true
+                }
+
+                override fun delete(
+                    configDir: File,
+                    token: String,
+                    target: File,
+                ) = Unit
+
+                override fun rollback(
+                    configDir: File,
+                    token: String,
+                ) = Unit
+
+                override fun commit(
+                    configDir: File,
+                    token: String,
+                ) = Unit
+
+                override fun abort(
+                    configDir: File,
+                    token: String,
+                ) = Unit
+
+                override fun exportRecovery(
+                    configDir: File,
+                    token: String,
+                ): String = configDir.resolve("recovery").absolutePath
             }
     }
 
