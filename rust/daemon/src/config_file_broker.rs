@@ -280,7 +280,9 @@ fn atomic_write_relative_from<R: Read>(
             .iter()
             .any(|original| original.path == path)
     }) {
-        return Err(invalid("active restore target requires a transaction-scoped write"));
+        return Err(invalid(
+            "active restore target requires a transaction-scoped write",
+        ));
     }
     atomic_write_target_from(root, path, reader, body_len, scratch)
 }
@@ -412,7 +414,9 @@ fn delete_allowed(root: &TrustedDir, path: &str) -> io::Result<()> {
             .iter()
             .any(|original| original.path == path)
     }) {
-        return Err(invalid("active restore target requires a transaction-scoped delete"));
+        return Err(invalid(
+            "active restore target requires a transaction-scoped delete",
+        ));
     }
     restore_target(root, path, None)
 }
@@ -1039,7 +1043,11 @@ mod tests {
         .is_err());
         assert!(handle_from(
             &root,
-            &request(ACTION_WRITE, &format!("{token}\0other.txt"), b"not-snapshotted"),
+            &request(
+                ACTION_WRITE,
+                &format!("{token}\0other.txt"),
+                b"not-snapshotted"
+            ),
         )
         .is_err());
         handle_from(
