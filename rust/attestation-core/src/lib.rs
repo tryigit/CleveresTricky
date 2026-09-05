@@ -663,7 +663,10 @@ mod tests {
             explicit_integer_raw(VENDOR_PATCH_TAG, 20240101),
         ]);
         let software = auth_list([explicit_integer_raw(SYSTEM_PATCH_TAG, 202402)]);
-        let strongbox = Any::new(Tag::Enumerated, vec![2]).unwrap().to_der().unwrap();
+        let strongbox = Any::new(Tag::Enumerated, vec![2])
+            .unwrap()
+            .to_der()
+            .unwrap();
         let extension = encode_sequence([
             300i32.to_der().unwrap().as_slice(),
             strongbox.as_slice(),
@@ -707,8 +710,14 @@ mod tests {
             &root_of_trust([7; 32], [8; 32]),
         )]);
         let software = auth_list([]);
-        let unknown = Any::new(Tag::Enumerated, vec![3]).unwrap().to_der().unwrap();
-        let trusted = Any::new(Tag::Enumerated, vec![1]).unwrap().to_der().unwrap();
+        let unknown = Any::new(Tag::Enumerated, vec![3])
+            .unwrap()
+            .to_der()
+            .unwrap();
+        let trusted = Any::new(Tag::Enumerated, vec![1])
+            .unwrap()
+            .to_der()
+            .unwrap();
         let extension = encode_sequence([
             300i32.to_der().unwrap().as_slice(),
             unknown.as_slice(),
