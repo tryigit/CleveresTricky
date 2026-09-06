@@ -1,5 +1,6 @@
 package cleveres.tricky.cleverestech
 
+import android.hardware.security.keymint.ErrorCode
 import android.os.IBinder
 import android.os.Parcel
 import android.system.keystore2.IKeystoreSecurityLevel
@@ -21,6 +22,8 @@ import java.security.cert.Certificate
  */
 class SecurityLevelInterceptor : BinderInterceptor() {
     companion object {
+        private const val EX_SERVICE_SPECIFIC = -8
+
         private val generateKeyTransaction =
             getTransactCode(IKeystoreSecurityLevel.Stub::class.java, "generateKey")
 
@@ -40,12 +43,6 @@ class SecurityLevelInterceptor : BinderInterceptor() {
             CertHack.canHack() &&
             Config.needHack(callingUid)
         ) {
-            // Non-attested keys must generate completely natively on genuine hardware
-            // without interceptor post-processing overhead or synthetic errors.
-            if (!Utils.isAttestationRequested(data)) {
-                return Skip
-            }
-
             return Continue
         }
 
@@ -88,12 +85,22 @@ class SecurityLevelInterceptor : BinderInterceptor() {
                 return Skip
             }
 
-            // Cryptographic AttestKey Traps:
-            // Do not rewrite caller-selected AttestKey leaves or chains.
-            // Preserving KeyMint's hardware signature prevents cross-sign mismatch and graph anomalies.
+            // Cryptographic AttestKey Contract:
+            // When an application requests attestation using a caller-provided attestationKey,
+            // KeyMint hardware signs the child leaf with the private key of that attestationKey.
+            // Hardware refuses arbitrary data signing, so the module cannot sign a modified
+            // certificate using the caller's attestation key.
+            // Returning the genuine hardware leaf leaks the un-spoofed hardware RootOfTrust,
+            // creating a divergence against the spoofed default attestation path.
+            // Returning CANNOT_ATTEST_KEYS gracefully notifies the caller that user-provided
+            // attestation keys are not supported by this security level.
             if (!Utils.usesDefaultAttestationKey(data)) {
+                val errorReply = Parcel.obtain()
+                errorReply.writeInt(EX_SERVICE_SPECIFIC)
+                errorReply.writeString("AttestKey is unsupported")
+                errorReply.writeInt(ErrorCode.CANNOT_ATTEST_KEYS)
                 replacement.recycle()
-                return Skip
+                return OverrideReply(0, errorReply)
             }
 
             // Parse only the leaf first. A normal asymmetric key without an Android attestation
