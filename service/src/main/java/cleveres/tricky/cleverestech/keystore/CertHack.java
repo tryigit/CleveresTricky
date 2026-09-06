@@ -90,6 +90,14 @@ public final class CertHack {
         CachedCertificateChain(
                 Certificate[] certificates,
                 byte[] leafEncoded,
+                byte[] issuerChainEncoded
+        ) {
+            this(certificates, leafEncoded, issuerChainEncoded, true);
+        }
+
+        CachedCertificateChain(
+                Certificate[] certificates,
+                byte[] leafEncoded,
                 byte[] issuerChainEncoded,
                 boolean leafOnlySafe
         ) {
@@ -382,7 +390,11 @@ public final class CertHack {
      * Managed code resolves Android-derived policy facts, selects an opaque key handle and
      * materializes the final JCA X.509 object. Private key bytes never enter this process.
      */
-    public static Certificate[] hackCertificateChain(Certificate[] caList, int callingUid, boolean leafOnlySafe) {
+    public static Certificate[] hackCertificateChain(Certificate[] caList, int uid) {
+        return hackCertificateChain(caList, uid, false);
+    }
+
+    public static Certificate[] hackCertificateChain(Certificate[] caList, int uid, boolean leafOnlySafe) {
         if (caList == null || caList.length == 0 || caList[0] == null) {
             throw new UnsupportedOperationException("Certificate chain is empty");
         }
@@ -504,7 +516,7 @@ public final class CertHack {
             System.arraycopy(prepared.issuerChain, 0, result, 1, prepared.issuerChain.length);
             byte[] issuerChainEncoded = Utils.encodeIssuerChain(result);
             CachedCertificateChain completed =
-                    new CachedCertificateChain(result, rewrittenDer, issuerChainEncoded, leafOnlySafe);
+                    new CachedCertificateChain(result, rewrittenDer, issuerChainEncoded);
             synchronized (cache) {
                 if (state != currentState || currentState.certificateCacheEpoch != cacheEpoch) {
                     return result;
