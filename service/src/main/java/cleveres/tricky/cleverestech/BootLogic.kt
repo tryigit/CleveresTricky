@@ -157,11 +157,15 @@ object BootLogic {
                 "ro.vendor.boot.warranty_bit" to "0",
                 "ro.vendor.warranty_bit" to "0",
                 "ro.secureboot.lockstate" to "locked",
+                "ro.secureboot.devicelock" to "1",
+                "ro.boot.secureboot" to "1",
+                "ro.boot.device_state" to "locked",
                 "ro.boot.realmebootstate" to "green",
                 "ro.boot.realme.lockstate" to "1",
                 "vendor.boot.vbmeta.device_state" to "locked",
                 "vendor.boot.verifiedbootstate" to "green",
                 "vendor.boot.flash.locked" to "1",
+                "vendor.boot.device_state" to "locked",
             )
         val sdk = getSystemProperty("ro.build.version.sdk").toIntOrNull()
         if (sdk != null && sdk < ANDROID_16_SDK) {

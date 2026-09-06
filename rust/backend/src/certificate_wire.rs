@@ -1,9 +1,10 @@
 // Additional GPLv3 section 7(b) attribution term for tryigit-owned material: see ../../NOTICE.
 use crate::keybox_wire::key_store::{self, KeyId, KEY_ID_BYTES};
 use cleverestricky_certificate_core::{
-    inspect_certificate, rewrite_certificate_prepared, AttestationIdOverride, CertificateInspection,
-    PatchComponent, PatchLevels, PreparedCertificateRewriteRequest, SecurityLevel, SigningAlgorithm,
-    MAX_ATTESTATION_ID_BYTES, MAX_CERTIFICATE_DER_BYTES, MAX_MODULE_HASH_BYTES,
+    inspect_certificate, rewrite_certificate_prepared, AttestationIdOverride,
+    CertificateInspection, PatchComponent, PatchLevels, PreparedCertificateRewriteRequest,
+    SecurityLevel, SigningAlgorithm, MAX_ATTESTATION_ID_BYTES, MAX_CERTIFICATE_DER_BYTES,
+    MAX_MODULE_HASH_BYTES,
 };
 use zeroize::Zeroize;
 
@@ -60,7 +61,8 @@ fn validate_hardware_provenance(provenance: &CertificateInspection) -> Result<()
     let attestation_is_hardware = provenance.attestation_security_level
         == SecurityLevel::TrustedEnvironment
         || provenance.attestation_security_level == SecurityLevel::StrongBox;
-    let keymint_is_hardware = provenance.keymint_security_level == SecurityLevel::TrustedEnvironment
+    let keymint_is_hardware = provenance.keymint_security_level
+        == SecurityLevel::TrustedEnvironment
         || provenance.keymint_security_level == SecurityLevel::StrongBox;
     let is_software = provenance.attestation_security_level == SecurityLevel::Software
         || provenance.keymint_security_level == SecurityLevel::Software;
