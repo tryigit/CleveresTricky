@@ -33,7 +33,7 @@ class CertificateBackendProvenanceTest {
     }
 
     @Test
-    fun `Rust rewrite boundary independently rejects non hardware provenance before issuer access`() {
+    fun `Rust rewrite boundary calls its provenance gate before issuer access`() {
         val rawSource =
             File(
                 locateRoot(),
@@ -42,17 +42,13 @@ class CertificateBackendProvenanceTest {
         val source = rawSource.replace(Regex("\\s+"), " ")
         val rewrite = source.indexOf("pub fn rewrite_and_encode")
         val provenance = source.indexOf("inspect_certificate(parsed.genuine_leaf_der)", rewrite)
-        val teeGate =
-            source.indexOf("provenance.attestation_security_level == SecurityLevel::TrustedEnvironment", provenance)
-        val strongboxGate =
-            source.indexOf("provenance.attestation_security_level == SecurityLevel::StrongBox", teeGate)
-        val issuerAccess = source.indexOf("key_store::with_prepared_key", strongboxGate)
+        val provenanceGate = source.indexOf("validate_hardware_provenance(&provenance)", provenance)
+        val issuerAccess = source.indexOf("key_store::with_prepared_key", provenanceGate)
 
         assertTrue(rewrite >= 0)
         assertTrue(provenance > rewrite)
-        assertTrue(teeGate > provenance)
-        assertTrue(strongboxGate > teeGate)
-        assertTrue(issuerAccess > strongboxGate)
+        assertTrue(provenanceGate > provenance)
+        assertTrue(issuerAccess > provenanceGate)
     }
 
     @Test
