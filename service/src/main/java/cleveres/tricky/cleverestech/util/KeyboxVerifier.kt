@@ -528,15 +528,17 @@ object KeyboxVerifier {
         filename: String,
         storageId: String,
         crlFetcher: () -> RevocationSource?,
-    ): Result =
-        try {
+    ): Result {
+        var trackedSecurityLevel = "TEE"
+        return try {
             if (!isSafeKeyboxFile(file)) {
-                return Result(file, file.name, Status.ERROR, "Unsafe or oversized keybox file")
+                return Result(file, file.name, Status.ERROR, "Unsafe or oversized keybox file", storageId = storageId)
             }
             val parsed = KeyboxLoader.parseFileSnapshot(scope, filename, storageId)
             val snapshotSha256 = parsed.snapshotSha256?.takeIf(FULL_SHA256_PATTERN::matches)
             val keyboxes = parsed.keyboxes
-            val securityLevel = if (keyboxes.any(CertHack::isStrongBoxKeybox)) "StrongBox" else "TEE"
+            trackedSecurityLevel = if (keyboxes.any(CertHack::isStrongBoxKeybox)) "StrongBox" else "TEE"
+            val securityLevel = trackedSecurityLevel
             if (keyboxes.isEmpty()) {
                 return Result(
                     file,
@@ -635,10 +637,19 @@ object KeyboxVerifier {
                 "Rust backend unavailable",
                 storageId,
                 retryableBackendFailure = true,
+                securityLevel = trackedSecurityLevel,
             )
         } catch (error: Exception) {
-            Result(file, file.name, Status.ERROR, "Error: ${error.javaClass.simpleName}", storageId)
+            Result(
+                file,
+                file.name,
+                Status.ERROR,
+                "Error: ${error.javaClass.simpleName}",
+                storageId,
+                securityLevel = trackedSecurityLevel,
+            )
         }
+    }
 
     private fun isSafeKeyboxFile(file: File): Boolean =
         Files.isRegularFile(file.toPath(), LinkOption.NOFOLLOW_LINKS) &&

@@ -120,6 +120,6 @@ https://github.com/tryigit/CleveresTricky/pull/1199
 | 2026-02-01 | #79 | App-spezifische Attestation-Identity |
 | 2026-02-05 | #139 | Randomisierte Geräteidentität |
 | 2026-08-09 | #871 | Dual-SIM und App-facing Identity |
-| 2026-08-09 | #876 | Rust/native runtime architecture |
-| 2026-08-30 | #1132 | StrongBox und TEE redirection |
+| 2026-08-09 | #876 | Rust/native Laufzeitarchitektur |
+| 2026-08-30 | #1132 | StrongBox- und TEE-Weiterleitung |
 | 2026-09-06 | #1199 | StrongBox-Routing und AttestKey-Kompatibilität |
