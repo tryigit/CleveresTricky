@@ -121,4 +121,27 @@ public class CertHackTest {
 
         assertFalse(CertHack.isCertificateCacheEpochCurrentForTesting(capturedEpoch));
     }
+
+    @Test
+    public void testIsStrongBoxKeybox() {
+        assertFalse(CertHack.isStrongBoxKeybox(null));
+
+        java.security.KeyPair keyPair = org.mockito.Mockito.mock(java.security.KeyPair.class);
+        CertHack.KeyBox emptyBox = new CertHack.KeyBox(keyPair, List.of(), "empty.xml");
+        assertFalse(CertHack.isStrongBoxKeybox(emptyBox));
+
+        java.security.cert.X509Certificate teeCert = org.mockito.Mockito.mock(java.security.cert.X509Certificate.class);
+        org.mockito.Mockito.when(teeCert.getSubjectX500Principal())
+                .thenReturn(new javax.security.auth.x500.X500Principal("CN=Android KeyMint CA, O=Google LLC, C=US"));
+        org.mockito.Mockito.when(teeCert.getIssuerX500Principal())
+                .thenReturn(new javax.security.auth.x500.X500Principal("CN=Google Root CA, O=Google LLC, C=US"));
+        CertHack.KeyBox teeBox = new CertHack.KeyBox(keyPair, List.of(teeCert), "tee.xml");
+        assertFalse(CertHack.isStrongBoxKeybox(teeBox));
+
+        java.security.cert.X509Certificate strongboxCert = org.mockito.Mockito.mock(java.security.cert.X509Certificate.class);
+        org.mockito.Mockito.when(strongboxCert.getSubjectX500Principal())
+                .thenReturn(new javax.security.auth.x500.X500Principal("CN=Google StrongBox KeyMint CA, O=Google LLC, C=US"));
+        CertHack.KeyBox strongBox = new CertHack.KeyBox(keyPair, List.of(strongboxCert), "strongbox.xml");
+        assertTrue(CertHack.isStrongBoxKeybox(strongBox));
+    }
 }

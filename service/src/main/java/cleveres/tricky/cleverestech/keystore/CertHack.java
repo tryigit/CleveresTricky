@@ -224,6 +224,48 @@ public final class CertHack {
         return !state.keyboxes.isEmpty();
     }
 
+    public static boolean isStrongBoxKeybox(KeyBox keybox) {
+        if (keybox == null || keybox.certificates == null) return false;
+        for (Certificate cert : keybox.certificates) {
+            if (cert instanceof X509Certificate x509) {
+                var subject = x509.getSubjectX500Principal();
+                if (subject != null && subject.getName().toLowerCase(Locale.ROOT).contains("strongbox")) {
+                    return true;
+                }
+                var issuer = x509.getIssuerX500Principal();
+                if (issuer != null && issuer.getName().toLowerCase(Locale.ROOT).contains("strongbox")) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    public static boolean hasStrongBoxKeybox() {
+        State currentState = state;
+        for (List<KeyBox> list : currentState.keyboxes.values()) {
+            for (KeyBox keybox : list) {
+                if (isStrongBoxKeybox(keybox)) return true;
+            }
+        }
+        return false;
+    }
+
+    public static boolean hasStrongBoxKeybox(int uid) {
+        State currentState = state;
+        var appConfig = Config.INSTANCE.getAppConfig(uid);
+        if (appConfig != null && appConfig.getKeyboxFilename() != null) {
+            List<KeyBox> list = currentState.keyboxFiles.get(appConfig.getKeyboxFilename());
+            if (list != null) {
+                for (KeyBox keybox : list) {
+                    if (isStrongBoxKeybox(keybox)) return true;
+                }
+            }
+            return false;
+        }
+        return hasStrongBoxKeybox();
+    }
+
     public static int getKeyboxCount() {
         if (!KeyboxLoader.isActiveSetHealthy()) {
             throw new IllegalStateException("Rust keybox backend activation is unavailable");
@@ -469,6 +511,15 @@ public final class CertHack {
                 return caList;
             }
 
+            if (isStrongbox && !hasStrongBoxKeybox(uid)) {
+                synchronized (cache) {
+                    if (state == currentState && currentState.certificateCacheEpoch == cacheEpoch) {
+                        cache.putIfAbsent(cacheKey, CachedCertificateChain.passthrough());
+                    }
+                }
+                return caList;
+            }
+
             boolean needsCapturedPatchLevels = PolicyState.INSTANCE.isFeatureEnabled(
                     PolicyState.Feature.SECURITY_PATCH, uid);
             byte[] originalBootKey = usableBootDigest(inspection.getOriginalBootKey());
@@ -503,6 +554,10 @@ public final class CertHack {
                         currentState.keyboxFiles.get(appConfig.getKeyboxFilename()), preferredSignerAlgorithm);
             } else {
                 list = selectGlobalKeyboxPool(currentState, preferredSignerAlgorithm);
+            }
+            List<KeyBox> matchedByLevel = filterKeyboxesBySecurityLevel(list, isStrongbox);
+            if (!matchedByLevel.isEmpty()) {
+                list = matchedByLevel;
             }
             if (list.isEmpty()) throw new UnsupportedOperationException("No compatible keybox is available");
 
@@ -668,6 +723,17 @@ public final class CertHack {
         for (KeyBox candidate : candidates) {
             String alg = candidate.keyPair.getPublic().getAlgorithm();
             if (requiredAlgorithm.equals(alg) || requiredAlgorithm.equals(normalizeAlgorithm(alg))) {
+                matches.add(candidate);
+            }
+        }
+        return matches;
+    }
+
+    private static List<KeyBox> filterKeyboxesBySecurityLevel(List<KeyBox> candidates, boolean strongBox) {
+        if (candidates == null || candidates.isEmpty()) return Collections.emptyList();
+        List<KeyBox> matches = new ArrayList<>();
+        for (KeyBox candidate : candidates) {
+            if (isStrongBoxKeybox(candidate) == strongBox) {
                 matches.add(candidate);
             }
         }

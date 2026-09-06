@@ -43,7 +43,7 @@ import static org.mockito.Mockito.when;
 
 public class AttestationInterceptorContractTest {
     @Test
-    public void callerSelectedKeyAchievesParityWhilePreservingLeafOnlyChain() throws Exception {
+    public void callerSelectedIssuerWinsEvenIfReplyContainsAnIssuerChain() throws Exception {
         KeyPair issuer = keyPair("EC");
         X509Certificate child = certificate(keyPair("RSA"), issuer, "child", "issuer");
         KeyMetadata metadata = metadata(child, child.getEncoded());
@@ -52,11 +52,10 @@ public class AttestationInterceptorContractTest {
         try (MockedStatic<CertHack> backend = mockStatic(CertHack.class)) {
             backend.when(() -> CertHack.hackCertificateChain(any(), anyInt(), anyBoolean(), anyBoolean()))
                     .thenReturn(new Certificate[] {child, child});
-            BinderInterceptor.Result result = generate(request, reply);
-            org.junit.Assert.assertTrue(result instanceof BinderInterceptor.OverrideReply);
-            backend.verify(() -> CertHack.hackCertificateChain(any(), anyInt(), anyBoolean(), anyBoolean()));
-            ((BinderInterceptor.OverrideReply) result).getReply().recycle();
+            assertSame(BinderInterceptor.Skip.INSTANCE, generate(request, reply));
+            backend.verifyNoInteractions();
         }
+        child.verify(issuer.getPublic());
         verify(request).setDataPosition(28);
     }
 
@@ -149,11 +148,9 @@ public class AttestationInterceptorContractTest {
                         assertSame(BinderInterceptor.Skip.INSTANCE,
                                 generate(AttestationRequestContractTest.request(false), generatedReply(metadata)));
                     } else {
-                        // AttestKey children achieve parity by rewriting the leaf
-                        BinderInterceptor.Result genResult =
-                                generate(AttestationRequestContractTest.request(true), generatedReply(metadata));
-                        org.junit.Assert.assertTrue(genResult instanceof BinderInterceptor.OverrideReply);
-                        ((BinderInterceptor.OverrideReply) genResult).getReply().recycle();
+                        // Caller-selected AttestKey children must not be rewritten.
+                        assertSame(BinderInterceptor.Skip.INSTANCE,
+                                generate(AttestationRequestContractTest.request(true), generatedReply(metadata)));
                     }
 
                     for (int read = 0; read < 320; read++) {
@@ -169,21 +166,66 @@ public class AttestationInterceptorContractTest {
                         // applyCachedCertificateChain returns false and KeystoreInterceptor returns Skip.
                         assertSame(BinderInterceptor.Skip.INSTANCE, result);
                     }
-                    if (child == ordinary) {
-                        assertArrayEquals(original, metadata.certificate);
-                        assertSame(chain, metadata.certificateChain);
-                    } else {
-                        org.junit.Assert.assertNull(metadata.certificateChain);
-                    }
+                    assertArrayEquals(original, metadata.certificate);
+                    assertSame(chain, metadata.certificateChain);
                 }
             }
 
-            backend.verify(() -> CertHack.hackCertificateChain(any(), anyInt(), anyBoolean(), anyBoolean()), org.mockito.Mockito.times(4));
+            backend.verify(() -> CertHack.hackCertificateChain(any(), anyInt(), anyBoolean(), anyBoolean()), never());
         } finally {
             keystore.set(null, previous);
         }
         ab.verify(a.getPublic());
         bc.verify(b.getPublic());
+    }
+
+    @Test
+    public void strongBoxKeyGenerationReturnsHardwareTypeUnavailableWhenNoStrongBoxKeybox() throws Exception {
+        KeyPair issuer = keyPair("EC");
+        X509Certificate child = certificate(keyPair("EC"), issuer, "strongbox_child", "issuer");
+        KeyMetadata metadata = metadata(child, child.getEncoded());
+        metadata.keySecurityLevel = SecurityLevel.STRONGBOX;
+
+        Parcel request = AttestationRequestContractTest.request(false);
+        Parcel reply = generatedReply(metadata);
+
+        try (MockedStatic<CertHack> backend = mockStatic(CertHack.class)) {
+            backend.when(CertHack::canHack).thenReturn(true);
+            backend.when(() -> CertHack.hasStrongBoxKeybox(anyInt())).thenReturn(false);
+
+            BinderInterceptor.Result result = generate(request, reply);
+            org.junit.Assert.assertTrue(result instanceof BinderInterceptor.OverrideReply);
+            Parcel errorReply = ((BinderInterceptor.OverrideReply) result).getReply();
+            org.junit.Assert.assertEquals(-8, errorReply.readInt());
+            org.junit.Assert.assertEquals("StrongBox unavailable", errorReply.readString());
+            org.junit.Assert.assertEquals(android.hardware.security.keymint.ErrorCode.HARDWARE_TYPE_UNAVAILABLE, errorReply.readInt());
+            errorReply.recycle();
+
+            backend.verify(() -> CertHack.hackCertificateChain(any(), anyInt(), anyBoolean(), anyBoolean()), never());
+        }
+    }
+
+    @Test
+    public void strongBoxKeyGenerationRewritesNormallyWhenStrongBoxKeyboxAvailable() throws Exception {
+        KeyPair issuer = keyPair("EC");
+        X509Certificate child = certificate(keyPair("EC"), issuer, "strongbox_child", "issuer");
+        KeyMetadata metadata = metadata(child, child.getEncoded());
+        metadata.keySecurityLevel = SecurityLevel.STRONGBOX;
+
+        Parcel request = AttestationRequestContractTest.request(false);
+        Parcel reply = generatedReply(metadata);
+        Certificate[] replacement = new Certificate[] {child, child};
+
+        try (MockedStatic<CertHack> backend = mockStatic(CertHack.class)) {
+            backend.when(CertHack::canHack).thenReturn(true);
+            backend.when(() -> CertHack.hasStrongBoxKeybox(anyInt())).thenReturn(true);
+            backend.when(() -> CertHack.hackCertificateChain(any(), anyInt(), anyBoolean(), anyBoolean())).thenReturn(replacement);
+
+            BinderInterceptor.Result result = generate(request, reply);
+            org.junit.Assert.assertTrue(result instanceof BinderInterceptor.OverrideReply);
+            backend.verify(() -> CertHack.hackCertificateChain(any(), anyInt(), anyBoolean(), anyBoolean()));
+            ((BinderInterceptor.OverrideReply) result).getReply().recycle();
+        }
     }
 
     @Test
