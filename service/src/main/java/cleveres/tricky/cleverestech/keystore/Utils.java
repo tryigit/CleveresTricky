@@ -126,6 +126,22 @@ public final class Utils {
                 certificateChain.length <= MAX_CHAIN_BYTES;
     }
 
+    /**
+     * Returns true when the metadata carries a leaf certificate suitable for attestation rewrite
+     * or cache-based readback. Unlike {@link #isCertificateChainRewriteCandidate}, this method
+     * does not require an issuer chain; caller-selected attestation keys produce leaf-only
+     * metadata that is still eligible for attestation rewrite and cached readback.
+     */
+    public static boolean hasRewritableLeafCertificate(KeyMetadata metadata) {
+        return metadata != null && hasRewritableLeafCertificate(metadata.certificate);
+    }
+
+    public static boolean hasRewritableLeafCertificate(byte[] certificate) {
+        return certificate != null && certificate.length > 0 &&
+                certificate.length <= MAX_CERTIFICATE_BYTES;
+    }
+
+
     static X509Certificate toCertificate(byte[] encoded) {
         if (encoded == null || encoded.length == 0 ||
                 encoded.length > MAX_CERTIFICATE_BYTES) {

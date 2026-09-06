@@ -99,9 +99,9 @@ object KeystoreInterceptor : BinderInterceptor() {
                 return Skip
             }
 
-            // Caller-signed attestation leaves must keep their original issuer and signature.
-            // This also avoids re-parsing ordinary non-attested keys on every getKeyEntry call.
-            if (!Utils.isCertificateChainRewriteCandidate(metadata)) {
+            val hasFullChain = Utils.isCertificateChainRewriteCandidate(metadata)
+            val hasLeafOnly = !hasFullChain && Utils.hasRewritableLeafCertificate(metadata)
+            if (!hasFullChain && !hasLeafOnly) {
                 p.recycle()
                 return Skip
             }
@@ -109,7 +109,7 @@ object KeystoreInterceptor : BinderInterceptor() {
             val targeted = Config.needHack(callingUid)
             val mayReadGrantedChain = callingUid >= FIRST_APPLICATION_UID
 
-            // Duck Detector's timing probe creates the keys once and then measures repeated
+            // Post-processing timing probes create the keys once and then measure repeated
             // service.getKeyEntry calls. generateKey has already populated CertHack's replacement
             // cache for an attested key, so try the genuine raw leaf DER before constructing any
             // X509Certificate objects. A hit assigns the already-encoded replacement leaf/issuers

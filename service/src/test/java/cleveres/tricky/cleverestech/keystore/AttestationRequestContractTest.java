@@ -97,7 +97,7 @@ public class AttestationRequestContractTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    public void removingIssuerChainCannotReuseAnOlderGenericReplacement() throws Exception {
+    public void cachedReplacementAppliesEvenForLeafOnlyMetadata() throws Exception {
         Field stateField = CertHack.class.getDeclaredField("state");
         stateField.setAccessible(true);
         Object state = stateField.get(null);
@@ -120,14 +120,22 @@ public class AttestationRequestContractTest {
             metadata.certificateChain = new byte[] {6};
             assertTrue(CertHack.applyCachedCertificateChain(metadata));
             assertArrayEquals(new byte[] {4}, metadata.certificate);
+            assertArrayEquals(new byte[] {5}, metadata.certificateChain);
 
             for (byte[] chain : new byte[][] {null, new byte[0]}) {
                 metadata.certificate = original.clone();
                 metadata.certificateChain = chain;
-                assertFalse(CertHack.applyCachedCertificateChain(metadata));
-                assertArrayEquals(original, metadata.certificate);
-                assertSame(chain, metadata.certificateChain);
+                assertTrue(CertHack.applyCachedCertificateChain(metadata));
+                assertArrayEquals(new byte[] {4}, metadata.certificate);
+                assertArrayEquals(new byte[] {5}, metadata.certificateChain);
             }
+
+            metadata.certificate = null;
+            assertFalse(CertHack.applyCachedCertificateChain(metadata));
+            metadata.certificate = new byte[0];
+            assertFalse(CertHack.applyCachedCertificateChain(metadata));
+            metadata.certificate = new byte[64 * 1024 + 1];
+            assertFalse(CertHack.applyCachedCertificateChain(metadata));
         } finally {
             if (previous == null) cache.remove(key);
             else cache.put(key, previous);
