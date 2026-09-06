@@ -38,6 +38,12 @@ Keybox doğrulama ve uygulama özelinde attestation kimliği işlemleri.
 
 https://github.com/tryigit/CleveresTricky/pull/79
 
+**#1199, 2026-09-06**
+
+Yetenek tabanlı StrongBox yönlendirmesi, App AttestKey donanım imza koruması, güvenlik seviyesi aday filtreleme ve WebUI donanım etiketleri.
+
+https://github.com/tryigit/CleveresTricky/pull/1199
+
 ## Profil, uygulama kapsamı ve runtime
 
 **#376**
@@ -100,6 +106,12 @@ StrongBox to TEE redirection ve attestation security-level harmonization. Bu ça
 
 https://github.com/tryigit/CleveresTricky/pull/1132
 
+**#1199, 2026-09-06**
+
+Yetenek tabanlı StrongBox fallback yönlendirmesi: StrongBox keybox'ı bulunmadığında donanım KeyMint üretiminden önce erken red yapılarak alias çakışmaları engellenir ve temiz TEE fallback sağlanır.
+
+https://github.com/tryigit/CleveresTricky/pull/1199
+
 ## Zaman çizelgesi
 
 | Tarih | PR | Alan |
@@ -110,3 +122,4 @@ https://github.com/tryigit/CleveresTricky/pull/1132
 | 2026-08-09 | #871 | Dual-SIM ve app-facing identity |
 | 2026-08-09 | #876 | Rust/native runtime architecture |
 | 2026-08-30 | #1132 | StrongBox ve TEE redirection |
+| 2026-09-06 | #1199 | StrongBox yönlendirmesi ve AttestKey uyumluluğu |
