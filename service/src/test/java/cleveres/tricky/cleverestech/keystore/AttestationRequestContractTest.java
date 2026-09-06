@@ -1,5 +1,6 @@
 package cleveres.tricky.cleverestech.keystore;
 
+import android.hardware.security.keymint.Tag;
 import android.os.Parcel;
 import android.system.keystore2.IKeystoreSecurityLevel;
 import android.system.keystore2.KeyMetadata;
@@ -142,12 +143,75 @@ public class AttestationRequestContractTest {
         }
     }
 
+    @Test
+    public void attestationRequestedDetectsChallengeTagInParams() {
+        Parcel request = attestedRequest(false);
+        assertTrue(Utils.isAttestationRequested(request));
+        verify(request).enforceInterface(IKeystoreSecurityLevel.DESCRIPTOR);
+        verify(request).setDataPosition(28);
+
+        request = attestedRequest(true);
+        assertTrue(Utils.isAttestationRequested(request));
+        verify(request).setDataPosition(28);
+    }
+
+    @Test
+    public void nonAttestedRequestReturnsFalseWithoutAttestationChallenge() {
+        Parcel request = request(false);
+        assertFalse(Utils.isAttestationRequested(request));
+        verify(request).setDataPosition(28);
+
+        assertFalse(Utils.isAttestationRequested(null));
+    }
+
+    @Test
+    public void attestationRequestedSkipsNonChallengeParams() {
+        Parcel request = mock(Parcel.class);
+        when(request.dataPosition()).thenReturn(28, 32, 48, 52, 64);
+        when(request.dataAvail()).thenReturn(128);
+        when(request.readInt()).thenReturn(
+                1, 16, // key
+                0,     // attestationKey null
+                2,     // 2 params
+                1, 12, Tag.PURPOSE, // param 0 is not challenge
+                1, 12, Tag.ATTESTATION_CHALLENGE // param 1 is challenge
+        );
+        when(request.dataSize()).thenReturn(256);
+        assertTrue(Utils.isAttestationRequested(request));
+        verify(request).setDataPosition(28);
+    }
+
     static Parcel request(boolean explicitIssuer) {
         Parcel request = mock(Parcel.class);
         when(request.dataPosition()).thenReturn(28, 32);
         when(request.dataAvail()).thenReturn(64);
         when(request.readInt()).thenReturn(1, 16, explicitIssuer ? 1 : 0);
         when(request.dataSize()).thenReturn(128);
+        return request;
+    }
+
+    static Parcel attestedRequest(boolean explicitIssuer) {
+        Parcel request = mock(Parcel.class);
+        when(request.dataPosition()).thenReturn(28, 32, 48, 52);
+        when(request.dataAvail()).thenReturn(128);
+        if (explicitIssuer) {
+            when(request.readInt()).thenReturn(
+                    1, 16, // key: presence, size
+                    1, 16, // attestationKey: presence, size
+                    1,     // params: count = 1
+                    1, 12, // param 0: presence, size
+                    Tag.ATTESTATION_CHALLENGE // param 0 tag
+            );
+        } else {
+            when(request.readInt()).thenReturn(
+                    1, 16, // key: presence, size
+                    0,     // attestationKey: null presence
+                    1,     // params: count = 1
+                    1, 12, // param 0: presence, size
+                    Tag.ATTESTATION_CHALLENGE // param 0 tag
+            );
+        }
+        when(request.dataSize()).thenReturn(256);
         return request;
     }
 }

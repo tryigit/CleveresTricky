@@ -1,5 +1,6 @@
 package cleveres.tricky.cleverestech.keystore;
 
+import android.hardware.security.keymint.Tag;
 import android.os.Parcel;
 import android.system.keystore2.IKeystoreSecurityLevel;
 import android.system.keystore2.KeyEntryResponse;
@@ -81,6 +82,80 @@ public final class Utils {
         } finally {
             request.setDataPosition(position);
         }
+    }
+
+    /**
+     * Inspects generateKey AIDL parameters to check if Tag.ATTESTATION_CHALLENGE was provided,
+     * without changing the caller's parcel position.
+     */
+    public static boolean isAttestationRequested(Parcel request) {
+        if (request == null) return false;
+        int position = request.dataPosition();
+        try {
+            request.enforceInterface(IKeystoreSecurityLevel.DESCRIPTOR);
+            if (!skipStableTypedParcelable(request)) {
+                return false;
+            }
+            if (!skipNullableStableTypedParcelable(request)) {
+                return false;
+            }
+            if (request.dataAvail() < Integer.BYTES) {
+                return false;
+            }
+            int paramCount = request.readInt();
+            if (paramCount <= 0 || paramCount > 1000) {
+                return false;
+            }
+
+            for (int i = 0; i < paramCount; i++) {
+                if (request.dataAvail() < Integer.BYTES) {
+                    return false;
+                }
+                int presence = request.readInt();
+                if (presence == 0) {
+                    continue;
+                }
+                if (presence != 1 || request.dataAvail() < Integer.BYTES) {
+                    return false;
+                }
+                int paramStart = request.dataPosition();
+                int paramSize = request.readInt();
+                if (paramSize < Integer.BYTES * 2 ||
+                        paramStart > Integer.MAX_VALUE - paramSize) {
+                    return false;
+                }
+                int paramEnd = paramStart + paramSize;
+                if (paramEnd > request.dataSize()) {
+                    return false;
+                }
+                if (request.dataAvail() >= Integer.BYTES) {
+                    int tag = request.readInt();
+                    if (tag == Tag.ATTESTATION_CHALLENGE) {
+                        return true;
+                    }
+                }
+                request.setDataPosition(paramEnd);
+            }
+            return false;
+        } catch (RuntimeException invalidRequest) {
+            return false;
+        } finally {
+            request.setDataPosition(position);
+        }
+    }
+
+    private static boolean skipNullableStableTypedParcelable(Parcel request) {
+        if (request.dataAvail() < Integer.BYTES) {
+            return false;
+        }
+        int presence = request.readInt();
+        if (presence == 0) {
+            return true;
+        }
+        if (presence != 1) {
+            return false;
+        }
+        return skipStableParcelableBody(request);
     }
 
     /**

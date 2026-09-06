@@ -54,12 +54,7 @@ public class AttestationInterceptorContractTest {
             backend.when(() -> CertHack.hackCertificateChain(any(), anyInt(), anyBoolean(), anyBoolean()))
                     .thenReturn(new Certificate[] {child, child});
             BinderInterceptor.Result result = generate(request, reply);
-            org.junit.Assert.assertTrue(result instanceof BinderInterceptor.OverrideReply);
-            Parcel errorReply = ((BinderInterceptor.OverrideReply) result).getReply();
-            org.junit.Assert.assertEquals(-8, errorReply.readInt());
-            org.junit.Assert.assertEquals("AttestKey is unsupported", errorReply.readString());
-            org.junit.Assert.assertEquals(android.hardware.security.keymint.ErrorCode.CANNOT_ATTEST_KEYS, errorReply.readInt());
-            errorReply.recycle();
+            assertSame(BinderInterceptor.Skip.INSTANCE, result);
             backend.verifyNoInteractions();
         }
         child.verify(issuer.getPublic());
@@ -155,15 +150,9 @@ public class AttestationInterceptorContractTest {
                         assertSame(BinderInterceptor.Skip.INSTANCE,
                                 generate(AttestationRequestContractTest.request(false), generatedReply(metadata)));
                     } else {
-                        // Caller-selected AttestKey children are rejected cleanly with CANNOT_ATTEST_KEYS.
-                        BinderInterceptor.Result genResult =
-                                generate(AttestationRequestContractTest.request(true), generatedReply(metadata));
-                        org.junit.Assert.assertTrue(genResult instanceof BinderInterceptor.OverrideReply);
-                        Parcel errorReply = ((BinderInterceptor.OverrideReply) genResult).getReply();
-                        org.junit.Assert.assertEquals(-8, errorReply.readInt());
-                        org.junit.Assert.assertEquals("AttestKey is unsupported", errorReply.readString());
-                        org.junit.Assert.assertEquals(android.hardware.security.keymint.ErrorCode.CANNOT_ATTEST_KEYS, errorReply.readInt());
-                        errorReply.recycle();
+                        // Caller-selected AttestKey children are skipped natively to avoid ProviderException.
+                        assertSame(BinderInterceptor.Skip.INSTANCE,
+                                generate(AttestationRequestContractTest.request(true), generatedReply(metadata)));
                     }
 
                     for (int read = 0; read < 320; read++) {
@@ -216,7 +205,7 @@ public class AttestationInterceptorContractTest {
     }
 
     @Test
-    public void nonAttestedKeyGenerationContinuesPreTransactAndSkipsPostTransact() throws Exception {
+    public void nonAttestedKeyGenerationSkipsPreTransactAndSkipsPostTransact() throws Exception {
         Binder strongboxTarget = new Binder();
         Field strongboxTargetField = field(KeystoreInterceptor.class, "strongboxTarget");
         strongboxTargetField.set(KeystoreInterceptor.INSTANCE, strongboxTarget);
@@ -225,15 +214,20 @@ public class AttestationInterceptorContractTest {
         globalModeField.set(Config.INSTANCE, true);
         Config.INSTANCE.setPackagesForTesting(10_001, new String[] {"com.test.app"});
         try {
-            Parcel request = AttestationRequestContractTest.request(false);
+            Parcel nonAttestedRequest = AttestationRequestContractTest.request(false);
+            Parcel attestedRequest = AttestationRequestContractTest.attestedRequest(false);
             try (MockedStatic<CertHack> backend = mockStatic(CertHack.class)) {
                 backend.when(CertHack::canHack).thenReturn(true);
                 backend.when(() -> CertHack.hasStrongBoxKeybox(anyInt())).thenReturn(false);
 
                 int code = field(SecurityLevelInterceptor.class, "generateKeyTransaction").getInt(null);
-                BinderInterceptor.Result result = new SecurityLevelInterceptor().onPreTransact(
-                        strongboxTarget, code, 0, 10_001, 42, request);
-                assertSame(BinderInterceptor.Continue.INSTANCE, result);
+                BinderInterceptor.Result nonAttestedResult = new SecurityLevelInterceptor().onPreTransact(
+                        strongboxTarget, code, 0, 10_001, 42, nonAttestedRequest);
+                assertSame(BinderInterceptor.Skip.INSTANCE, nonAttestedResult);
+
+                BinderInterceptor.Result attestedResult = new SecurityLevelInterceptor().onPreTransact(
+                        strongboxTarget, code, 0, 10_001, 42, attestedRequest);
+                assertSame(BinderInterceptor.Continue.INSTANCE, attestedResult);
             }
         } finally {
             strongboxTargetField.set(KeystoreInterceptor.INSTANCE, null);
