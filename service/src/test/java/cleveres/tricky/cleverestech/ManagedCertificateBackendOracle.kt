@@ -106,7 +106,10 @@ object ManagedCertificateBackendOracle {
             val listSeven = ASN1Sequence.getInstance(fields[7])
             val sixSummary = summarize(listSix)
             val sevenSummary = summarize(listSeven)
-            val teeIndex = if (sixSummary.hasRootOfTrust && !sevenSummary.hasRootOfTrust) 6 else 7
+            require(sixSummary.hasRootOfTrust != sevenSummary.hasRootOfTrust) {
+                "Exactly one authorization list must contain RootOfTrust"
+            }
+            val teeIndex = if (sixSummary.hasRootOfTrust) 6 else 7
             val softwareIndex = if (teeIndex == 6) 7 else 6
             val teeOriginal = if (teeIndex == 6) listSix else listSeven
             val softwareOriginal = if (teeIndex == 6) listSeven else listSix
@@ -271,7 +274,12 @@ object ManagedCertificateBackendOracle {
             val tagged = value as? ASN1TaggedObject ?: error("Invalid authorization-list element")
             summary =
                 when (tagged.tagNo) {
-                    704 -> summary.copy(hasRootOfTrust = true)
+                    704 -> {
+                        require(!summary.hasRootOfTrust) {
+                            "Duplicate RootOfTrust authorization"
+                        }
+                        summary.copy(hasRootOfTrust = true)
+                    }
                     706 -> summary.copy(systemPatch = mergePatch(summary.systemPatch, patchValue(tagged)))
                     718 -> summary.copy(vendorPatch = mergePatch(summary.vendorPatch, patchValue(tagged)))
                     719 -> summary.copy(bootPatch = mergePatch(summary.bootPatch, patchValue(tagged)))
