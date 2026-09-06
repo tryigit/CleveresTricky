@@ -425,13 +425,12 @@ object KeystoreInterceptor : BinderInterceptor() {
 
         if (strongbox != null) {
             val interceptor = SecurityLevelInterceptor()
-            val candidateTarget = strongbox.asBinder()
             val preStale =
                 synchronized(this) {
                     if (lifecycleEpoch != currentEpoch || !keystoreRegistered) {
                         true
                     } else {
-                        strongboxTarget = candidateTarget
+                        strongboxTarget = strongbox.asBinder()
                         false
                     }
                 }
@@ -443,14 +442,14 @@ object KeystoreInterceptor : BinderInterceptor() {
 
             if (!registerBinderInterceptor(
                     bd,
-                    candidateTarget,
+                    strongbox.asBinder(),
                     interceptor,
                     SecurityLevelInterceptor.INTERCEPTED_CODES,
                 )
             ) {
                 Logger.e("Failed to register the StrongBox SecurityLevel interceptor")
                 synchronized(this) {
-                    if (strongboxTarget === candidateTarget) {
+                    if (strongboxTarget === strongbox.asBinder()) {
                         strongboxTarget = null
                     }
                 }
@@ -460,7 +459,7 @@ object KeystoreInterceptor : BinderInterceptor() {
             val stale =
                 synchronized(this) {
                     if (lifecycleEpoch != currentEpoch || !keystoreRegistered) {
-                        if (strongboxTarget === candidateTarget) {
+                        if (strongboxTarget === strongbox.asBinder()) {
                             strongboxTarget = null
                         }
                         true
@@ -471,7 +470,7 @@ object KeystoreInterceptor : BinderInterceptor() {
                 }
             if (stale) {
                 Logger.w("StrongBox interceptor registration raced with teardown; rolling back")
-                unregisterBinderInterceptor(bd, candidateTarget, interceptor)
+                unregisterBinderInterceptor(bd, strongbox.asBinder(), interceptor)
                 return false
             }
             Logger.i("StrongBox SecurityLevel interceptor registered")
