@@ -87,17 +87,15 @@ object ManagedCertificateBackendOracle {
             require(fields.size > 7)
             val attLevel = decodeSecurityLevel(fields[1])
             val kmLevel = decodeSecurityLevel(fields[3])
-            val attestationIsHardware =
-                attLevel == CertificateBackend.SECURITY_LEVEL_TEE ||
-                    attLevel == CertificateBackend.SECURITY_LEVEL_STRONGBOX
-            val keymintIsHardware =
-                kmLevel == CertificateBackend.SECURITY_LEVEL_TEE ||
+            val isTee =
+                attLevel == CertificateBackend.SECURITY_LEVEL_TEE &&
+                    kmLevel == CertificateBackend.SECURITY_LEVEL_TEE
+            val isStrongbox =
+                attLevel == CertificateBackend.SECURITY_LEVEL_STRONGBOX &&
                     kmLevel == CertificateBackend.SECURITY_LEVEL_STRONGBOX
-            require(attestationIsHardware && keymintIsHardware)
+            require(isTee || isStrongbox)
             val targetLevel =
-                if (attLevel == CertificateBackend.SECURITY_LEVEL_STRONGBOX ||
-                    kmLevel == CertificateBackend.SECURITY_LEVEL_STRONGBOX
-                ) {
+                if (isStrongbox) {
                     CertificateBackend.SECURITY_LEVEL_STRONGBOX
                 } else {
                     CertificateBackend.SECURITY_LEVEL_TEE
