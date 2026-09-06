@@ -181,7 +181,7 @@ public class AttestationInterceptorContractTest {
     }
 
     @Test
-    public void strongBoxKeyGenerationReturnsHardwareTypeUnavailableWhenNoStrongBoxKeybox() throws Exception {
+    public void strongBoxKeyGenerationWithAttestationRewritesEvenWhenNoDedicatedStrongBoxKeybox() throws Exception {
         KeyPair issuer = keyPair("EC");
         X509Certificate child = certificate(keyPair("EC"), issuer, "strongbox_child", "issuer");
         KeyMetadata metadata = metadata(child, child.getEncoded());
@@ -189,25 +189,22 @@ public class AttestationInterceptorContractTest {
 
         Parcel request = AttestationRequestContractTest.request(false);
         Parcel reply = generatedReply(metadata);
+        Certificate[] replacement = new Certificate[] {child, child};
 
         try (MockedStatic<CertHack> backend = mockStatic(CertHack.class)) {
             backend.when(CertHack::canHack).thenReturn(true);
             backend.when(() -> CertHack.hasStrongBoxKeybox(anyInt())).thenReturn(false);
+            backend.when(() -> CertHack.hackCertificateChain(any(), anyInt(), anyBoolean(), anyBoolean())).thenReturn(replacement);
 
             BinderInterceptor.Result result = generate(request, reply);
             org.junit.Assert.assertTrue(result instanceof BinderInterceptor.OverrideReply);
-            Parcel errorReply = ((BinderInterceptor.OverrideReply) result).getReply();
-            org.junit.Assert.assertEquals(-8, errorReply.readInt());
-            org.junit.Assert.assertEquals("StrongBox unavailable", errorReply.readString());
-            org.junit.Assert.assertEquals(android.hardware.security.keymint.ErrorCode.HARDWARE_TYPE_UNAVAILABLE, errorReply.readInt());
-            errorReply.recycle();
-
-            backend.verify(() -> CertHack.hackCertificateChain(any(), anyInt(), anyBoolean(), anyBoolean()), never());
+            backend.verify(() -> CertHack.hackCertificateChain(any(), anyInt(), anyBoolean(), anyBoolean()));
+            ((BinderInterceptor.OverrideReply) result).getReply().recycle();
         }
     }
 
     @Test
-    public void strongBoxKeyGenerationRejectedEarlyInPreTransactWhenNoStrongBoxKeybox() throws Exception {
+    public void nonAttestedKeyGenerationSkipsPreTransactForNativeHardwareExecution() throws Exception {
         Binder strongboxTarget = new Binder();
         Field strongboxTargetField = field(KeystoreInterceptor.class, "strongboxTarget");
         strongboxTargetField.set(KeystoreInterceptor.INSTANCE, strongboxTarget);
@@ -224,12 +221,33 @@ public class AttestationInterceptorContractTest {
                 int code = field(SecurityLevelInterceptor.class, "generateKeyTransaction").getInt(null);
                 BinderInterceptor.Result result = new SecurityLevelInterceptor().onPreTransact(
                         strongboxTarget, code, 0, 10_001, 42, request);
-                org.junit.Assert.assertTrue("Expected OverrideReply but got " + result, result instanceof BinderInterceptor.OverrideReply);
-                Parcel errorReply = ((BinderInterceptor.OverrideReply) result).getReply();
-                org.junit.Assert.assertEquals(-8, errorReply.readInt());
-                org.junit.Assert.assertEquals("StrongBox unavailable", errorReply.readString());
-                org.junit.Assert.assertEquals(android.hardware.security.keymint.ErrorCode.HARDWARE_TYPE_UNAVAILABLE, errorReply.readInt());
-                errorReply.recycle();
+                assertSame(BinderInterceptor.Skip.INSTANCE, result);
+            }
+        } finally {
+            strongboxTargetField.set(KeystoreInterceptor.INSTANCE, null);
+            globalModeField.set(Config.INSTANCE, prevGlobalMode);
+        }
+    }
+
+    @Test
+    public void attestedKeyGenerationContinuesInPreTransact() throws Exception {
+        Binder strongboxTarget = new Binder();
+        Field strongboxTargetField = field(KeystoreInterceptor.class, "strongboxTarget");
+        strongboxTargetField.set(KeystoreInterceptor.INSTANCE, strongboxTarget);
+        Field globalModeField = field(Config.class, "isGlobalMode");
+        boolean prevGlobalMode = (boolean) globalModeField.get(Config.INSTANCE);
+        globalModeField.set(Config.INSTANCE, true);
+        Config.INSTANCE.setPackagesForTesting(10_001, new String[] {"com.test.app"});
+        try {
+            Parcel request = AttestationRequestContractTest.attestedRequest(false);
+            try (MockedStatic<CertHack> backend = mockStatic(CertHack.class)) {
+                backend.when(CertHack::canHack).thenReturn(true);
+                backend.when(() -> CertHack.hasStrongBoxKeybox(anyInt())).thenReturn(false);
+
+                int code = field(SecurityLevelInterceptor.class, "generateKeyTransaction").getInt(null);
+                BinderInterceptor.Result result = new SecurityLevelInterceptor().onPreTransact(
+                        strongboxTarget, code, 0, 10_001, 42, request);
+                assertSame(BinderInterceptor.Continue.INSTANCE, result);
             }
         } finally {
             strongboxTargetField.set(KeystoreInterceptor.INSTANCE, null);

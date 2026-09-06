@@ -572,15 +572,6 @@ public final class CertHack {
                 return caList;
             }
 
-            if (isStrongbox && !hasStrongBoxKeybox(uid)) {
-                synchronized (cache) {
-                    if (state == currentState && currentState.certificateCacheEpoch == cacheEpoch) {
-                        cache.putIfAbsent(cacheKey, CachedCertificateChain.passthrough());
-                    }
-                }
-                return caList;
-            }
-
             boolean needsCapturedPatchLevels = PolicyState.INSTANCE.isFeatureEnabled(
                     PolicyState.Feature.SECURITY_PATCH, uid);
             byte[] originalBootKey = usableBootDigest(inspection.getOriginalBootKey());
@@ -620,7 +611,10 @@ public final class CertHack {
                 candidates = all;
             }
             if (candidates == null) candidates = Collections.emptyList();
-            candidates = filterKeyboxesBySecurityLevel(candidates, isStrongbox);
+            List<KeyBox> matchingLevel = filterKeyboxesBySecurityLevel(candidates, isStrongbox);
+            if (!matchingLevel.isEmpty()) {
+                candidates = matchingLevel;
+            }
             List<KeyBox> list = selectKeyboxPool(candidates, preferredSignerAlgorithm);
             if (list.isEmpty()) throw new UnsupportedOperationException("No compatible keybox is available");
 
