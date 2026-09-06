@@ -99,9 +99,9 @@ object KeystoreInterceptor : BinderInterceptor() {
                 return Skip
             }
 
-            val hasFullChain = Utils.isCertificateChainRewriteCandidate(metadata)
-            val hasLeafOnly = !hasFullChain && Utils.hasRewritableLeafCertificate(metadata)
-            if (!hasFullChain && !hasLeafOnly) {
+            // Caller-signed attestation leaves must keep their original issuer and signature.
+            // This also avoids re-parsing ordinary non-attested keys on every getKeyEntry call.
+            if (!Utils.isCertificateChainRewriteCandidate(metadata)) {
                 p.recycle()
                 return Skip
             }

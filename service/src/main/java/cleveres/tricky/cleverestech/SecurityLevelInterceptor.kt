@@ -62,7 +62,8 @@ class SecurityLevelInterceptor : BinderInterceptor() {
         if (
             code != generateKeyTransaction ||
             reply == null ||
-            resultCode != 0
+            resultCode != 0 ||
+            !Utils.usesDefaultAttestationKey(data)
         ) {
             return Skip
         }
@@ -71,7 +72,7 @@ class SecurityLevelInterceptor : BinderInterceptor() {
         return try {
             reply.readException()
             val metadata = reply.readTypedObject(KeyMetadata.CREATOR)
-            if (!Utils.hasRewritableLeafCertificate(metadata)) {
+            if (!Utils.isCertificateChainRewriteCandidate(metadata)) {
                 replacement.recycle()
                 return Skip
             }

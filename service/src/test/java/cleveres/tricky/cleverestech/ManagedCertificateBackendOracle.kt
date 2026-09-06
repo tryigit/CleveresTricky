@@ -49,7 +49,10 @@ object ManagedCertificateBackendOracle {
             val listSeven = ASN1Sequence.getInstance(fields[7])
             val sixSummary = summarize(listSix)
             val sevenSummary = summarize(listSeven)
-            val tee = if (sixSummary.hasRootOfTrust && !sevenSummary.hasRootOfTrust) listSix else listSeven
+            require(sixSummary.hasRootOfTrust != sevenSummary.hasRootOfTrust) {
+                "Exactly one authorization list must contain RootOfTrust"
+            }
+            val tee = if (sixSummary.hasRootOfTrust) listSix else listSeven
             val teeSummary = if (tee === listSix) sixSummary else sevenSummary
             val softwareSummary = if (tee === listSix) sevenSummary else sixSummary
 
@@ -87,15 +90,20 @@ object ManagedCertificateBackendOracle {
             require(fields.size > 7)
             val attLevel = decodeSecurityLevel(fields[1])
             val kmLevel = decodeSecurityLevel(fields[3])
-            val isTee =
-                attLevel == CertificateBackend.SECURITY_LEVEL_TEE &&
-                    kmLevel == CertificateBackend.SECURITY_LEVEL_TEE
-            val isStrongbox =
-                attLevel == CertificateBackend.SECURITY_LEVEL_STRONGBOX &&
+            val attestationIsHardware =
+                attLevel == CertificateBackend.SECURITY_LEVEL_TEE ||
+                    attLevel == CertificateBackend.SECURITY_LEVEL_STRONGBOX
+            val keymintIsHardware =
+                kmLevel == CertificateBackend.SECURITY_LEVEL_TEE ||
                     kmLevel == CertificateBackend.SECURITY_LEVEL_STRONGBOX
-            require(isTee || isStrongbox)
+            val isSoftware =
+                attLevel == CertificateBackend.SECURITY_LEVEL_SOFTWARE ||
+                    kmLevel == CertificateBackend.SECURITY_LEVEL_SOFTWARE
+            require(!isSoftware && attestationIsHardware && keymintIsHardware)
             val targetLevel =
-                if (isStrongbox) {
+                if (attLevel == CertificateBackend.SECURITY_LEVEL_STRONGBOX ||
+                    kmLevel == CertificateBackend.SECURITY_LEVEL_STRONGBOX
+                ) {
                     CertificateBackend.SECURITY_LEVEL_STRONGBOX
                 } else {
                     CertificateBackend.SECURITY_LEVEL_TEE

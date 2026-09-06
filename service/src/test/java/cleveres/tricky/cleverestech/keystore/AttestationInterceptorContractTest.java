@@ -42,21 +42,21 @@ import static org.mockito.Mockito.when;
 
 public class AttestationInterceptorContractTest {
     @Test
-    public void callerSelectedAttestationKeyStillGetsCertificateRewrite() throws Exception {
+    public void callerSelectedIssuerWinsEvenIfReplyContainsAnIssuerChain() throws Exception {
         KeyPair issuer = keyPair("EC");
         X509Certificate child = certificate(keyPair("RSA"), issuer, "child", "issuer");
         KeyMetadata metadata = metadata(child, child.getEncoded());
-        Parcel reply = generatedReply(metadata);
         Parcel request = AttestationRequestContractTest.request(true);
-
+        Parcel reply = generatedReply(metadata);
         try (MockedStatic<CertHack> backend = mockStatic(CertHack.class)) {
             backend.when(() -> CertHack.hackCertificateChain(any(), anyInt()))
                     .thenReturn(new Certificate[] {child, child});
-            BinderInterceptor.Result result = generate(request, reply);
-            org.junit.Assert.assertTrue(result instanceof BinderInterceptor.OverrideReply);
-            backend.verify(() -> CertHack.hackCertificateChain(any(), anyInt()));
-            ((BinderInterceptor.OverrideReply) result).getReply().recycle();
+            assertSame(BinderInterceptor.Skip.INSTANCE, generate(request, reply));
+            backend.verifyNoInteractions();
         }
+        verify(reply, never()).readException();
+        verify(request).setDataPosition(28);
+        child.verify(issuer.getPublic());
     }
 
     @Test
@@ -102,12 +102,13 @@ public class AttestationInterceptorContractTest {
     }
 
     @Test
-    public void leafOnlyAttestationKeysAreRewrittenAndHitCacheOnReadback() throws Exception {
+    public void leafOnlyAttestKeyGraphAndOrdinaryKeysSurviveRepeatedReadback() throws Exception {
         KeyPair a = keyPair("EC");
         KeyPair b = keyPair("RSA");
         KeyPair c = keyPair("EC");
         X509Certificate ab = certificate(b, a, "B", "A");
         X509Certificate bc = certificate(c, b, "C", "B");
+        X509Certificate ordinary = certificate(c, c, "ordinary", "ordinary", false);
 
         Binder target = new Binder();
         Field keystore = field(KeystoreInterceptor.class, "keystore");
@@ -115,40 +116,40 @@ public class AttestationInterceptorContractTest {
         keystore.set(null, target);
         try (MockedStatic<CertHack> backend = mockStatic(CertHack.class)) {
             backend.when(CertHack::canHack).thenReturn(true);
+            // A stale hit must not turn a caller-owned leaf into a generic replacement.
             backend.when(() -> CertHack.applyCachedCertificateChain(any())).thenReturn(true);
             backend.when(() -> CertHack.hackCertificateChain(any(), anyInt()))
                     .thenReturn(new Certificate[] {ab, ab});
 
-            for (X509Certificate child : new X509Certificate[] {ab, bc}) {
+            for (X509Certificate child : new X509Certificate[] {ab, bc, ordinary}) {
                 for (byte[] chain : new byte[][] {null, new byte[0]}) {
                     KeyMetadata metadata = metadata(child, chain);
+                    byte[] original = metadata.certificate.clone();
+                    // Also exercise the reply invariant independently of the request guard.
+                    assertSame(BinderInterceptor.Skip.INSTANCE,
+                            generate(AttestationRequestContractTest.request(false), generatedReply(metadata)));
 
-                    // Attested leaf-only key is rewritten at generateKey time.
-                    BinderInterceptor.Result genResult =
-                            generate(AttestationRequestContractTest.request(false), generatedReply(metadata));
-                    org.junit.Assert.assertTrue(genResult instanceof BinderInterceptor.OverrideReply);
-                    ((BinderInterceptor.OverrideReply) genResult).getReply().recycle();
-
-                    // Repeated readback hits the cache and returns OverrideReply.
-                    for (int read = 0; read < 10; read++) {
+                    for (int read = 0; read < 320; read++) {
                         KeyEntryResponse response = new KeyEntryResponse();
                         response.metadata = metadata;
                         Parcel reply = mock(Parcel.class);
                         when(reply.readTypedObject(KeyEntryResponse.CREATOR)).thenReturn(response);
-                        BinderInterceptor.Result readResult =
+                        assertSame(BinderInterceptor.Skip.INSTANCE,
                                 KeystoreInterceptor.INSTANCE.onPostTransact(target,
                                         field(KeystoreInterceptor.class, "getKeyEntryTransaction").getInt(null),
-                                        0, 10_001, 42, mock(Parcel.class), reply, 0);
-                        org.junit.Assert.assertTrue(readResult instanceof BinderInterceptor.OverrideReply);
-                        ((BinderInterceptor.OverrideReply) readResult).getReply().recycle();
+                                        0, 10_001, 42, mock(Parcel.class), reply, 0));
                     }
+                    assertArrayEquals(original, metadata.certificate);
+                    assertSame(chain, metadata.certificateChain);
                 }
             }
-            backend.verify(() -> CertHack.applyCachedCertificateChain(any()), org.mockito.Mockito.atLeastOnce());
-            backend.verify(() -> CertHack.hackCertificateChain(any(), anyInt()), org.mockito.Mockito.atLeastOnce());
+            backend.verify(() -> CertHack.applyCachedCertificateChain(any()), never());
+            backend.verify(() -> CertHack.hackCertificateChain(any(), anyInt()), never());
         } finally {
             keystore.set(null, previous);
         }
+        ab.verify(a.getPublic());
+        bc.verify(b.getPublic());
     }
 
     @Test

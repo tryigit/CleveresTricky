@@ -34,11 +34,12 @@ class CertificateBackendProvenanceTest {
 
     @Test
     fun `Rust rewrite boundary independently rejects non hardware provenance before issuer access`() {
-        val source =
+        val rawSource =
             File(
                 locateRoot(),
                 "rust/backend/src/certificate_wire.rs",
             ).readText()
+        val source = rawSource.replace(Regex("\\s+"), " ")
         val rewrite = source.indexOf("pub fn rewrite_and_encode")
         val provenance = source.indexOf("inspect_certificate(parsed.genuine_leaf_der)", rewrite)
         val teeGate =
