@@ -65,6 +65,12 @@ public class CertHackOrderTest {
         ManagedCertificateBackendOracle.reset();
     }
 
+    private static byte[] validBootDigest(int marker) {
+        byte[] digest = new byte[32];
+        digest[0] = (byte) marker;
+        return digest;
+    }
+
     private void setAttestationId(String tag, byte[] value) throws Exception {
         Field field = Config.class.getDeclaredField("attestationIds");
         field.setAccessible(true);
@@ -107,10 +113,10 @@ public class CertHackOrderTest {
 
         ASN1EncodableVector teeEnforced = new ASN1EncodableVector();
         ASN1EncodableVector rootOfTrust = new ASN1EncodableVector();
-        rootOfTrust.add(new DEROctetString(new byte[32]));
+        rootOfTrust.add(new DEROctetString(validBootDigest(0x11)));
         rootOfTrust.add(ASN1Boolean.TRUE);
         rootOfTrust.add(new ASN1Enumerated(0));
-        rootOfTrust.add(new DEROctetString(new byte[32]));
+        rootOfTrust.add(new DEROctetString(validBootDigest(0x22)));
         teeEnforced.add(new DERTaggedObject(true, 704, new DERSequence(rootOfTrust)));
         teeEnforced.add(new DERTaggedObject(true, 706, new ASN1Integer(202401)));
         teeEnforced.add(new DERTaggedObject(

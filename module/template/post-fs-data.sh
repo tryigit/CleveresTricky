@@ -223,6 +223,7 @@ apply_core_boot_properties() {
   apply_prop ro.boot.vbmeta.device_state locked || true
   apply_prop ro.boot.verifiedbootstate green || true
   apply_prop ro.boot.flash.locked 1 || true
+  apply_prop ro.boot.veritymode enforcing || true
   apply_prop ro.boot.warranty_bit 0 || true
   apply_prop ro.warranty_bit 0 || true
   apply_prop ro.debuggable 0 || true
@@ -243,6 +244,9 @@ apply_core_boot_properties() {
   apply_prop ro.secureboot.lockstate locked || true
   apply_prop ro.boot.realmebootstate green || true
   apply_prop ro.boot.realme.lockstate 1 || true
+  apply_prop vendor.boot.vbmeta.device_state locked || true
+  apply_prop vendor.boot.verifiedbootstate green || true
+  apply_prop vendor.boot.flash.locked 1 || true
   hide_boot_mode ro.bootmode || true
   hide_boot_mode ro.boot.bootmode || true
   hide_boot_mode vendor.boot.bootmode || true

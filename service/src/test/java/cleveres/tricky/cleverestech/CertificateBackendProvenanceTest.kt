@@ -7,7 +7,7 @@ import java.io.File
 
 class CertificateBackendProvenanceTest {
     @Test
-    fun `StrongBox provenance is classified before issuer selection and cached as passthrough`() {
+    fun `StrongBox provenance is classified before issuer selection but is rewritten normally`() {
         val source =
             File(
                 locateRoot(),
@@ -16,24 +16,24 @@ class CertificateBackendProvenanceTest {
         val method = source.indexOf("public static Certificate[] hackCertificateChain")
         val inspect = source.indexOf("inspection = CertificateBackend.inspect(leafEncoded)", method)
         val attestationGate =
-            source.indexOf("inspection.getAttestationSecurityLevel() != CertificateBackend.SECURITY_LEVEL_TEE", inspect)
+            source.indexOf("int attLevel = inspection.getAttestationSecurityLevel()", inspect)
         val keymintGate =
-            source.indexOf("inspection.getKeymintSecurityLevel() != CertificateBackend.SECURITY_LEVEL_TEE", attestationGate)
-        val passthrough = source.indexOf("CachedCertificateChain.passthrough()", keymintGate)
-        val issuerSelection = source.indexOf("selectKeyboxPool(", passthrough)
+            source.indexOf("int kmLevel = inspection.getKeymintSecurityLevel()", attestationGate)
+        val checkIsHardware = source.indexOf("boolean isTeeOrStrongbox =", keymintGate)
+        val issuerSelection = source.indexOf("selectKeyboxPool(", checkIsHardware)
         val rewrite = source.indexOf("CertificateBackend.rewrite(", issuerSelection)
 
         assertTrue(method >= 0)
         assertTrue(inspect > method)
         assertTrue(attestationGate > inspect)
         assertTrue(keymintGate > attestationGate)
-        assertTrue(passthrough > keymintGate)
-        assertTrue(issuerSelection > passthrough)
+        assertTrue(checkIsHardware > keymintGate)
+        assertTrue(issuerSelection > checkIsHardware)
         assertTrue(rewrite > issuerSelection)
     }
 
     @Test
-    fun `Rust rewrite boundary independently rejects non TEE provenance before issuer access`() {
+    fun `Rust rewrite boundary independently rejects non hardware provenance before issuer access`() {
         val source =
             File(
                 locateRoot(),
@@ -41,17 +41,17 @@ class CertificateBackendProvenanceTest {
             ).readText()
         val rewrite = source.indexOf("pub fn rewrite_and_encode")
         val provenance = source.indexOf("inspect_certificate(parsed.genuine_leaf_der)", rewrite)
-        val attestationGate =
-            source.indexOf("provenance.attestation_security_level != SecurityLevel::TrustedEnvironment", provenance)
-        val keymintGate =
-            source.indexOf("provenance.keymint_security_level != SecurityLevel::TrustedEnvironment", attestationGate)
-        val issuerAccess = source.indexOf("key_store::with_prepared_key", keymintGate)
+        val teeGate =
+            source.indexOf("provenance.attestation_security_level == SecurityLevel::TrustedEnvironment", provenance)
+        val strongboxGate =
+            source.indexOf("provenance.attestation_security_level == SecurityLevel::StrongBox", teeGate)
+        val issuerAccess = source.indexOf("key_store::with_prepared_key", strongboxGate)
 
         assertTrue(rewrite >= 0)
         assertTrue(provenance > rewrite)
-        assertTrue(attestationGate > provenance)
-        assertTrue(keymintGate > attestationGate)
-        assertTrue(issuerAccess > keymintGate)
+        assertTrue(teeGate > provenance)
+        assertTrue(strongboxGate > teeGate)
+        assertTrue(issuerAccess > strongboxGate)
     }
 
     @Test

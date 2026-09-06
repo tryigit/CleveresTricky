@@ -15,7 +15,7 @@ object CertificateBackend {
     const val SECURITY_LEVEL_TEE = 1
     const val SECURITY_LEVEL_STRONGBOX = 2
 
-    data class Inspection(
+    data class Inspection @JvmOverloads constructor(
         val systemPatch: Int?,
         val vendorPatch: Int?,
         val bootPatch: Int?,
@@ -25,6 +25,7 @@ object CertificateBackend {
         val originalBootHash: ByteArray?,
         val attestationSecurityLevel: Int,
         val keymintSecurityLevel: Int,
+        val hasAttestKeyPurpose: Boolean = false,
     ) {
         fun wipe() {
             originalBootKey?.fill(0)
@@ -47,6 +48,8 @@ object CertificateBackend {
         val moduleHash: ByteArray?,
         val verifiedBootKey: ByteArray,
         val verifiedBootHash: ByteArray,
+        val preserveIssuerName: Boolean = false,
+        val virtualizeSubjectKey: Boolean = false,
     )
 
     @VisibleForTesting
@@ -54,6 +57,9 @@ object CertificateBackend {
 
     @VisibleForTesting
     internal var rewriteOverride: ((RewriteRequest) -> ByteArray?)? = null
+
+    @VisibleForTesting
+    internal var rewriteTransportOverride: ((Int, (OutputStream) -> Unit) -> ByteArray?)? = null
 
     @JvmStatic
     fun inspect(leafDer: ByteArray): Inspection? {
@@ -86,7 +92,46 @@ object CertificateBackend {
         moduleHash: ByteArray?,
         verifiedBootKey: ByteArray,
         verifiedBootHash: ByteArray,
+    ): ByteArray? =
+        rewriteWithMode(
+            genuineLeafDer,
+            keyId,
+            signingAlgorithm,
+            systemDisposition,
+            systemValue,
+            vendorDisposition,
+            vendorValue,
+            bootDisposition,
+            bootValue,
+            idOverrides,
+            moduleHash,
+            verifiedBootKey,
+            verifiedBootHash,
+            preserveIssuerName = false,
+            virtualizeSubjectKey = false,
+        )
+
+    @JvmStatic
+    fun rewriteWithMode(
+        genuineLeafDer: ByteArray,
+        keyId: ByteArray,
+        signingAlgorithm: Int,
+        systemDisposition: Int,
+        systemValue: Int,
+        vendorDisposition: Int,
+        vendorValue: Int,
+        bootDisposition: Int,
+        bootValue: Int,
+        idOverrides: Map<Int, ByteArray>,
+        moduleHash: ByteArray?,
+        verifiedBootKey: ByteArray,
+        verifiedBootHash: ByteArray,
+        preserveIssuerName: Boolean,
+        virtualizeSubjectKey: Boolean,
     ): ByteArray? {
+        // The paired Rust backend implements v2 only. Unsupported modes must not silently
+        // become default-issuer rewrites or change the wire format of ordinary requests.
+        if (preserveIssuerName || virtualizeSubjectKey) return null
         if (genuineLeafDer.isEmpty() || genuineLeafDer.size > MAX_CERTIFICATE_DER_BYTES ||
             keyId.size != KEY_ID_BYTES || keyId.all { it == 0.toByte() } ||
             signingAlgorithm !in SIGNING_EC_P256_SHA256..SIGNING_RSA_PKCS1_SHA256 ||
@@ -136,16 +181,13 @@ object CertificateBackend {
                     moduleHash = moduleHash,
                     verifiedBootKey = verifiedBootKey,
                     verifiedBootHash = verifiedBootHash,
+                    preserveIssuerName = preserveIssuerName,
+                    virtualizeSubjectKey = virtualizeSubjectKey,
                 ),
             )
         }
 
-        return NativeBackend.transact(
-            OP_CERTIFICATE_REWRITE,
-            payloadLength,
-            MAX_CERTIFICATE_DER_BYTES,
-            propagateTransportFailure = true,
-        ) { output ->
+        val writePayload: (OutputStream) -> Unit = { output ->
             output.write(REWRITE_WIRE_VERSION)
             output.write(signingAlgorithm)
             writePatch(output, systemDisposition, systemValue)
@@ -165,12 +207,21 @@ object CertificateBackend {
             if (moduleHash != null) output.write(moduleHash)
             output.write(genuineLeafDer)
         }
+        rewriteTransportOverride?.let { return it(payloadLength, writePayload) }
+        return NativeBackend.transact(
+            OP_CERTIFICATE_REWRITE,
+            payloadLength,
+            MAX_CERTIFICATE_DER_BYTES,
+            propagateTransportFailure = true,
+            writePayload = writePayload,
+        )
     }
 
     @VisibleForTesting
     internal fun resetForTesting() {
         inspectionOverride = null
         rewriteOverride = null
+        rewriteTransportOverride = null
     }
 
     internal fun decodeInspection(response: ByteArray): Inspection {
