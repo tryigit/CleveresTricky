@@ -425,29 +425,53 @@ object KeystoreInterceptor : BinderInterceptor() {
 
         if (strongbox != null) {
             val interceptor = SecurityLevelInterceptor()
+            val candidateTarget = strongbox.asBinder()
+            val preStale =
+                synchronized(this) {
+                    if (lifecycleEpoch != currentEpoch || !keystoreRegistered) {
+                        true
+                    } else {
+                        strongboxTarget = candidateTarget
+                        false
+                    }
+                }
+            if (preStale) {
+                Logger.w("Keystore registration stale before StrongBox interceptor could be registered")
+                stopKeystoreInterceptor()
+                return false
+            }
+
             if (!registerBinderInterceptor(
                     bd,
-                    strongbox.asBinder(),
+                    candidateTarget,
                     interceptor,
                     SecurityLevelInterceptor.INTERCEPTED_CODES,
                 )
             ) {
                 Logger.e("Failed to register the StrongBox SecurityLevel interceptor")
+                synchronized(this) {
+                    if (strongboxTarget === candidateTarget) {
+                        strongboxTarget = null
+                    }
+                }
                 stopKeystoreInterceptor()
                 return false
             }
-            val stale = synchronized(this) {
-                if (lifecycleEpoch != currentEpoch || !keystoreRegistered) {
-                    true
-                } else {
-                    strongboxInterceptor = interceptor
-                    strongboxTarget = strongbox.asBinder()
-                    false
+            val stale =
+                synchronized(this) {
+                    if (lifecycleEpoch != currentEpoch || !keystoreRegistered) {
+                        if (strongboxTarget === candidateTarget) {
+                            strongboxTarget = null
+                        }
+                        true
+                    } else {
+                        strongboxInterceptor = interceptor
+                        false
+                    }
                 }
-            }
             if (stale) {
                 Logger.w("StrongBox interceptor registration raced with teardown; rolling back")
-                unregisterBinderInterceptor(bd, strongbox.asBinder(), interceptor)
+                unregisterBinderInterceptor(bd, candidateTarget, interceptor)
                 return false
             }
             Logger.i("StrongBox SecurityLevel interceptor registered")

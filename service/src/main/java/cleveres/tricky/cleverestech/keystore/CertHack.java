@@ -245,9 +245,12 @@ public final class CertHack {
         return false;
     }
 
-    public static String getKeyboxSecurityLevel(String filename) {
-        if (filename == null) return "TEE";
-        List<KeyBox> boxes = state.keyboxFiles.get(filename);
+    public static String getKeyboxSecurityLevel(String identifier) {
+        if (identifier == null) return "TEE";
+        List<KeyBox> boxes = state.keyboxFiles.get(identifier);
+        if (boxes == null && identifier.contains(":")) {
+            boxes = state.keyboxFiles.get(identifier.substring(identifier.indexOf(':') + 1));
+        }
         if (boxes == null) return "TEE";
         for (KeyBox box : boxes) {
             if (isStrongBoxKeybox(box)) return "StrongBox";
@@ -295,9 +298,12 @@ public final class CertHack {
         return state.keyboxFiles.size();
     }
 
-    public static String getDeviceCertificateSerial(String filename) {
-        if (filename == null) return null;
-        List<KeyBox> boxes = state.keyboxFiles.get(filename);
+    public static String getDeviceCertificateSerial(String identifier) {
+        if (identifier == null) return null;
+        List<KeyBox> boxes = state.keyboxFiles.get(identifier);
+        if (boxes == null && identifier.contains(":")) {
+            boxes = state.keyboxFiles.get(identifier.substring(identifier.indexOf(':') + 1));
+        }
         if (boxes == null) return null;
         for (KeyBox box : boxes) {
             String serial = getDeviceCertificateSerial(box);
@@ -383,6 +389,11 @@ public final class CertHack {
             }
             newKeyboxes.computeIfAbsent(algo, ignored -> new ArrayList<>()).add(box);
             newKeyboxFiles.computeIfAbsent(box.filename, ignored -> new ArrayList<>()).add(box);
+            int colonIdx = box.filename.indexOf(':');
+            if (colonIdx >= 0 && colonIdx < box.filename.length() - 1) {
+                String shortName = box.filename.substring(colonIdx + 1);
+                newKeyboxFiles.computeIfAbsent(shortName, ignored -> new ArrayList<>()).add(box);
+            }
         }
         int ecCount = newKeyboxes.getOrDefault(KeyProperties.KEY_ALGORITHM_EC, Collections.emptyList()).size();
         int rsaCount = newKeyboxes.getOrDefault(KeyProperties.KEY_ALGORITHM_RSA, Collections.emptyList()).size();
@@ -573,10 +584,7 @@ public final class CertHack {
                 candidates = all;
             }
             if (candidates == null) candidates = Collections.emptyList();
-            List<KeyBox> matchedByLevel = filterKeyboxesBySecurityLevel(candidates, isStrongbox);
-            if (!matchedByLevel.isEmpty()) {
-                candidates = matchedByLevel;
-            }
+            candidates = filterKeyboxesBySecurityLevel(candidates, isStrongbox);
             List<KeyBox> list = selectKeyboxPool(candidates, preferredSignerAlgorithm);
             if (list.isEmpty()) throw new UnsupportedOperationException("No compatible keybox is available");
 
@@ -748,7 +756,7 @@ public final class CertHack {
         return matches;
     }
 
-    private static List<KeyBox> filterKeyboxesBySecurityLevel(List<KeyBox> candidates, boolean strongBox) {
+    static List<KeyBox> filterKeyboxesBySecurityLevel(List<KeyBox> candidates, boolean strongBox) {
         if (candidates == null || candidates.isEmpty()) return Collections.emptyList();
         List<KeyBox> matches = new ArrayList<>();
         for (KeyBox candidate : candidates) {

@@ -38,6 +38,12 @@ Keybox 验证和应用级 Attestation 身份处理。
 
 https://github.com/tryigit/CleveresTricky/pull/79
 
+**#1199, 2026-09-06**
+
+支持功能感知的 StrongBox 回退路由、保留 App AttestKey 硬件签名、按安全级别筛选候选密钥库以及 WebUI 硬件级别标签。
+
+https://github.com/tryigit/CleveresTricky/pull/1199
+
 ## Profile、应用范围与 Runtime
 
 **#376**
@@ -100,6 +106,12 @@ StrongBox 到 TEE 的重定向以及 Attestation 安全级别统一。此更改�
 
 https://github.com/tryigit/CleveresTricky/pull/1132
 
+**#1199, 2026-09-06**
+
+功能感知的 StrongBox 回退路由：在缺少 StrongBox 密钥库时，于原生 KeyMint 生成前提前拒绝，防止别名冲突并确保平稳回退至 TEE。
+
+https://github.com/tryigit/CleveresTricky/pull/1199
+
 ## 时间线
 
 | 日期 | PR | 领域 |
@@ -110,3 +122,4 @@ https://github.com/tryigit/CleveresTricky/pull/1132
 | 2026-08-09 | #871 | Dual-SIM 与 app-facing identity |
 | 2026-08-09 | #876 | Rust/native runtime architecture |
 | 2026-08-30 | #1132 | StrongBox 与 TEE redirection |
+| 2026-09-06 | #1199 | StrongBox 路由与 AttestKey 兼容性 |

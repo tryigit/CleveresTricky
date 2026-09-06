@@ -720,8 +720,8 @@ class WebServer(
                     .put("scope", source.scope.apiValue)
                     .put("filename", source.filename)
                     .put("type", if (source.isCbox) "cbox" else "xml")
-                    .put("certificate_serial", CertHack.getDeviceCertificateSerial(source.filename) ?: "")
-                    .put("security_level", CertHack.getKeyboxSecurityLevel(source.filename)),
+                    .put("certificate_serial", CertHack.getDeviceCertificateSerial(source.id) ?: CertHack.getDeviceCertificateSerial(source.filename) ?: "")
+                    .put("security_level", CertHack.getKeyboxSecurityLevel(source.id)),
             )
         }
         return array.toString()
@@ -3006,8 +3006,13 @@ class WebServer(
                 val obj = JSONObject()
                 obj.put("filename", r.filename)
                 obj.put("storage_id", r.storageId)
-                obj.put("certificate_serial", r.certificateSerial ?: "")
-                obj.put("security_level", CertHack.getKeyboxSecurityLevel(r.filename))
+                val secLevel =
+                    if (r.securityLevel.isNotEmpty()) {
+                        r.securityLevel
+                    } else {
+                        CertHack.getKeyboxSecurityLevel(r.storageId.ifEmpty { r.filename })
+                    }
+                obj.put("security_level", secLevel)
                 obj.put("status", r.status.name)
                 obj.put("details", r.details)
                 array.put(obj)

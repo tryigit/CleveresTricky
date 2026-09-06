@@ -34,6 +34,7 @@ object KeyboxVerifier {
         val certificateSerial: String? = null,
         val snapshotSha256: String? = null,
         internal val retryableBackendFailure: Boolean = false,
+        val securityLevel: String = "TEE",
     )
 
     enum class Status {
@@ -532,9 +533,10 @@ object KeyboxVerifier {
             if (!isSafeKeyboxFile(file)) {
                 return Result(file, file.name, Status.ERROR, "Unsafe or oversized keybox file")
             }
-            val parsed = KeyboxLoader.parseFileSnapshot(scope, filename)
+            val parsed = KeyboxLoader.parseFileSnapshot(scope, filename, storageId)
             val snapshotSha256 = parsed.snapshotSha256?.takeIf(FULL_SHA256_PATTERN::matches)
             val keyboxes = parsed.keyboxes
+            val securityLevel = if (keyboxes.any(CertHack::isStrongBoxKeybox)) "StrongBox" else "TEE"
             if (keyboxes.isEmpty()) {
                 return Result(
                     file,
@@ -543,6 +545,7 @@ object KeyboxVerifier {
                     "No valid keybox found or parse error",
                     storageId,
                     snapshotSha256 = snapshotSha256,
+                    securityLevel = securityLevel,
                 )
             }
             // parseFileSnapshot can discover a Rust backend restart and rebuild backend-owned CRL
@@ -556,6 +559,7 @@ object KeyboxVerifier {
                     "Failed to initialize CRL index",
                     storageId,
                     snapshotSha256 = snapshotSha256,
+                    securityLevel = securityLevel,
                 )
             val deviceSerial = keyboxes.asSequence().mapNotNull(CertHack::getDeviceCertificateSerial).firstOrNull()
 
@@ -582,6 +586,7 @@ object KeyboxVerifier {
                             storageId,
                             certificateSerial = deviceSerial,
                             snapshotSha256 = snapshotSha256,
+                            securityLevel = securityLevel,
                         )
                     }
                     Status.INVALID -> {
@@ -593,6 +598,7 @@ object KeyboxVerifier {
                             storageId,
                             certificateSerial = deviceSerial,
                             snapshotSha256 = snapshotSha256,
+                            securityLevel = securityLevel,
                         )
                     }
                     Status.ERROR -> {
@@ -605,6 +611,7 @@ object KeyboxVerifier {
                             certificateSerial = deviceSerial,
                             snapshotSha256 = snapshotSha256,
                             retryableBackendFailure = true,
+                            securityLevel = securityLevel,
                         )
                     }
                     Status.VALID -> Unit
@@ -618,6 +625,7 @@ object KeyboxVerifier {
                 storageId,
                 certificateSerial = deviceSerial,
                 snapshotSha256 = snapshotSha256,
+                securityLevel = securityLevel,
             )
         } catch (_: RustBackendUnavailableException) {
             Result(

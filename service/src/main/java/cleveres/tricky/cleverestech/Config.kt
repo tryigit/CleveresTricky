@@ -612,6 +612,7 @@ object Config {
                             KeyboxLoader.parseFileSnapshot(
                                 requireNotNull(source.scope.fileScope),
                                 source.filename,
+                                source.id,
                             )
                         val snapshotSha256 = parsed.snapshotSha256
                         if (snapshotSha256 == null || !fullSha256Pattern.matches(snapshotSha256)) {
@@ -2336,6 +2337,8 @@ object Config {
         appState.identityCache.remove(uid)
         PolicyState.invalidateUid(uid)
         targetState.hackCache.remove(uid)
+        identityTargetState.cache.remove(uid)
+        securityPatchState.cache.remove(uid)
         drmState.cache.remove(uid)
         rkpInfrastructureCache.remove(uid)
     }

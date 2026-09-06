@@ -38,6 +38,12 @@ Verificación de Keybox y gestión de identidad de attestation por aplicación.
 
 https://github.com/tryigit/CleveresTricky/pull/79
 
+**#1199, 2026-09-06**
+
+Enrutamiento de respaldo de StrongBox consciente de capacidades, preservación de firmas de hardware para App AttestKey, filtrado de candidatos por nivel de seguridad y distintivos de hardware en WebUI.
+
+https://github.com/tryigit/CleveresTricky/pull/1199
+
 ## Perfiles, alcance de aplicación y runtime
 
 **#376**
@@ -100,6 +106,12 @@ Redirección StrongBox a TEE y armonización del nivel de seguridad de attestati
 
 https://github.com/tryigit/CleveresTricky/pull/1132
 
+**#1199, 2026-09-06**
+
+Enrutamiento de respaldo de StrongBox consciente de capacidades: rechazo temprano antes de la generación nativa en KeyMint cuando no hay un keybox de StrongBox disponible, evitando conflictos de alias y garantizando una transición limpia a TEE.
+
+https://github.com/tryigit/CleveresTricky/pull/1199
+
 ## Línea temporal
 
 | Fecha | PR | Área |
@@ -110,3 +122,4 @@ https://github.com/tryigit/CleveresTricky/pull/1132
 | 2026-08-09 | #871 | Dual-SIM y app-facing identity |
 | 2026-08-09 | #876 | Rust/native runtime architecture |
 | 2026-08-30 | #1132 | StrongBox y TEE redirection |
+| 2026-09-06 | #1199 | Enrutamiento StrongBox y compatibilidad AttestKey |

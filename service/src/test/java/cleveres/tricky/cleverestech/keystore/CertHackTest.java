@@ -153,4 +153,66 @@ public class CertHackTest {
         assertEquals("TEE", CertHack.getKeyboxSecurityLevel(null));
         assertEquals("TEE", CertHack.getKeyboxSecurityLevel("non_existent.xml"));
     }
+
+    @Test
+    public void testFilterKeyboxesBySecurityLevelDoesNotFallback() {
+        java.security.KeyPair keyPair = org.mockito.Mockito.mock(java.security.KeyPair.class);
+        java.security.cert.X509Certificate strongboxCert = org.mockito.Mockito.mock(java.security.cert.X509Certificate.class);
+        org.mockito.Mockito.when(strongboxCert.getSubjectX500Principal())
+                .thenReturn(new javax.security.auth.x500.X500Principal("CN=Google StrongBox KeyMint CA, O=Google LLC, C=US"));
+        org.mockito.Mockito.when(strongboxCert.getIssuerX500Principal())
+                .thenReturn(new javax.security.auth.x500.X500Principal("CN=Google Root CA, O=Google LLC, C=US"));
+        CertHack.KeyBox strongBox = new CertHack.KeyBox(keyPair, List.of(strongboxCert), "sb.xml");
+
+        List<CertHack.KeyBox> resultForTee = CertHack.filterKeyboxesBySecurityLevel(List.of(strongBox), false);
+        assertTrue("TEE request with only StrongBox candidates must return empty list without falling back", resultForTee.isEmpty());
+
+        List<CertHack.KeyBox> resultForStrongBox = CertHack.filterKeyboxesBySecurityLevel(List.of(strongBox), true);
+        assertEquals(1, resultForStrongBox.size());
+        assertSame(strongBox, resultForStrongBox.get(0));
+    }
+
+    @Test
+    public void testScopeAwareKeyboxIdentifiersResolveAccurately() throws Exception {
+        java.security.KeyPair keyPair = org.mockito.Mockito.mock(java.security.KeyPair.class);
+        java.security.cert.X509Certificate strongboxCert = org.mockito.Mockito.mock(java.security.cert.X509Certificate.class);
+        org.mockito.Mockito.when(strongboxCert.getSubjectX500Principal())
+                .thenReturn(new javax.security.auth.x500.X500Principal("CN=Google StrongBox KeyMint CA, O=Google LLC, C=US"));
+        org.mockito.Mockito.when(strongboxCert.getIssuerX500Principal())
+                .thenReturn(new javax.security.auth.x500.X500Principal("CN=Google Root CA, O=Google LLC, C=US"));
+
+        java.security.cert.X509Certificate teeCert = org.mockito.Mockito.mock(java.security.cert.X509Certificate.class);
+        org.mockito.Mockito.when(teeCert.getSubjectX500Principal())
+                .thenReturn(new javax.security.auth.x500.X500Principal("CN=Android KeyMint CA, O=Google LLC, C=US"));
+        org.mockito.Mockito.when(teeCert.getIssuerX500Principal())
+                .thenReturn(new javax.security.auth.x500.X500Principal("CN=Google Root CA, O=Google LLC, C=US"));
+
+        CertHack.KeyBox rootKeybox = new CertHack.KeyBox(keyPair, List.of(strongboxCert), "root:keybox.xml");
+        CertHack.KeyBox managedKeybox = new CertHack.KeyBox(keyPair, List.of(teeCert), "keyboxes:keybox.xml");
+
+        Map<String, List<CertHack.KeyBox>> keyboxes = new HashMap<>();
+        keyboxes.put("EC", List.of(rootKeybox, managedKeybox));
+        Map<String, List<CertHack.KeyBox>> keyboxFiles = new HashMap<>();
+        keyboxFiles.put("root:keybox.xml", List.of(rootKeybox));
+        keyboxFiles.put("keyboxes:keybox.xml", List.of(managedKeybox));
+        keyboxFiles.put("keybox.xml", List.of(rootKeybox, managedKeybox));
+
+        Class<?> stateClass = Class.forName("cleveres.tricky.cleverestech.keystore.CertHack$State");
+        java.lang.reflect.Constructor<?> ctor = stateClass.getDeclaredConstructor(Map.class, Map.class);
+        ctor.setAccessible(true);
+        Object newState = ctor.newInstance(keyboxes, keyboxFiles);
+
+        java.lang.reflect.Field stateField = CertHack.class.getDeclaredField("state");
+        stateField.setAccessible(true);
+        Object previousState = stateField.get(null);
+        stateField.set(null, newState);
+
+        try {
+            assertEquals("StrongBox", CertHack.getKeyboxSecurityLevel("root:keybox.xml"));
+            assertEquals("TEE", CertHack.getKeyboxSecurityLevel("keyboxes:keybox.xml"));
+            assertEquals("StrongBox", CertHack.getKeyboxSecurityLevel("keybox.xml"));
+        } finally {
+            stateField.set(null, previousState);
+        }
+    }
 }

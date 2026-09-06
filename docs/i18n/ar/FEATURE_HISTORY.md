@@ -38,6 +38,12 @@ https://github.com/tryigit/CleveresTricky/pull/77
 
 https://github.com/tryigit/CleveresTricky/pull/79
 
+**#1199، 2026-09-06**
+
+توجيه احتياطي لـ StrongBox مدرك للقدرات، والحفاظ على توقيعات العتاد لـ App AttestKey، وتصفية المرشحين حسب مستوى الأمان، وشارات العتاد في WebUI.
+
+https://github.com/tryigit/CleveresTricky/pull/1199
+
 ## الملفات الشخصية ونطاق التطبيق وRuntime
 
 **#376**
@@ -100,6 +106,12 @@ https://github.com/tryigit/CleveresTricky/pull/952
 
 https://github.com/tryigit/CleveresTricky/pull/1132
 
+**#1199، 2026-09-06**
+
+توجيه احتياطي لـ StrongBox مدرك للقدرات: الرفض المبكر قبل توليد KeyMint العتادي عند عدم توفر keybox لـ StrongBox، مما يمنع تعارض الأسماء المستعارة ويضمن التراجع السلس إلى TEE.
+
+https://github.com/tryigit/CleveresTricky/pull/1199
+
 ## الخط الزمني
 
 | التاريخ | PR | المجال |
@@ -110,3 +122,4 @@ https://github.com/tryigit/CleveresTricky/pull/1132
 | 2026-08-09 | #871 | Dual-SIM وApp-facing identity |
 | 2026-08-09 | #876 | Rust/native runtime architecture |
 | 2026-08-30 | #1132 | StrongBox وTEE redirection |
+| 2026-09-06 | #1199 | توجيه StrongBox وتوافق AttestKey |
