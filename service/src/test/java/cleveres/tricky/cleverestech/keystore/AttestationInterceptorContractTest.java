@@ -125,9 +125,18 @@ public class AttestationInterceptorContractTest {
                 for (byte[] chain : new byte[][] {null, new byte[0]}) {
                     KeyMetadata metadata = metadata(child, chain);
                     byte[] original = metadata.certificate.clone();
-                    // Also exercise the reply invariant independently of the request guard.
-                    assertSame(BinderInterceptor.Skip.INSTANCE,
-                            generate(AttestationRequestContractTest.request(false), generatedReply(metadata)));
+                    
+                    if (child == ordinary) {
+                        // Ordinary keys are not attested, so they fail the attestation extension check
+                        // even if they pass the request guard.
+                        assertSame(BinderInterceptor.Skip.INSTANCE,
+                                generate(AttestationRequestContractTest.request(false), generatedReply(metadata)));
+                    } else {
+                        // AttestKey children rely on the request guard. We use request(true) to indicate
+                        // an AttestKey is present, which safely skips generation rewrite.
+                        assertSame(BinderInterceptor.Skip.INSTANCE,
+                                generate(AttestationRequestContractTest.request(true), generatedReply(metadata)));
+                    }
 
                     for (int read = 0; read < 320; read++) {
                         KeyEntryResponse response = new KeyEntryResponse();
