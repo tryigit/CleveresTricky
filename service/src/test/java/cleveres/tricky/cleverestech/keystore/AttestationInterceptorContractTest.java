@@ -134,10 +134,11 @@ public class AttestationInterceptorContractTest {
                         response.metadata = metadata;
                         Parcel reply = mock(Parcel.class);
                         when(reply.readTypedObject(KeyEntryResponse.CREATOR)).thenReturn(response);
-                        assertSame(BinderInterceptor.Skip.INSTANCE,
-                                KeystoreInterceptor.INSTANCE.onPostTransact(target,
-                                        field(KeystoreInterceptor.class, "getKeyEntryTransaction").getInt(null),
-                                        0, 10_001, 42, mock(Parcel.class), reply, 0));
+                        BinderInterceptor.Result result = KeystoreInterceptor.INSTANCE.onPostTransact(target,
+                                field(KeystoreInterceptor.class, "getKeyEntryTransaction").getInt(null),
+                                0, 10_001, 42, mock(Parcel.class), reply, 0);
+                        org.junit.Assert.assertTrue(result instanceof BinderInterceptor.OverrideReply);
+                        ((BinderInterceptor.OverrideReply) result).getReply().recycle();
                     }
                     assertArrayEquals(original, metadata.certificate);
                     assertSame(chain, metadata.certificateChain);
