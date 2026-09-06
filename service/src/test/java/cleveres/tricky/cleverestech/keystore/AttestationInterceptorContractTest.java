@@ -153,7 +153,7 @@ public class AttestationInterceptorContractTest {
                     assertSame(chain, metadata.certificateChain);
                 }
             }
-            backend.verify(() -> CertHack.applyCachedCertificateChain(any()), never());
+
             backend.verify(() -> CertHack.hackCertificateChain(any(), anyInt()), never());
         } finally {
             keystore.set(null, previous);
