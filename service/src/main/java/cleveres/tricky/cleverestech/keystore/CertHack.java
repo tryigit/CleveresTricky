@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 import cleveres.tricky.cleverestech.CertificateBackend;
 import cleveres.tricky.cleverestech.Config;
@@ -153,6 +154,9 @@ public final class CertHack {
         final Map<String, List<KeyBox>> keyboxFiles;
         final Map<KeyBox, PreparedKeyBox> preparedKeyboxes;
         final Map<CacheKey, CachedCertificateChain> certificateCache;
+        final boolean hasStrongBox;
+        final Map<String, Boolean> strongBoxByIdentifier;
+        final Set<KeyBox> strongBoxKeyboxes;
         Object certificateCacheEpoch;
 
         State(Map<String, List<KeyBox>> keyboxes, Map<String, List<KeyBox>> keyboxFiles) {
@@ -170,6 +174,36 @@ public final class CertHack {
                 }
             }
             this.preparedKeyboxes = Collections.unmodifiableMap(prepared);
+
+            Set<KeyBox> sbKeyboxes = Collections.newSetFromMap(new IdentityHashMap<>());
+            Map<String, Boolean> sbById = new HashMap<>();
+            boolean anyStrongBox = false;
+
+            for (Map.Entry<String, List<KeyBox>> entry : this.keyboxFiles.entrySet()) {
+                boolean fileHasStrongBox = false;
+                for (KeyBox box : entry.getValue()) {
+                    if (classifyStrongBoxKeybox(box)) {
+                        sbKeyboxes.add(box);
+                        fileHasStrongBox = true;
+                        anyStrongBox = true;
+                    }
+                }
+                sbById.put(entry.getKey(), fileHasStrongBox);
+            }
+
+            for (List<KeyBox> list : this.keyboxes.values()) {
+                for (KeyBox box : list) {
+                    if (classifyStrongBoxKeybox(box)) {
+                        sbKeyboxes.add(box);
+                        anyStrongBox = true;
+                    }
+                }
+            }
+
+            this.hasStrongBox = anyStrongBox;
+            this.strongBoxByIdentifier = Map.copyOf(sbById);
+            this.strongBoxKeyboxes = Collections.unmodifiableSet(sbKeyboxes);
+
             this.certificateCache = Collections.synchronizedMap(
                     new LinkedHashMap<CacheKey, CachedCertificateChain>(32, 0.75f, true) {
                         @Override
@@ -224,7 +258,7 @@ public final class CertHack {
         return !state.keyboxes.isEmpty();
     }
 
-    public static boolean isStrongBoxKeybox(KeyBox keybox) {
+    private static boolean classifyStrongBoxKeybox(KeyBox keybox) {
         if (keybox == null) return false;
         if (keybox.filename() != null && keybox.filename().toLowerCase(Locale.ROOT).contains("strongbox")) {
             return true;
@@ -245,42 +279,44 @@ public final class CertHack {
         return false;
     }
 
+    public static boolean isStrongBoxKeybox(KeyBox keybox) {
+        if (keybox == null) return false;
+        State currentState = state;
+        if (currentState.strongBoxKeyboxes.contains(keybox)) {
+            return true;
+        }
+        if (currentState.preparedKeyboxes.containsKey(keybox)) {
+            return false;
+        }
+        return classifyStrongBoxKeybox(keybox);
+    }
+
     public static String getKeyboxSecurityLevel(String identifier) {
         if (identifier == null) return "TEE";
-        List<KeyBox> boxes = state.keyboxFiles.get(identifier);
-        if (boxes == null && identifier.contains(":")) {
-            boxes = state.keyboxFiles.get(identifier.substring(identifier.indexOf(':') + 1));
+        State currentState = state;
+        Boolean hasSb = currentState.strongBoxByIdentifier.get(identifier);
+        if (hasSb == null && identifier.contains(":")) {
+            hasSb = currentState.strongBoxByIdentifier.get(identifier.substring(identifier.indexOf(':') + 1));
         }
-        if (boxes == null) return "TEE";
-        for (KeyBox box : boxes) {
-            if (isStrongBoxKeybox(box)) return "StrongBox";
-        }
-        return "TEE";
+        return Boolean.TRUE.equals(hasSb) ? "StrongBox" : "TEE";
     }
 
     public static boolean hasStrongBoxKeybox() {
-        State currentState = state;
-        for (List<KeyBox> list : currentState.keyboxes.values()) {
-            for (KeyBox keybox : list) {
-                if (isStrongBoxKeybox(keybox)) return true;
-            }
-        }
-        return false;
+        return state.hasStrongBox;
     }
 
     public static boolean hasStrongBoxKeybox(int uid) {
         State currentState = state;
         var appConfig = Config.INSTANCE.getAppConfig(uid);
         if (appConfig != null && appConfig.getKeyboxFilename() != null) {
-            List<KeyBox> list = currentState.keyboxFiles.get(appConfig.getKeyboxFilename());
-            if (list != null) {
-                for (KeyBox keybox : list) {
-                    if (isStrongBoxKeybox(keybox)) return true;
-                }
+            String filename = appConfig.getKeyboxFilename();
+            Boolean hasSb = currentState.strongBoxByIdentifier.get(filename);
+            if (hasSb == null && filename.contains(":")) {
+                hasSb = currentState.strongBoxByIdentifier.get(filename.substring(filename.indexOf(':') + 1));
             }
-            return false;
+            return Boolean.TRUE.equals(hasSb);
         }
-        return hasStrongBoxKeybox();
+        return currentState.hasStrongBox;
     }
 
     public static int getKeyboxCount() {

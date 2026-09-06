@@ -211,8 +211,18 @@ public class CertHackTest {
             assertEquals("StrongBox", CertHack.getKeyboxSecurityLevel("root:keybox.xml"));
             assertEquals("TEE", CertHack.getKeyboxSecurityLevel("keyboxes:keybox.xml"));
             assertEquals("StrongBox", CertHack.getKeyboxSecurityLevel("keybox.xml"));
+            assertTrue(CertHack.hasStrongBoxKeybox());
+            assertTrue(CertHack.isStrongBoxKeybox(rootKeybox));
+            assertFalse(CertHack.isStrongBoxKeybox(managedKeybox));
         } finally {
             stateField.set(null, previousState);
         }
+    }
+
+    @Test
+    public void testEmptyStateStrongBoxFastPath() {
+        assertFalse(CertHack.hasStrongBoxKeybox());
+        assertFalse(CertHack.hasStrongBoxKeybox(1000));
+        assertEquals("TEE", CertHack.getKeyboxSecurityLevel("any.xml"));
     }
 }
