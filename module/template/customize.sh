@@ -338,12 +338,12 @@ is_conflicting_attestation_module() {
   conflict_name=$2
 
   case "$conflict_id" in
-    tricky_store|teesim) return 0 ;;
+    tricky_store|teesim|playintegrityfix|play_integrity_fix|playintegrity|pif|playcurl|safetynet-fix|safetynet_fix|ih8sn) return 0 ;;
   esac
 
   normalized_conflict_name=$(normalize_conflicting_module_name "$conflict_name")
   case "$normalized_conflict_name" in
-    trickystore|trickystoreoss|teesimulator|teesimulatorrs) return 0 ;;
+    trickystore*|teesimulator*|playintegrityfix*|playintegrity*|playcurl*|safetynetfix*|universalsafetynetfix*|ih8sn*) return 0 ;;
   esac
 
   return 1
@@ -362,7 +362,7 @@ remove_conflicting_modules_from_root() {
 
     if [ -L "$candidate" ]; then
       case "$candidate_dir" in
-        tricky_store|teesim)
+        tricky_store|teesim|playintegrityfix|play_integrity_fix|playintegrity|pif|playcurl|safetynet-fix|safetynet_fix|ih8sn)
           ui_print "- Removing conflicting module link: $candidate_dir"
           rm -f "$candidate" || abort "! Could not remove conflicting module link: $candidate_dir"
           ;;
@@ -375,7 +375,7 @@ remove_conflicting_modules_from_root() {
 
     if [ -L "$prop_file" ]; then
       case "$candidate_dir" in
-        tricky_store|teesim)
+        tricky_store|teesim|playintegrityfix|play_integrity_fix|playintegrity|pif|playcurl|safetynet-fix|safetynet_fix|ih8sn)
           abort "! Refusing unsafe conflicting module metadata: $candidate_dir/module.prop"
           ;;
       esac
@@ -384,7 +384,7 @@ remove_conflicting_modules_from_root() {
 
     if [ ! -f "$prop_file" ]; then
       case "$candidate_dir" in
-        tricky_store|teesim)
+        tricky_store|teesim|playintegrityfix|play_integrity_fix|playintegrity|pif|playcurl|safetynet-fix|safetynet_fix|ih8sn)
           ui_print "- Removing incomplete conflicting module: $candidate_dir"
           rm -rf "$candidate" || abort "! Could not remove incomplete conflicting module: $candidate_dir"
           ;;

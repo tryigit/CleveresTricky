@@ -39,15 +39,31 @@ class SecurityLevelInterceptor : BinderInterceptor() {
         callingPid: Int,
         data: Parcel,
     ): Result {
-        return if (
+        if (
             code == generateKeyTransaction &&
             CertHack.canHack() &&
             Config.needHack(callingUid)
         ) {
-            Continue
-        } else {
-            Skip
+            // Adaptive StrongBox Routing (Early rejection):
+            // If the caller requested default attestation from StrongBox but no StrongBox keybox
+            // is available, reject early before KeyMint/Keystore2 generates hardware keys and commits
+            // conflicting aliases into keystore2.sqlite.
+            if (
+                KeystoreInterceptor.isStrongBoxTarget(target) &&
+                Utils.usesDefaultAttestationKey(data) &&
+                !CertHack.hasStrongBoxKeybox(callingUid)
+            ) {
+                val errorReply = Parcel.obtain()
+                errorReply.writeInt(EX_SERVICE_SPECIFIC)
+                errorReply.writeString("StrongBox unavailable")
+                errorReply.writeInt(ErrorCode.HARDWARE_TYPE_UNAVAILABLE)
+                return OverrideReply(0, errorReply)
+            }
+
+            return Continue
         }
+
+        return Skip
     }
 
     override fun onPostTransact(

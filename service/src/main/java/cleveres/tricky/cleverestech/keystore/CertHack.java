@@ -225,8 +225,12 @@ public final class CertHack {
     }
 
     public static boolean isStrongBoxKeybox(KeyBox keybox) {
-        if (keybox == null || keybox.certificates == null) return false;
-        for (Certificate cert : keybox.certificates) {
+        if (keybox == null) return false;
+        if (keybox.filename() != null && keybox.filename().toLowerCase(Locale.ROOT).contains("strongbox")) {
+            return true;
+        }
+        if (keybox.certificates() == null) return false;
+        for (Certificate cert : keybox.certificates()) {
             if (cert instanceof X509Certificate x509) {
                 var subject = x509.getSubjectX500Principal();
                 if (subject != null && subject.getName().toLowerCase(Locale.ROOT).contains("strongbox")) {
@@ -239,6 +243,16 @@ public final class CertHack {
             }
         }
         return false;
+    }
+
+    public static String getKeyboxSecurityLevel(String filename) {
+        if (filename == null) return "TEE";
+        List<KeyBox> boxes = state.keyboxFiles.get(filename);
+        if (boxes == null) return "TEE";
+        for (KeyBox box : boxes) {
+            if (isStrongBoxKeybox(box)) return "StrongBox";
+        }
+        return "TEE";
     }
 
     public static boolean hasStrongBoxKeybox() {
@@ -548,17 +562,22 @@ public final class CertHack {
 
             String preferredSignerAlgorithm = KeyProperties.KEY_ALGORITHM_EC;
             var appConfig = Config.INSTANCE.getAppConfig(uid);
-            List<KeyBox> list;
+            List<KeyBox> candidates;
             if (appConfig != null && appConfig.getKeyboxFilename() != null) {
-                list = selectKeyboxPool(
-                        currentState.keyboxFiles.get(appConfig.getKeyboxFilename()), preferredSignerAlgorithm);
+                candidates = currentState.keyboxFiles.get(appConfig.getKeyboxFilename());
             } else {
-                list = selectGlobalKeyboxPool(currentState, preferredSignerAlgorithm);
+                List<KeyBox> all = new ArrayList<>();
+                for (List<KeyBox> group : currentState.keyboxes.values()) {
+                    all.addAll(group);
+                }
+                candidates = all;
             }
-            List<KeyBox> matchedByLevel = filterKeyboxesBySecurityLevel(list, isStrongbox);
+            if (candidates == null) candidates = Collections.emptyList();
+            List<KeyBox> matchedByLevel = filterKeyboxesBySecurityLevel(candidates, isStrongbox);
             if (!matchedByLevel.isEmpty()) {
-                list = matchedByLevel;
+                candidates = matchedByLevel;
             }
+            List<KeyBox> list = selectKeyboxPool(candidates, preferredSignerAlgorithm);
             if (list.isEmpty()) throw new UnsupportedOperationException("No compatible keybox is available");
 
             KeyBox keybox = list.get(cacheKey.indexForPool(list.size()));

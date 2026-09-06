@@ -376,12 +376,13 @@ object Config {
         }
 
     @androidx.annotation.VisibleForTesting
+    @JvmName("setPackagesForTesting")
     internal fun setPackagesForTesting(
         uid: Int,
         packages: Array<String>,
     ) {
         putBoundedUidCache(packageCache, uid, CachedPackage(packages.clone(), System.currentTimeMillis()))
-        PolicyState.invalidateUid(uid)
+        invalidateUidPolicyCaches(uid)
     }
 
     fun parsePackages(lines: Sequence<String>): PackageTrie<Boolean> = parsePackages(lines, Int.MAX_VALUE)

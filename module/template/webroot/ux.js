@@ -3329,8 +3329,14 @@
             const body = document.createElement('div');
             body.style.cssText = 'flex:1 1 auto;min-width:0;line-height:1.4;';
             const name = document.createElement('div');
-            name.style.cssText = 'overflow-wrap:anywhere;word-break:break-word;font-weight:500;';
-            name.textContent = String(item.filename || '');
+            name.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;overflow-wrap:anywhere;word-break:break-word;font-weight:500;';
+            const nameText = document.createElement('span');
+            nameText.textContent = String(item.filename || '');
+            const badge = document.createElement('span');
+            const isStrongBox = item.security_level === 'StrongBox';
+            badge.className = 'ct-badge ' + (isStrongBox ? 'ct-badge-strongbox' : 'ct-badge-tee');
+            badge.textContent = isStrongBox ? 'StrongBox' : 'TEE';
+            name.append(nameText, badge);
             const meta = document.createElement('div');
             meta.style.cssText = 'font-size:.78em;color:#888;margin-top:3px;overflow-wrap:anywhere;word-break:break-word;';
             const scope = item.scope === 'root' ? t('root') : t('managed');
@@ -3378,7 +3384,8 @@
                     id: String(item?.id ?? '').slice(0, 128),
                     filename: String(item?.filename ?? '').slice(0, 256),
                     scope: item?.scope === 'root' || item?.scope === 'keyboxes' || item?.scope === 'managed' ? item.scope : '',
-                    certificate_serial: String(item?.certificate_serial ?? '').slice(0, 256)
+                    certificate_serial: String(item?.certificate_serial ?? '').slice(0, 256),
+                    security_level: item?.security_level === 'StrongBox' ? 'StrongBox' : 'TEE'
                 })).filter(item => item.id && item.filename && item.scope)
                 : [];
             const ids = new Set(inventory.map(item => item.id));
@@ -3602,8 +3609,14 @@
             const row = document.createElement('div');
             row.style.cssText = 'padding:8px 0;overflow-wrap:anywhere' + (index !== array.length - 1 ? ';border-bottom:1px solid var(--border)' : '');
             const title = document.createElement('div');
-            title.style.fontWeight = '600';
-            title.textContent = String(item.filename || '') + ' - ' + String(item.status || '');
+            title.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-weight:600;';
+            const titleText = document.createElement('span');
+            titleText.textContent = String(item.filename || '') + ' - ' + String(item.status || '');
+            const badge = document.createElement('span');
+            const isStrongBox = item.security_level === 'StrongBox';
+            badge.className = 'ct-badge ' + (isStrongBox ? 'ct-badge-strongbox' : 'ct-badge-tee');
+            badge.textContent = isStrongBox ? 'StrongBox' : 'TEE';
+            title.append(titleText, badge);
             const meta = document.createElement('div');
             meta.style.cssText = 'font-size:.8em;color:#888;margin-top:2px';
             meta.textContent = item.certificate_serial ? t('cert') + ': ' + item.certificate_serial : t('certMissing');
@@ -3633,6 +3646,7 @@
                     filename: String(item?.filename ?? '').slice(0, 256),
                     status: String(item?.status ?? 'UNKNOWN').slice(0, 128),
                     certificate_serial: String(item?.certificate_serial ?? '').slice(0, 256),
+                    security_level: item?.security_level === 'StrongBox' ? 'StrongBox' : 'TEE',
                     details: String(item?.details ?? '').slice(0, 2048)
                 })).filter(item => item.filename)
                 : [];

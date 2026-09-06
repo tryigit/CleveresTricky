@@ -141,7 +141,16 @@ public class CertHackTest {
         java.security.cert.X509Certificate strongboxCert = org.mockito.Mockito.mock(java.security.cert.X509Certificate.class);
         org.mockito.Mockito.when(strongboxCert.getSubjectX500Principal())
                 .thenReturn(new javax.security.auth.x500.X500Principal("CN=Google StrongBox KeyMint CA, O=Google LLC, C=US"));
-        CertHack.KeyBox strongBox = new CertHack.KeyBox(keyPair, List.of(strongboxCert), "strongbox.xml");
+        CertHack.KeyBox strongBox = new CertHack.KeyBox(keyPair, List.of(strongboxCert), "sb.xml");
         assertTrue(CertHack.isStrongBoxKeybox(strongBox));
+
+        CertHack.KeyBox strongBoxByFilename = new CertHack.KeyBox(keyPair, List.of(teeCert), "keybox_strongbox.xml");
+        assertTrue(CertHack.isStrongBoxKeybox(strongBoxByFilename));
+    }
+
+    @Test
+    public void testGetKeyboxSecurityLevelDefaultsSafely() {
+        assertEquals("TEE", CertHack.getKeyboxSecurityLevel(null));
+        assertEquals("TEE", CertHack.getKeyboxSecurityLevel("non_existent.xml"));
     }
 }

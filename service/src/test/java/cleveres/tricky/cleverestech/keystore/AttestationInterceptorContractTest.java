@@ -5,6 +5,7 @@ import android.os.Binder;
 import android.os.Parcel;
 import android.system.keystore2.KeyEntryResponse;
 import android.system.keystore2.KeyMetadata;
+import cleveres.tricky.cleverestech.Config;
 import cleveres.tricky.cleverestech.KeystoreInterceptor;
 import cleveres.tricky.cleverestech.SecurityLevelInterceptor;
 import cleveres.tricky.cleverestech.binder.BinderInterceptor;
@@ -202,6 +203,37 @@ public class AttestationInterceptorContractTest {
             errorReply.recycle();
 
             backend.verify(() -> CertHack.hackCertificateChain(any(), anyInt(), anyBoolean(), anyBoolean()), never());
+        }
+    }
+
+    @Test
+    public void strongBoxKeyGenerationRejectedEarlyInPreTransactWhenNoStrongBoxKeybox() throws Exception {
+        Binder strongboxTarget = new Binder();
+        Field strongboxTargetField = field(KeystoreInterceptor.class, "strongboxTarget");
+        strongboxTargetField.set(KeystoreInterceptor.INSTANCE, strongboxTarget);
+        Field globalModeField = field(Config.class, "isGlobalMode");
+        boolean prevGlobalMode = (boolean) globalModeField.get(Config.INSTANCE);
+        globalModeField.set(Config.INSTANCE, true);
+        Config.INSTANCE.setPackagesForTesting(10_001, new String[] {"com.test.app"});
+        try {
+            Parcel request = AttestationRequestContractTest.request(false);
+            try (MockedStatic<CertHack> backend = mockStatic(CertHack.class)) {
+                backend.when(CertHack::canHack).thenReturn(true);
+                backend.when(() -> CertHack.hasStrongBoxKeybox(anyInt())).thenReturn(false);
+
+                int code = field(SecurityLevelInterceptor.class, "generateKeyTransaction").getInt(null);
+                BinderInterceptor.Result result = new SecurityLevelInterceptor().onPreTransact(
+                        strongboxTarget, code, 0, 10_001, 42, request);
+                org.junit.Assert.assertTrue("Expected OverrideReply but got " + result, result instanceof BinderInterceptor.OverrideReply);
+                Parcel errorReply = ((BinderInterceptor.OverrideReply) result).getReply();
+                org.junit.Assert.assertEquals(-8, errorReply.readInt());
+                org.junit.Assert.assertEquals("StrongBox unavailable", errorReply.readString());
+                org.junit.Assert.assertEquals(android.hardware.security.keymint.ErrorCode.HARDWARE_TYPE_UNAVAILABLE, errorReply.readInt());
+                errorReply.recycle();
+            }
+        } finally {
+            strongboxTargetField.set(KeystoreInterceptor.INSTANCE, null);
+            globalModeField.set(Config.INSTANCE, prevGlobalMode);
         }
     }
 

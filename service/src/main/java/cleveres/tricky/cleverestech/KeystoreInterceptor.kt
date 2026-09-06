@@ -28,8 +28,10 @@ object KeystoreInterceptor : BinderInterceptor() {
     private var teeInterceptor: SecurityLevelInterceptor? = null
     private var teeTarget: IBinder? = null
     private var strongboxInterceptor: SecurityLevelInterceptor? = null
-    private var strongboxTarget: IBinder? = null
+    @Volatile internal var strongboxTarget: IBinder? = null
     private var binderBackdoor: IBinder? = null
+
+    fun isStrongBoxTarget(target: IBinder): Boolean = (strongboxTarget != null && target == strongboxTarget)
 
     @Volatile private var keystoreRegistered = false
 
