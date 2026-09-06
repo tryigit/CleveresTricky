@@ -163,7 +163,7 @@ public class CertHackOrderTest {
         stateField.set(null, newState);
 
         try {
-            Certificate[] hackedChain = CertHack.hackCertificateChain(new Certificate[]{cert}, 0);
+            Certificate[] hackedChain = CertHack.hackCertificateChain(new Certificate[]{cert}, 0, true);
             X509Certificate hackedCert = (X509Certificate) hackedChain[0];
             byte[] extBytes = hackedCert.getExtensionValue("1.3.6.1.4.1.11129.2.1.17");
             ASN1Primitive extStruct = ASN1Primitive.fromByteArray(

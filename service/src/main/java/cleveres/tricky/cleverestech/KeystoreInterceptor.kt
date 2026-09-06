@@ -143,7 +143,7 @@ object KeystoreInterceptor : BinderInterceptor() {
             val originalChain = Utils.getCertificateChain(response)
             val newChain =
                 originalChain?.let {
-                    CertHack.hackCertificateChain(it, callingUid).takeUnless { rewritten -> rewritten === it }
+                    CertHack.hackCertificateChain(it, callingUid, false).takeUnless { rewritten -> rewritten === it }
                 }
             if (newChain != null) {
                 Utils.putCertificateChain(response, newChain)

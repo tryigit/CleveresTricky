@@ -97,7 +97,7 @@ class SecurityLevelInterceptor : BinderInterceptor() {
             // therefore adds work only to attested generateKey calls. Keep the hot path leaf-only
             // until CertHack confirms that a replacement can actually be produced.
             val originalLeafOnly = arrayOf<Certificate>(originalLeaf)
-            val rewritten = CertHack.hackCertificateChain(originalLeafOnly, callingUid)
+            val rewritten = CertHack.hackCertificateChain(originalLeafOnly, callingUid, true)
             if (rewritten === originalLeafOnly) {
                 replacement.recycle()
                 return Skip

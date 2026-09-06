@@ -49,7 +49,7 @@ public class AttestationInterceptorContractTest {
         Parcel request = AttestationRequestContractTest.request(true);
         Parcel reply = generatedReply(metadata);
         try (MockedStatic<CertHack> backend = mockStatic(CertHack.class)) {
-            backend.when(() -> CertHack.hackCertificateChain(any(), anyInt()))
+            backend.when(() -> CertHack.hackCertificateChain(any(), anyInt(), anyBoolean()))
                     .thenReturn(new Certificate[] {child, child});
             assertSame(BinderInterceptor.Skip.INSTANCE, generate(request, reply));
             backend.verifyNoInteractions();
@@ -71,7 +71,7 @@ public class AttestationInterceptorContractTest {
         try (MockedStatic<CertHack> backend = mockStatic(CertHack.class)) {
             backend.when(CertHack::canHack).thenReturn(true);
             backend.when(() -> CertHack.applyCachedCertificateChain(any())).thenReturn(false);
-            backend.when(() -> CertHack.hackCertificateChain(any(), anyInt()))
+            backend.when(() -> CertHack.hackCertificateChain(any(), anyInt(), anyBoolean()))
                     .thenAnswer(invocation -> invocation.getArgument(0));
 
             for (byte[] chain : new byte[][] {null, new byte[0]}) {
@@ -95,7 +95,7 @@ public class AttestationInterceptorContractTest {
                 assertArrayEquals(original, metadata.certificate);
                 assertSame(chain, metadata.certificateChain);
             }
-            backend.verify(() -> CertHack.hackCertificateChain(any(), anyInt()), never());
+            backend.verify(() -> CertHack.hackCertificateChain(any(), anyInt(), anyBoolean()), never());
         } finally {
             keystore.set(null, previous);
         }
@@ -114,14 +114,30 @@ public class AttestationInterceptorContractTest {
         Field keystore = field(KeystoreInterceptor.class, "keystore");
         Object previous = keystore.get(null);
         keystore.set(null, target);
-        try (MockedStatic<CertHack> backend = mockStatic(CertHack.class)) {
+        
+        // Inject stale cache entries that simulate a generic key hit (leafOnlySafe = false)
+        Field stateField = field(CertHack.class, "state");
+        Object stateObj = stateField.get(null);
+        Field cacheField = field(stateObj.getClass(), "certificateCache");
+        java.util.Map cache = (java.util.Map) cacheField.get(stateObj);
+        Class<?> cacheKeyClass = Class.forName("cleveres.tricky.cleverestech.keystore.CertHack$CacheKey");
+        java.lang.reflect.Constructor<?> cacheKeyCtor = cacheKeyClass.getDeclaredConstructor(byte[].class);
+        cacheKeyCtor.setAccessible(true);
+        Class<?> cachedChainClass = Class.forName("cleveres.tricky.cleverestech.keystore.CertHack$CachedCertificateChain");
+        java.lang.reflect.Constructor<?> cachedChainCtor = cachedChainClass.getDeclaredConstructor(Certificate[].class, byte[].class, byte[].class, boolean.class);
+        cachedChainCtor.setAccessible(true);
+        
+        try (MockedStatic<CertHack> backend = mockStatic(CertHack.class, org.mockito.Mockito.CALLS_REAL_METHODS)) {
             backend.when(CertHack::canHack).thenReturn(true);
-            // A stale hit must not turn a caller-owned leaf into a generic replacement.
-            backend.when(() -> CertHack.applyCachedCertificateChain(any())).thenReturn(true);
-            backend.when(() -> CertHack.hackCertificateChain(any(), anyInt()))
+            backend.when(() -> CertHack.hackCertificateChain(any(), anyInt(), anyBoolean()))
                     .thenReturn(new Certificate[] {ab, ab});
 
             for (X509Certificate child : new X509Certificate[] {ab, bc, ordinary}) {
+                Object cacheKey = cacheKeyCtor.newInstance((Object) child.getEncoded());
+                byte[] staleReplacement = new byte[] {9, 9, 9};
+                Object cachedChain = cachedChainCtor.newInstance(new Certificate[] {child}, staleReplacement, new byte[0], false);
+                cache.put(cacheKey, cachedChain);
+                
                 for (byte[] chain : new byte[][] {null, new byte[0]}) {
                     KeyMetadata metadata = metadata(child, chain);
                     byte[] original = metadata.certificate.clone();
@@ -146,15 +162,17 @@ public class AttestationInterceptorContractTest {
                         BinderInterceptor.Result result = KeystoreInterceptor.INSTANCE.onPostTransact(target,
                                 field(KeystoreInterceptor.class, "getKeyEntryTransaction").getInt(null),
                                 0, 10_001, 42, mock(Parcel.class), reply, 0);
-                        org.junit.Assert.assertTrue(result instanceof BinderInterceptor.OverrideReply);
-                        ((BinderInterceptor.OverrideReply) result).getReply().recycle();
+                        
+                        // Because this is a leaf-only read and the cache entry is leafOnlySafe=false,
+                        // applyCachedCertificateChain returns false and KeystoreInterceptor returns Skip.
+                        assertSame(BinderInterceptor.Skip.INSTANCE, result);
                     }
                     assertArrayEquals(original, metadata.certificate);
                     assertSame(chain, metadata.certificateChain);
                 }
             }
 
-            backend.verify(() -> CertHack.hackCertificateChain(any(), anyInt()), never());
+            backend.verify(() -> CertHack.hackCertificateChain(any(), anyInt(), anyBoolean()), never());
         } finally {
             keystore.set(null, previous);
         }
@@ -169,11 +187,11 @@ public class AttestationInterceptorContractTest {
         KeyMetadata metadata = metadata(child, child.getEncoded());
         Certificate[] replacement = new Certificate[] {child, child};
         try (MockedStatic<CertHack> backend = mockStatic(CertHack.class)) {
-            backend.when(() -> CertHack.hackCertificateChain(any(), anyInt())).thenReturn(replacement);
+            backend.when(() -> CertHack.hackCertificateChain(any(), anyInt(), anyBoolean())).thenReturn(replacement);
             BinderInterceptor.Result result =
                     generate(AttestationRequestContractTest.request(false), generatedReply(metadata));
             org.junit.Assert.assertTrue(result instanceof BinderInterceptor.OverrideReply);
-            backend.verify(() -> CertHack.hackCertificateChain(any(), anyInt()));
+            backend.verify(() -> CertHack.hackCertificateChain(any(), anyInt(), anyBoolean()));
             ((BinderInterceptor.OverrideReply) result).getReply().recycle();
         }
     }

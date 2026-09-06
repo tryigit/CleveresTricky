@@ -85,16 +85,19 @@ public final class CertHack {
         final byte[] leafEncoded;
         final byte[] issuerChainEncoded;
         final boolean passthrough;
+        final boolean leafOnlySafe;
 
         CachedCertificateChain(
                 Certificate[] certificates,
                 byte[] leafEncoded,
-                byte[] issuerChainEncoded
+                byte[] issuerChainEncoded,
+                boolean leafOnlySafe
         ) {
             this.certificates = certificates.clone();
             this.leafEncoded = Objects.requireNonNull(leafEncoded, "leafEncoded");
             this.issuerChainEncoded = Objects.requireNonNull(issuerChainEncoded, "issuerChainEncoded");
             this.passthrough = false;
+            this.leafOnlySafe = leafOnlySafe;
         }
 
         private CachedCertificateChain() {
@@ -102,6 +105,7 @@ public final class CertHack {
             this.leafEncoded = null;
             this.issuerChainEncoded = null;
             this.passthrough = true;
+            this.leafOnlySafe = true; // Passthrough is always safe for leaves (it does nothing)
         }
 
         static CachedCertificateChain passthrough() {
@@ -338,8 +342,8 @@ public final class CertHack {
      * getKeyEntry calls to avoid X.509 parsing and Rust IPC while preserving the genuine reply.
      */
     public static boolean applyCachedCertificateChain(KeyMetadata metadata) {
-        if (!Utils.isCertificateChainRewriteCandidate(metadata) &&
-            !Utils.hasRewritableLeafCertificate(metadata)) {
+        boolean isLeafOnly = Utils.hasRewritableLeafCertificate(metadata);
+        if (!Utils.isCertificateChainRewriteCandidate(metadata) && !isLeafOnly) {
             return false;
         }
         State currentState = state;
@@ -348,6 +352,11 @@ public final class CertHack {
             cached = currentState.certificateCache.get(new CacheKey(metadata.certificate));
         }
         if (cached == null) return false;
+        
+        if (isLeafOnly && !cached.leafOnlySafe) {
+            return false;
+        }
+
         cached.applyTo(metadata);
         return true;
     }
@@ -373,7 +382,7 @@ public final class CertHack {
      * Managed code resolves Android-derived policy facts, selects an opaque key handle and
      * materializes the final JCA X.509 object. Private key bytes never enter this process.
      */
-    public static Certificate[] hackCertificateChain(Certificate[] caList, int uid) {
+    public static Certificate[] hackCertificateChain(Certificate[] caList, int callingUid, boolean leafOnlySafe) {
         if (caList == null || caList.length == 0 || caList[0] == null) {
             throw new UnsupportedOperationException("Certificate chain is empty");
         }
@@ -495,7 +504,7 @@ public final class CertHack {
             System.arraycopy(prepared.issuerChain, 0, result, 1, prepared.issuerChain.length);
             byte[] issuerChainEncoded = Utils.encodeIssuerChain(result);
             CachedCertificateChain completed =
-                    new CachedCertificateChain(result, rewrittenDer, issuerChainEncoded);
+                    new CachedCertificateChain(result, rewrittenDer, issuerChainEncoded, leafOnlySafe);
             synchronized (cache) {
                 if (state != currentState || currentState.certificateCacheEpoch != cacheEpoch) {
                     return result;
