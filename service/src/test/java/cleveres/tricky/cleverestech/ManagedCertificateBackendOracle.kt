@@ -87,9 +87,23 @@ object ManagedCertificateBackendOracle {
             require(fields.size > 7)
             val attLevel = decodeSecurityLevel(fields[1])
             val kmLevel = decodeSecurityLevel(fields[3])
-            val isTee = attLevel == CertificateBackend.SECURITY_LEVEL_TEE && kmLevel == CertificateBackend.SECURITY_LEVEL_TEE
-            val isStrongbox = attLevel == CertificateBackend.SECURITY_LEVEL_STRONGBOX && kmLevel == CertificateBackend.SECURITY_LEVEL_STRONGBOX
-            require(isTee || isStrongbox)
+            val attestationIsHardware =
+                attLevel == CertificateBackend.SECURITY_LEVEL_TEE ||
+                    attLevel == CertificateBackend.SECURITY_LEVEL_STRONGBOX
+            val keymintIsHardware =
+                kmLevel == CertificateBackend.SECURITY_LEVEL_TEE ||
+                    kmLevel == CertificateBackend.SECURITY_LEVEL_STRONGBOX
+            require(attestationIsHardware && keymintIsHardware)
+            val targetLevel =
+                if (attLevel == CertificateBackend.SECURITY_LEVEL_STRONGBOX ||
+                    kmLevel == CertificateBackend.SECURITY_LEVEL_STRONGBOX
+                ) {
+                    CertificateBackend.SECURITY_LEVEL_STRONGBOX
+                } else {
+                    CertificateBackend.SECURITY_LEVEL_TEE
+                }
+            fields[1] = ASN1Enumerated(targetLevel)
+            fields[3] = ASN1Enumerated(targetLevel)
             val listSix = ASN1Sequence.getInstance(fields[6])
             val listSeven = ASN1Sequence.getInstance(fields[7])
             val sixSummary = summarize(listSix)

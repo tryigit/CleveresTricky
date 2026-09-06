@@ -354,6 +354,8 @@ object KeystoreInterceptor : BinderInterceptor() {
         // are hooked for certificate compatibility.
         val interceptedCodes = validTransactCodes(getKeyEntryTransaction)
 
+        val expectedEpoch = synchronized(this) { lifecycleEpoch }
+
         val registeredHook = registerBinderInterceptor(bd, b, this, interceptedCodes)
         if (!registeredHook) {
             Logger.e("Failed to register the Keystore Binder interceptor")
@@ -362,10 +364,20 @@ object KeystoreInterceptor : BinderInterceptor() {
         }
 
         val currentEpoch = synchronized(this) {
-            keystore = b
-            binderBackdoor = bd
-            keystoreRegistered = true
-            lifecycleEpoch
+            if (lifecycleEpoch != expectedEpoch) {
+                null
+            } else {
+                keystore = b
+                binderBackdoor = bd
+                keystoreRegistered = true
+                lifecycleEpoch
+            }
+        }
+        if (currentEpoch == null) {
+            Logger.w("Root interceptor registration raced with teardown; rolling back")
+            unregisterBinderInterceptor(bd, b, this)
+            parkBinderHook(bd)
+            return false
         }
 
         Logger.i("Keystore Binder interceptor registered")
