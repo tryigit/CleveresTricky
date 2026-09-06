@@ -95,12 +95,10 @@ pub fn inspect_certificate(leaf_der: &[u8]) -> Result<CertificateInspection, Err
             present_id_mask |= 1u16 << index;
         }
     }
-    let root = tee
+    let (original_boot_key, original_boot_hash) = tee
         .iter()
         .find(|(tag, _)| *tag == ROOT_OF_TRUST_TAG)
-        .and_then(|(_, encoded)| parse_root_of_trust(encoded));
-    let (original_boot_key, original_boot_hash) = root
-        .map(|(key, hash)| (Some(key), Some(hash)))
+        .map(|(_, encoded)| parse_root_of_trust(encoded))
         .unwrap_or((None, None));
 
     Ok(CertificateInspection {
@@ -155,19 +153,25 @@ fn tagged_fields(encoded: &[u8]) -> Result<Vec<(u32, Vec<u8>)>, Error> {
         .collect()
 }
 
-fn parse_root_of_trust(encoded: &[u8]) -> Option<([u8; 32], [u8; 32])> {
-    let outer = AnyRef::from_der(encoded).ok()?;
-    let sequence = AnyRef::from_der(outer.value()).ok()?;
+fn parse_root_of_trust(encoded: &[u8]) -> (Option<[u8; 32]>, Option<[u8; 32]>) {
+    let Some(outer) = AnyRef::from_der(encoded).ok() else {
+        return (None, None);
+    };
+    let Some(sequence) = AnyRef::from_der(outer.value()).ok() else {
+        return (None, None);
+    };
     if sequence.tag() != Tag::Sequence {
-        return None;
+        return (None, None);
     }
-    let fields = split(sequence.value(), 4).ok()?;
+    let Ok(fields) = split(sequence.value(), 4) else {
+        return (None, None);
+    };
     if fields.len() != 4 {
-        return None;
+        return (None, None);
     }
-    let key = decode_digest(&fields[0])?;
-    let hash = decode_digest(&fields[3])?;
-    Some((key, hash))
+    let key = decode_digest(&fields[0]);
+    let hash = decode_digest(&fields[3]);
+    (key, hash)
 }
 
 fn decode_digest(encoded: &[u8]) -> Option<[u8; 32]> {

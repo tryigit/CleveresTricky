@@ -62,8 +62,7 @@ class SecurityLevelInterceptor : BinderInterceptor() {
         if (
             code != generateKeyTransaction ||
             reply == null ||
-            resultCode != 0 ||
-            !Utils.usesDefaultAttestationKey(data)
+            resultCode != 0
         ) {
             return Skip
         }
@@ -72,6 +71,10 @@ class SecurityLevelInterceptor : BinderInterceptor() {
         return try {
             reply.readException()
             val metadata = reply.readTypedObject(KeyMetadata.CREATOR)
+            if (metadata == null) {
+                replacement.recycle()
+                return Skip
+            }
             val isFullChain = Utils.isCertificateChainRewriteCandidate(metadata)
             val isLeafOnly = Utils.hasRewritableLeafCertificate(metadata)
             if (!isFullChain && !isLeafOnly) {
@@ -96,14 +99,25 @@ class SecurityLevelInterceptor : BinderInterceptor() {
             // replaces it with the selected keybox chain. Parsing every genuine issuer first
             // therefore adds work only to attested generateKey calls. Keep the hot path leaf-only
             // until CertHack confirms that a replacement can actually be produced.
+            val usesDefaultKey = Utils.usesDefaultAttestationKey(data)
             val originalLeafOnly = arrayOf<Certificate>(originalLeaf)
-            val rewritten = CertHack.hackCertificateChain(originalLeafOnly, callingUid, true)
+            val rewritten = CertHack.hackCertificateChain(
+                originalLeafOnly,
+                callingUid,
+                true,
+                !usesDefaultKey,
+            )
             if (rewritten === originalLeafOnly) {
                 replacement.recycle()
                 return Skip
             }
 
-            Utils.putCertificateChain(metadata, rewritten)
+            if (usesDefaultKey) {
+                Utils.putCertificateChain(metadata, rewritten)
+            } else {
+                metadata.certificate = rewritten[0].encoded
+                metadata.certificateChain = null
+            }
             replacement.writeNoException()
             replacement.writeTypedObject(metadata, 0)
             OverrideReply(0, replacement)

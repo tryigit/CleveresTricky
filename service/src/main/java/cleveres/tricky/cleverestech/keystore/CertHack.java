@@ -86,13 +86,14 @@ public final class CertHack {
         final byte[] issuerChainEncoded;
         final boolean passthrough;
         final boolean leafOnlySafe;
+        final boolean preserveLeafOnly;
 
         CachedCertificateChain(
                 Certificate[] certificates,
                 byte[] leafEncoded,
                 byte[] issuerChainEncoded
         ) {
-            this(certificates, leafEncoded, issuerChainEncoded, true);
+            this(certificates, leafEncoded, issuerChainEncoded, true, false);
         }
 
         CachedCertificateChain(
@@ -101,11 +102,22 @@ public final class CertHack {
                 byte[] issuerChainEncoded,
                 boolean leafOnlySafe
         ) {
+            this(certificates, leafEncoded, issuerChainEncoded, leafOnlySafe, false);
+        }
+
+        CachedCertificateChain(
+                Certificate[] certificates,
+                byte[] leafEncoded,
+                byte[] issuerChainEncoded,
+                boolean leafOnlySafe,
+                boolean preserveLeafOnly
+        ) {
             this.certificates = certificates.clone();
             this.leafEncoded = Objects.requireNonNull(leafEncoded, "leafEncoded");
             this.issuerChainEncoded = Objects.requireNonNull(issuerChainEncoded, "issuerChainEncoded");
             this.passthrough = false;
             this.leafOnlySafe = leafOnlySafe;
+            this.preserveLeafOnly = preserveLeafOnly;
         }
 
         private CachedCertificateChain() {
@@ -114,6 +126,7 @@ public final class CertHack {
             this.issuerChainEncoded = null;
             this.passthrough = true;
             this.leafOnlySafe = true; // Passthrough is always safe for leaves (it does nothing)
+            this.preserveLeafOnly = false;
         }
 
         static CachedCertificateChain passthrough() {
@@ -129,7 +142,9 @@ public final class CertHack {
             // Parcel.writeTypedObject copies these byte arrays synchronously. The transient
             // KeyMetadata object never owns or mutates the cache storage after the reply is built.
             metadata.certificate = leafEncoded;
-            metadata.certificateChain = issuerChainEncoded;
+            if (!preserveLeafOnly) {
+                metadata.certificateChain = issuerChainEncoded;
+            }
         }
     }
 
@@ -176,6 +191,7 @@ public final class CertHack {
 
     private static volatile State state = new State(Collections.emptyMap(), Collections.emptyMap());
     private static volatile byte[] capturedHardwareBootKey = null;
+    private static volatile byte[] capturedHardwareBootHash = null;
 
     private static final class CacheKey {
         private final byte[] leafEncoded;
@@ -391,10 +407,15 @@ public final class CertHack {
      * materializes the final JCA X.509 object. Private key bytes never enter this process.
      */
     public static Certificate[] hackCertificateChain(Certificate[] caList, int uid) {
-        return hackCertificateChain(caList, uid, false);
+        return hackCertificateChain(caList, uid, false, false);
     }
 
     public static Certificate[] hackCertificateChain(Certificate[] caList, int uid, boolean leafOnlySafe) {
+        return hackCertificateChain(caList, uid, leafOnlySafe, false);
+    }
+
+    public static Certificate[] hackCertificateChain(
+            Certificate[] caList, int uid, boolean leafOnlySafe, boolean preserveLeafOnly) {
         if (caList == null || caList.length == 0 || caList[0] == null) {
             throw new UnsupportedOperationException("Certificate chain is empty");
         }
@@ -454,12 +475,18 @@ public final class CertHack {
             if (originalBootKey != null) {
                 capturedHardwareBootKey = originalBootKey.clone();
             }
+            byte[] originalBootHash = usableBootDigest(inspection.getOriginalBootHash());
+            if (originalBootHash != null) {
+                capturedHardwareBootHash = originalBootHash.clone();
+            }
             byte[] verifiedBootKey = selectVerifiedBootDigest(
                     UtilKt.getBootKey(),
                     originalBootKey != null ? originalBootKey : capturedHardwareBootKey,
                     UtilKt.getPersistentBootKey());
             byte[] verifiedBootHash = selectVerifiedBootDigest(
-                    UtilKt.getBootHash(), inspection.getOriginalBootHash(), UtilKt.getPersistentBootHash());
+                    UtilKt.getBootHash(),
+                    originalBootHash != null ? originalBootHash : capturedHardwareBootHash,
+                    UtilKt.getPersistentBootHash());
             Config.AttestationPatchLevels patchLevels = needsCapturedPatchLevels
                     ? PolicyState.INSTANCE.resolveAttestationPatchLevels(
                             uid,
@@ -516,7 +543,7 @@ public final class CertHack {
             System.arraycopy(prepared.issuerChain, 0, result, 1, prepared.issuerChain.length);
             byte[] issuerChainEncoded = Utils.encodeIssuerChain(result);
             CachedCertificateChain completed =
-                    new CachedCertificateChain(result, rewrittenDer, issuerChainEncoded);
+                    new CachedCertificateChain(result, rewrittenDer, issuerChainEncoded, leafOnlySafe, preserveLeafOnly);
             synchronized (cache) {
                 if (state != currentState || currentState.certificateCacheEpoch != cacheEpoch) {
                     return result;

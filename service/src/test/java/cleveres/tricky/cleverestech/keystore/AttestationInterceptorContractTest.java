@@ -43,21 +43,21 @@ import static org.mockito.Mockito.when;
 
 public class AttestationInterceptorContractTest {
     @Test
-    public void callerSelectedIssuerWinsEvenIfReplyContainsAnIssuerChain() throws Exception {
+    public void callerSelectedKeyAchievesParityWhilePreservingLeafOnlyChain() throws Exception {
         KeyPair issuer = keyPair("EC");
         X509Certificate child = certificate(keyPair("RSA"), issuer, "child", "issuer");
         KeyMetadata metadata = metadata(child, child.getEncoded());
         Parcel request = AttestationRequestContractTest.request(true);
         Parcel reply = generatedReply(metadata);
         try (MockedStatic<CertHack> backend = mockStatic(CertHack.class)) {
-            backend.when(() -> CertHack.hackCertificateChain(any(), anyInt(), anyBoolean()))
+            backend.when(() -> CertHack.hackCertificateChain(any(), anyInt(), anyBoolean(), anyBoolean()))
                     .thenReturn(new Certificate[] {child, child});
-            assertSame(BinderInterceptor.Skip.INSTANCE, generate(request, reply));
-            backend.verifyNoInteractions();
+            BinderInterceptor.Result result = generate(request, reply);
+            org.junit.Assert.assertTrue(result instanceof BinderInterceptor.OverrideReply);
+            backend.verify(() -> CertHack.hackCertificateChain(any(), anyInt(), anyBoolean(), anyBoolean()));
+            ((BinderInterceptor.OverrideReply) result).getReply().recycle();
         }
-        verify(reply, never()).readException();
         verify(request).setDataPosition(28);
-        child.verify(issuer.getPublic());
     }
 
     @Test
@@ -96,7 +96,7 @@ public class AttestationInterceptorContractTest {
                 assertArrayEquals(original, metadata.certificate);
                 assertSame(chain, metadata.certificateChain);
             }
-            backend.verify(() -> CertHack.hackCertificateChain(any(), anyInt(), anyBoolean()), never());
+            backend.verify(() -> CertHack.hackCertificateChain(any(), anyInt(), anyBoolean(), anyBoolean()), never());
         } finally {
             keystore.set(null, previous);
         }
@@ -130,7 +130,7 @@ public class AttestationInterceptorContractTest {
         
         try (MockedStatic<CertHack> backend = mockStatic(CertHack.class, org.mockito.Mockito.CALLS_REAL_METHODS)) {
             backend.when(CertHack::canHack).thenReturn(true);
-            backend.when(() -> CertHack.hackCertificateChain(any(), anyInt(), anyBoolean()))
+            backend.when(() -> CertHack.hackCertificateChain(any(), anyInt(), anyBoolean(), anyBoolean()))
                     .thenReturn(new Certificate[] {ab, ab});
 
             for (X509Certificate child : new X509Certificate[] {ab, bc, ordinary}) {
@@ -149,10 +149,11 @@ public class AttestationInterceptorContractTest {
                         assertSame(BinderInterceptor.Skip.INSTANCE,
                                 generate(AttestationRequestContractTest.request(false), generatedReply(metadata)));
                     } else {
-                        // AttestKey children rely on the request guard. We use request(true) to indicate
-                        // an AttestKey is present, which safely skips generation rewrite.
-                        assertSame(BinderInterceptor.Skip.INSTANCE,
-                                generate(AttestationRequestContractTest.request(true), generatedReply(metadata)));
+                        // AttestKey children achieve parity by rewriting the leaf
+                        BinderInterceptor.Result genResult =
+                                generate(AttestationRequestContractTest.request(true), generatedReply(metadata));
+                        org.junit.Assert.assertTrue(genResult instanceof BinderInterceptor.OverrideReply);
+                        ((BinderInterceptor.OverrideReply) genResult).getReply().recycle();
                     }
 
                     for (int read = 0; read < 320; read++) {
@@ -168,12 +169,16 @@ public class AttestationInterceptorContractTest {
                         // applyCachedCertificateChain returns false and KeystoreInterceptor returns Skip.
                         assertSame(BinderInterceptor.Skip.INSTANCE, result);
                     }
-                    assertArrayEquals(original, metadata.certificate);
-                    assertSame(chain, metadata.certificateChain);
+                    if (child == ordinary) {
+                        assertArrayEquals(original, metadata.certificate);
+                        assertSame(chain, metadata.certificateChain);
+                    } else {
+                        org.junit.Assert.assertNull(metadata.certificateChain);
+                    }
                 }
             }
 
-            backend.verify(() -> CertHack.hackCertificateChain(any(), anyInt(), anyBoolean()), never());
+            backend.verify(() -> CertHack.hackCertificateChain(any(), anyInt(), anyBoolean(), anyBoolean()), org.mockito.Mockito.times(4));
         } finally {
             keystore.set(null, previous);
         }
@@ -188,11 +193,11 @@ public class AttestationInterceptorContractTest {
         KeyMetadata metadata = metadata(child, child.getEncoded());
         Certificate[] replacement = new Certificate[] {child, child};
         try (MockedStatic<CertHack> backend = mockStatic(CertHack.class)) {
-            backend.when(() -> CertHack.hackCertificateChain(any(), anyInt(), anyBoolean())).thenReturn(replacement);
+            backend.when(() -> CertHack.hackCertificateChain(any(), anyInt(), anyBoolean(), anyBoolean())).thenReturn(replacement);
             BinderInterceptor.Result result =
                     generate(AttestationRequestContractTest.request(false), generatedReply(metadata));
             org.junit.Assert.assertTrue(result instanceof BinderInterceptor.OverrideReply);
-            backend.verify(() -> CertHack.hackCertificateChain(any(), anyInt(), anyBoolean()));
+            backend.verify(() -> CertHack.hackCertificateChain(any(), anyInt(), anyBoolean(), anyBoolean()));
             ((BinderInterceptor.OverrideReply) result).getReply().recycle();
         }
     }
