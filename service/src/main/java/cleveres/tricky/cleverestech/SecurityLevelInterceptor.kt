@@ -72,7 +72,9 @@ class SecurityLevelInterceptor : BinderInterceptor() {
         return try {
             reply.readException()
             val metadata = reply.readTypedObject(KeyMetadata.CREATOR)
-            if (!Utils.isCertificateChainRewriteCandidate(metadata)) {
+            val isFullChain = Utils.isCertificateChainRewriteCandidate(metadata)
+            val isLeafOnly = Utils.hasRewritableLeafCertificate(metadata)
+            if (!isFullChain && !isLeafOnly) {
                 replacement.recycle()
                 return Skip
             }

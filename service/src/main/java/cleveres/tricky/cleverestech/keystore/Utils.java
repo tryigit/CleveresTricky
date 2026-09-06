@@ -126,6 +126,18 @@ public final class Utils {
                 certificateChain.length <= MAX_CHAIN_BYTES;
     }
 
+    public static boolean hasRewritableLeafCertificate(KeyMetadata metadata) {
+        return metadata != null &&
+                hasRewritableLeafCertificate(metadata.certificate, metadata.certificateChain);
+    }
+
+    public static boolean hasRewritableLeafCertificate(
+            byte[] certificate, byte[] certificateChain) {
+        return certificate != null && certificate.length > 0 &&
+                certificate.length <= MAX_CERTIFICATE_BYTES &&
+                (certificateChain == null || certificateChain.length == 0);
+    }
+
 
     static X509Certificate toCertificate(byte[] encoded) {
         if (encoded == null || encoded.length == 0 ||

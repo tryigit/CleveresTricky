@@ -101,7 +101,9 @@ object KeystoreInterceptor : BinderInterceptor() {
 
             // Caller-signed attestation leaves must keep their original issuer and signature.
             // This also avoids re-parsing ordinary non-attested keys on every getKeyEntry call.
-            if (!Utils.isCertificateChainRewriteCandidate(metadata)) {
+            val isFullChain = Utils.isCertificateChainRewriteCandidate(metadata)
+            val isLeafOnly = Utils.hasRewritableLeafCertificate(metadata)
+            if (!isFullChain && !isLeafOnly) {
                 p.recycle()
                 return Skip
             }
@@ -132,6 +134,12 @@ object KeystoreInterceptor : BinderInterceptor() {
             // Cache miss is the exceptional/recovery path. Match the 2.5.8 ordering here: parse the
             // returned chain and let CertHack classify the uncached leaf after its own cache lookup.
             // CertHack rejects an ordinary non-attested leaf locally before any Rust IPC.
+            // For leaf-only metadata on a cache miss, it could be an AttestKey child. We MUST NOT rewrite it.
+            if (isLeafOnly) {
+                p.recycle()
+                return Skip
+            }
+
             val originalChain = Utils.getCertificateChain(response)
             val newChain =
                 originalChain?.let {
