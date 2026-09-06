@@ -1,10 +1,9 @@
 // Additional GPLv3 section 7(b) attribution term for tryigit-owned material: see ../../NOTICE.
 use crate::keybox_wire::key_store::{self, KeyId, KEY_ID_BYTES};
 use cleverestricky_certificate_core::{
-    inspect_certificate, rewrite_certificate_prepared, AttestationIdOverride,
-    CertificateInspection, PatchComponent, PatchLevels, PreparedCertificateRewriteRequest,
-    SecurityLevel, SigningAlgorithm, MAX_ATTESTATION_ID_BYTES, MAX_CERTIFICATE_DER_BYTES,
-    MAX_MODULE_HASH_BYTES,
+    inspect_certificate, rewrite_certificate_prepared, AttestationIdOverride, PatchComponent,
+    PatchLevels, PreparedCertificateRewriteRequest, SecurityLevel, SigningAlgorithm,
+    MAX_ATTESTATION_ID_BYTES, MAX_CERTIFICATE_DER_BYTES, MAX_MODULE_HASH_BYTES,
 };
 use zeroize::Zeroize;
 
@@ -103,21 +102,6 @@ pub fn rewrite_and_encode(mut request: Vec<u8>) -> Result<Vec<u8>, &'static str>
     })();
     request.zeroize();
     result
-}
-
-fn validate_hardware_provenance(provenance: &CertificateInspection) -> Result<(), &'static str> {
-    let attestation_is_hardware = provenance.attestation_security_level
-        == SecurityLevel::TrustedEnvironment
-        || provenance.attestation_security_level == SecurityLevel::StrongBox;
-    let keymint_is_hardware = provenance.keymint_security_level
-        == SecurityLevel::TrustedEnvironment
-        || provenance.keymint_security_level == SecurityLevel::StrongBox;
-    let is_software = provenance.attestation_security_level == SecurityLevel::Software
-        || provenance.keymint_security_level == SecurityLevel::Software;
-    if is_software || !attestation_is_hardware || !keymint_is_hardware {
-        return Err("certificate rewrite provenance is not hardware compatible");
-    }
-    Ok(())
 }
 
 struct ParsedRewrite<'a> {
@@ -308,7 +292,7 @@ impl<'a> Cursor<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cleverestricky_certificate_core::CapturedPatchLevels;
+    use cleverestricky_certificate_core::{CapturedPatchLevels, CertificateInspection};
 
     fn patch(disposition: u8, value: i32, out: &mut Vec<u8>) {
         out.push(disposition);
@@ -392,6 +376,23 @@ mod tests {
         invalid_patch[2] = PATCH_KEEP;
         invalid_patch[3..7].copy_from_slice(&7i32.to_be_bytes());
         assert!(parse_rewrite_request(&invalid_patch).is_err());
+    }
+
+    fn validate_hardware_provenance(
+        provenance: &CertificateInspection,
+    ) -> Result<(), &'static str> {
+        let attestation_is_hardware = provenance.attestation_security_level
+            == SecurityLevel::TrustedEnvironment
+            || provenance.attestation_security_level == SecurityLevel::StrongBox;
+        let keymint_is_hardware = provenance.keymint_security_level
+            == SecurityLevel::TrustedEnvironment
+            || provenance.keymint_security_level == SecurityLevel::StrongBox;
+        let is_software = provenance.attestation_security_level == SecurityLevel::Software
+            || provenance.keymint_security_level == SecurityLevel::Software;
+        if is_software || !attestation_is_hardware || !keymint_is_hardware {
+            return Err("certificate rewrite provenance is not hardware compatible");
+        }
+        Ok(())
     }
 
     #[test]
