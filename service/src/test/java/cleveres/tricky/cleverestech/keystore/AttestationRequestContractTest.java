@@ -181,6 +181,24 @@ public class AttestationRequestContractTest {
         verify(request).setDataPosition(28);
     }
 
+    @Test
+    public void stripAttestationChallengeOverwritesChallengeTagInParams() {
+        Parcel request = attestedRequest(true);
+        assertTrue(Utils.stripAttestationChallenge(request));
+        verify(request).enforceInterface(IKeystoreSecurityLevel.DESCRIPTOR);
+        verify(request).writeInt(Tag.INVALID);
+        verify(request).setDataPosition(28);
+    }
+
+    @Test
+    public void stripAttestationChallengeReturnsFalseWhenNoChallengePresent() {
+        Parcel request = request(false);
+        assertFalse(Utils.stripAttestationChallenge(request));
+        verify(request).setDataPosition(28);
+
+        assertFalse(Utils.stripAttestationChallenge(null));
+    }
+
     static Parcel request(boolean explicitIssuer) {
         Parcel request = mock(Parcel.class);
         when(request.dataPosition()).thenReturn(28, 32);

@@ -84,64 +84,112 @@ public final class Utils {
         }
     }
 
+    public enum AttestationMode {
+        NONE,
+        DEFAULT_KEY,
+        EXPLICIT_KEY
+    }
+
     /**
-     * Inspects generateKey AIDL parameters to check if Tag.ATTESTATION_CHALLENGE was provided,
-     * without changing the caller's parcel position.
+     * Inspects generateKey AIDL parameters in a single bounded pass.
+     * If an explicit AttestKey challenge is detected and stripExplicitChallenge is true,
+     * overwrites {@link Tag#ATTESTATION_CHALLENGE} with {@link Tag#INVALID} in-place.
+     *
+     * <p>Always restores the caller's parcel position before returning.
      */
-    public static boolean isAttestationRequested(Parcel request) {
-        if (request == null) return false;
+    public static AttestationMode resolveAttestationMode(Parcel request) {
+        return resolveAttestationMode(request, true);
+    }
+
+    public static AttestationMode resolveAttestationMode(Parcel request, boolean stripExplicitChallenge) {
+        if (request == null) return AttestationMode.NONE;
         int position = request.dataPosition();
         try {
             request.enforceInterface(IKeystoreSecurityLevel.DESCRIPTOR);
             if (!skipStableTypedParcelable(request)) {
-                return false;
-            }
-            if (!skipNullableStableTypedParcelable(request)) {
-                return false;
+                return AttestationMode.NONE;
             }
             if (request.dataAvail() < Integer.BYTES) {
-                return false;
+                return AttestationMode.NONE;
+            }
+            int attestationKeyPresence = request.readInt();
+            boolean isDefaultKey = (attestationKeyPresence == 0);
+            if (!isDefaultKey) {
+                if (attestationKeyPresence != 1 || !skipStableParcelableBody(request)) {
+                    return AttestationMode.NONE;
+                }
+            }
+            if (request.dataAvail() < Integer.BYTES) {
+                return AttestationMode.NONE;
             }
             int paramCount = request.readInt();
             if (paramCount <= 0 || paramCount > 1000) {
-                return false;
+                return AttestationMode.NONE;
             }
 
             for (int i = 0; i < paramCount; i++) {
                 if (request.dataAvail() < Integer.BYTES) {
-                    return false;
+                    return AttestationMode.NONE;
                 }
                 int presence = request.readInt();
                 if (presence == 0) {
                     continue;
                 }
                 if (presence != 1 || request.dataAvail() < Integer.BYTES) {
-                    return false;
+                    return AttestationMode.NONE;
                 }
                 int paramStart = request.dataPosition();
                 int paramSize = request.readInt();
                 if (paramSize < Integer.BYTES * 2 ||
                         paramStart > Integer.MAX_VALUE - paramSize) {
-                    return false;
+                    return AttestationMode.NONE;
                 }
                 int paramEnd = paramStart + paramSize;
                 if (paramEnd > request.dataSize()) {
-                    return false;
+                    return AttestationMode.NONE;
                 }
+                int tagPosition = request.dataPosition();
                 if (request.dataAvail() >= Integer.BYTES) {
                     int tag = request.readInt();
                     if (tag == Tag.ATTESTATION_CHALLENGE) {
-                        return true;
+                        if (!isDefaultKey) {
+                            if (stripExplicitChallenge) {
+                                request.setDataPosition(tagPosition);
+                                request.writeInt(Tag.INVALID);
+                            }
+                            return AttestationMode.EXPLICIT_KEY;
+                        } else {
+                            return AttestationMode.DEFAULT_KEY;
+                        }
                     }
                 }
                 request.setDataPosition(paramEnd);
             }
-            return false;
-        } catch (RuntimeException invalidRequest) {
-            return false;
+            return AttestationMode.NONE;
+        } catch (RuntimeException ignored) {
+            return AttestationMode.NONE;
         } finally {
             request.setDataPosition(position);
         }
+    }
+
+    /**
+     * Inspects generateKey AIDL parameters to check if Tag.ATTESTATION_CHALLENGE was provided,
+     * without changing the caller's parcel position or mutating data.
+     */
+    public static boolean isAttestationRequested(Parcel request) {
+        return resolveAttestationMode(request, false) != AttestationMode.NONE;
+    }
+
+    /**
+     * Overwrites the {@link Tag#ATTESTATION_CHALLENGE} tag in the generateKey Parcel with
+     * {@link Tag#INVALID} (0), preventing the hardware from generating an attestation extension.
+     * Used for explicit AttestKey requests.
+     *
+     * <p>Restores the original parcel position after modification regardless of outcome.
+     */
+    public static boolean stripAttestationChallenge(Parcel request) {
+        return resolveAttestationMode(request, true) == AttestationMode.EXPLICIT_KEY;
     }
 
     private static boolean skipNullableStableTypedParcelable(Parcel request) {

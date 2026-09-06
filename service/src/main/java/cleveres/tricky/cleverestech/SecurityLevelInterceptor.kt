@@ -40,13 +40,24 @@ class SecurityLevelInterceptor : BinderInterceptor() {
             CertHack.canHack() &&
             Config.needHack(callingUid)
         ) {
-            // Non-attested keys must generate completely natively on genuine hardware
-            // without interceptor post-processing overhead or synthetic errors.
-            if (!Utils.isAttestationRequested(data)) {
-                return Skip
+            return when (Utils.resolveAttestationMode(data)) {
+                Utils.AttestationMode.NONE -> Skip
+                Utils.AttestationMode.DEFAULT_KEY -> Continue
+                Utils.AttestationMode.EXPLICIT_KEY -> {
+                    // Explicit AttestKey: hardware signs with the caller's key, so the module
+                    // cannot re-sign the leaf. Stripping the attestation challenge makes
+                    // hardware generate a plain key with no RootOfTrust to compare, preventing
+                    // ROOT_OF_TRUST_DIVERGENCE detection.
+                    // resolveAttestationMode already mutated the challenge tag in-place to Tag.INVALID.
+                    // Returning OverrideData forwards the modified Parcel with stripped challenge to hardware.
+                    val replacement = Parcel.obtain()
+                    val payloadStart = data.dataPosition()
+                    val payloadSize = data.dataAvail()
+                    replacement.appendFrom(data, payloadStart, payloadSize)
+                    replacement.setDataPosition(0)
+                    OverrideData(replacement)
+                }
             }
-
-            return Continue
         }
 
         return Skip
@@ -93,7 +104,7 @@ class SecurityLevelInterceptor : BinderInterceptor() {
             // KeyMint hardware signs the child leaf with the private key of that attestationKey.
             // Hardware refuses arbitrary data signing, so the module cannot sign a modified
             // certificate using the caller's attestation key.
-            // Allow caller-selected AttestKeys to pass through natively (Skip) to avoid ProviderException.
+            // Allow caller-selected AttestKeys to pass through natively (Skip) as defensive fallback.
             if (!Utils.usesDefaultAttestationKey(data)) {
                 replacement.recycle()
                 return Skip

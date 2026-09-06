@@ -1,6 +1,7 @@
 package cleveres.tricky.cleverestech.keystore;
 
 import android.hardware.security.keymint.SecurityLevel;
+import android.hardware.security.keymint.Tag;
 import android.os.Binder;
 import android.os.Parcel;
 import android.system.keystore2.KeyEntryResponse;
@@ -44,21 +45,38 @@ import static org.mockito.Mockito.when;
 
 public class AttestationInterceptorContractTest {
     @Test
-    public void callerSelectedIssuerWinsEvenIfReplyContainsAnIssuerChain() throws Exception {
-        KeyPair issuer = keyPair("EC");
-        X509Certificate child = certificate(keyPair("RSA"), issuer, "child", "issuer");
-        KeyMetadata metadata = metadata(child, child.getEncoded());
-        Parcel request = AttestationRequestContractTest.request(true);
-        Parcel reply = generatedReply(metadata);
-        try (MockedStatic<CertHack> backend = mockStatic(CertHack.class)) {
-            backend.when(() -> CertHack.hackCertificateChain(any(), anyInt(), anyBoolean(), anyBoolean()))
-                    .thenReturn(new Certificate[] {child, child});
-            BinderInterceptor.Result result = generate(request, reply);
-            assertSame(BinderInterceptor.Skip.INSTANCE, result);
-            backend.verifyNoInteractions();
+    public void explicitAttestKeyStripsChallengeDuringPreTransactAndReturnsOverrideData() throws Exception {
+        Binder strongboxTarget = new Binder();
+        Field strongboxTargetField = field(KeystoreInterceptor.class, "strongboxTarget");
+        strongboxTargetField.set(KeystoreInterceptor.INSTANCE, strongboxTarget);
+        Field globalModeField = field(Config.class, "isGlobalMode");
+        boolean prevGlobalMode = (boolean) globalModeField.get(Config.INSTANCE);
+        globalModeField.set(Config.INSTANCE, true);
+        Config.INSTANCE.setPackagesForTesting(10_001, new String[] {"com.test.app"});
+        try {
+            // Attested request with explicit issuer (AttestKey)
+            Parcel attestedExplicitRequest = AttestationRequestContractTest.attestedRequest(true);
+            try (MockedStatic<CertHack> backend = mockStatic(CertHack.class)) {
+                backend.when(CertHack::canHack).thenReturn(true);
+                int code = field(SecurityLevelInterceptor.class, "generateKeyTransaction").getInt(null);
+
+                // onPreTransact should strip challenge and return OverrideData
+                BinderInterceptor.Result result = new SecurityLevelInterceptor().onPreTransact(
+                        strongboxTarget, code, 0, 10_001, 42, attestedExplicitRequest);
+                org.junit.Assert.assertTrue(result instanceof BinderInterceptor.OverrideData);
+                ((BinderInterceptor.OverrideData) result).getData().recycle();
+
+                // Verify stripAttestationChallenge was called (writeInt overwrites the tag)
+                verify(attestedExplicitRequest).writeInt(Tag.INVALID);
+
+                // CertHack.canHack is queried in pre-transact guard, but hackCertificateChain must never run
+                backend.verify(CertHack::canHack);
+                backend.verify(() -> CertHack.hackCertificateChain(any(), anyInt(), anyBoolean(), anyBoolean()), never());
+            }
+        } finally {
+            strongboxTargetField.set(KeystoreInterceptor.INSTANCE, null);
+            globalModeField.set(Config.INSTANCE, prevGlobalMode);
         }
-        child.verify(issuer.getPublic());
-        verify(request).setDataPosition(28);
     }
 
     @Test
