@@ -133,11 +133,15 @@ object KeystoreInterceptor : BinderInterceptor() {
                 return Skip
             }
 
-            // Cache miss is the exceptional/recovery path. Match the 2.5.8 ordering here: parse the
-            // returned chain and let CertHack classify the uncached leaf after its own cache lookup.
-            // CertHack rejects an ordinary non-attested leaf locally before any Rust IPC.
-            // For leaf-only metadata on a cache miss, it could be an AttestKey child. We MUST NOT rewrite it.
-            if (isLeafOnly) {
+            // Cache miss is the exceptional/recovery path. Parse the returned leaf first and
+            // ensure it contains an Android attestation extension before invoking CertHack.
+            // Ordinary non-attested asymmetric keys have a self-signed X.509 certificate with no
+            // attestation extension; skipping them preserves original keys and avoids unnecessary IPC.
+            val originalLeaf = Utils.getLeafCertificate(metadata)
+            if (
+                originalLeaf == null ||
+                !Utils.hasAndroidAttestationExtension(originalLeaf)
+            ) {
                 p.recycle()
                 return Skip
             }

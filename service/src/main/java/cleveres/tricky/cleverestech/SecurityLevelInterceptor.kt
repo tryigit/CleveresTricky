@@ -40,6 +40,14 @@ class SecurityLevelInterceptor : BinderInterceptor() {
             CertHack.canHack() &&
             Config.needHack(callingUid)
         ) {
+            if (!Utils.usesDefaultAttestationKey(data)) {
+                // Reject gracefully with CANNOT_ATTEST_KEYS
+                val reply = Parcel.obtain()
+                reply.writeInt(-8) // EX_SERVICE_SPECIFIC
+                reply.writeInt(-66) // ErrorCode.CANNOT_ATTEST_KEYS (MUST BE EXACTLY -66)
+                reply.writeString("AttestKey not supported by hardware")
+                return OverrideReply(0, reply)
+            }
             return Continue
         }
 
@@ -80,22 +88,6 @@ class SecurityLevelInterceptor : BinderInterceptor() {
             if (!isFullChain && !isLeafOnly) {
                 replacement.recycle()
                 return Skip
-            }
-
-            // Cryptographic AttestKey Contract:
-            // When an application requests attestation using a caller-provided attestationKey,
-            // KeyMint hardware signs the child leaf with the private key of that attestationKey.
-            // Hardware refuses arbitrary data signing, so the module cannot sign a modified
-            // certificate using the caller's attestation key.
-            // Rather than returning a mismatched RootOfTrust or crashing with synthetic exceptions,
-            // empty the certificate fields in the response. Key generation succeeds normally, but
-            // no attestation certificate is returned to the caller, preventing RootOfTrust divergence.
-            if (!Utils.usesDefaultAttestationKey(data)) {
-                metadata.certificate = null
-                metadata.certificateChain = null
-                replacement.writeNoException()
-                replacement.writeTypedObject(metadata, 0)
-                return OverrideReply(0, replacement)
             }
 
             // Parse only the leaf first. A normal asymmetric key without an Android attestation

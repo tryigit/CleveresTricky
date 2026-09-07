@@ -44,28 +44,30 @@ import static org.mockito.Mockito.when;
 
 public class AttestationInterceptorContractTest {
     @Test
-    public void callerSelectedIssuerEmptiesCertificatesInPostTransact() throws Exception {
-        KeyPair issuer = keyPair("EC");
-        X509Certificate child = certificate(keyPair("RSA"), issuer, "child", "issuer");
-        KeyMetadata metadata = metadata(child, child.getEncoded());
+    public void callerSelectedIssuerIsRejectedInPreTransact() throws Exception {
+        Binder target = new Binder();
+        int code = field(SecurityLevelInterceptor.class, "generateKeyTransaction").getInt(null);
         Parcel request = AttestationRequestContractTest.request(true);
-        Parcel reply = generatedReply(metadata);
+        Field globalModeField = field(Config.class, "isGlobalMode");
+        boolean prevGlobalMode = (boolean) globalModeField.get(Config.INSTANCE);
+        globalModeField.set(Config.INSTANCE, true);
+        Config.INSTANCE.setPackagesForTesting(10_001, new String[] {"com.test.app"});
         try (MockedStatic<CertHack> backend = mockStatic(CertHack.class)) {
-            backend.when(() -> CertHack.hackCertificateChain(any(), anyInt(), anyBoolean(), anyBoolean()))
-                    .thenReturn(new Certificate[] {child, child});
-            BinderInterceptor.Result result = generate(request, reply);
+            backend.when(CertHack::canHack).thenReturn(true);
+            BinderInterceptor.Result result = new SecurityLevelInterceptor().onPreTransact(
+                    target, code, 0, 10_001, 42, request);
             org.junit.Assert.assertTrue(result instanceof BinderInterceptor.OverrideReply);
-            org.junit.Assert.assertNull(metadata.certificate);
-            org.junit.Assert.assertNull(metadata.certificateChain);
             ((BinderInterceptor.OverrideReply) result).getReply().recycle();
-            backend.verifyNoInteractions();
+            backend.verify(CertHack::canHack);
+            backend.verifyNoMoreInteractions();
+        } finally {
+            globalModeField.set(Config.INSTANCE, prevGlobalMode);
         }
-        child.verify(issuer.getPublic());
         verify(request).setDataPosition(28);
     }
 
     @Test
-    public void generateKeyAlwaysContinuesInPreTransact() throws Exception {
+    public void generateKeyRejectsExplicitAttestKeyInPreTransactAndContinuesDefault() throws Exception {
         Binder strongboxTarget = new Binder();
         Field strongboxTargetField = field(KeystoreInterceptor.class, "strongboxTarget");
         strongboxTargetField.set(KeystoreInterceptor.INSTANCE, strongboxTarget);
@@ -78,16 +80,18 @@ public class AttestationInterceptorContractTest {
             try (MockedStatic<CertHack> backend = mockStatic(CertHack.class)) {
                 backend.when(CertHack::canHack).thenReturn(true);
 
-                // Both default and explicit attest key requests ALWAYS return Continue in pre-transact
+                // Default request returns Continue natively
                 Parcel defaultRequest = AttestationRequestContractTest.request(false);
                 BinderInterceptor.Result defaultResult = new SecurityLevelInterceptor().onPreTransact(
                         strongboxTarget, code, 0, 10_001, 42, defaultRequest);
                 assertSame(BinderInterceptor.Continue.INSTANCE, defaultResult);
 
+                // Explicit attest key requests are rejected gracefully with CANNOT_ATTEST_KEYS
                 Parcel explicitRequest = AttestationRequestContractTest.request(true);
                 BinderInterceptor.Result explicitResult = new SecurityLevelInterceptor().onPreTransact(
                         strongboxTarget, code, 0, 10_001, 42, explicitRequest);
-                assertSame(BinderInterceptor.Continue.INSTANCE, explicitResult);
+                org.junit.Assert.assertTrue(explicitResult instanceof BinderInterceptor.OverrideReply);
+                ((BinderInterceptor.OverrideReply) explicitResult).getReply().recycle();
 
                 backend.verify(CertHack::canHack, org.mockito.Mockito.times(2));
                 backend.verify(() -> CertHack.hackCertificateChain(any(), anyInt(), anyBoolean(), anyBoolean()), never());
@@ -166,6 +170,11 @@ public class AttestationInterceptorContractTest {
         java.lang.reflect.Constructor<?> cachedChainCtor = cachedChainClass.getDeclaredConstructor(Certificate[].class, byte[].class, byte[].class, boolean.class);
         cachedChainCtor.setAccessible(true);
         
+        Field globalModeField = field(Config.class, "isGlobalMode");
+        boolean prevGlobalMode = (boolean) globalModeField.get(Config.INSTANCE);
+        globalModeField.set(Config.INSTANCE, true);
+        Config.INSTANCE.setPackagesForTesting(10_001, new String[] {"com.test.app"});
+
         try (MockedStatic<CertHack> backend = mockStatic(CertHack.class, org.mockito.Mockito.CALLS_REAL_METHODS)) {
             backend.when(CertHack::canHack).thenReturn(true);
             backend.when(() -> CertHack.hackCertificateChain(any(), anyInt(), anyBoolean(), anyBoolean()))
@@ -187,40 +196,38 @@ public class AttestationInterceptorContractTest {
                         assertSame(BinderInterceptor.Skip.INSTANCE,
                                 generate(AttestationRequestContractTest.request(false), generatedReply(metadata)));
                     } else {
-                        // Caller-selected AttestKey children have their certificates emptied to prevent RootOfTrust divergence.
-                        BinderInterceptor.Result genResult =
-                                generate(AttestationRequestContractTest.request(true), generatedReply(metadata));
-                        org.junit.Assert.assertTrue(genResult instanceof BinderInterceptor.OverrideReply);
-                        org.junit.Assert.assertNull(metadata.certificate);
-                        org.junit.Assert.assertNull(metadata.certificateChain);
-                        ((BinderInterceptor.OverrideReply) genResult).getReply().recycle();
-
-                        // Reset metadata for the readback test
-                        metadata.certificate = original.clone();
-                        metadata.certificateChain = chain;
+                        // Caller-selected AttestKey children are rejected in pre-transact with CANNOT_ATTEST_KEYS
+                        int code = field(SecurityLevelInterceptor.class, "generateKeyTransaction").getInt(null);
+                        BinderInterceptor.Result preResult = new SecurityLevelInterceptor().onPreTransact(
+                                target, code, 0, 10_001, 42, AttestationRequestContractTest.request(true));
+                        org.junit.Assert.assertTrue(preResult instanceof BinderInterceptor.OverrideReply);
+                        ((BinderInterceptor.OverrideReply) preResult).getReply().recycle();
                     }
 
                     for (int read = 0; read < 320; read++) {
                         KeyEntryResponse response = new KeyEntryResponse();
-                        response.metadata = metadata;
+                        KeyMetadata readMetadata = metadata(child, chain);
+                        response.metadata = readMetadata;
                         Parcel reply = mock(Parcel.class);
                         when(reply.readTypedObject(KeyEntryResponse.CREATOR)).thenReturn(response);
                         BinderInterceptor.Result result = KeystoreInterceptor.INSTANCE.onPostTransact(target,
                                 field(KeystoreInterceptor.class, "getKeyEntryTransaction").getInt(null),
                                 0, 10_001, 42, mock(Parcel.class), reply, 0);
                         
-                        // Because this is a leaf-only read and the cache entry is leafOnlySafe=false,
-                        // applyCachedCertificateChain returns false and KeystoreInterceptor returns Skip.
-                        assertSame(BinderInterceptor.Skip.INSTANCE, result);
+                        if (child == ordinary) {
+                            assertSame(BinderInterceptor.Skip.INSTANCE, result);
+                            assertArrayEquals(original, readMetadata.certificate);
+                            assertSame(chain, readMetadata.certificateChain);
+                        } else {
+                            org.junit.Assert.assertTrue(result instanceof BinderInterceptor.OverrideReply);
+                            ((BinderInterceptor.OverrideReply) result).getReply().recycle();
+                        }
                     }
-                    assertArrayEquals(original, metadata.certificate);
-                    assertSame(chain, metadata.certificateChain);
                 }
             }
-
-            backend.verify(() -> CertHack.hackCertificateChain(any(), anyInt(), anyBoolean(), anyBoolean()), never());
         } finally {
             keystore.set(null, previous);
+            globalModeField.set(Config.INSTANCE, prevGlobalMode);
         }
         ab.verify(a.getPublic());
         bc.verify(b.getPublic());

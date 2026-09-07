@@ -228,7 +228,7 @@ public final class Utils {
                 metadata.certificateChain == null
                         ? List.of()
                         : toCertificates(metadata.certificateChain);
-        if (metadata.certificateChain != null && issuers.isEmpty()) return null;
+        if (metadata.certificateChain != null && metadata.certificateChain.length > 0 && issuers.isEmpty()) return null;
 
         Certificate[] chain = new Certificate[issuers.size() + 1];
         chain[0] = leaf;
