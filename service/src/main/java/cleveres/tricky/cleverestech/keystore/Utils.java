@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Locale;
 
 import cleveres.tricky.cleverestech.util.FastByteArrayOutputStream;
 
@@ -25,6 +26,26 @@ public final class Utils {
     private static final int MAX_CHAIN_BYTES = 512 * 1024;
     private static final int MAX_CERTIFICATES = 16;
     private static final int MAX_THREAD_ISSUER_CACHE_ENTRIES = 8;
+    private static final String[] DEFAULT_HARDWARE_ISSUER_PATTERNS = new String[] {
+        "android keystore",
+        "google",
+        "qualcomm",
+        "samsung",
+        "knox",
+        "huawei",
+        "xiaomi",
+        "nxp",
+        "trusty",
+        "strongbox",
+        "motorola",
+        "honor",
+        "mediatek",
+        "unisoc",
+        "spreadtrum",
+        "keymint",
+        "keymaster",
+        "hardware"
+    };
 
     private static final ThreadLocal<CertificateFactory> CERTIFICATE_FACTORY =
             new ThreadLocal<CertificateFactory>() {
@@ -176,6 +197,31 @@ public final class Utils {
             return x509Certificate.getExtensionValue(ANDROID_ATTESTATION_EXTENSION_OID) != null;
         } catch (RuntimeException error) {
             Log.w(TAG, "Could not inspect Android attestation extension");
+            return false;
+        }
+    }
+
+    /**
+     * Returns whether the given certificate was issued by a standard hardware/OEM/Google CA.
+     * When an app creates an AttestKey child, the leaf's issuer is the app's custom subject.
+     * Preserving custom AttestKey signatures is critical so caller verification is not broken on readback.
+     */
+    public static boolean isDefaultHardwareIssuer(Certificate certificate) {
+        if (!(certificate instanceof X509Certificate x509Certificate)) return false;
+        try {
+            var principal = x509Certificate.getIssuerX500Principal();
+            if (principal == null) return false;
+            String name = principal.getName();
+            if (name == null || name.isEmpty()) return false;
+            String lower = name.toLowerCase(Locale.ROOT);
+            for (String pattern : DEFAULT_HARDWARE_ISSUER_PATTERNS) {
+                if (lower.contains(pattern)) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (RuntimeException error) {
+            Log.w(TAG, "Could not inspect certificate issuer", error);
             return false;
         }
     }

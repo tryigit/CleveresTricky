@@ -134,13 +134,15 @@ object KeystoreInterceptor : BinderInterceptor() {
             }
 
             // Cache miss is the exceptional/recovery path. Parse the returned leaf first and
-            // ensure it contains an Android attestation extension before invoking CertHack.
-            // Ordinary non-attested asymmetric keys have a self-signed X.509 certificate with no
-            // attestation extension; skipping them preserves original keys and avoids unnecessary IPC.
+            // ensure it contains an Android attestation extension and a default hardware issuer
+            // before invoking CertHack. Ordinary non-attested keys have no attestation extension.
+            // Caller-selected AttestKey children have a custom app subject as issuer; skipping
+            // them preserves the genuine cross-signature and prevents RootOfTrust corruption.
             val originalLeaf = Utils.getLeafCertificate(metadata)
             if (
                 originalLeaf == null ||
-                !Utils.hasAndroidAttestationExtension(originalLeaf)
+                !Utils.hasAndroidAttestationExtension(originalLeaf) ||
+                !Utils.isDefaultHardwareIssuer(originalLeaf)
             ) {
                 p.recycle()
                 return Skip

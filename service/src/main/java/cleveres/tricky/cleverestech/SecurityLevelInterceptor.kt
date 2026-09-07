@@ -41,11 +41,12 @@ class SecurityLevelInterceptor : BinderInterceptor() {
             Config.needHack(callingUid)
         ) {
             if (!Utils.usesDefaultAttestationKey(data)) {
-                // Reject gracefully with CANNOT_ATTEST_KEYS
+                // Reject gracefully with CANNOT_ATTEST_IDS (-66) via AOSP Binder exception format
                 val reply = Parcel.obtain()
-                reply.writeInt(-8) // EX_SERVICE_SPECIFIC
-                reply.writeInt(-66) // ErrorCode.CANNOT_ATTEST_KEYS (MUST BE EXACTLY -66)
-                reply.writeString("AttestKey not supported by hardware")
+                reply.writeInt(-8) // exception_code: EX_SERVICE_SPECIFIC
+                reply.writeString("CANNOT_ATTEST_IDS") // message
+                reply.writeInt(0) // stack_trace_header (0 means empty stack trace)
+                reply.writeInt(-66) // service_specific_error_code (CANNOT_ATTEST_IDS)
                 return OverrideReply(0, reply)
             }
             return Continue

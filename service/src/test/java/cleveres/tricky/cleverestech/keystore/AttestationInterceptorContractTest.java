@@ -32,7 +32,10 @@ import java.security.cert.X509Certificate;
 import java.util.Date;
 
 import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -56,8 +59,14 @@ public class AttestationInterceptorContractTest {
             backend.when(CertHack::canHack).thenReturn(true);
             BinderInterceptor.Result result = new SecurityLevelInterceptor().onPreTransact(
                     target, code, 0, 10_001, 42, request);
-            org.junit.Assert.assertTrue(result instanceof BinderInterceptor.OverrideReply);
-            ((BinderInterceptor.OverrideReply) result).getReply().recycle();
+            assertTrue(result instanceof BinderInterceptor.OverrideReply);
+            Parcel errorReply = ((BinderInterceptor.OverrideReply) result).getReply();
+            errorReply.setDataPosition(0);
+            assertEquals(-8, errorReply.readInt()); // EX_SERVICE_SPECIFIC
+            assertEquals("CANNOT_ATTEST_IDS", errorReply.readString()); // Message
+            assertEquals(0, errorReply.readInt()); // Stack trace header
+            assertEquals(-66, errorReply.readInt()); // CANNOT_ATTEST_IDS
+            errorReply.recycle();
             backend.verify(CertHack::canHack);
             backend.verifyNoMoreInteractions();
         } finally {
@@ -86,12 +95,18 @@ public class AttestationInterceptorContractTest {
                         strongboxTarget, code, 0, 10_001, 42, defaultRequest);
                 assertSame(BinderInterceptor.Continue.INSTANCE, defaultResult);
 
-                // Explicit attest key requests are rejected gracefully with CANNOT_ATTEST_KEYS
+                // Explicit attest key requests are rejected gracefully with CANNOT_ATTEST_IDS
                 Parcel explicitRequest = AttestationRequestContractTest.request(true);
                 BinderInterceptor.Result explicitResult = new SecurityLevelInterceptor().onPreTransact(
                         strongboxTarget, code, 0, 10_001, 42, explicitRequest);
-                org.junit.Assert.assertTrue(explicitResult instanceof BinderInterceptor.OverrideReply);
-                ((BinderInterceptor.OverrideReply) explicitResult).getReply().recycle();
+                assertTrue(explicitResult instanceof BinderInterceptor.OverrideReply);
+                Parcel errorReply = ((BinderInterceptor.OverrideReply) explicitResult).getReply();
+                errorReply.setDataPosition(0);
+                assertEquals(-8, errorReply.readInt()); // EX_SERVICE_SPECIFIC
+                assertEquals("CANNOT_ATTEST_IDS", errorReply.readString()); // Message
+                assertEquals(0, errorReply.readInt()); // Stack trace header
+                assertEquals(-66, errorReply.readInt()); // CANNOT_ATTEST_IDS
+                errorReply.recycle();
 
                 backend.verify(CertHack::canHack, org.mockito.Mockito.times(2));
                 backend.verify(() -> CertHack.hackCertificateChain(any(), anyInt(), anyBoolean(), anyBoolean()), never());
@@ -196,12 +211,18 @@ public class AttestationInterceptorContractTest {
                         assertSame(BinderInterceptor.Skip.INSTANCE,
                                 generate(AttestationRequestContractTest.request(false), generatedReply(metadata)));
                     } else {
-                        // Caller-selected AttestKey children are rejected in pre-transact with CANNOT_ATTEST_KEYS
+                        // Caller-selected AttestKey children are rejected in pre-transact with CANNOT_ATTEST_IDS
                         int code = field(SecurityLevelInterceptor.class, "generateKeyTransaction").getInt(null);
                         BinderInterceptor.Result preResult = new SecurityLevelInterceptor().onPreTransact(
                                 target, code, 0, 10_001, 42, AttestationRequestContractTest.request(true));
-                        org.junit.Assert.assertTrue(preResult instanceof BinderInterceptor.OverrideReply);
-                        ((BinderInterceptor.OverrideReply) preResult).getReply().recycle();
+                        assertTrue(preResult instanceof BinderInterceptor.OverrideReply);
+                        Parcel errorReply = ((BinderInterceptor.OverrideReply) preResult).getReply();
+                        errorReply.setDataPosition(0);
+                        assertEquals(-8, errorReply.readInt());
+                        assertEquals("CANNOT_ATTEST_IDS", errorReply.readString());
+                        assertEquals(0, errorReply.readInt());
+                        assertEquals(-66, errorReply.readInt());
+                        errorReply.recycle();
                     }
 
                     for (int read = 0; read < 320; read++) {
@@ -214,14 +235,11 @@ public class AttestationInterceptorContractTest {
                                 field(KeystoreInterceptor.class, "getKeyEntryTransaction").getInt(null),
                                 0, 10_001, 42, mock(Parcel.class), reply, 0);
                         
-                        if (child == ordinary) {
-                            assertSame(BinderInterceptor.Skip.INSTANCE, result);
-                            assertArrayEquals(original, readMetadata.certificate);
-                            assertSame(chain, readMetadata.certificateChain);
-                        } else {
-                            org.junit.Assert.assertTrue(result instanceof BinderInterceptor.OverrideReply);
-                            ((BinderInterceptor.OverrideReply) result).getReply().recycle();
-                        }
+                        // All non-hardware issuers (custom AttestKey children and ordinary keys) return Skip
+                        // on readback to preserve genuine cross-signatures byte-for-byte.
+                        assertSame(BinderInterceptor.Skip.INSTANCE, result);
+                        assertArrayEquals(original, readMetadata.certificate);
+                        assertSame(chain, readMetadata.certificateChain);
                     }
                 }
             }
@@ -231,6 +249,61 @@ public class AttestationInterceptorContractTest {
         }
         ab.verify(a.getPublic());
         bc.verify(b.getPublic());
+    }
+
+    @Test
+    public void defaultHardwareIssuerAttestationRewritesOnReadback() throws Exception {
+        KeyPair issuer = keyPair("EC");
+        X509Certificate hardwareChild = certificate(keyPair("EC"), issuer, "child", "Android Keystore Key", true);
+        KeyMetadata metadata = metadata(hardwareChild, null);
+        Certificate[] replacement = new Certificate[] {hardwareChild, hardwareChild};
+
+        Binder target = new Binder();
+        Field keystore = field(KeystoreInterceptor.class, "keystore");
+        Object previous = keystore.get(null);
+        keystore.set(null, target);
+
+        Field globalModeField = field(Config.class, "isGlobalMode");
+        boolean prevGlobalMode = (boolean) globalModeField.get(Config.INSTANCE);
+        globalModeField.set(Config.INSTANCE, true);
+        Config.INSTANCE.setPackagesForTesting(10_001, new String[] {"com.test.app"});
+
+        try (MockedStatic<CertHack> backend = mockStatic(CertHack.class, org.mockito.Mockito.CALLS_REAL_METHODS)) {
+            backend.when(CertHack::canHack).thenReturn(true);
+            backend.when(() -> CertHack.applyCachedCertificateChain(any())).thenReturn(false);
+            backend.when(() -> CertHack.hackCertificateChain(any(), anyInt(), anyBoolean(), anyBoolean()))
+                    .thenReturn(replacement);
+
+            KeyEntryResponse response = new KeyEntryResponse();
+            response.metadata = metadata;
+            Parcel reply = mock(Parcel.class);
+            when(reply.readTypedObject(KeyEntryResponse.CREATOR)).thenReturn(response);
+
+            BinderInterceptor.Result result = KeystoreInterceptor.INSTANCE.onPostTransact(target,
+                    field(KeystoreInterceptor.class, "getKeyEntryTransaction").getInt(null),
+                    0, 10_001, 42, mock(Parcel.class), reply, 0);
+
+            assertTrue(result instanceof BinderInterceptor.OverrideReply);
+            ((BinderInterceptor.OverrideReply) result).getReply().recycle();
+            backend.verify(() -> CertHack.hackCertificateChain(any(), anyInt(), anyBoolean(), anyBoolean()));
+        } finally {
+            keystore.set(null, previous);
+            globalModeField.set(Config.INSTANCE, prevGlobalMode);
+        }
+    }
+
+    @Test
+    public void isDefaultHardwareIssuerDistinguishesHardwareFromCustomIssuers() throws Exception {
+        KeyPair kp = keyPair("EC");
+        X509Certificate hwCert1 = certificate(kp, kp, "child", "Android Keystore Key", true);
+        X509Certificate hwCert2 = certificate(kp, kp, "child", "CN=Google, O=Google LLC", true);
+        X509Certificate hwCert3 = certificate(kp, kp, "child", "Qualcomm Keymaster CA", true);
+        X509Certificate customCert = certificate(kp, kp, "child", "CN=App Custom AttestKey", true);
+
+        assertTrue(Utils.isDefaultHardwareIssuer(hwCert1));
+        assertTrue(Utils.isDefaultHardwareIssuer(hwCert2));
+        assertTrue(Utils.isDefaultHardwareIssuer(hwCert3));
+        org.junit.Assert.assertFalse(Utils.isDefaultHardwareIssuer(customCert));
     }
 
     @Test
