@@ -52,11 +52,11 @@ vm.runInContext(keyboxSource, context, { filename: 'ux.js#refreshInventory' });
   assert.equal(calls[0].path, '/api/keybox_inventory');
   assert.equal(calls[0].signal.aborted, true, 'the stale inventory request must be aborted');
   assert.equal(calls[1].signal.aborted, false, 'the replacement inventory request must remain active');
-  assert.deepEqual(JSON.parse(JSON.stringify(context.__testInventory())), [{ id: 'newest', filename: 'newest.xml', scope: 'managed', certificate_serial: '' }], 'the newest inventory response must win');
+  assert.deepEqual(JSON.parse(JSON.stringify(context.__testInventory())), [{ id: 'newest', filename: 'newest.xml', scope: 'managed', certificate_serial: '', security_level: 'TEE' }], 'the newest inventory response must win');
 
   releaseFirst();
   await first;
-  assert.deepEqual(JSON.parse(JSON.stringify(context.__testInventory())), [{ id: 'newest', filename: 'newest.xml', scope: 'managed', certificate_serial: '' }], 'a delayed stale inventory response must not overwrite current data');
+  assert.deepEqual(JSON.parse(JSON.stringify(context.__testInventory())), [{ id: 'newest', filename: 'newest.xml', scope: 'managed', certificate_serial: '', security_level: 'TEE' }], 'a delayed stale inventory response must not overwrite current data');
   console.log('KeyboxHub inventory request-owner cancellation regression checks passed');
 })().catch(error => {
   console.error(error);

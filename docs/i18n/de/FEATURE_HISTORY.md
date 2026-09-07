@@ -38,6 +38,12 @@ Keybox-Verifizierung und app-spezifische Attestation-Identität.
 
 https://github.com/tryigit/CleveresTricky/pull/79
 
+**#1199, 2026-09-06**
+
+Funktionsfähigkeitsbewusstes StrongBox-Fallback-Routing, Erhalt der Hardware-Signaturen für App AttestKey, Sicherheitslevel-Kandidatenfilterung und WebUI-Hardware-Badges.
+
+https://github.com/tryigit/CleveresTricky/pull/1199
+
 ## Profile, App-Scope und Runtime
 
 **#376**
@@ -100,6 +106,12 @@ StrongBox-to-TEE-Weiterleitung und Harmonisierung des Attestation-Sicherheitslev
 
 https://github.com/tryigit/CleveresTricky/pull/1132
 
+**#1199, 2026-09-06**
+
+Funktionsfähigkeitsbewusstes StrongBox-Fallback-Routing: Frühe Ablehnung vor der nativen KeyMint-Erzeugung bei fehlender StrongBox-Keybox, um Alias-Kollisionen zu vermeiden und einen sauberen TEE-Fallback zu gewährleisten.
+
+https://github.com/tryigit/CleveresTricky/pull/1199
+
 ## Zeitlinie
 
 | Datum | PR | Bereich |
@@ -108,5 +120,6 @@ https://github.com/tryigit/CleveresTricky/pull/1132
 | 2026-02-01 | #79 | App-spezifische Attestation-Identity |
 | 2026-02-05 | #139 | Randomisierte Geräteidentität |
 | 2026-08-09 | #871 | Dual-SIM und App-facing Identity |
-| 2026-08-09 | #876 | Rust/Native Runtime-Architektur |
-| 2026-08-30 | #1132 | StrongBox und TEE-Weiterleitung |
+| 2026-08-09 | #876 | Rust/native Laufzeitarchitektur |
+| 2026-08-30 | #1132 | StrongBox- und TEE-Weiterleitung |
+| 2026-09-06 | #1199 | StrongBox-Routing und AttestKey-Kompatibilität |

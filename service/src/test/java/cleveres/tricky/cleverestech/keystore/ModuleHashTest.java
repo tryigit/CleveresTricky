@@ -63,6 +63,12 @@ public class ModuleHashTest {
         ManagedCertificateBackendOracle.reset();
     }
 
+    private static byte[] validBootDigest(int marker) {
+        byte[] digest = new byte[32];
+        digest[0] = (byte) marker;
+        return digest;
+    }
+
     private static Field moduleHashField() throws Exception {
         Field field = Config.class.getDeclaredField("moduleHash");
         field.setAccessible(true);
@@ -95,10 +101,10 @@ public class ModuleHashTest {
         keyDesc.add(new DERSequence());
 
         ASN1EncodableVector rootOfTrust = new ASN1EncodableVector();
-        rootOfTrust.add(new DEROctetString(new byte[32]));
+        rootOfTrust.add(new DEROctetString(validBootDigest(0x11)));
         rootOfTrust.add(ASN1Boolean.TRUE);
         rootOfTrust.add(new ASN1Enumerated(0));
-        rootOfTrust.add(new DEROctetString(new byte[32]));
+        rootOfTrust.add(new DEROctetString(validBootDigest(0x22)));
         ASN1EncodableVector teeEnforced = new ASN1EncodableVector();
         teeEnforced.add(new DERTaggedObject(true, 704, new DERSequence(rootOfTrust)));
         keyDesc.add(new DERSequence(teeEnforced));
@@ -142,7 +148,7 @@ public class ModuleHashTest {
             ctor.setAccessible(true);
             state.set(null, ctor.newInstance(newKeyboxes, newKeyboxFiles));
 
-            Certificate[] hackedChain = CertHack.hackCertificateChain(new Certificate[] {cert}, 0);
+            Certificate[] hackedChain = CertHack.hackCertificateChain(new Certificate[] {cert}, 0, true);
             X509Certificate hackedCert = (X509Certificate) hackedChain[0];
             byte[] extBytes = hackedCert.getExtensionValue("1.3.6.1.4.1.11129.2.1.17");
             ASN1Primitive extStruct = ASN1Primitive.fromByteArray(
@@ -232,14 +238,14 @@ public class ModuleHashTest {
             state.set(null, ctor.newInstance(newKeyboxes, newKeyboxFiles));
 
             Certificate[] original = new Certificate[] {originalLeaf};
-            Certificate[] generated = CertHack.hackCertificateChain(original, 10_001);
+            Certificate[] generated = CertHack.hackCertificateChain(original, 10_001, true);
             Assert.assertTrue(CertHack.hasCachedCertificateChains());
 
             Certificate[] isolatedReadback = CertHack.getCachedCertificateChain(original);
             Assert.assertNotNull(isolatedReadback);
             Assert.assertArrayEquals(generated[0].getEncoded(), isolatedReadback[0].getEncoded());
 
-            Certificate[] differentReader = CertHack.hackCertificateChain(original, 99_008);
+            Certificate[] differentReader = CertHack.hackCertificateChain(original, 99_008, true);
             Assert.assertArrayEquals(generated[0].getEncoded(), differentReader[0].getEncoded());
             Assert.assertEquals(generated.length, differentReader.length);
             for (int index = 0; index < generated.length; index++) {
@@ -248,7 +254,7 @@ public class ModuleHashTest {
 
             CertHack.clearCertificateCache();
             Assert.assertFalse(CertHack.hasCachedCertificateChains());
-            Certificate[] regenerated = CertHack.hackCertificateChain(original, 99_008);
+            Certificate[] regenerated = CertHack.hackCertificateChain(original, 99_008, true);
             Assert.assertEquals(generated.length, regenerated.length);
             for (int index = 0; index < generated.length; index++) {
                 Assert.assertArrayEquals(generated[index].getEncoded(), regenerated[index].getEncoded());
@@ -292,7 +298,7 @@ public class ModuleHashTest {
             state.set(null, ctor.newInstance(newKeyboxes, newKeyboxFiles));
 
             Certificate[] hackedChain = CertHack.hackCertificateChain(
-                    new Certificate[] {attestationLeaf}, 0);
+                    new Certificate[] {attestationLeaf}, 0, true);
             Assert.assertEquals(2, hackedChain.length);
             X509Certificate hackedLeaf = (X509Certificate) hackedChain[0];
             hackedLeaf.verify(ecPair.getPublic());

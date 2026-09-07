@@ -338,12 +338,12 @@ is_conflicting_attestation_module() {
   conflict_name=$2
 
   case "$conflict_id" in
-    tricky_store|teesim) return 0 ;;
+    tricky_store|teesim|playintegrityfix|play_integrity_fix|playintegrity|pif|playcurl|safetynet-fix|safetynet_fix|ih8sn) return 0 ;;
   esac
 
   normalized_conflict_name=$(normalize_conflicting_module_name "$conflict_name")
   case "$normalized_conflict_name" in
-    trickystore|trickystoreoss|teesimulator|teesimulatorrs) return 0 ;;
+    trickystore*|teesimulator*|playintegrityfix*|playintegrity*|playcurl*|safetynetfix*|universalsafetynetfix*|ih8sn*) return 0 ;;
   esac
 
   return 1
@@ -361,12 +361,10 @@ remove_conflicting_modules_from_root() {
     [ "$candidate_dir" = "cleverestricky" ] && continue
 
     if [ -L "$candidate" ]; then
-      case "$candidate_dir" in
-        tricky_store|teesim)
-          ui_print "- Removing conflicting module link: $candidate_dir"
-          rm -f "$candidate" || abort "! Could not remove conflicting module link: $candidate_dir"
-          ;;
-      esac
+      if is_conflicting_attestation_module "$candidate_dir" "$candidate_dir"; then
+        ui_print "- Removing conflicting module link: $candidate_dir"
+        rm -f "$candidate" || abort "! Could not remove conflicting module link: $candidate_dir"
+      fi
       continue
     fi
 
@@ -374,21 +372,17 @@ remove_conflicting_modules_from_root() {
     prop_file="$candidate/module.prop"
 
     if [ -L "$prop_file" ]; then
-      case "$candidate_dir" in
-        tricky_store|teesim)
-          abort "! Refusing unsafe conflicting module metadata: $candidate_dir/module.prop"
-          ;;
-      esac
+      if is_conflicting_attestation_module "$candidate_dir" "$candidate_dir"; then
+        abort "! Refusing unsafe conflicting module metadata: $candidate_dir/module.prop"
+      fi
       continue
     fi
 
     if [ ! -f "$prop_file" ]; then
-      case "$candidate_dir" in
-        tricky_store|teesim)
-          ui_print "- Removing incomplete conflicting module: $candidate_dir"
-          rm -rf "$candidate" || abort "! Could not remove incomplete conflicting module: $candidate_dir"
-          ;;
-      esac
+      if is_conflicting_attestation_module "$candidate_dir" "$candidate_dir"; then
+        ui_print "- Removing incomplete conflicting module: $candidate_dir"
+        rm -rf "$candidate" || abort "! Could not remove incomplete conflicting module: $candidate_dir"
+      fi
       continue
     fi
 

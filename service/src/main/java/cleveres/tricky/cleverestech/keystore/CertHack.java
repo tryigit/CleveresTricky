@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 import cleveres.tricky.cleverestech.CertificateBackend;
 import cleveres.tricky.cleverestech.Config;
@@ -85,16 +86,39 @@ public final class CertHack {
         final byte[] leafEncoded;
         final byte[] issuerChainEncoded;
         final boolean passthrough;
+        final boolean leafOnlySafe;
+        final boolean preserveLeafOnly;
 
         CachedCertificateChain(
                 Certificate[] certificates,
                 byte[] leafEncoded,
                 byte[] issuerChainEncoded
         ) {
+            this(certificates, leafEncoded, issuerChainEncoded, true, false);
+        }
+
+        CachedCertificateChain(
+                Certificate[] certificates,
+                byte[] leafEncoded,
+                byte[] issuerChainEncoded,
+                boolean leafOnlySafe
+        ) {
+            this(certificates, leafEncoded, issuerChainEncoded, leafOnlySafe, false);
+        }
+
+        CachedCertificateChain(
+                Certificate[] certificates,
+                byte[] leafEncoded,
+                byte[] issuerChainEncoded,
+                boolean leafOnlySafe,
+                boolean preserveLeafOnly
+        ) {
             this.certificates = certificates.clone();
             this.leafEncoded = Objects.requireNonNull(leafEncoded, "leafEncoded");
             this.issuerChainEncoded = Objects.requireNonNull(issuerChainEncoded, "issuerChainEncoded");
             this.passthrough = false;
+            this.leafOnlySafe = leafOnlySafe;
+            this.preserveLeafOnly = preserveLeafOnly;
         }
 
         private CachedCertificateChain() {
@@ -102,6 +126,8 @@ public final class CertHack {
             this.leafEncoded = null;
             this.issuerChainEncoded = null;
             this.passthrough = true;
+            this.leafOnlySafe = true; // Passthrough is always safe for leaves (it does nothing)
+            this.preserveLeafOnly = false;
         }
 
         static CachedCertificateChain passthrough() {
@@ -117,7 +143,9 @@ public final class CertHack {
             // Parcel.writeTypedObject copies these byte arrays synchronously. The transient
             // KeyMetadata object never owns or mutates the cache storage after the reply is built.
             metadata.certificate = leafEncoded;
-            metadata.certificateChain = issuerChainEncoded;
+            if (!preserveLeafOnly) {
+                metadata.certificateChain = issuerChainEncoded;
+            }
         }
     }
 
@@ -126,6 +154,9 @@ public final class CertHack {
         final Map<String, List<KeyBox>> keyboxFiles;
         final Map<KeyBox, PreparedKeyBox> preparedKeyboxes;
         final Map<CacheKey, CachedCertificateChain> certificateCache;
+        final boolean hasStrongBox;
+        final Map<String, Boolean> strongBoxByIdentifier;
+        final Set<KeyBox> strongBoxKeyboxes;
         Object certificateCacheEpoch;
 
         State(Map<String, List<KeyBox>> keyboxes, Map<String, List<KeyBox>> keyboxFiles) {
@@ -143,6 +174,36 @@ public final class CertHack {
                 }
             }
             this.preparedKeyboxes = Collections.unmodifiableMap(prepared);
+
+            Set<KeyBox> sbKeyboxes = Collections.newSetFromMap(new IdentityHashMap<>());
+            Map<String, Boolean> sbById = new HashMap<>();
+            boolean anyStrongBox = false;
+
+            for (Map.Entry<String, List<KeyBox>> entry : this.keyboxFiles.entrySet()) {
+                boolean fileHasStrongBox = false;
+                for (KeyBox box : entry.getValue()) {
+                    if (classifyStrongBoxKeybox(box)) {
+                        sbKeyboxes.add(box);
+                        fileHasStrongBox = true;
+                        anyStrongBox = true;
+                    }
+                }
+                sbById.put(entry.getKey(), fileHasStrongBox);
+            }
+
+            for (List<KeyBox> list : this.keyboxes.values()) {
+                for (KeyBox box : list) {
+                    if (classifyStrongBoxKeybox(box)) {
+                        sbKeyboxes.add(box);
+                        anyStrongBox = true;
+                    }
+                }
+            }
+
+            this.hasStrongBox = anyStrongBox;
+            this.strongBoxByIdentifier = Map.copyOf(sbById);
+            this.strongBoxKeyboxes = Collections.unmodifiableSet(sbKeyboxes);
+
             this.certificateCache = Collections.synchronizedMap(
                     new LinkedHashMap<CacheKey, CachedCertificateChain>(32, 0.75f, true) {
                         @Override
@@ -163,6 +224,8 @@ public final class CertHack {
     }
 
     private static volatile State state = new State(Collections.emptyMap(), Collections.emptyMap());
+    private static volatile byte[] capturedHardwareBootKey = null;
+    private static volatile byte[] capturedHardwareBootHash = null;
 
     private static final class CacheKey {
         private final byte[] leafEncoded;
@@ -195,6 +258,67 @@ public final class CertHack {
         return !state.keyboxes.isEmpty();
     }
 
+    private static boolean classifyStrongBoxKeybox(KeyBox keybox) {
+        if (keybox == null) return false;
+        if (keybox.filename() != null && keybox.filename().toLowerCase(Locale.ROOT).contains("strongbox")) {
+            return true;
+        }
+        if (keybox.certificates() == null) return false;
+        for (Certificate cert : keybox.certificates()) {
+            if (cert instanceof X509Certificate x509) {
+                var subject = x509.getSubjectX500Principal();
+                if (subject != null && subject.getName().toLowerCase(Locale.ROOT).contains("strongbox")) {
+                    return true;
+                }
+                var issuer = x509.getIssuerX500Principal();
+                if (issuer != null && issuer.getName().toLowerCase(Locale.ROOT).contains("strongbox")) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    public static boolean isStrongBoxKeybox(KeyBox keybox) {
+        if (keybox == null) return false;
+        State currentState = state;
+        if (currentState.strongBoxKeyboxes.contains(keybox)) {
+            return true;
+        }
+        if (currentState.preparedKeyboxes.containsKey(keybox)) {
+            return false;
+        }
+        return classifyStrongBoxKeybox(keybox);
+    }
+
+    public static String getKeyboxSecurityLevel(String identifier) {
+        if (identifier == null) return "TEE";
+        State currentState = state;
+        Boolean hasSb = currentState.strongBoxByIdentifier.get(identifier);
+        if (hasSb == null && identifier.contains(":")) {
+            hasSb = currentState.strongBoxByIdentifier.get(identifier.substring(identifier.indexOf(':') + 1));
+        }
+        return Boolean.TRUE.equals(hasSb) ? "StrongBox" : "TEE";
+    }
+
+    public static boolean hasStrongBoxKeybox() {
+        return state.hasStrongBox;
+    }
+
+    public static boolean hasStrongBoxKeybox(int uid) {
+        State currentState = state;
+        var appConfig = Config.INSTANCE.getAppConfig(uid);
+        if (appConfig != null && appConfig.getKeyboxFilename() != null) {
+            String filename = appConfig.getKeyboxFilename();
+            Boolean hasSb = currentState.strongBoxByIdentifier.get(filename);
+            if (hasSb == null && filename.contains(":")) {
+                hasSb = currentState.strongBoxByIdentifier.get(filename.substring(filename.indexOf(':') + 1));
+            }
+            return Boolean.TRUE.equals(hasSb);
+        }
+        return currentState.hasStrongBox;
+    }
+
     public static int getKeyboxCount() {
         if (!KeyboxLoader.isActiveSetHealthy()) {
             throw new IllegalStateException("Rust keybox backend activation is unavailable");
@@ -210,9 +334,12 @@ public final class CertHack {
         return state.keyboxFiles.size();
     }
 
-    public static String getDeviceCertificateSerial(String filename) {
-        if (filename == null) return null;
-        List<KeyBox> boxes = state.keyboxFiles.get(filename);
+    public static String getDeviceCertificateSerial(String identifier) {
+        if (identifier == null) return null;
+        List<KeyBox> boxes = state.keyboxFiles.get(identifier);
+        if (boxes == null && identifier.contains(":")) {
+            boxes = state.keyboxFiles.get(identifier.substring(identifier.indexOf(':') + 1));
+        }
         if (boxes == null) return null;
         for (KeyBox box : boxes) {
             String serial = getDeviceCertificateSerial(box);
@@ -298,6 +425,11 @@ public final class CertHack {
             }
             newKeyboxes.computeIfAbsent(algo, ignored -> new ArrayList<>()).add(box);
             newKeyboxFiles.computeIfAbsent(box.filename, ignored -> new ArrayList<>()).add(box);
+            int colonIdx = box.filename.indexOf(':');
+            if (colonIdx >= 0 && colonIdx < box.filename.length() - 1) {
+                String shortName = box.filename.substring(colonIdx + 1);
+                newKeyboxFiles.computeIfAbsent(shortName, ignored -> new ArrayList<>()).add(box);
+            }
         }
         int ecCount = newKeyboxes.getOrDefault(KeyProperties.KEY_ALGORITHM_EC, Collections.emptyList()).size();
         int rsaCount = newKeyboxes.getOrDefault(KeyProperties.KEY_ALGORITHM_RSA, Collections.emptyList()).size();
@@ -337,9 +469,8 @@ public final class CertHack {
      * getKeyEntry calls to avoid X.509 parsing and Rust IPC while preserving the genuine reply.
      */
     public static boolean applyCachedCertificateChain(KeyMetadata metadata) {
-        if (metadata == null || metadata.certificate == null ||
-                metadata.certificate.length == 0 ||
-                metadata.certificate.length > MAX_LEAF_CERTIFICATE_BYTES) {
+        boolean isLeafOnly = Utils.hasRewritableLeafCertificate(metadata);
+        if (!Utils.isCertificateChainRewriteCandidate(metadata) && !isLeafOnly) {
             return false;
         }
         State currentState = state;
@@ -348,6 +479,11 @@ public final class CertHack {
             cached = currentState.certificateCache.get(new CacheKey(metadata.certificate));
         }
         if (cached == null) return false;
+        
+        if (isLeafOnly && !cached.leafOnlySafe) {
+            return false;
+        }
+
         cached.applyTo(metadata);
         return true;
     }
@@ -374,6 +510,15 @@ public final class CertHack {
      * materializes the final JCA X.509 object. Private key bytes never enter this process.
      */
     public static Certificate[] hackCertificateChain(Certificate[] caList, int uid) {
+        return hackCertificateChain(caList, uid, false, false);
+    }
+
+    public static Certificate[] hackCertificateChain(Certificate[] caList, int uid, boolean leafOnlySafe) {
+        return hackCertificateChain(caList, uid, leafOnlySafe, false);
+    }
+
+    public static Certificate[] hackCertificateChain(
+            Certificate[] caList, int uid, boolean leafOnlySafe, boolean preserveLeafOnly) {
         if (caList == null || caList.length == 0 || caList[0] == null) {
             throw new UnsupportedOperationException("Certificate chain is empty");
         }
@@ -409,8 +554,16 @@ public final class CertHack {
             // not create recurring IPC, parsing, allocations, timers or background work.
             inspection = CertificateBackend.inspect(leafEncoded);
             if (inspection == null) return caList;
-            if (inspection.getAttestationSecurityLevel() != CertificateBackend.SECURITY_LEVEL_TEE ||
-                    inspection.getKeymintSecurityLevel() != CertificateBackend.SECURITY_LEVEL_TEE) {
+            int attLevel = inspection.getAttestationSecurityLevel();
+            int kmLevel = inspection.getKeymintSecurityLevel();
+            boolean isSoftware = attLevel == CertificateBackend.SECURITY_LEVEL_SOFTWARE
+                    || kmLevel == CertificateBackend.SECURITY_LEVEL_SOFTWARE;
+            boolean isStrongbox = attLevel == CertificateBackend.SECURITY_LEVEL_STRONGBOX
+                    || kmLevel == CertificateBackend.SECURITY_LEVEL_STRONGBOX;
+            boolean isTee = (attLevel == CertificateBackend.SECURITY_LEVEL_TEE
+                    || kmLevel == CertificateBackend.SECURITY_LEVEL_TEE) && !isStrongbox;
+            boolean isTeeOrStrongbox = !isSoftware && (isTee || isStrongbox);
+            if (!isTeeOrStrongbox) {
                 synchronized (cache) {
                     if (state == currentState && currentState.certificateCacheEpoch == cacheEpoch) {
                         cache.putIfAbsent(cacheKey, CachedCertificateChain.passthrough());
@@ -421,8 +574,22 @@ public final class CertHack {
 
             boolean needsCapturedPatchLevels = PolicyState.INSTANCE.isFeatureEnabled(
                     PolicyState.Feature.SECURITY_PATCH, uid);
-            byte[] verifiedBootKey = usableBootDigest(UtilKt.getBootKey());
-            byte[] verifiedBootHash = usableBootDigest(UtilKt.getBootHash());
+            byte[] originalBootKey = usableBootDigest(inspection.getOriginalBootKey());
+            if (originalBootKey != null) {
+                capturedHardwareBootKey = originalBootKey.clone();
+            }
+            byte[] originalBootHash = usableBootDigest(inspection.getOriginalBootHash());
+            if (originalBootHash != null) {
+                capturedHardwareBootHash = originalBootHash.clone();
+            }
+            byte[] verifiedBootKey = selectVerifiedBootDigest(
+                    UtilKt.getBootKey(),
+                    originalBootKey != null ? originalBootKey : capturedHardwareBootKey,
+                    UtilKt.getPersistentBootKey());
+            byte[] verifiedBootHash = selectVerifiedBootDigest(
+                    UtilKt.getBootHash(),
+                    originalBootHash != null ? originalBootHash : capturedHardwareBootHash,
+                    UtilKt.getPersistentBootHash());
             Config.AttestationPatchLevels patchLevels = needsCapturedPatchLevels
                     ? PolicyState.INSTANCE.resolveAttestationPatchLevels(
                             uid,
@@ -430,24 +597,25 @@ public final class CertHack {
                             inspection.getVendorPatch(),
                             inspection.getBootPatch())
                     : keepPatchLevels();
-            if (verifiedBootKey == null) {
-                verifiedBootKey = firstUsableBootDigest(
-                        null, inspection.getOriginalBootKey(), UtilKt.getPersistentBootKey());
-            }
-            if (verifiedBootHash == null) {
-                verifiedBootHash = firstUsableBootDigest(
-                        null, inspection.getOriginalBootHash(), UtilKt.getPersistentBootHash());
-            }
 
             String preferredSignerAlgorithm = KeyProperties.KEY_ALGORITHM_EC;
             var appConfig = Config.INSTANCE.getAppConfig(uid);
-            List<KeyBox> list;
+            List<KeyBox> candidates;
             if (appConfig != null && appConfig.getKeyboxFilename() != null) {
-                list = selectKeyboxPool(
-                        currentState.keyboxFiles.get(appConfig.getKeyboxFilename()), preferredSignerAlgorithm);
+                candidates = currentState.keyboxFiles.get(appConfig.getKeyboxFilename());
             } else {
-                list = selectGlobalKeyboxPool(currentState, preferredSignerAlgorithm);
+                List<KeyBox> all = new ArrayList<>();
+                for (List<KeyBox> group : currentState.keyboxes.values()) {
+                    all.addAll(group);
+                }
+                candidates = all;
             }
+            if (candidates == null) candidates = Collections.emptyList();
+            List<KeyBox> matchingLevel = filterKeyboxesBySecurityLevel(candidates, isStrongbox);
+            if (!matchingLevel.isEmpty()) {
+                candidates = matchingLevel;
+            }
+            List<KeyBox> list = selectKeyboxPool(candidates, preferredSignerAlgorithm);
             if (list.isEmpty()) throw new UnsupportedOperationException("No compatible keybox is available");
 
             KeyBox keybox = list.get(cacheKey.indexForPool(list.size()));
@@ -487,7 +655,7 @@ public final class CertHack {
             System.arraycopy(prepared.issuerChain, 0, result, 1, prepared.issuerChain.length);
             byte[] issuerChainEncoded = Utils.encodeIssuerChain(result);
             CachedCertificateChain completed =
-                    new CachedCertificateChain(result, rewrittenDer, issuerChainEncoded);
+                    new CachedCertificateChain(result, rewrittenDer, issuerChainEncoded, leafOnlySafe, preserveLeafOnly);
             synchronized (cache) {
                 if (state != currentState || currentState.certificateCacheEpoch != cacheEpoch) {
                     return result;
@@ -549,8 +717,8 @@ public final class CertHack {
         return 0;
     }
 
-    private static byte[] firstUsableBootDigest(byte[] preferred, byte[] original, byte[] persistent) {
-        byte[] value = usableBootDigest(preferred);
+    static byte[] selectVerifiedBootDigest(byte[] runtime, byte[] original, byte[] persistent) {
+        byte[] value = usableBootDigest(runtime);
         if (value != null) return value;
         value = usableBootDigest(original);
         if (value != null) return value;
@@ -612,6 +780,17 @@ public final class CertHack {
         for (KeyBox candidate : candidates) {
             String alg = candidate.keyPair.getPublic().getAlgorithm();
             if (requiredAlgorithm.equals(alg) || requiredAlgorithm.equals(normalizeAlgorithm(alg))) {
+                matches.add(candidate);
+            }
+        }
+        return matches;
+    }
+
+    static List<KeyBox> filterKeyboxesBySecurityLevel(List<KeyBox> candidates, boolean strongBox) {
+        if (candidates == null || candidates.isEmpty()) return Collections.emptyList();
+        List<KeyBox> matches = new ArrayList<>();
+        for (KeyBox candidate : candidates) {
+            if (isStrongBoxKeybox(candidate) == strongBox) {
                 matches.add(candidate);
             }
         }

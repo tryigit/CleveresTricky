@@ -11,13 +11,11 @@ import java.security.cert.Certificate
 
 /**
  * Rewrites only the certificate chain returned by a successful, genuine TEE
- * KeyMint key generation. The private key and every later cryptographic
+ * or StrongBox KeyMint key generation. The private key and every later cryptographic
  * operation remain owned by the platform security level.
  *
- * This interceptor is registered only on the TEE child binder. StrongBox is
- * deliberately left completely unhooked so its binder identity, generateKey
- * reply and genuine hardware certificate chain remain platform-owned. Targeted
- * TEE generateKey and getKeyEntry calls use the same certificate-compatibility
+ * This interceptor is registered on both the TEE and StrongBox child binders.
+ * Targeted generateKey and getKeyEntry calls use the same certificate-compatibility
  * path. No synthetic timing delay is added here; certificate caching in
  * CertHack handles repeated reads without parking Keystore threads.
  */
@@ -37,15 +35,24 @@ class SecurityLevelInterceptor : BinderInterceptor() {
         callingPid: Int,
         data: Parcel,
     ): Result {
-        return if (
+        if (
             code == generateKeyTransaction &&
             CertHack.canHack() &&
             Config.needHack(callingUid)
         ) {
-            Continue
-        } else {
-            Skip
+            if (!Utils.usesDefaultAttestationKey(data)) {
+                // Reject gracefully with CANNOT_ATTEST_IDS (-66) via AOSP Binder exception format
+                val reply = Parcel.obtain()
+                reply.writeInt(-8) // exception_code: EX_SERVICE_SPECIFIC
+                reply.writeString("CANNOT_ATTEST_IDS") // message
+                reply.writeInt(0) // stack_trace_header (0 means empty stack trace)
+                reply.writeInt(-66) // service_specific_error_code (CANNOT_ATTEST_IDS)
+                return OverrideReply(0, reply)
+            }
+            return Continue
         }
+
+        return Skip
     }
 
     override fun onPostTransact(
@@ -77,6 +84,12 @@ class SecurityLevelInterceptor : BinderInterceptor() {
                 replacement.recycle()
                 return Skip
             }
+            val isFullChain = Utils.isCertificateChainRewriteCandidate(metadata)
+            val isLeafOnly = Utils.hasRewritableLeafCertificate(metadata)
+            if (!isFullChain && !isLeafOnly) {
+                replacement.recycle()
+                return Skip
+            }
 
             // Parse only the leaf first. A normal asymmetric key without an Android attestation
             // challenge still has a self-signed X.509 leaf, but it must never cross the Rust
@@ -91,12 +104,17 @@ class SecurityLevelInterceptor : BinderInterceptor() {
                 return Skip
             }
 
-            // A successful TEE attestation rewrite discards Android's genuine issuer chain and
+            // A successful TEE or StrongBox attestation rewrite discards Android's genuine issuer chain and
             // replaces it with the selected keybox chain. Parsing every genuine issuer first
             // therefore adds work only to attested generateKey calls. Keep the hot path leaf-only
             // until CertHack confirms that a replacement can actually be produced.
             val originalLeafOnly = arrayOf<Certificate>(originalLeaf)
-            val rewritten = CertHack.hackCertificateChain(originalLeafOnly, callingUid)
+            val rewritten = CertHack.hackCertificateChain(
+                originalLeafOnly,
+                callingUid,
+                true,
+                false,
+            )
             if (rewritten === originalLeafOnly) {
                 replacement.recycle()
                 return Skip

@@ -1,9 +1,10 @@
 // Additional GPLv3 section 7(b) attribution term for tryigit-owned material: see ../../NOTICE.
 use crate::keybox_wire::key_store::{self, KeyId, KEY_ID_BYTES};
 use cleverestricky_certificate_core::{
-    inspect_certificate, rewrite_certificate_prepared, AttestationIdOverride, PatchComponent,
-    PatchLevels, PreparedCertificateRewriteRequest, SecurityLevel, SigningAlgorithm,
-    MAX_ATTESTATION_ID_BYTES, MAX_CERTIFICATE_DER_BYTES, MAX_MODULE_HASH_BYTES,
+    inspect_certificate, rewrite_certificate_prepared, AttestationIdOverride,
+    CertificateInspection, PatchComponent, PatchLevels, PreparedCertificateRewriteRequest,
+    SecurityLevel, SigningAlgorithm, MAX_ATTESTATION_ID_BYTES, MAX_CERTIFICATE_DER_BYTES,
+    MAX_MODULE_HASH_BYTES,
 };
 use zeroize::Zeroize;
 
@@ -56,6 +57,21 @@ pub fn inspect_and_encode(mut request: Vec<u8>) -> Result<Vec<u8>, &'static str>
     result
 }
 
+fn validate_hardware_provenance(provenance: &CertificateInspection) -> Result<(), &'static str> {
+    let attestation_is_hardware = provenance.attestation_security_level
+        == SecurityLevel::TrustedEnvironment
+        || provenance.attestation_security_level == SecurityLevel::StrongBox;
+    let keymint_is_hardware = provenance.keymint_security_level
+        == SecurityLevel::TrustedEnvironment
+        || provenance.keymint_security_level == SecurityLevel::StrongBox;
+    let is_software = provenance.attestation_security_level == SecurityLevel::Software
+        || provenance.keymint_security_level == SecurityLevel::Software;
+    if is_software || !attestation_is_hardware || !keymint_is_hardware {
+        return Err("certificate rewrite provenance is not hardware compatible");
+    }
+    Ok(())
+}
+
 pub fn rewrite_and_encode(mut request: Vec<u8>) -> Result<Vec<u8>, &'static str> {
     let result = (|| {
         if request.len() < REWRITE_FIXED_BYTES || request.len() > MAX_REWRITE_REQUEST_BYTES {
@@ -66,14 +82,10 @@ pub fn rewrite_and_encode(mut request: Vec<u8>) -> Result<Vec<u8>, &'static str>
         // Defense in depth: do not trust the managed caller to classify provenance correctly.
         // The production replacement keybox format proves key ownership/signature validity but not
         // a hardware TEE-vs-StrongBox origin. Reinspect the genuine source and reject every source
-        // that is not unambiguously TEE/TEE before an opaque replacement issuer can sign it.
+        // that is not unambiguously hardware-backed before an opaque replacement issuer can sign it.
         let provenance = inspect_certificate(parsed.genuine_leaf_der)
             .map_err(|_| "certificate rewrite provenance rejected")?;
-        if provenance.attestation_security_level != SecurityLevel::TrustedEnvironment
-            || provenance.keymint_security_level != SecurityLevel::TrustedEnvironment
-        {
-            return Err("certificate rewrite provenance is not TEE compatible");
-        }
+        validate_hardware_provenance(&provenance)?;
 
         key_store::with_prepared_key(&parsed.key_id, |stored_algorithm, prepared_issuer| {
             if stored_algorithm != parsed.signing_algorithm
@@ -286,6 +298,7 @@ impl<'a> Cursor<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use cleverestricky_certificate_core::{CapturedPatchLevels, CertificateInspection};
 
     fn patch(disposition: u8, value: i32, out: &mut Vec<u8>) {
         out.push(disposition);
@@ -315,7 +328,15 @@ mod tests {
 
     #[test]
     fn strict_rewrite_wire_parses_opaque_key_and_bounded_fields() {
-        let input = minimal_request();
+        // The managed production serializer emits this same fixture. A one-sided wire
+        // version/layout change must fail even when a managed signing oracle still passes.
+        let hex = include_str!("../tests/fixtures/certificate-rewrite-v2.hex").trim();
+        assert_eq!(hex.len() % 2, 0);
+        let input: Vec<u8> = (0..hex.len())
+            .step_by(2)
+            .map(|offset| u8::from_str_radix(&hex[offset..offset + 2], 16).unwrap())
+            .collect();
+        assert_eq!(input, minimal_request());
         let parsed = parse_rewrite_request(&input).unwrap();
         assert_eq!(parsed.signing_algorithm, SigningAlgorithm::EcP256Sha256);
         assert_eq!(parsed.patch_levels.system, PatchComponent::KEEP);
@@ -361,5 +382,77 @@ mod tests {
         invalid_patch[2] = PATCH_KEEP;
         invalid_patch[3..7].copy_from_slice(&7i32.to_be_bytes());
         assert!(parse_rewrite_request(&invalid_patch).is_err());
+    }
+
+    #[test]
+    fn hardware_provenance_accepts_mixed_hardware_levels_and_rejects_software() {
+        let make_inspection = |attestation, keymint| CertificateInspection {
+            captured_patch_levels: CapturedPatchLevels {
+                system: None,
+                vendor: None,
+                boot: None,
+            },
+            present_id_mask: 0,
+            supports_module_hash: false,
+            original_boot_key: None,
+            original_boot_hash: None,
+            attestation_security_level: attestation,
+            keymint_security_level: keymint,
+        };
+
+        // Standard TEE attestation
+        assert!(validate_hardware_provenance(&make_inspection(
+            SecurityLevel::TrustedEnvironment,
+            SecurityLevel::TrustedEnvironment,
+        ))
+        .is_ok());
+
+        // Qualcomm / Snapdragon StrongBox key attested by TEE KeyMint
+        assert!(validate_hardware_provenance(&make_inspection(
+            SecurityLevel::TrustedEnvironment,
+            SecurityLevel::StrongBox,
+        ))
+        .is_ok());
+
+        // Dedicated StrongBox attestation
+        assert!(validate_hardware_provenance(&make_inspection(
+            SecurityLevel::StrongBox,
+            SecurityLevel::StrongBox,
+        ))
+        .is_ok());
+
+        // StrongBox attestation with TEE keymint
+        assert!(validate_hardware_provenance(&make_inspection(
+            SecurityLevel::StrongBox,
+            SecurityLevel::TrustedEnvironment,
+        ))
+        .is_ok());
+
+        // Software attestation or keymint must fail closed
+        assert!(validate_hardware_provenance(&make_inspection(
+            SecurityLevel::Software,
+            SecurityLevel::TrustedEnvironment,
+        ))
+        .is_err());
+        assert!(validate_hardware_provenance(&make_inspection(
+            SecurityLevel::TrustedEnvironment,
+            SecurityLevel::Software,
+        ))
+        .is_err());
+        assert!(validate_hardware_provenance(&make_inspection(
+            SecurityLevel::Software,
+            SecurityLevel::StrongBox,
+        ))
+        .is_err());
+        assert!(validate_hardware_provenance(&make_inspection(
+            SecurityLevel::StrongBox,
+            SecurityLevel::Software,
+        ))
+        .is_err());
+        assert!(validate_hardware_provenance(&make_inspection(
+            SecurityLevel::Software,
+            SecurityLevel::Software,
+        ))
+        .is_err());
     }
 }

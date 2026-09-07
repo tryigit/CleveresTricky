@@ -156,7 +156,7 @@ class GenerateKeyTimingFastPathTest {
         val rewrite = source.indexOf("byte[] rewrittenDer = CertificateBackend.rewrite")
         val issuerEncoding = source.indexOf("byte[] issuerChainEncoded = Utils.encodeIssuerChain(result)", rewrite)
         val completed =
-            source.indexOf("new CachedCertificateChain(result, rewrittenDer, issuerChainEncoded)", issuerEncoding)
+            source.indexOf("new CachedCertificateChain(result, rewrittenDer, issuerChainEncoded", issuerEncoding)
         val cachePut = source.indexOf("cache.put(cacheKey, completed)", completed)
 
         assertTrue(rewrite >= 0)

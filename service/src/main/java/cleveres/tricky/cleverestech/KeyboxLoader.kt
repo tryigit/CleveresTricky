@@ -67,6 +67,7 @@ internal object KeyboxLoader {
     fun parseFileSnapshot(
         scope: FileScope,
         filename: String,
+        storageId: String = filename,
     ): ParsedFile =
         try {
             val override = fileParserOverride
@@ -77,7 +78,7 @@ internal object KeyboxLoader {
                     ?: return ParsedFile(null, emptyList())
                 ParsedFile(
                     snapshotSha256 = document.snapshotSha256,
-                    keyboxes = KeyboxJcaAdapter.materialize(document, filename),
+                    keyboxes = KeyboxJcaAdapter.materialize(document, storageId.ifEmpty { filename }),
                 )
             }
         } catch (error: RustBackendUnavailableException) {

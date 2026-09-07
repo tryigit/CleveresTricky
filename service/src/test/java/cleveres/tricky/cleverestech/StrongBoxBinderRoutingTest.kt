@@ -7,36 +7,36 @@ import org.junit.Test
 
 class StrongBoxBinderRoutingTest {
     @Test
-    fun `root keystore interceptor never remaps StrongBox to TEE`() {
+    fun `root keystore does not intercept or remap StrongBox discovery`() {
         val source = source("KeystoreInterceptor.kt")
 
         assertFalse(source.contains("getSecurityLevelTransaction"))
         assertFalse(source.contains("returned == strongBoxTarget"))
         assertFalse(source.contains("writeStrongBinder(currentTeeTarget)"))
+        assertFalse(source.contains("requestedSecurityLevel(data) == SecurityLevel.STRONGBOX"))
+        assertFalse(source.contains("ServiceSpecificException(ErrorCode.HARDWARE_TYPE_UNAVAILABLE)"))
         assertTrue(source.contains("validTransactCodes(getKeyEntryTransaction)"))
     }
 
     @Test
-    fun `StrongBox child binder remains completely unhooked`() {
+    fun `StrongBox child binder is hooked for certificate compatibility`() {
         val source = source("KeystoreInterceptor.kt")
-        val teeLookup = source.indexOf("ks.getSecurityLevel(SecurityLevel.TRUSTED_ENVIRONMENT)")
-        val teeRegistration = source.indexOf("tee.asBinder(),", teeLookup)
+        val strongboxLookup = source.indexOf("ks.getSecurityLevel(SecurityLevel.STRONGBOX)")
+        val strongboxRegistration = source.indexOf("strongbox.asBinder(),", strongboxLookup)
 
-        assertTrue(teeLookup >= 0)
-        assertTrue(teeRegistration > teeLookup)
-        assertFalse(source.contains("SecurityLevel.STRONGBOX"))
-        assertFalse(source.contains("strongBox.asBinder()"))
-        assertFalse(source.contains("strongBoxInterceptor"))
-        assertFalse(source.contains("strongBoxTarget"))
+        assertTrue(strongboxLookup >= 0)
+        assertTrue(strongboxRegistration > strongboxLookup)
+        assertTrue(source.contains("strongboxInterceptor"))
+        assertTrue(source.contains("strongboxTarget"))
     }
 
     @Test
-    fun `non TEE getKeyEntry exits before cache hashing or certificate parsing`() {
+    fun `StrongBox getKeyEntry does not exit before cache hashing`() {
         val source = source("KeystoreInterceptor.kt")
         val metadataRead = source.indexOf("val metadata = response?.metadata")
         val levelGate =
             source.indexOf(
-                "metadata.keySecurityLevel != SecurityLevel.TRUSTED_ENVIRONMENT",
+                "metadata.keySecurityLevel != SecurityLevel.TRUSTED_ENVIRONMENT &&",
                 metadataRead,
             )
         val cacheLookup = source.indexOf("CertHack.applyCachedCertificateChain(metadata)", levelGate)
@@ -49,19 +49,24 @@ class StrongBoxBinderRoutingTest {
         assertTrue(chainRead > cacheLookup)
         assertTrue(gateBody.contains("p.recycle()"))
         assertTrue(gateBody.contains("return Skip"))
+        assertTrue(gateBody.contains("metadata.keySecurityLevel != SecurityLevel.STRONGBOX"))
     }
 
     @Test
-    fun `security level interceptor is used only for TEE generateKey`() {
+    fun `security level interceptor is used for both TEE and StrongBox`() {
         val keystore = source("KeystoreInterceptor.kt")
         val interceptor = source("SecurityLevelInterceptor.kt")
         val teeLookup = keystore.indexOf("ks.getSecurityLevel(SecurityLevel.TRUSTED_ENVIRONMENT)")
         val interceptorCreation = keystore.indexOf("SecurityLevelInterceptor()", teeLookup)
+        val strongboxLookup = keystore.indexOf("ks.getSecurityLevel(SecurityLevel.STRONGBOX)")
+        val strongboxInterceptorCreation = keystore.indexOf("SecurityLevelInterceptor()", strongboxLookup)
+        
         val generateKeyGate = interceptor.indexOf("code == generateKeyTransaction")
         val backendGate = interceptor.indexOf("CertHack.canHack()", generateKeyGate)
         val policyGate = interceptor.indexOf("Config.needHack(callingUid)", backendGate)
 
         assertTrue(interceptorCreation > teeLookup)
+        assertTrue(strongboxInterceptorCreation > strongboxLookup)
         assertTrue(generateKeyGate >= 0)
         assertTrue(backendGate > generateKeyGate)
         assertTrue(policyGate > backendGate)

@@ -209,4 +209,59 @@ class KeyboxVerifierCheckFileTest {
         assertEquals(KeyboxVerifier.Status.ERROR, result.status)
         assertTrue(result.details.contains("RuntimeException"))
     }
+
+    @Test
+    fun `checkFile preserves StrongBox securityLevel on post-parse backend exception`() {
+        tempFile.writeText("content")
+        val mockKeyBox = Mockito.mock(CertHack.KeyBox::class.java)
+        Mockito.`when`(mockKeyBox.filename()).thenReturn("strongbox_keybox.xml")
+
+        KeyboxLoader.fileParserOverride = { _, _ ->
+            KeyboxLoader.ParsedFile(
+                snapshotSha256 = null,
+                keyboxes = listOf(mockKeyBox)
+            )
+        }
+
+        val result = KeyboxVerifier.checkFile(
+            tempFile,
+            KeyboxLoader.FileScope.CONFIG_ROOT,
+            tempFile.name,
+            "storage123"
+        ) {
+            throw RustBackendUnavailableException(IOException("backend restart"))
+        }
+
+        assertEquals(KeyboxVerifier.Status.ERROR, result.status)
+        assertEquals("Rust backend unavailable", result.details)
+        assertTrue(result.retryableBackendFailure)
+        assertEquals("StrongBox", result.securityLevel)
+    }
+
+    @Test
+    fun `checkFile preserves StrongBox securityLevel on post-parse generic exception`() {
+        tempFile.writeText("content")
+        val mockKeyBox = Mockito.mock(CertHack.KeyBox::class.java)
+        Mockito.`when`(mockKeyBox.filename()).thenReturn("strongbox_keybox.xml")
+
+        KeyboxLoader.fileParserOverride = { _, _ ->
+            KeyboxLoader.ParsedFile(
+                snapshotSha256 = null,
+                keyboxes = listOf(mockKeyBox)
+            )
+        }
+
+        val result = KeyboxVerifier.checkFile(
+            tempFile,
+            KeyboxLoader.FileScope.CONFIG_ROOT,
+            tempFile.name,
+            "storage123"
+        ) {
+            throw RuntimeException("network crash")
+        }
+
+        assertEquals(KeyboxVerifier.Status.ERROR, result.status)
+        assertTrue(result.details.contains("RuntimeException"))
+        assertEquals("StrongBox", result.securityLevel)
+    }
 }

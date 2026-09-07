@@ -1,5 +1,7 @@
 package cleveres.tricky.cleverestech.keystore;
 
+import android.os.Parcel;
+import android.system.keystore2.IKeystoreSecurityLevel;
 import android.system.keystore2.KeyEntryResponse;
 import android.system.keystore2.KeyMetadata;
 import android.util.Log;
@@ -13,6 +15,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Locale;
 
 import cleveres.tricky.cleverestech.util.FastByteArrayOutputStream;
 
@@ -23,6 +26,26 @@ public final class Utils {
     private static final int MAX_CHAIN_BYTES = 512 * 1024;
     private static final int MAX_CERTIFICATES = 16;
     private static final int MAX_THREAD_ISSUER_CACHE_ENTRIES = 8;
+    private static final String[] DEFAULT_HARDWARE_ISSUER_PATTERNS = new String[] {
+        "android keystore",
+        "google",
+        "qualcomm",
+        "samsung",
+        "knox",
+        "huawei",
+        "xiaomi",
+        "nxp",
+        "trusty",
+        "strongbox",
+        "motorola",
+        "honor",
+        "mediatek",
+        "unisoc",
+        "spreadtrum",
+        "keymint",
+        "keymaster",
+        "hardware"
+    };
 
     private static final ThreadLocal<CertificateFactory> CERTIFICATE_FACTORY =
             new ThreadLocal<CertificateFactory>() {
@@ -61,6 +84,88 @@ public final class Utils {
     private Utils() {
     }
 
+    /** Reads the generateKey AIDL prefix without changing the caller's parcel position. */
+    public static boolean usesDefaultAttestationKey(Parcel request) {
+        if (request == null) return false;
+        int position = request.dataPosition();
+        try {
+            request.enforceInterface(IKeystoreSecurityLevel.DESCRIPTOR);
+            if (!skipStableTypedParcelable(request) || request.dataAvail() < Integer.BYTES) {
+                return false;
+            }
+            // Parcel.writeTypedObject writes zero for null and a nonzero presence marker otherwise.
+            // We only need to distinguish the optional attestationKey, so do not instantiate its
+            // hidden platform class or depend on a generated CREATOR field that may change by API.
+            return request.readInt() == 0;
+        } catch (RuntimeException invalidRequest) {
+            return false;
+        } finally {
+            request.setDataPosition(position);
+        }
+    }
+
+    /**
+     * Skips one non-null stable-AIDL typed parcelable without allocating or binding to its Java ABI.
+     * Stable parcelables are size-prefixed; reject missing, undersized, overflowing, or truncated
+     * values instead of allowing an ambiguous prefix to select the default attestation key.
+     */
+    private static boolean skipStableTypedParcelable(Parcel request) {
+        if (request.dataAvail() < Integer.BYTES || request.readInt() != 1) {
+            return false;
+        }
+        return skipStableParcelableBody(request);
+    }
+
+    private static boolean skipStableParcelableBody(Parcel request) {
+        if (request.dataAvail() < Integer.BYTES) {
+            return false;
+        }
+        int parcelableStart = request.dataPosition();
+        int parcelableSize = request.readInt();
+        if (parcelableSize < Integer.BYTES ||
+                parcelableStart > Integer.MAX_VALUE - parcelableSize) {
+            return false;
+        }
+
+        int parcelableEnd = parcelableStart + parcelableSize;
+        if (parcelableEnd > request.dataSize()) return false;
+        request.setDataPosition(parcelableEnd);
+        return true;
+    }
+
+    /**
+     * KeyCreationResult's caller-provided ATTEST_KEY case returns only the signed leaf; its
+     * issuer chain belongs to the caller. Non-attested keys also have no issuer chain.
+     * Neither case permits substituting a generic keybox issuer, including after cache eviction
+     * or restart. Check the raw metadata before cache lookup, X.509 parsing or backend IPC.
+     */
+    public static boolean isCertificateChainRewriteCandidate(KeyMetadata metadata) {
+        return metadata != null &&
+                isCertificateChainRewriteCandidate(metadata.certificate, metadata.certificateChain);
+    }
+
+    /** Raw-byte form keeps platform-contract tests independent of hidden KeyMetadata constructors. */
+    public static boolean isCertificateChainRewriteCandidate(
+            byte[] certificate, byte[] certificateChain) {
+        return certificate != null && certificate.length > 0 &&
+                certificate.length <= MAX_CERTIFICATE_BYTES &&
+                certificateChain != null && certificateChain.length > 0 &&
+                certificateChain.length <= MAX_CHAIN_BYTES;
+    }
+
+    public static boolean hasRewritableLeafCertificate(KeyMetadata metadata) {
+        return metadata != null &&
+                hasRewritableLeafCertificate(metadata.certificate, metadata.certificateChain);
+    }
+
+    public static boolean hasRewritableLeafCertificate(
+            byte[] certificate, byte[] certificateChain) {
+        return certificate != null && certificate.length > 0 &&
+                certificate.length <= MAX_CERTIFICATE_BYTES &&
+                (certificateChain == null || certificateChain.length == 0);
+    }
+
+
     static X509Certificate toCertificate(byte[] encoded) {
         if (encoded == null || encoded.length == 0 ||
                 encoded.length > MAX_CERTIFICATE_BYTES) {
@@ -92,6 +197,31 @@ public final class Utils {
             return x509Certificate.getExtensionValue(ANDROID_ATTESTATION_EXTENSION_OID) != null;
         } catch (RuntimeException error) {
             Log.w(TAG, "Could not inspect Android attestation extension");
+            return false;
+        }
+    }
+
+    /**
+     * Returns whether the given certificate was issued by a standard hardware/OEM/Google CA.
+     * When an app creates an AttestKey child, the leaf's issuer is the app's custom subject.
+     * Preserving custom AttestKey signatures is critical so caller verification is not broken on readback.
+     */
+    public static boolean isDefaultHardwareIssuer(Certificate certificate) {
+        if (!(certificate instanceof X509Certificate x509Certificate)) return false;
+        try {
+            var principal = x509Certificate.getIssuerX500Principal();
+            if (principal == null) return false;
+            String name = principal.getName();
+            if (name == null || name.isEmpty()) return false;
+            String lower = name.toLowerCase(Locale.ROOT);
+            for (String pattern : DEFAULT_HARDWARE_ISSUER_PATTERNS) {
+                if (lower.contains(pattern)) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (RuntimeException error) {
+            Log.w(TAG, "Could not inspect certificate issuer", error);
             return false;
         }
     }
@@ -144,7 +274,7 @@ public final class Utils {
                 metadata.certificateChain == null
                         ? List.of()
                         : toCertificates(metadata.certificateChain);
-        if (metadata.certificateChain != null && issuers.isEmpty()) return null;
+        if (metadata.certificateChain != null && metadata.certificateChain.length > 0 && issuers.isEmpty()) return null;
 
         Certificate[] chain = new Certificate[issuers.size() + 1];
         chain[0] = leaf;

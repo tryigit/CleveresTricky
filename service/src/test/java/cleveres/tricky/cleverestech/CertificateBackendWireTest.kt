@@ -1,14 +1,101 @@
 package cleveres.tricky.cleverestech
 
+import java.io.ByteArrayOutputStream
+import java.io.File
+import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 
 class CertificateBackendWireTest {
+    @Before
+    fun setUp() {
+        CertificateBackend.resetForTesting()
+    }
+
+    @After
+    fun tearDown() {
+        CertificateBackend.resetForTesting()
+    }
+
+    @Test
+    fun `default rewrite emits the exact fixture consumed by the Rust parser`() {
+        val expected = rewriteFixture()
+        var writes = 0
+        CertificateBackend.rewriteTransportOverride = { declaredLength, writePayload ->
+            val output = ByteArrayOutputStream()
+            writePayload(output)
+            val actual = output.toByteArray()
+            assertEquals(expected.size, declaredLength)
+            assertEquals(declaredLength, actual.size)
+            assertArrayEquals(expected, actual)
+            writes++
+            byteArrayOf(0x30, 0x00)
+        }
+
+        val result =
+            CertificateBackend.rewrite(
+                genuineLeafDer = byteArrayOf(1),
+                keyId = ByteArray(16) { 0x33 },
+                signingAlgorithm = CertificateBackend.SIGNING_EC_P256_SHA256,
+                systemDisposition = CertificateBackend.PATCH_KEEP,
+                systemValue = 0,
+                vendorDisposition = CertificateBackend.PATCH_OMIT,
+                vendorValue = 0,
+                bootDisposition = CertificateBackend.PATCH_REPLACE,
+                bootValue = 20251205,
+                idOverrides = mapOf(714 to "imei".toByteArray()),
+                moduleHash = "mod".toByteArray(),
+                verifiedBootKey = ByteArray(32) { 0x11 },
+                verifiedBootHash = ByteArray(32) { 0x22 },
+            )
+
+        assertArrayEquals(byteArrayOf(0x30, 0x00), result)
+        assertEquals(1, writes)
+    }
+
+    @Test
+    fun `unsupported rewrite modes never invoke a signer or transport`() {
+        var signerCalls = 0
+        var transportCalls = 0
+        CertificateBackend.rewriteOverride = {
+            signerCalls++
+            byteArrayOf(1)
+        }
+        CertificateBackend.rewriteTransportOverride = { _, _ ->
+            transportCalls++
+            byteArrayOf(1)
+        }
+        for ((preserveIssuer, virtualizeSubject) in listOf(true to false, false to true, true to true)) {
+            assertNull(
+                CertificateBackend.rewriteWithMode(
+                    genuineLeafDer = byteArrayOf(1),
+                    keyId = ByteArray(16) { 0x33 },
+                    signingAlgorithm = CertificateBackend.SIGNING_EC_P256_SHA256,
+                    systemDisposition = CertificateBackend.PATCH_KEEP,
+                    systemValue = 0,
+                    vendorDisposition = CertificateBackend.PATCH_KEEP,
+                    vendorValue = 0,
+                    bootDisposition = CertificateBackend.PATCH_KEEP,
+                    bootValue = 0,
+                    idOverrides = emptyMap(),
+                    moduleHash = null,
+                    verifiedBootKey = ByteArray(32) { 0x11 },
+                    verifiedBootHash = ByteArray(32) { 0x22 },
+                    preserveIssuerName = preserveIssuer,
+                    virtualizeSubjectKey = virtualizeSubject,
+                ),
+            )
+        }
+        assertEquals(0, signerCalls)
+        assertEquals(0, transportCalls)
+    }
+
     @Test
     fun `inspection response decodes strict fields and wipes transport bytes`() {
         val response = ByteArray(85)
@@ -84,6 +171,19 @@ class CertificateBackendWireTest {
             it[83] = CertificateBackend.SECURITY_LEVEL_TEE.toByte()
             it[84] = CertificateBackend.SECURITY_LEVEL_TEE.toByte()
         }
+
+    private fun rewriteFixture(): ByteArray {
+        var root = File(requireNotNull(System.getProperty("user.dir"))).canonicalFile
+        repeat(6) {
+            val fixture = File(root, "rust/backend/tests/fixtures/certificate-rewrite-v2.hex")
+            if (fixture.isFile) {
+                val hex = fixture.readText().trim()
+                return hex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+            }
+            root = root.parentFile ?: error("Repository root not found")
+        }
+        error("Certificate wire fixture not found")
+    }
 
     private fun writeOptionalI32(
         bytes: ByteArray,

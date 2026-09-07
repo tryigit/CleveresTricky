@@ -149,16 +149,37 @@ pub fn rewrite_extension(request: &RewriteRequest<'_>) -> Result<RewriteResult, 
     }
 
     let attestation_version = decode_i32(&fields[0])?;
-    validate_security_level(&fields[1])?;
+    let attestation_level = decode_security_level(&fields[1])?;
     let keymint_version = decode_i32(&fields[2])?;
-    validate_security_level(&fields[3])?;
+    let keymint_level = decode_security_level(&fields[3])?;
     let supports_module_hash = attestation_version >= 400 && keymint_version >= 400;
+
+    let target_security_level = if attestation_level == 2 || keymint_level == 2 {
+        2u8
+    } else if attestation_level == 1 || keymint_level == 1 {
+        1u8
+    } else {
+        attestation_level
+    };
+    let encoded_level = Any::new(Tag::Enumerated, vec![target_security_level])
+        .map_err(|_| Error::Der)?
+        .to_der()
+        .map_err(|_| Error::Der)?;
+    fields[1] = encoded_level.clone();
+    fields[3] = encoded_level;
 
     let list_six = parse_authorization_list(&fields[AUTHORIZATION_LIST_SOFTWARE_INDEX])?;
     let list_seven = parse_authorization_list(&fields[AUTHORIZATION_LIST_TEE_INDEX])?;
     let summary_six = summarize_authorization_list(&list_six)?;
     let summary_seven = summarize_authorization_list(&list_seven)?;
-    let tee_index = if summary_six.has_root_of_trust && !summary_seven.has_root_of_trust {
+
+    // Android attestation has one hardware authorization list carrying RootOfTrust. Accept the
+    // historical list-order variance already supported here, but reject missing/ambiguous roots
+    // instead of manufacturing a hardware statement in the compatibility layer.
+    if summary_six.has_root_of_trust == summary_seven.has_root_of_trust {
+        return Err(Error::InvalidStructure);
+    }
+    let tee_index = if summary_six.has_root_of_trust {
         AUTHORIZATION_LIST_SOFTWARE_INDEX
     } else {
         AUTHORIZATION_LIST_TEE_INDEX
@@ -376,7 +397,12 @@ fn summarize_authorization_list(fields: &[TaggedTlv]) -> Result<AuthorizationSum
     let mut summary = AuthorizationSummary::default();
     for field in fields {
         match field.tag {
-            ROOT_OF_TRUST_TAG => summary.has_root_of_trust = true,
+            ROOT_OF_TRUST_TAG => {
+                if summary.has_root_of_trust {
+                    return Err(Error::InvalidStructure);
+                }
+                summary.has_root_of_trust = true;
+            }
             SYSTEM_PATCH_TAG => {
                 summary.system_patch =
                     merge_patch(summary.system_patch, decode_explicit_i32(&field.encoded)?)?
@@ -452,7 +478,7 @@ fn decode_i32(encoded: &[u8]) -> Result<i32, Error> {
     i32::from_der(encoded).map_err(|_| Error::InvalidStructure)
 }
 
-fn validate_security_level(encoded: &[u8]) -> Result<(), Error> {
+fn decode_security_level(encoded: &[u8]) -> Result<u8, Error> {
     let level = parse_any(encoded)?;
     if level.tag() != Tag::Enumerated
         || level.value().len() != 1
@@ -460,7 +486,7 @@ fn validate_security_level(encoded: &[u8]) -> Result<(), Error> {
     {
         return Err(Error::InvalidStructure);
     }
-    Ok(())
+    Ok(level.value()[0])
 }
 
 fn decode_explicit_i32(encoded: &[u8]) -> Result<i32, Error> {
@@ -567,9 +593,10 @@ mod tests {
 
     #[test]
     fn rewrites_patch_ids_module_hash_and_root_of_trust() {
-        let original_root = root_of_trust([0x33; 32], [0x44; 32]);
+        let original_root = root_of_trust_with_state([0x33; 32], false, 2, [0x44; 32]);
+        let original_root_tag = explicit_tag_raw(ROOT_OF_TRUST_TAG, &original_root);
         let tee = auth_list([
-            explicit_tag_raw(ROOT_OF_TRUST_TAG, &original_root),
+            original_root_tag,
             explicit_integer_raw(SYSTEM_PATCH_TAG, 202401),
             explicit_integer_raw(VENDOR_PATCH_TAG, 20240205),
             explicit_octet_raw(714, b"old-imei"),
@@ -621,7 +648,7 @@ mod tests {
         );
         assert_eq!(
             root_of_trust_fields(&tee),
-            (BOOT_KEY.to_vec(), BOOT_HASH.to_vec())
+            (BOOT_KEY.to_vec(), true, 0, BOOT_HASH.to_vec())
         );
         assert_sorted(&tee);
         assert_sorted(&software);
@@ -864,6 +891,28 @@ mod tests {
         assert_eq!(rewrite_extension(&request), Err(Error::InvalidOverride));
     }
 
+    #[test]
+    fn missing_or_duplicate_root_of_trust_is_rejected() {
+        let no_root = key_description(400, 400, auth_list([]), auth_list([]));
+        let request = RewriteRequest {
+            extension_der: &no_root,
+            patch_levels: PatchLevels::default(),
+            id_overrides: &[],
+            module_hash: None,
+            verified_boot_key: &BOOT_KEY,
+            verified_boot_hash: &BOOT_HASH,
+        };
+        assert_eq!(rewrite_extension(&request), Err(Error::InvalidStructure));
+
+        let root = explicit_tag_raw(ROOT_OF_TRUST_TAG, &root_of_trust([1; 32], [2; 32]));
+        let duplicate = key_description(400, 400, auth_list([]), auth_list([root.clone(), root]));
+        let request = RewriteRequest {
+            extension_der: &duplicate,
+            ..request
+        };
+        assert_eq!(rewrite_extension(&request), Err(Error::InvalidStructure));
+    }
+
     fn key_description(
         attestation_version: i32,
         keymint_version: i32,
@@ -916,12 +965,16 @@ mod tests {
     }
 
     fn root_of_trust(key: [u8; 32], hash: [u8; 32]) -> Vec<u8> {
+        root_of_trust_with_state(key, true, 0, hash)
+    }
+
+    fn root_of_trust_with_state(key: [u8; 32], locked: bool, state: u8, hash: [u8; 32]) -> Vec<u8> {
         let key = Any::new(Tag::OctetString, key.to_vec())
             .unwrap()
             .to_der()
             .unwrap();
-        let verified = true.to_der().unwrap();
-        let state = Any::new(Tag::Enumerated, vec![0])
+        let verified = locked.to_der().unwrap();
+        let state = Any::new(Tag::Enumerated, vec![state])
             .unwrap()
             .to_der()
             .unwrap();
@@ -968,7 +1021,7 @@ mod tests {
         })
     }
 
-    fn root_of_trust_fields(tee: &[TaggedTlv]) -> (Vec<u8>, Vec<u8>) {
+    fn root_of_trust_fields(tee: &[TaggedTlv]) -> (Vec<u8>, bool, u8, Vec<u8>) {
         let root = tee
             .iter()
             .find(|field| field.tag == ROOT_OF_TRUST_TAG)
@@ -979,8 +1032,19 @@ mod tests {
         let fields = split_tlvs(sequence.value(), 4).unwrap();
         assert_eq!(fields.len(), 4);
         let key = parse_any(&fields[0]).unwrap();
+        assert_eq!(key.tag(), Tag::OctetString);
+        let locked = bool::from_der(&fields[1]).unwrap();
+        let state = parse_any(&fields[2]).unwrap();
+        assert_eq!(state.tag(), Tag::Enumerated);
+        assert_eq!(state.value().len(), 1);
         let hash = parse_any(&fields[3]).unwrap();
-        (key.value().to_vec(), hash.value().to_vec())
+        assert_eq!(hash.tag(), Tag::OctetString);
+        (
+            key.value().to_vec(),
+            locked,
+            state.value()[0],
+            hash.value().to_vec(),
+        )
     }
 
     fn assert_sorted(fields: &[TaggedTlv]) {
