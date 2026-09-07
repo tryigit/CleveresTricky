@@ -1,7 +1,6 @@
 package cleveres.tricky.cleverestech.keystore;
 
 import android.hardware.security.keymint.SecurityLevel;
-import android.hardware.security.keymint.Tag;
 import android.os.Binder;
 import android.os.Parcel;
 import android.system.keystore2.KeyEntryResponse;
@@ -45,7 +44,28 @@ import static org.mockito.Mockito.when;
 
 public class AttestationInterceptorContractTest {
     @Test
-    public void explicitAttestKeyStripsChallengeDuringPreTransactAndReturnsOverrideData() throws Exception {
+    public void callerSelectedIssuerEmptiesCertificatesInPostTransact() throws Exception {
+        KeyPair issuer = keyPair("EC");
+        X509Certificate child = certificate(keyPair("RSA"), issuer, "child", "issuer");
+        KeyMetadata metadata = metadata(child, child.getEncoded());
+        Parcel request = AttestationRequestContractTest.request(true);
+        Parcel reply = generatedReply(metadata);
+        try (MockedStatic<CertHack> backend = mockStatic(CertHack.class)) {
+            backend.when(() -> CertHack.hackCertificateChain(any(), anyInt(), anyBoolean(), anyBoolean()))
+                    .thenReturn(new Certificate[] {child, child});
+            BinderInterceptor.Result result = generate(request, reply);
+            org.junit.Assert.assertTrue(result instanceof BinderInterceptor.OverrideReply);
+            org.junit.Assert.assertNull(metadata.certificate);
+            org.junit.Assert.assertNull(metadata.certificateChain);
+            ((BinderInterceptor.OverrideReply) result).getReply().recycle();
+            backend.verifyNoInteractions();
+        }
+        child.verify(issuer.getPublic());
+        verify(request).setDataPosition(28);
+    }
+
+    @Test
+    public void generateKeyAlwaysContinuesInPreTransact() throws Exception {
         Binder strongboxTarget = new Binder();
         Field strongboxTargetField = field(KeystoreInterceptor.class, "strongboxTarget");
         strongboxTargetField.set(KeystoreInterceptor.INSTANCE, strongboxTarget);
@@ -54,23 +74,22 @@ public class AttestationInterceptorContractTest {
         globalModeField.set(Config.INSTANCE, true);
         Config.INSTANCE.setPackagesForTesting(10_001, new String[] {"com.test.app"});
         try {
-            // Attested request with explicit issuer (AttestKey)
-            Parcel attestedExplicitRequest = AttestationRequestContractTest.attestedRequest(true);
+            int code = field(SecurityLevelInterceptor.class, "generateKeyTransaction").getInt(null);
             try (MockedStatic<CertHack> backend = mockStatic(CertHack.class)) {
                 backend.when(CertHack::canHack).thenReturn(true);
-                int code = field(SecurityLevelInterceptor.class, "generateKeyTransaction").getInt(null);
 
-                // onPreTransact should strip challenge and return OverrideData
-                BinderInterceptor.Result result = new SecurityLevelInterceptor().onPreTransact(
-                        strongboxTarget, code, 0, 10_001, 42, attestedExplicitRequest);
-                org.junit.Assert.assertTrue(result instanceof BinderInterceptor.OverrideData);
-                ((BinderInterceptor.OverrideData) result).getData().recycle();
+                // Both default and explicit attest key requests ALWAYS return Continue in pre-transact
+                Parcel defaultRequest = AttestationRequestContractTest.request(false);
+                BinderInterceptor.Result defaultResult = new SecurityLevelInterceptor().onPreTransact(
+                        strongboxTarget, code, 0, 10_001, 42, defaultRequest);
+                assertSame(BinderInterceptor.Continue.INSTANCE, defaultResult);
 
-                // Verify stripAttestationChallenge was called (writeInt overwrites the tag)
-                verify(attestedExplicitRequest).writeInt(Tag.INVALID);
+                Parcel explicitRequest = AttestationRequestContractTest.request(true);
+                BinderInterceptor.Result explicitResult = new SecurityLevelInterceptor().onPreTransact(
+                        strongboxTarget, code, 0, 10_001, 42, explicitRequest);
+                assertSame(BinderInterceptor.Continue.INSTANCE, explicitResult);
 
-                // CertHack.canHack is queried in pre-transact guard, but hackCertificateChain must never run
-                backend.verify(CertHack::canHack);
+                backend.verify(CertHack::canHack, org.mockito.Mockito.times(2));
                 backend.verify(() -> CertHack.hackCertificateChain(any(), anyInt(), anyBoolean(), anyBoolean()), never());
             }
         } finally {
@@ -168,9 +187,17 @@ public class AttestationInterceptorContractTest {
                         assertSame(BinderInterceptor.Skip.INSTANCE,
                                 generate(AttestationRequestContractTest.request(false), generatedReply(metadata)));
                     } else {
-                        // Caller-selected AttestKey children are skipped natively to avoid ProviderException.
-                        assertSame(BinderInterceptor.Skip.INSTANCE,
-                                generate(AttestationRequestContractTest.request(true), generatedReply(metadata)));
+                        // Caller-selected AttestKey children have their certificates emptied to prevent RootOfTrust divergence.
+                        BinderInterceptor.Result genResult =
+                                generate(AttestationRequestContractTest.request(true), generatedReply(metadata));
+                        org.junit.Assert.assertTrue(genResult instanceof BinderInterceptor.OverrideReply);
+                        org.junit.Assert.assertNull(metadata.certificate);
+                        org.junit.Assert.assertNull(metadata.certificateChain);
+                        ((BinderInterceptor.OverrideReply) genResult).getReply().recycle();
+
+                        // Reset metadata for the readback test
+                        metadata.certificate = original.clone();
+                        metadata.certificateChain = chain;
                     }
 
                     for (int read = 0; read < 320; read++) {
@@ -223,7 +250,7 @@ public class AttestationInterceptorContractTest {
     }
 
     @Test
-    public void nonAttestedKeyGenerationSkipsPreTransactAndSkipsPostTransact() throws Exception {
+    public void nonAttestedKeyGenerationContinuesPreTransactAndSkipsPostTransact() throws Exception {
         Binder strongboxTarget = new Binder();
         Field strongboxTargetField = field(KeystoreInterceptor.class, "strongboxTarget");
         strongboxTargetField.set(KeystoreInterceptor.INSTANCE, strongboxTarget);
@@ -232,20 +259,15 @@ public class AttestationInterceptorContractTest {
         globalModeField.set(Config.INSTANCE, true);
         Config.INSTANCE.setPackagesForTesting(10_001, new String[] {"com.test.app"});
         try {
-            Parcel nonAttestedRequest = AttestationRequestContractTest.request(false);
-            Parcel attestedRequest = AttestationRequestContractTest.attestedRequest(false);
+            Parcel request = AttestationRequestContractTest.request(false);
             try (MockedStatic<CertHack> backend = mockStatic(CertHack.class)) {
                 backend.when(CertHack::canHack).thenReturn(true);
                 backend.when(() -> CertHack.hasStrongBoxKeybox(anyInt())).thenReturn(false);
 
                 int code = field(SecurityLevelInterceptor.class, "generateKeyTransaction").getInt(null);
-                BinderInterceptor.Result nonAttestedResult = new SecurityLevelInterceptor().onPreTransact(
-                        strongboxTarget, code, 0, 10_001, 42, nonAttestedRequest);
-                assertSame(BinderInterceptor.Skip.INSTANCE, nonAttestedResult);
-
-                BinderInterceptor.Result attestedResult = new SecurityLevelInterceptor().onPreTransact(
-                        strongboxTarget, code, 0, 10_001, 42, attestedRequest);
-                assertSame(BinderInterceptor.Continue.INSTANCE, attestedResult);
+                BinderInterceptor.Result result = new SecurityLevelInterceptor().onPreTransact(
+                        strongboxTarget, code, 0, 10_001, 42, request);
+                assertSame(BinderInterceptor.Continue.INSTANCE, result);
             }
         } finally {
             strongboxTargetField.set(KeystoreInterceptor.INSTANCE, null);
