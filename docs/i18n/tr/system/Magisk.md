@@ -63,7 +63,7 @@ Tüm ayar ve kural dosyaları `/data/adb/cleverestricky/` klasöründe yer alır
   TAGS=release-keys
   ```
 * **`security_patch.txt`**: Güvenlik yaması tarihi (örn. `2026-03-05`). Otomatik sistem eşleşmesi için boş bırakın veya dosyayı kaldırın.
-* **`boot_props_mode`**: Bootloader özellik simülasyonunu yönetir (`auto`, `manual` veya `disabled`).
+* **`boot_props_mode`**: Bootloader özellik simülasyonunu yönetir (`auto`, `force` veya `disable`).
 
 ---
 
@@ -96,7 +96,7 @@ Bir özelliği açmak için dosyasını oluşturun (`touch <dosya>`), kapatmak i
 | `auto_keybox_check` | Keybox geçerliliğini ve iptal durumunu periyodik doğrular. |
 | `drm_passthrough` | `drm_packages.txt` listesindeki paketlere DRM muafiyeti uygular. |
 | `hide_sensitive_props` | Root ve bootloader durum göstergesi özelliklerini gizler. |
-| `tee_broken_mode` | Donanımsal TEE arızalı cihazlarda yazılımsal attestation desteği açar. |
+| `tee_broken_mode` | Eski geçiş/uyumluluk durumu. Dosya mevcutsa servis eski geçiş işlemlerini korur; çekirdek koruma değişmez ve donanım TEE iletişim hatasında devre kesici ayrıca devreye girer. |
 | `debug_logging` | `native_runtime.log` dosyasına ayrıntılı hata ayıklama günlüğü yazar. |
 
 ---

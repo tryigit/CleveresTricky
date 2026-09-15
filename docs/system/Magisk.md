@@ -63,7 +63,7 @@ All module settings and policy files reside in `/data/adb/cleverestricky/`.
   TAGS=release-keys
   ```
 * **`security_patch.txt`**: Security patch date (e.g., `2026-03-05`). Leave empty or absent for automatic system date alignment.
-* **`boot_props_mode`**: Controls bootloader property simulation (`auto`, `manual`, or `disabled`).
+* **`boot_props_mode`**: Controls bootloader property simulation (`auto`, `force`, or `disable`).
 
 ---
 
@@ -96,7 +96,7 @@ Enable features by creating the marker file (`touch <file>`), or disable them by
 | `auto_keybox_check` | Automatically validates keyboxes and checks revocation status. |
 | `drm_passthrough` | Enables DRM passthrough protection for packages in `drm_packages.txt`. |
 | `hide_sensitive_props` | Conceals root, debugging, and bootloader status properties. |
-| `tee_broken_mode` | Enables software attestation fallback on devices with damaged hardware TEE. |
+| `tee_broken_mode` | Legacy migration/compatibility state. When present, the service retains legacy migration handling; core protection is unchanged and the fail-closed circuit breaker activates separately upon hardware TEE communication failure. |
 | `debug_logging` | Enables verbose runtime logging to `native_runtime.log`. |
 
 ---

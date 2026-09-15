@@ -42,7 +42,7 @@ When authenticity matters, download from the official project release page and v
 
 5. Reboot Android.
 
-6. Open the module WebUI and review Dashboard and Logs.
+6. **KernelSU / APatch**: Open the module WebUI and review Dashboard and Logs. **Magisk (headless)**: Check runtime status via `su -c "cat /data/adb/cleverestricky/native_runtime.log"`, process inspection (`su -c "ps -A | grep cleverestech"`), or `action.sh` (see [Magisk Support](Magisk.md)).
 
 Do not extract or delete template binaries manually. An incomplete payload will fail verification or prevent native runtime activation.
 

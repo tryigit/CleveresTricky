@@ -63,7 +63,7 @@ Todos los archivos de configuración residen en `/data/adb/cleverestricky/`.
   TAGS=release-keys
   ```
 * **`security_patch.txt`**: Fecha del parche de seguridad (ej. `2026-03-05`). Dejar en blanco o ausente para alineación automática con el sistema.
-* **`boot_props_mode`**: Controla el modo de propiedades del bootloader (`auto`, `manual` o `disabled`).
+* **`boot_props_mode`**: Controla el modo de propiedades del bootloader (`auto`, `force` o `disable`).
 
 ---
 
@@ -96,7 +96,7 @@ Habilite funciones creando el archivo (`touch <archivo>`) o deshabilítelas elim
 | `auto_keybox_check` | Valida periódicamente las keyboxes y verifica revocaciones. |
 | `drm_passthrough` | Activa la exclusión de DRM para los paquetes en `drm_packages.txt`. |
 | `hide_sensitive_props` | Oculta propiedades sensibles de root, depuración y bootloader. |
-| `tee_broken_mode` | Habilita fallback por software en dispositivos con TEE físico dañado. |
+| `tee_broken_mode` | Estado de migración/compatibilidad heredado. Cuando está presente, el servicio mantiene el procesamiento de migración heredado; la protección central no cambia y el disyuntor fallo-cerrado se activa por separado ante un fallo de comunicación TEE de hardware. |
 | `debug_logging` | Habilita registros nativos detallados en `native_runtime.log`. |
 
 ---

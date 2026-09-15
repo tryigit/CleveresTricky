@@ -63,7 +63,7 @@ Semua file pengaturan dan kebijakan berada di direktori `/data/adb/cleverestrick
   TAGS=release-keys
   ```
 * **`security_patch.txt`**: Tanggal patch keamanan (misal `2026-03-05`). Kosongkan atau hapus file untuk penyelarasan otomatis dengan sistem.
-* **`boot_props_mode`**: Mengontrol mode properti bootloader (`auto`, `manual`, atau `disabled`).
+* **`boot_props_mode`**: Mengontrol mode properti bootloader (`auto`, `force`, atau `disable`).
 
 ---
 
@@ -96,7 +96,7 @@ Aktifkan fitur dengan membuat file (`touch <file>`), atau matikan dengan menghap
 | `auto_keybox_check` | Memvalidasi keybox dan memeriksa status pencabutan secara berkala. |
 | `drm_passthrough` | Mengaktifkan perlindungan DRM passthrough untuk paket di `drm_packages.txt`. |
 | `hide_sensitive_props` | Menyembunyikan properti sensitif root, debug, dan status bootloader. |
-| `tee_broken_mode` | Mengaktifkan fallback atestasi perangkat lunak untuk perangkat dengan TEE fisik rusak. |
+| `tee_broken_mode` | Status migrasi/kompatibilitas warisan. Jika ada, layanan mempertahankan penanganan migrasi warisan; perlindungan inti tidak berubah dan circuit breaker fail-closed diaktifkan secara terpisah saat kegagalan komunikasi TEE perangkat keras. |
 | `debug_logging` | Mengaktifkan pencatatan log detail di `native_runtime.log`. |
 
 ---

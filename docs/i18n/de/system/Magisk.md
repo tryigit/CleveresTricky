@@ -63,7 +63,7 @@ Alle Einstellungs- und Richtliniendateien befinden sich im Verzeichnis `/data/ad
   TAGS=release-keys
   ```
 * **`security_patch.txt`**: Datum des Sicherheitspatches (z. B. `2026-03-05`). Leer lassen oder entfernen für automatischen Abgleich mit den Systemeigenschaften.
-* **`boot_props_mode`**: Steuert die Bootloader-Eigenschaftssimulation (`auto`, `manual` oder `disabled`).
+* **`boot_props_mode`**: Steuert die Bootloader-Eigenschaftssimulation (`auto`, `force` oder `disable`).
 
 ---
 
@@ -96,7 +96,7 @@ Funktionen werden durch Erstellen der Datei aktiviert (`touch <Datei>`) und durc
 | `auto_keybox_check` | Überprüft automatisch Keybox-Gültigkeit und Widerrufsstatus. |
 | `drm_passthrough` | Aktiviert den DRM-Passthrough-Schutz für Apps in `drm_packages.txt`. |
 | `hide_sensitive_props` | Verbirgt sensible Root-, Debugging- und Bootloader-Statuswerte. |
-| `tee_broken_mode` | Aktiviert Software-Attestation auf Geräten mit beschädigter Hardware-TEE. |
+| `tee_broken_mode` | Legacy-Migrations-/Kompatibilitätsstatus. Bei Vorhandensein behält der Dienst die Legacy-Migrationsverarbeitung bei; der Kernschutz bleibt unverändert und der Fail-Closed-Breaker aktiviert sich separat bei einem Hardware-TEE-Kommunikationsfehler. |
 | `debug_logging` | Aktiviert ausführliche Diagnoseprotokolle in `native_runtime.log`. |
 
 ---

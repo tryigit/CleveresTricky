@@ -63,7 +63,7 @@ KernelSU 和 APatch 在其管理器应用内内置了模块 WebUI 扩展环境�
   TAGS=release-keys
   ```
 * **`security_patch.txt`**: 安全补丁日期（例如 `2026-03-05`）。留空或删除此文件则自动与系统属性对齐。
-* **`boot_props_mode`**: 控制引导加载程序（Bootloader）属性模拟方式（`auto`、`manual` 或 `disabled`）。
+* **`boot_props_mode`**: 控制引导加载程序（Bootloader）属性模拟方式（`auto`、`force` 或 `disable`）。
 
 ---
 
@@ -96,7 +96,7 @@ KernelSU 和 APatch 在其管理器应用内内置了模块 WebUI 扩展环境�
 | `auto_keybox_check` | 自动验证 keybox 并检查吊销状态。 |
 | `drm_passthrough` | 为 `drm_packages.txt` 中的包启用 DRM 直通保护。 |
 | `hide_sensitive_props` | 隐藏敏感的 root、调试与引导加载程序状态属性。 |
-| `tee_broken_mode` | 在硬件 TEE 损坏的设备上启用软件认证回退。 |
+| `tee_broken_mode` | 传统迁移/兼容状态。存在时，服务保留传统迁移处理；核心保护不变，硬件 TEE 通信故障时断路器单独激活。 |
 | `debug_logging` | 在 `native_runtime.log` 中记录详细的原生调试日志。 |
 
 ---
