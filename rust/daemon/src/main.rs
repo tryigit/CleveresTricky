@@ -790,8 +790,13 @@ fn serve_web(
     adapter_identity: Arc<AdapterIdentity>,
     module_dir: Arc<PathBuf>,
 ) -> io::Result<()> {
-    let mut adapter: Option<RegisteredAdapter> = None;
-    let mut relay_buffer = vec![0u8; STREAM_COPY_BYTES];
+    // Keep the adapter registration state behind a mutex so a long-running WebUI request cannot
+    // block the listener from accepting a reconnect. This prevents the daemon from reporting
+    // "Android adapter is unavailable" while the adapter process itself is still alive and trying
+    // to re-register after a transport reset.
+    let adapter: Arc<std::sync::Mutex<Option<RegisteredAdapter>>> =
+        Arc::new(std::sync::Mutex::new(None));
+    let relay_gate = Arc::new(std::sync::Mutex::new(()));
     let cached_manifest: Arc<std::sync::RwLock<Option<CachedManifest>>> =
         Arc::new(std::sync::RwLock::new(None));
     loop {
@@ -823,11 +828,13 @@ fn serve_web(
                 continue;
             }
         };
-        if adapter
-            .as_ref()
-            .is_some_and(|registered| !adapter_identity.matches(registered.lease))
-        {
-            adapter = None;
+        if let Ok(mut registered) = adapter.lock() {
+            if registered
+                .as_ref()
+                .is_some_and(|entry| !adapter_identity.matches(entry.lease))
+            {
+                *registered = None;
+            }
         }
         let peer_pid = u32::try_from(credentials.pid).ok();
         let peer_lease = adapter_identity
@@ -855,35 +862,88 @@ fn serve_web(
                 if write_frame(&mut client, OP_ADAPTER_REGISTER, 0, b"ok").is_err() {
                     continue;
                 }
-                adapter = Some(RegisteredAdapter {
-                    stream: client,
-                    lease,
-                });
+                if let Ok(mut registered) = adapter.lock() {
+                    *registered = Some(RegisteredAdapter {
+                        stream: client,
+                        lease,
+                    });
+                } else {
+                    continue;
+                }
             }
             OP_PING if header.flags == 0 && header.payload_len == 0 => {
                 let _ = write_frame(&mut client, OP_PING, 0, b"pong");
             }
             OP_WEB_REQUEST if header.flags == 0 && header.payload_len <= MAX_FRAME_BYTES => {
-                match forward_web_request_with_timeout(
-                    &mut client,
-                    header,
-                    &mut adapter,
-                    &mut relay_buffer,
-                    WEB_REQUEST_TIMEOUT,
-                ) {
-                    Ok(()) => {}
-                    Err(ForwardError::AdapterFailed(error)) => {
-                        adapter = None;
-                        let _ = reply_error(&mut client, OP_WEB_REQUEST, &error);
-                    }
-                    Err(ForwardError::AdapterUnavailable(error)) => {
-                        let _ = reply_error(&mut client, OP_WEB_REQUEST, &error);
-                    }
-                    Err(ForwardError::ClientFailed { preserve_adapter }) => {
-                        if !preserve_adapter {
-                            adapter = None;
+                let adapter_state = Arc::clone(&adapter);
+                let relay_gate = Arc::clone(&relay_gate);
+                let spawn_result = thread::Builder::new()
+                    .name("ct-web-request".to_string())
+                    .spawn(move || {
+                        let mut relay_buffer = vec![0u8; STREAM_COPY_BYTES];
+                        let _relay_guard = match relay_gate.lock() {
+                            Ok(guard) => guard,
+                            Err(_) => {
+                                let error = io::Error::other("adapter relay gate is poisoned");
+                                let _ = reply_error(&mut client, OP_WEB_REQUEST, &error);
+                                return;
+                            }
+                        };
+
+                        let mut selected = match adapter_state.lock() {
+                            Ok(mut registered) => registered.take(),
+                            Err(_) => {
+                                let error = io::Error::other("adapter registration state is poisoned");
+                                let _ = reply_error(&mut client, OP_WEB_REQUEST, &error);
+                                return;
+                            }
+                        };
+
+                        if selected.is_none() {
+                            let error = io::Error::other("Android adapter is unavailable");
+                            let _ = reply_error(&mut client, OP_WEB_REQUEST, &error);
+                            return;
                         }
-                    }
+
+                        let result = forward_web_request_with_timeout(
+                            &mut client,
+                            header,
+                            &mut selected,
+                            &mut relay_buffer,
+                            WEB_REQUEST_TIMEOUT,
+                        );
+
+                        match result {
+                            Ok(()) => {
+                                if let Some(adapter) = selected.take() {
+                                    if let Ok(mut registered) = adapter_state.lock() {
+                                        if registered.is_none() {
+                                            *registered = Some(adapter);
+                                        }
+                                    }
+                                }
+                            }
+                            Err(ForwardError::AdapterFailed(error)) => {
+                                let _ = reply_error(&mut client, OP_WEB_REQUEST, &error);
+                            }
+                            Err(ForwardError::AdapterUnavailable(error)) => {
+                                let _ = reply_error(&mut client, OP_WEB_REQUEST, &error);
+                            }
+                            Err(ForwardError::ClientFailed { preserve_adapter }) => {
+                                if preserve_adapter {
+                                    if let Some(adapter) = selected.take() {
+                                        if let Ok(mut registered) = adapter_state.lock() {
+                                            if registered.is_none() {
+                                                *registered = Some(adapter);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                if let Err(error) = spawn_result {
+                    eprintln!("cleverestrickyd: could not spawn WebUI request worker: {error}");
                 }
             }
             OP_INTEGRITY_VERIFY_FULL
