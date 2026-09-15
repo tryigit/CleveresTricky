@@ -418,10 +418,7 @@ fn spawn_android_adapter(module_dir: &Path) -> io::Result<Child> {
             if libc::getppid() == 1 {
                 libc::_exit(125);
             }
-            let fd = libc::open(
-                b"/proc/self/oom_score_adj\0".as_ptr() as *const libc::c_char,
-                libc::O_WRONLY,
-            );
+            let fd = libc::open(c"/proc/self/oom_score_adj".as_ptr(), libc::O_WRONLY);
             if fd >= 0 {
                 let _ = libc::write(fd, b"-1000\n".as_ptr() as *const libc::c_void, 6);
                 let _ = libc::close(fd);
@@ -456,10 +453,7 @@ fn spawn_backend(module_dir: &Path, adapter_pid: u32) -> io::Result<(Child, Unix
     // live in the forked child and the target descriptor is a fixed value below RLIMIT_NOFILE.
     unsafe {
         command.pre_exec(move || {
-            let fd = libc::open(
-                b"/proc/self/oom_score_adj\0".as_ptr() as *const libc::c_char,
-                libc::O_WRONLY,
-            );
+            let fd = libc::open(c"/proc/self/oom_score_adj".as_ptr(), libc::O_WRONLY);
             if fd >= 0 {
                 let _ = libc::write(fd, b"-1000\n".as_ptr() as *const libc::c_void, 6);
                 let _ = libc::close(fd);
