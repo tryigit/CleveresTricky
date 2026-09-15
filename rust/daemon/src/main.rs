@@ -796,6 +796,7 @@ fn serve_web(
     // to re-register after a transport reset.
     let adapter: Arc<std::sync::Mutex<Option<RegisteredAdapter>>> =
         Arc::new(std::sync::Mutex::new(None));
+    let relay_gate = Arc::new(std::sync::Mutex::new(()));
     let cached_manifest: Arc<std::sync::RwLock<Option<CachedManifest>>> =
         Arc::new(std::sync::RwLock::new(None));
     loop {
@@ -875,33 +876,69 @@ fn serve_web(
             }
             OP_WEB_REQUEST if header.flags == 0 && header.payload_len <= MAX_FRAME_BYTES => {
                 let adapter_state = Arc::clone(&adapter);
+                let relay_gate = Arc::clone(&relay_gate);
                 let spawn_result = thread::Builder::new()
                     .name("ct-web-request".to_string())
                     .spawn(move || {
                         let mut relay_buffer = vec![0u8; STREAM_COPY_BYTES];
-                        match adapter_state.lock() {
-                            Ok(mut registered) => {
-                                match forward_web_request_with_timeout(
-                                    &mut client,
-                                    header,
-                                    &mut registered,
-                                    &mut relay_buffer,
-                                    WEB_REQUEST_TIMEOUT,
-                                ) {
-                                    Ok(()) => {}
-                                    Err(ForwardError::AdapterFailed(error)) => {
-                                        let _ = reply_error(&mut client, OP_WEB_REQUEST, &error);
+                        let _relay_guard = match relay_gate.lock() {
+                            Ok(guard) => guard,
+                            Err(_) => {
+                                let error = io::Error::other("adapter relay gate is poisoned");
+                                let _ = reply_error(&mut client, OP_WEB_REQUEST, &error);
+                                return;
+                            }
+                        };
+
+                        let mut selected = match adapter_state.lock() {
+                            Ok(mut registered) => registered.take(),
+                            Err(_) => {
+                                let error = io::Error::other("adapter registration state is poisoned");
+                                let _ = reply_error(&mut client, OP_WEB_REQUEST, &error);
+                                return;
+                            }
+                        };
+
+                        if selected.is_none() {
+                            let error = io::Error::other("Android adapter is unavailable");
+                            let _ = reply_error(&mut client, OP_WEB_REQUEST, &error);
+                            return;
+                        }
+
+                        let result = forward_web_request_with_timeout(
+                            &mut client,
+                            header,
+                            &mut selected,
+                            &mut relay_buffer,
+                            WEB_REQUEST_TIMEOUT,
+                        );
+
+                        match result {
+                            Ok(()) => {
+                                if let Some(adapter) = selected.take() {
+                                    if let Ok(mut registered) = adapter_state.lock() {
+                                        if registered.is_none() {
+                                            *registered = Some(adapter);
+                                        }
                                     }
-                                    Err(ForwardError::AdapterUnavailable(error)) => {
-                                        let _ = reply_error(&mut client, OP_WEB_REQUEST, &error);
-                                    }
-                                    Err(ForwardError::ClientFailed { .. }) => {}
                                 }
                             }
-                            Err(_) => {
-                                let error =
-                                    io::Error::other("adapter registration state is poisoned");
+                            Err(ForwardError::AdapterFailed(error)) => {
                                 let _ = reply_error(&mut client, OP_WEB_REQUEST, &error);
+                            }
+                            Err(ForwardError::AdapterUnavailable(error)) => {
+                                let _ = reply_error(&mut client, OP_WEB_REQUEST, &error);
+                            }
+                            Err(ForwardError::ClientFailed { preserve_adapter }) => {
+                                if preserve_adapter {
+                                    if let Some(adapter) = selected.take() {
+                                        if let Ok(mut registered) = adapter_state.lock() {
+                                            if registered.is_none() {
+                                                *registered = Some(adapter);
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     });
