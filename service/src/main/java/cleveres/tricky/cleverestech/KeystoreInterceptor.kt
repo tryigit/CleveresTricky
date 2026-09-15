@@ -17,7 +17,6 @@ import cleveres.tricky.cleverestech.binder.BinderInterceptor
 import cleveres.tricky.cleverestech.keystore.CertHack
 import cleveres.tricky.cleverestech.keystore.Utils
 import java.security.cert.Certificate
-import kotlin.system.exitProcess
 
 @SuppressLint("BlockedPrivateApi")
 object KeystoreInterceptor : BinderInterceptor() {
@@ -1035,6 +1034,11 @@ object KeystoreInterceptor : BinderInterceptor() {
             deathRecipientLinked = false
             registered = false
             keystoreRegistered = false
+            injected = false
+            injectedPid = null
+            cachedKeystorePid = null
+            lastInjectionAttemptMs = 0L
+            triedCount.set(0)
             binderBackdoor = null
             teeInterceptor = null
             teeTarget = null
@@ -1046,8 +1050,8 @@ object KeystoreInterceptor : BinderInterceptor() {
 
     object Killer : IBinder.DeathRecipient {
         override fun binderDied() {
-            Logger.d("keystore exit, daemon restart")
-            exitProcess(0)
+            Logger.w("Keystore service exited; resetting interceptor state for re-injection")
+            onInterceptorReplaced()
         }
     }
 }

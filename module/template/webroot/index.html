@@ -1092,8 +1092,10 @@ return element.innerHTML;
                     if (message !== 'Native WebUI runtime is starting; retry shortly') return response;
                 } catch (error) {
                     const msg = String(error && error.message || '');
-                    const isTransient = msg.includes('Android adapter is unavailable') || msg.includes('Broken pipe') || msg.includes('service is unavailable');
-                    if (!isTransient || !canRetryTransient || attempt >= startupRetryDelaysMs.length) throw error;
+                    const isAdapterUnavailable = msg.includes('Android adapter is unavailable');
+                    const isTransient = isAdapterUnavailable || msg.includes('Broken pipe') || msg.includes('service is unavailable');
+                    const canRetry = canRetryTransient;
+                    if (!isTransient || !canRetry || attempt >= startupRetryDelaysMs.length) throw error;
                 }
                 if (options.signal && options.signal.aborted) throw new DOMException('The request was aborted', 'AbortError');
                 await new Promise((resolve, reject) => {
@@ -1367,6 +1369,14 @@ if (id === 'info') loadResourceUsage();
 else if (resourceUsageController) {
     resourceUsageController.abort();
     resourceUsageController = null;
+}
+if (id === 'editor' && typeof loadFile === 'function') {
+    const editor = document.getElementById('fileEditor');
+    const selector = document.getElementById('fileSelector');
+    const targetFile = selector ? selector.value : '';
+    if (!currentFile || currentFile !== targetFile || !editor || editor.value === 'Loading...' || (editor.value === '' && !originalContent)) {
+        loadFile();
+    }
 }
 const reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 window.scrollTo({ top: 0, behavior: reducedMotion ? 'auto' : 'smooth' });
@@ -1665,7 +1675,7 @@ const data = {
 
 const formData = new FormData();
 formData.append('data', JSON.stringify(data));
-const res = await fetchAuth('/api/server/add', { method: 'POST', body: formData });
+const res = await fetchAuth('/api/server/add', { method: 'POST', body: formData, idempotent: true });
 if (!res.ok) throw new Error(await res.text());
 notify('Server Added');
 resetServerForm();
@@ -1677,7 +1687,7 @@ try {
     notify('Removing...', 'working');
     const formData = new FormData();
     formData.append('id', id);
-    const res = await fetchAuth('/api/server/delete', { method: 'POST', body: formData });
+    const res = await fetchAuth('/api/server/delete', { method: 'POST', body: formData, idempotent: true });
     if (res.ok) { notify('Server Removed'); loadServers(); } else { const msg = await res.text(); notify('Error: ' + msg, 'error'); }
 } catch(e) { notify('Error: ' + e.message, 'error'); return; }
         }
@@ -1687,7 +1697,7 @@ try {
     notify('Refreshing...', 'working');
     const formData = new FormData();
     formData.append('id', id);
-    const res = await fetchAuth('/api/server/refresh', { method: 'POST', body: formData });
+    const res = await fetchAuth('/api/server/refresh', { method: 'POST', body: formData, idempotent: true });
     if(res.ok) { notify('Refreshed'); loadServers(); } else { const msg = await res.text(); notify('Error: ' + msg, 'error'); }
 } catch(e) { notify('Error: ' + e.message, 'error'); return; }
         }
@@ -1875,7 +1885,8 @@ try {
     const content = mode + '\n';
     const res = await fetchAuth('/api/save', {
         method: 'POST',
-        body: new URLSearchParams({ filename: 'boot_props_mode', content })
+        body: new URLSearchParams({ filename: 'boot_props_mode', content }),
+        idempotent: true
     });
     if (!res.ok) throw new Error(await res.text());
     select.dataset.savedValue = mode;
@@ -1908,7 +1919,11 @@ const requestedValue = Boolean(el.checked);
 syncSettingControls(setting, requestedValue, true);
 notify('Updating...', 'working');
 try {
-    const res = await fetchAuth('/api/toggle', {method:'POST', body: new URLSearchParams({setting, value: requestedValue})});
+    const res = await fetchAuth('/api/toggle', {
+        method: 'POST',
+        body: new URLSearchParams({ setting, value: requestedValue }),
+        idempotent: true
+    });
     if (!res.ok) {
         const message = await res.text();
         throw new Error('Server returned ' + res.status + ': ' + message);
@@ -2184,7 +2199,7 @@ notify('Deleting...', 'working');
 try {
     const formData = new URLSearchParams();
     formData.append('filename', filename);
-    const res = await fetchAuth('/api/delete_keybox', { method: 'POST', body: formData });
+    const res = await fetchAuth('/api/delete_keybox', { method: 'POST', body: formData, idempotent: true });
     if (res.ok) {
         notify('Deleted');
         loadKeyInfo();
@@ -2393,7 +2408,7 @@ appRules.splice(idx, 1); renderAppTable();
         async function saveAppConfig() {
 notify('Saving App Config...', 'working');
 try {
-    const res = await fetchAuth(getAuthUrl('/api/app_config_structured'), { method: 'POST', body: new URLSearchParams({ data: JSON.stringify(appRules) }) });
+    const res = await fetchAuth(getAuthUrl('/api/app_config_structured'), { method: 'POST', body: new URLSearchParams({ data: JSON.stringify(appRules) }), idempotent: true });
     const txt = await res.text();
     if (res.ok) { notify('App Config Saved'); } else { notify('Save Failed: ' + txt, 'error'); }
 } catch (e) {
@@ -2434,7 +2449,7 @@ if (!profileName) return;
 try {
     const formData = new URLSearchParams();
     formData.append('profile', profileName);
-    const res = await fetchAuth('/api/apply_profile', { method: 'POST', body: formData });
+    const res = await fetchAuth('/api/apply_profile', { method: 'POST', body: formData, idempotent: true });
     if (res.ok) {
         notify(`Profile ${profileName} Applied`);
         setTimeout(() => window.location.reload(), 1000);
@@ -2463,7 +2478,7 @@ else select.value = '';
 
         async function reloadConfig() {
 try {
-    const res = await fetchAuth('/api/reload', { method: 'POST' });
+    const res = await fetchAuth('/api/reload', { method: 'POST', idempotent: true });
     if (!res.ok) throw new Error(await res.text());
     notify('Reloaded');
     setTimeout(() => window.location.reload(), 1000);
@@ -2480,10 +2495,10 @@ for (const setting of ['global_mode','auto_keybox_check','drm_passthrough','spoo
     const body = new URLSearchParams();
     body.set('setting', setting);
     body.set('value', current[setting] ? 'true' : 'false');
-    const response = await fetchAuth('/api/toggle', { method: 'POST', body });
+    const response = await fetchAuth('/api/toggle', { method: 'POST', body, idempotent: true });
     if (!response.ok) throw new Error(await response.text());
 }
-const reload = await fetchAuth('/api/reload', { method: 'POST' });
+const reload = await fetchAuth('/api/reload', { method: 'POST', idempotent: true });
 if (!reload.ok) throw new Error(await reload.text());
 if (typeof loadConfig === 'function') await loadConfig();
 if (typeof loadResourceUsage === 'function') await loadResourceUsage();
@@ -2553,6 +2568,7 @@ editorFileController = controller;
 editorUnsavedBypass = false;
 editor.disabled = true;
 editor.value = 'Loading...';
+updateSaveButtonState();
 console.log('[CleveresTricky] loadFile: loading', f);
 try {
     const res = await fetchAuth('/api/file?filename=' + encodeURIComponent(f), { signal: controller.signal });
@@ -2573,7 +2589,12 @@ try {
         return;
     }
 } catch(e){
-    if (controller.signal.aborted || (e && e.name === 'AbortError')) return;
+    if (controller.signal.aborted || (e && e.name === 'AbortError')) {
+        if (editor.value === 'Loading...') {
+            editor.value = originalContent || '';
+        }
+        return;
+    }
     console.log('[CleveresTricky] loadFile:', f, 'error -', e.message);
     currentFile = '';
     originalContent = '';
@@ -2581,16 +2602,34 @@ try {
     notify('Error loading file', 'error');
     return;
 } finally {
-    if (editorFileController !== controller) return;
+    if (editorFileController !== controller) {
+        if (editor.value === 'Loading...') {
+            editor.value = originalContent || '';
+        }
+        editor.disabled = currentFile !== f;
+        updateSaveButtonState();
+        return;
+    }
     editorFileController = null;
     editor.disabled = currentFile !== f;
+    updateSaveButtonState();
 }
         }
         async function handleSave(btn) {
+ const editor = document.getElementById('fileEditor');
+ if (!editor || editor.disabled || !currentFile) return;
+ const content = editor.value;
+ if (content === 'Loading...' && originalContent !== 'Loading...') {
+     notify('File is still loading; please wait', 'error');
+     return;
+ }
  btn.disabled = true; btn.innerText = 'Saving...'; notify('Saving...', 'working');
- const content = document.getElementById('fileEditor').value;
  try {
-     const res = await fetchAuth('/api/save', { method: 'POST', body: new URLSearchParams({ filename: currentFile, content: content }) });
+     const res = await fetchAuth('/api/save', {
+         method: 'POST',
+         body: new URLSearchParams({ filename: currentFile, content: content }),
+         idempotent: true
+     });
      const txt = await res.text();
      if (res.ok) {
          notify('File Saved');
@@ -2606,6 +2645,16 @@ try {
 const editor = document.getElementById('fileEditor');
 const btn = document.getElementById('saveBtn');
 const revertBtn = document.getElementById('revertBtn');
+if (!btn) return;
+const isLoading = editor && (editor.disabled || editor.value === 'Loading...');
+if (isLoading) {
+    btn.disabled = true;
+    btn.innerText = 'Save';
+    btn.classList.remove('primary');
+    if (revertBtn) revertBtn.style.display = 'none';
+    return;
+}
+btn.disabled = false;
 if (currentFile && editor.value !== originalContent) {
     btn.innerText = 'Save *';
     btn.classList.add('primary');

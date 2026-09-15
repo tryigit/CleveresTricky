@@ -353,8 +353,8 @@ object KeyboxVerifier {
             val connection = URL(requestedUrl).openConnection() as HttpURLConnection
             try {
                 connection.instanceFollowRedirects = false
-                connection.connectTimeout = 10_000
-                connection.readTimeout = 10_000
+                connection.connectTimeout = 5_000
+                connection.readTimeout = 5_000
                 connection.requestMethod = "GET"
                 connection.setRequestProperty("Accept", "application/json")
                 connection.setRequestProperty("Accept-Encoding", "identity")

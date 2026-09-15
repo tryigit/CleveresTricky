@@ -6,7 +6,9 @@ import cleveres.tricky.cleverestech.util.SecureFile
 import java.io.File
 import java.util.concurrent.CountDownLatch
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -104,6 +106,9 @@ internal fun hasConfiguredKeyboxSource(configDir: File): Boolean =
  * Initializes integrity verification, starts interceptors, and enters the main runtime loop.
  */
 fun main(args: Array<String>) {
+    Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+        Logger.e("Uncaught exception on thread ${thread.name}", throwable)
+    }
     runCatching { File("/proc/self/oom_score_adj").writeText("-1000\n") }
     Logger.i("Welcome to Service!")
     val isTampered =
@@ -225,12 +230,14 @@ fun main(args: Array<String>) {
         // requests must wait until backend, configuration, and required watchers are operational.
         webUiReady.countDown()
 
+        val backgroundScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
         val startupRetryJobs =
             RuntimeStartupPolicy.retryableFailures(startupResults).map { result ->
                 Logger.w(
                     "${result.task.name} is unavailable; core Keystore/TEE interception will continue while the startup task retries",
                 )
-                launch(Dispatchers.IO) {
+                backgroundScope.launch {
                     try {
                         val recovered =
                             RuntimeStartupPolicy.retryBounded(result.task) { retryResult ->
@@ -262,7 +269,7 @@ fun main(args: Array<String>) {
         // scan even though the stored source is valid. Retry a few times in the background instead
         // of requiring a destructive environment reset from WebUI.
         if (activeKeyboxCountOrZero() == 0 && hasConfiguredKeyboxSource(configDir)) {
-            launch(Dispatchers.IO) {
+            backgroundScope.launch {
                 try {
                     val recovered =
                         retryDeferredKeyboxRefresh(

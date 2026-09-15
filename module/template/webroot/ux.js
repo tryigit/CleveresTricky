@@ -3444,7 +3444,7 @@
                 const body = new URLSearchParams();
                 body.set('filename', item.filename);
                 body.set('scope', scope);
-                const response = await global.fetchAuth('/api/delete_keybox', { method: 'POST', body });
+                const response = await global.fetchAuth('/api/delete_keybox', { method: 'POST', body, idempotent: true });
                 if (!response.ok) {
                     if (typeof global.notify === 'function') global.notify('Error: ' + await response.text(), 'error');
                     return;
@@ -3473,7 +3473,7 @@
                 if (typeof global.confirm === 'function' && !global.confirm(t('bulkConfirm', { count: items.length }))) return;
                 const body = new URLSearchParams();
                 body.set('items', JSON.stringify(items.map(({ item, scope }) => ({ filename: item.filename, scope }))));
-                const response = await global.fetchAuth('/api/delete_keyboxes', { method: 'POST', body });
+                const response = await global.fetchAuth('/api/delete_keyboxes', { method: 'POST', body, idempotent: true });
                 let payload = null;
                 try { payload = await response.clone().json(); } catch (_) {}
                 if (!response.ok && !payload) {

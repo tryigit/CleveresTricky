@@ -139,12 +139,12 @@ class WebUiBridge(
                     }
                     Logger.w("Native WebUI bridge reconnect attempt failed: ${error.message}")
                     try {
-                        Thread.sleep(backoffMs)
+                        Thread.sleep(if (backoffMs <= 0L) RECONNECT_INITIAL_DELAY_MS else backoffMs)
                     } catch (_: InterruptedException) {
                         Thread.currentThread().interrupt()
                         return
                     }
-                    backoffMs = minOf(backoffMs * 2, RECONNECT_MAX_DELAY_MS)
+                    backoffMs = if (backoffMs <= 0L) RECONNECT_INITIAL_DELAY_MS * 2 else minOf(backoffMs * 2, RECONNECT_MAX_DELAY_MS)
                     continue
                 }
 
@@ -168,20 +168,23 @@ class WebUiBridge(
             }
 
             val sessionDurationMs = System.currentTimeMillis() - connectedAt
-            if (processedRequests > 0 || sessionDurationMs >= STABLE_CONNECTION_MS) {
-                backoffMs = RECONNECT_INITIAL_DELAY_MS
+            val wasStable = processedRequests > 0 || sessionDurationMs >= STABLE_CONNECTION_MS
+            if (wasStable) {
+                backoffMs = 0L
             } else {
-                backoffMs = minOf(backoffMs * 2, RECONNECT_MAX_DELAY_MS)
+                backoffMs = if (backoffMs <= 0L) RECONNECT_INITIAL_DELAY_MS else minOf(backoffMs * 2, RECONNECT_MAX_DELAY_MS)
             }
 
             synchronized(lifecycleLock) {
                 if (!started || lifecycleGeneration != generation) return
             }
-            try {
-                Thread.sleep(backoffMs)
-            } catch (_: InterruptedException) {
-                Thread.currentThread().interrupt()
-                return
+            if (backoffMs > 0L) {
+                try {
+                    Thread.sleep(backoffMs)
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    return
+                }
             }
         }
     }
