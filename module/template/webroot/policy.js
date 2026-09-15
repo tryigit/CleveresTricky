@@ -76,7 +76,8 @@ function onReady(fn) {
 }
 
 async function request(path, options) {
-  const response = await bridge.fetch(path, options || {});
+  const fetcher = (typeof global.fetchAuth === 'function') ? global.fetchAuth : bridge.fetch;
+  const response = await fetcher(path, options || {});
   if (!response.ok) {
     const text = await response.text();
     throw new Error(text || `Request failed (${response.status})`);
@@ -1701,9 +1702,8 @@ async function initialize() {
   try {
     policyState = normalizePolicyState(await request('/api/policy_state'));
   } catch (error) {
-    notify(`Policy controls unavailable: ${error.message}`, 'error');
     if (typeof global.setTimeout === 'function') {
-      const retryDelays = [1000, 2500, 5000];
+      const retryDelays = [500, 1500, 3000, 6000];
       const attemptRetry = async (index) => {
         if (policyState || index >= retryDelays.length) return;
         try {
@@ -1714,13 +1714,19 @@ async function initialize() {
           sanitizeErrors();
           installResourceOwner();
           installPackagePickers();
-        } catch (_) {
-          if (!policyState && index + 1 < retryDelays.length) {
-            global.setTimeout(() => attemptRetry(index + 1), retryDelays[index + 1]);
+        } catch (retryError) {
+          if (!policyState) {
+            if (index + 1 < retryDelays.length) {
+              global.setTimeout(() => attemptRetry(index + 1), retryDelays[index + 1]);
+            } else {
+              notify(`Policy controls unavailable: ${retryError && retryError.message || error.message}`, 'error');
+            }
           }
         }
       };
       global.setTimeout(() => attemptRetry(0), retryDelays[0]);
+    } else {
+      notify(`Policy controls unavailable: ${error.message}`, 'error');
     }
     return;
   }

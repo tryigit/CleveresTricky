@@ -104,6 +104,7 @@ internal fun hasConfiguredKeyboxSource(configDir: File): Boolean =
  * Initializes integrity verification, starts interceptors, and enters the main runtime loop.
  */
 fun main(args: Array<String>) {
+    runCatching { File("/proc/self/oom_score_adj").writeText("-1000\n") }
     Logger.i("Welcome to Service!")
     val isTampered =
         try {

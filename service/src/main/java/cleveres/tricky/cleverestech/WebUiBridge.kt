@@ -25,7 +25,6 @@ import java.security.SecureRandom
 import java.util.Base64
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
-import kotlin.system.exitProcess
 
 class WebUiBridge(
     private val server: WebServer,
@@ -52,6 +51,27 @@ class WebUiBridge(
         ensureLayout()
         withStagingLock { cleanupStale() }
 
+        val connected = connectAndRegister()
+
+        synchronized(lifecycleLock) {
+            if (started) {
+                // Another thread started it concurrently
+                runCatching { connected.close() }
+                return
+            }
+            socket = connected
+            started = true
+            worker =
+                Thread({ workerLoop(connected) }, "CleveresTricky-WebUI").apply {
+                    isDaemon = true
+                    priority = Thread.NORM_PRIORITY
+                    start()
+                }
+        }
+        Logger.i("Native WebUI bridge is ready over bounded UDS IPC")
+    }
+
+    internal fun connectAndRegister(): LocalSocket {
         val connected = LocalSocket()
         try {
             connected.connect(LocalSocketAddress(SOCKET_NAME, LocalSocketAddress.Namespace.ABSTRACT))
@@ -75,27 +95,11 @@ class WebUiBridge(
                 acknowledgementPayload.fill(0)
             }
             connected.setSoTimeout(0)
+            return connected
         } catch (error: Throwable) {
             runCatching { connected.close() }
             throw error
         }
-
-        synchronized(lifecycleLock) {
-            if (started) {
-                // Another thread started it concurrently
-                runCatching { connected.close() }
-                return
-            }
-            socket = connected
-            started = true
-            worker =
-                Thread({ serveLoop(connected) }, "CleveresTricky-WebUI").apply {
-                    isDaemon = true
-                    priority = Thread.NORM_PRIORITY
-                    start()
-                }
-        }
-        Logger.i("Native WebUI bridge is ready over bounded UDS IPC")
     }
 
     fun stop() {
@@ -113,7 +117,64 @@ class WebUiBridge(
         activeWorker?.interrupt()
     }
 
-    private fun serveLoop(connected: LocalSocket) {
+    private fun workerLoop(initialSocket: LocalSocket) {
+        var currentSocket: LocalSocket? = initialSocket
+        var backoffMs = RECONNECT_INITIAL_DELAY_MS
+        while (started) {
+            val sock =
+                currentSocket ?: try {
+                    val newSocket = connectAndRegister()
+                    synchronized(lifecycleLock) {
+                        if (!started) {
+                            runCatching { newSocket.close() }
+                            return
+                        }
+                        socket = newSocket
+                    }
+                    backoffMs = RECONNECT_INITIAL_DELAY_MS
+                    Logger.i("Native WebUI bridge reconnected over bounded UDS IPC")
+                    newSocket
+                } catch (error: Throwable) {
+                    if (!started) return
+                    Logger.w("Native WebUI bridge reconnect attempt failed: ${error.message}")
+                    try {
+                        Thread.sleep(backoffMs)
+                    } catch (_: InterruptedException) {
+                        Thread.currentThread().interrupt()
+                        return
+                    }
+                    backoffMs = minOf(backoffMs * 2, RECONNECT_MAX_DELAY_MS)
+                    continue
+                }
+
+            try {
+                serveConnected(sock)
+            } catch (error: Throwable) {
+                if (!started) return
+                Logger.w("Native WebUI UDS transport disconnected; reconnecting: ${error.message}")
+            } finally {
+                runCatching { sock.close() }
+                synchronized(lifecycleLock) {
+                    if (socket === sock) {
+                        socket = null
+                    }
+                }
+                currentSocket = null
+            }
+
+            if (started) {
+                try {
+                    Thread.sleep(backoffMs)
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    return
+                }
+                backoffMs = minOf(backoffMs * 2, RECONNECT_MAX_DELAY_MS)
+            }
+        }
+    }
+
+    internal fun serveConnected(connected: LocalSocket) {
         val readHeaderBuffer = ByteArray(HEADER_BYTES)
         val writeHeaderBuffer = ByteArray(HEADER_BYTES)
         try {
@@ -138,11 +199,6 @@ class WebUiBridge(
                     requestBytes.fill(0)
                     responseBytes?.fill(0)
                 }
-            }
-        } catch (error: Throwable) {
-            if (started && socket === connected) {
-                Logger.e("Native WebUI UDS transport failed; terminating adapter for supervisor recovery", error)
-                exitProcess(1)
             }
         } finally {
             runCatching { connected.close() }
@@ -689,6 +745,8 @@ class WebUiBridge(
         private const val OP_ADAPTER_REGISTER = 2
         private const val OP_WEB_REQUEST = 3
         private const val REGISTER_TIMEOUT_MS = 5_000
+        private const val RECONNECT_INITIAL_DELAY_MS = 250L
+        private const val RECONNECT_MAX_DELAY_MS = 2_000L
         private const val HEX = "0123456789abcdef"
         private val IPC_MAGIC = byteArrayOf('C'.code.toByte(), 'T'.code.toByte(), 'I'.code.toByte(), 'P'.code.toByte())
         private val REGISTER_ACK = byteArrayOf('o'.code.toByte(), 'k'.code.toByte())

@@ -1115,6 +1115,7 @@ return element.innerHTML;
                 });
             }
         }
+        window.fetchAuth = fetchAuth;
         async function downloadBlob(blob, filename) {
 if (!window.CleveresBridge) throw new Error('Native WebUI bridge is unavailable');
 return window.CleveresBridge.exportBlob(blob, filename);

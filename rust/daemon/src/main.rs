@@ -44,6 +44,16 @@ const FILE_SOCKET_NAME: &[u8] = b"cleverestrickyd.files.v1";
 const CAPABILITY_WORKERS: usize = 2;
 const MAX_MANIFEST_BYTES: usize = 64 * 1024;
 const MAX_PROC_STAT_BYTES: u64 = 16 * 1024;
+const OOM_SCORE_ADJ_PROTECTED: i32 = -1000;
+
+/// Sets the OOM score adjustment for a process so that Linux / Android LMKD will not terminate it.
+fn set_oom_score_adj(pid: Option<u32>, score: i32) {
+    let path = match pid {
+        Some(pid) => format!("/proc/{pid}/oom_score_adj"),
+        None => "/proc/self/oom_score_adj".to_string(),
+    };
+    let _ = fs::write(&path, format!("{score}\n"));
+}
 
 fn parse_process_start_ticks(stat: &str) -> Option<u64> {
     let command_end = stat.rfind(')')?;
@@ -376,6 +386,7 @@ fn harden_process() -> io::Result<()> {
     if unsafe { libc::prctl(libc::PR_SET_DUMPABLE, 0, 0, 0, 0) } != 0 {
         return Err(io::Error::last_os_error());
     }
+    set_oom_score_adj(None, OOM_SCORE_ADJ_PROTECTED);
     Ok(())
 }
 
@@ -394,8 +405,9 @@ fn spawn_android_adapter(module_dir: &Path) -> io::Result<Child> {
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit());
 
-    // SAFETY: the pre-exec closure uses only async-signal-safe Linux syscalls (`prctl`, `getppid`)
-    // and constructs no shared Rust state after fork. It runs in the child immediately before exec.
+    // SAFETY: the pre-exec closure uses only async-signal-safe Linux syscalls (`prctl`, `getppid`,
+    // `open`, `write`, `close`) and constructs no shared Rust state after fork. It runs in the child
+    // immediately before exec.
     // PR_SET_PDEATHSIG prevents an adapter orphan if the Rust supervisor is terminated, while the
     // parent-PID check closes the race where the parent exits between fork and `prctl`.
     unsafe {
@@ -406,10 +418,20 @@ fn spawn_android_adapter(module_dir: &Path) -> io::Result<Child> {
             if libc::getppid() == 1 {
                 libc::_exit(125);
             }
+            let fd = libc::open(
+                b"/proc/self/oom_score_adj\0".as_ptr() as *const libc::c_char,
+                libc::O_WRONLY,
+            );
+            if fd >= 0 {
+                let _ = libc::write(fd, b"-1000\n".as_ptr() as *const libc::c_void, 6);
+                let _ = libc::close(fd);
+            }
             Ok(())
         });
     }
-    command.spawn()
+    let child = command.spawn()?;
+    set_oom_score_adj(Some(child.id()), OOM_SCORE_ADJ_PROTECTED);
+    Ok(child)
 }
 
 /// Spawns the backend process and returns the child handle along with the IPC socket pair.
@@ -433,9 +455,20 @@ fn spawn_backend(module_dir: &Path, adapter_pid: u32) -> io::Result<(Child, Unix
     // SAFETY: the closure performs only async-signal-safe descriptor syscalls. `child_broker_fd` is
     // live in the forked child and the target descriptor is a fixed value below RLIMIT_NOFILE.
     unsafe {
-        command.pre_exec(move || inherit_broker_fd(child_broker_fd));
+        command.pre_exec(move || {
+            let fd = libc::open(
+                b"/proc/self/oom_score_adj\0".as_ptr() as *const libc::c_char,
+                libc::O_WRONLY,
+            );
+            if fd >= 0 {
+                let _ = libc::write(fd, b"-1000\n".as_ptr() as *const libc::c_void, 6);
+                let _ = libc::close(fd);
+            }
+            inherit_broker_fd(child_broker_fd)
+        });
     }
     let child = command.spawn()?;
+    set_oom_score_adj(Some(child.id()), OOM_SCORE_ADJ_PROTECTED);
     drop(child_broker);
     Ok((child, daemon_broker))
 }
@@ -2305,5 +2338,11 @@ mod tests {
         assert_eq!(values.len(), 2);
         assert_eq!(values[0], pid.to_string());
         assert!(values[1].parse::<u64>().is_ok_and(|ticks| ticks > 0));
+    }
+
+    #[test]
+    fn oom_score_protection_helper_handles_missing_proc_gracefully() {
+        set_oom_score_adj(Some(999_999_999), OOM_SCORE_ADJ_PROTECTED);
+        set_oom_score_adj(None, OOM_SCORE_ADJ_PROTECTED);
     }
 }
