@@ -8,7 +8,7 @@ The installer creates a complete KernelSU or APatch module with the service, nat
 
 ## Supported path
 
-Installation must run from KernelSU or APatch while Android is active. Android 12 through Android 17 are supported on ARM64 and x86 64. Recovery and Magisk paths stop with an explanation before a partial module is left behind.
+Installation must run from KernelSU, APatch, or Magisk while Android is active. Android 12 through Android 17 are supported on ARM64 and x86 64. KernelSU and APatch provide full WebUI support; Magisk runs in headless daemon mode configured via `/data/adb/cleverestricky/` (see [Magisk Support](Magisk.md)). Recovery installation paths stop with an explanation before a partial module is left behind.
 
 The installer selects the architecture specific Rust `inject` and `webui_bridge` executables and the `libcleverestricky.so` library. It also installs the daemon, service APK, module metadata, installer script, early boot script, service script, native `webroot`, and SELinux policy required by their lifecycle stage.
 
@@ -36,7 +36,7 @@ When authenticity matters, download from the official project release page and v
 
 2. Verify its entry in `SHA256SUMS` and GitHub build provenance when source authenticity is required.
 
-3. Install it through KernelSU or APatch.
+3. Install it through KernelSU, APatch, or Magisk.
 
 4. Confirm that the manager reports success.
 

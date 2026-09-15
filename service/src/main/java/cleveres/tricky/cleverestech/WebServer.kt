@@ -1,6 +1,7 @@
 package cleveres.tricky.cleverestech
 
 import android.content.res.Resources
+import android.os.Build
 import android.system.Os
 import cleveres.tricky.cleverestech.keystore.CertHack
 import cleveres.tricky.cleverestech.util.BackupEncryptor
@@ -991,7 +992,7 @@ class WebServer(
     private fun getEnvironmentInfo(): String {
         if (File("/data/adb/ksu").exists() || File("/data/adb/ksud").exists()) return "KernelSU"
         if (File("/data/adb/apatch").exists()) return "APatch"
-        if (File("/sbin/magisk").exists() || File("/data/adb/magisk").exists()) return "Unsupported (Magisk)"
+        if (File("/sbin/magisk").exists() || File("/data/adb/magisk").exists()) return "Magisk"
         return "Unknown Root"
     }
 
@@ -2233,6 +2234,7 @@ class WebServer(
                     SecureFile.writeText(spoofFile, lines.joinToString("\n", postfix = "\n"))
                     Config.updateBuildVars(spoofFile)
                     Config.resetTargetFilesToDefaults()
+                    KeystoreInterceptor.resetTeeCircuitBreaker()
                     if (!updateKeyboxesFromConfiguredRevocationSource()) {
                         return keyboxActivationFailureResponse()
                     }
@@ -2276,6 +2278,7 @@ class WebServer(
                     if (!revocationAvailable) {
                         Logger.w("Runtime reload kept the active keybox pool because revocation data is unavailable")
                     }
+                    KeystoreInterceptor.resetTeeCircuitBreaker()
                     return secureResponse(Response.Status.OK, "text/plain", "Reloaded")
                 }
             } catch (e: Exception) {
@@ -2293,8 +2296,28 @@ class WebServer(
                         "system" -> arrayOf("logcat", "-d", "-t", "1000")
                         else -> arrayOf("logcat", "-d", "-t", "1000", "-s", "cleverestricky:V", "CleveresTricky:V")
                     }
-                val logs = readCommandOutput(cmd)
-                secureResponse(Response.Status.OK, "text/plain", logs.ifBlank { "No logs found." })
+                val logcatLogs = readCommandOutput(cmd).trim()
+                val combined =
+                    if (type == "cleverestricky") {
+                        val nativeRuntimeLogFile = File(configDir, "native_runtime.log")
+                        val nativeLogs =
+                            if (nativeRuntimeLogFile.isFile) {
+                                runCatching {
+                                    SafeConfigStore.readText(configDir, "native_runtime.log", 256 * 1024)
+                                }.getOrNull()?.trim()
+                            } else null
+
+                        buildString {
+                            if (logcatLogs.isNotBlank()) append(logcatLogs)
+                            if (!nativeLogs.isNullOrBlank()) {
+                                if (isNotEmpty()) append("\n--- native runtime ---\n")
+                                append(nativeLogs)
+                            }
+                        }
+                    } else {
+                        logcatLogs
+                    }
+                secureResponse(Response.Status.OK, "text/plain", combined.ifBlank { "No logs found." })
             } catch (e: Exception) {
                 Logger.e("Failed to fetch logs", e)
                 secureResponse(Response.Status.INTERNAL_ERROR, "text/plain", "Failed to fetch logs")
@@ -2368,6 +2391,15 @@ class WebServer(
             json.put("keystore_interceptor_running", KeystoreInterceptor.isRunning())
             json.put("telephony_interceptor_running", TelephonyInterceptor.isRunning())
             json.put("attest_fail_ring", CertHack.attestFailureSnapshot())
+            json.put("manufacturer", Build.MANUFACTURER)
+            json.put("brand", Build.BRAND)
+            json.put("model", Build.MODEL)
+            json.put("device", Build.DEVICE)
+            json.put("android_version", Build.VERSION.RELEASE)
+            json.put("android_sdk", Build.VERSION.SDK_INT)
+            val romDisplay = Build.DISPLAY
+            json.put("rom_build_id", if (!romDisplay.isNullOrBlank()) romDisplay else Build.ID)
+            json.put("security_patch", Build.VERSION.SECURITY_PATCH)
             return secureResponse(Response.Status.OK, "application/json", json.toString())
         }
 

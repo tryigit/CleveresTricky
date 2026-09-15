@@ -33,9 +33,10 @@ Project के साथ कोई usable Keybox या private attestation key 
 
 - Android **12-17** / API **31-37**
 - **ARM64** और **x86-64**
-- **KernelSU** और **APatch**
+- **KernelSU** और **APatch** (अनुशंसित, पूर्ण WebUI समर्थन)
+- **Magisk** (हेडलेस / `/data/adb/cleverestricky/` के माध्यम से मैन्युअल कॉन्फ़िगरेशन, [अनुशंसित नहीं](https://tryigit.dev/advanced-android-root-architecture-concealment/))
 
-Magisk और recovery installation supported नहीं हैं।
+Recovery installation समर्थित नहीं है।
 
 ## ज़रूरी बातें
 
@@ -48,6 +49,7 @@ CleveresTricky local compatibility path को बेहतर करता ह�
 ## और जानकारी
 
 - [Strong Integrity Guide](docs/i18n/hi/security/StrongIntegrityGuide.md) - Official, AOSP और Custom ROMs पर Google Play Integrity (MEETS_STRONG_INTEGRITY) पास करने के लिए त्वरित मार्गदर्शिका।
+- [Magisk सपोर्ट गाइड](docs/i18n/hi/system/Magisk.md) - Magisk यूज़र्स के लिए हेडलेस मैन्युअल कॉन्फ़िगरेशन और रूट कंसीलमेंट गाइड।
 - [Keybox Manager](docs/i18n/hi/security/KeyboxManager.md) - Keybox/CBOX loading, verification, selection और revocation checks।
 - [Application Scope](docs/i18n/hi/identity/ApplicationScope.md) और [Application Rules](docs/i18n/hi/identity/ApplicationRules.md) - तय करें features किन apps पर लागू हों।
 - [Build Identity](docs/i18n/hi/identity/BuildIdentity.md), [Telephony Identity](docs/i18n/hi/identity/TelephonyIdentity.md) और [Patch Levels](docs/i18n/hi/identity/PatchLevels.md) - optional identity controls।

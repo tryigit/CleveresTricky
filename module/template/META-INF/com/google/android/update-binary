@@ -1,0 +1,36 @@
+#!/sbin/sh
+##########################################################################################
+#
+# CleveresTricky Module Installer Script
+#
+##########################################################################################
+
+umask 022
+
+ui_print() { echo "$1"; }
+
+require_new_magisk() {
+  ui_print "*******************************"
+  ui_print " Please install Magisk v20.4+! "
+  ui_print "*******************************"
+  exit 1
+}
+
+OUTFD=$2
+ZIPFILE=$3
+
+mount /data 2>/dev/null
+
+if [ -f /data/adb/magisk/util_functions.sh ]; then
+  . /data/adb/magisk/util_functions.sh
+  [ "$MAGISK_VER_CODE" ] && [ "$MAGISK_VER_CODE" -ge 20400 ] || require_new_magisk
+elif [ -f /data/adb/ksu/util_functions.sh ]; then
+  . /data/adb/ksu/util_functions.sh
+elif [ -f /data/adb/ap/util_functions.sh ]; then
+  . /data/adb/ap/util_functions.sh
+else
+  require_new_magisk
+fi
+
+install_module
+exit 0

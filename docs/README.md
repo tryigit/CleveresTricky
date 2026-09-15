@@ -42,8 +42,10 @@ Runtime architecture, build requirements, diagnostics, platform coexistence, and
 * [Backup & Restore](system/BackupRestore.md) - Encrypted CTSB backup archive export and import.
 * [Building](system/Building.md) - Toolchain requirements, multi-target compilation, and verification.
 * [Diagnostics](system/Diagnostics.md) - Troubleshooting, logs, sanitized debug summaries, and inspectors.
+* [Logging & Diagnostics](LOG.md) - Diagnostic snapshots, WebUI debug logging, action report archive, and logcat.
 * [DRM Passthrough & Privacy](system/DrmPassthrough.md) - Media application Keystore preservation and deviceUniqueId isolation.
 * [Installer](system/Installer.md) - Module installation, environment detection, and package architecture.
+* [Magisk Support](system/Magisk.md) - Headless manual configuration, directory layout, and root concealment advisories.
 * [Native Architecture](system/NativeArchitecture.md) - Daemon supervision, IPC transport, and interceptors.
 * [Performance & Memory](system/Performance.md) - Zero-overhead design, memory limits, and bounded operations.
 * [Provider Coexistence](system/ProviderCoexistence.md) - Compatibility with other root and security modules.

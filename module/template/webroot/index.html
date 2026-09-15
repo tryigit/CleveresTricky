@@ -8,38 +8,38 @@
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
     <style>
         :root {
-            --color-red: rgb(255, 66, 69);
-            --color-orange: rgb(255, 146, 48);
-            --color-yellow: rgb(255, 214, 0);
+            --color-red: rgb(255, 69, 58);
+            --color-orange: rgb(255, 159, 10);
+            --color-yellow: rgb(255, 214, 10);
             --color-green: rgb(48, 209, 88);
             --color-mint: rgb(102, 212, 207);
-            --color-teal: rgb(106, 196, 212);
+            --color-teal: rgb(64, 200, 224);
             --color-cyan: rgb(100, 210, 255);
             --color-blue: rgb(10, 132, 255);
-            --color-indigo: rgb(109, 124, 255);
+            --color-indigo: rgb(94, 92, 230);
             --color-purple: rgb(191, 90, 242);
             --color-pink: rgb(255, 55, 95);
-            --color-brown: rgb(183, 138, 102);
+            --color-brown: rgb(172, 142, 104);
 
             --color-gray: rgb(142, 142, 147);
             --color-gray2: rgb(99, 99, 102);
             --color-gray3: rgb(72, 72, 74);
-            --color-gray4: rgb(56, 56, 58);
+            --color-gray4: rgb(58, 58, 60);
             --color-gray5: rgb(44, 44, 46);
             --color-gray6: rgb(28, 28, 30);
 
-            --color-red-light: rgb(255, 56, 60);
-            --color-orange-light: rgb(255, 141, 40);
+            --color-red-light: rgb(255, 59, 48);
+            --color-orange-light: rgb(255, 149, 0);
             --color-yellow-light: rgb(255, 204, 0);
             --color-green-light: rgb(52, 199, 89);
             --color-mint-light: rgb(0, 199, 190);
             --color-teal-light: rgb(48, 176, 199);
             --color-cyan-light: rgb(50, 173, 230);
             --color-blue-light: rgb(0, 122, 255);
-            --color-indigo-light: rgb(97, 85, 245);
+            --color-indigo-light: rgb(88, 86, 214);
             --color-purple-light: rgb(175, 82, 222);
             --color-pink-light: rgb(255, 45, 85);
-            --color-brown-light: rgb(172, 127, 94);
+            --color-brown-light: rgb(162, 132, 94);
 
             --color-gray-light: rgb(142, 142, 147);
             --color-gray2-light: rgb(174, 174, 178);
@@ -57,15 +57,15 @@
             --text-tertiary: var(--color-gray2);
             --accent: var(--color-blue);
             --accent-strong: rgb(0, 122, 255);
-            --accent-soft: rgba(10, 132, 255, 0.15);
+            --accent-soft: rgba(10, 132, 255, 0.12);
             --border: var(--color-gray4);
             --border-subtle: rgba(255, 255, 255, 0.12);
             --danger: var(--color-red);
-            --danger-soft: rgba(255, 66, 69, 0.15);
+            --danger-soft: rgba(255, 69, 58, 0.15);
             --success: var(--color-green);
             --success-soft: rgba(48, 209, 88, 0.15);
             --warning: var(--color-orange);
-            --warning-soft: rgba(255, 146, 48, 0.15);
+            --warning-soft: rgba(255, 159, 10, 0.15);
             --info: var(--color-cyan);
             --fg: #ffffff;
             --muted: var(--color-gray);
@@ -73,11 +73,11 @@
         }
         * { box-sizing: border-box; }
         ::selection {
-            background-color: rgba(10, 132, 255, 0.4);
+            background-color: rgba(10, 132, 255, 0.28);
             color: #ffffff;
         }
         ::-moz-selection {
-            background-color: rgba(10, 132, 255, 0.4);
+            background-color: rgba(10, 132, 255, 0.28);
             color: #ffffff;
         }
         html {
@@ -291,13 +291,13 @@
         input[type="text"]:focus, input[type="tel"]:focus, input[type="password"]:focus, input[type="search"]:focus, input[type="number"]:focus, textarea:focus {
             border-color: var(--accent);
             outline: none;
-            box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.3);
+            box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.22);
             background: #323236;
         }
         select:focus {
             border-color: var(--accent);
             outline: none;
-            box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.3);
+            box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.22);
             background-color: #323236;
             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%230a84ff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
         }
@@ -326,19 +326,22 @@
         }
         button:hover { background: #3a3a3c; border-color: rgba(255, 255, 255, 0.2); }
         button:active { transform: scale(0.98); }
-        button.primary { background: var(--accent); border-color: transparent; color: #ffffff; box-shadow: 0 4px 14px rgba(10, 132, 255, 0.35); }
-        button.primary:hover { background: var(--accent-strong); box-shadow: 0 6px 18px rgba(10, 132, 255, 0.45); }
-        button.danger { background: var(--danger-soft); color: var(--danger); border-color: rgba(255, 66, 69, 0.4); }
+        button.primary { background: var(--accent); border-color: transparent; color: #ffffff; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2); }
+        button.primary:hover { background: var(--accent-strong); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25); filter: brightness(1.05); }
+        button.danger { background: var(--danger-soft); color: var(--danger); border-color: rgba(255, 69, 58, 0.4); }
         button.danger:hover { background: var(--danger); color: #ffffff; }
         button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-        input[type="checkbox"].toggle { appearance: none; width: 52px; height: 32px; background: #3a3a3c; border-radius: 16px; position: relative; cursor: pointer; transition: background 0.3s; border: 6px solid transparent; background-clip: padding-box; box-sizing: content-box; margin: -6px; }
-        input[type="checkbox"].toggle::after { content: ''; position: absolute; top: 3px; left: 3px; width: 26px; height: 26px; background: #fff; border-radius: 50%; transition: transform 0.3s; }
-        input[type="checkbox"].toggle:checked { background: var(--success); }
-        input[type="checkbox"].toggle:checked::after { transform: translateX(20px); }
+        input[type="checkbox"].toggle, input[type="checkbox"].ct-switch { appearance: none; width: 48px; height: 28px; background: #323236; border-radius: 14px; position: relative; cursor: pointer; transition: background 0.2s, border-color 0.2s; border: 1px solid #4b4b4f; box-sizing: border-box; flex: 0 0 48px; }
+        input[type="checkbox"].toggle::after, input[type="checkbox"].ct-switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 22px; height: 22px; background: #fff; border-radius: 50%; box-shadow: 0 1px 3px rgba(0,0,0,0.4); transition: transform 0.2s cubic-bezier(.22,1,.36,1); }
+        input[type="checkbox"].toggle:checked, input[type="checkbox"].ct-switch:checked { background: var(--success); border-color: var(--success); }
+        input[type="checkbox"].toggle:checked::after, input[type="checkbox"].ct-switch:checked::after { transform: translateX(20px); background: #ffffff; }
         input[type="checkbox"].toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+        input[type="checkbox"].ct-switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         input[type="checkbox"].toggle:disabled { opacity: 0.5; cursor: not-allowed; }
-        input[type="checkbox"].toggle.pending-reboot, input[type="checkbox"].ct-switch.pending-reboot { background: #b45309 !important; border-color: #f59e0b !important; box-shadow: 0 0 8px rgba(245, 158, 11, 0.4) !important; }
-        input[type="checkbox"].toggle.pending-reboot:checked, input[type="checkbox"].ct-switch.pending-reboot:checked { background: #d97706 !important; border-color: #fbbf24 !important; box-shadow: 0 0 10px rgba(251, 191, 36, 0.5) !important; }
+        input[type="checkbox"].ct-switch:disabled { opacity: 0.5; cursor: not-allowed; }
+        input[type="checkbox"].toggle.pending-reboot, input[type="checkbox"].ct-switch.pending-reboot { background: #854d0e !important; border-color: #eab308 !important; box-shadow: none !important; }
+        input[type="checkbox"].toggle.pending-reboot:checked, input[type="checkbox"].ct-switch.pending-reboot:checked { background: #d97706 !important; border-color: #fbbf24 !important; box-shadow: none !important; }
+        input[type="checkbox"].toggle.pending-reboot:checked::after, input[type="checkbox"].ct-switch.pending-reboot:checked::after { transform: translateX(20px); background: #ffffff; }
         textarea:disabled, input:disabled, select:disabled, button:disabled { opacity: 0.5; cursor: not-allowed; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.94rem; box-sizing: border-box; }
         th { text-align: left; padding: 10px; border-bottom: 1px solid var(--border); color: var(--text-muted); font-weight: 600; font-size: 0.88rem; white-space: nowrap; }

@@ -1714,8 +1714,8 @@
                 top: 2px !important; left: 2px !important; border-radius: 50% !important; background: #f5f5f5 !important;
                 box-shadow: 0 1px 3px rgba(0,0,0,.45) !important; transform: translateX(0) !important; transition: transform .18s ease !important;
             }
-            input[type="checkbox"].toggle:checked { background: var(--accent) !important; border-color: var(--accent) !important; }
-            input[type="checkbox"].toggle:checked::after { transform: translateX(20px) !important; background: #0b0b0c !important; }
+            input[type="checkbox"].toggle:checked, input[type="checkbox"].ct-switch:checked { background: var(--success, #30d158) !important; border-color: var(--success, #30d158) !important; }
+            input[type="checkbox"].toggle:checked::after, input[type="checkbox"].ct-switch:checked::after { transform: translateX(20px) !important; background: #ffffff !important; }
             input[type="checkbox"].toggle:focus-visible { outline: 2px solid var(--accent) !important; outline-offset: 3px !important; }
             #apps .search-container, #apps .grid-2 > div { min-width: 0; }
             .autocomplete-items { z-index: 1200 !important; max-height: min(42dvh,320px) !important; overflow-x: hidden !important; }
@@ -2182,7 +2182,7 @@
         const panel = document.createElement('div');
         panel.id = 'ct_debug_panel';
         panel.className = 'panel';
-        panel.innerHTML = `<h3>Debug Logging</h3><div class="row" style="display:flex;align-items:center;justify-content:space-between;"><label for="ct_debug_logging_toggle" style="flex:1;min-width:0;padding-right:14px"><strong style="color:#fff">Debug Logging</strong><span class="res-desc">Enable additional runtime diagnostics without installing a debug build. Turn it off after collecting logs.</span></label><input id="ct_debug_logging_toggle" class="toggle" type="checkbox" style="flex:0 0 48px;width:48px;height:28px;"></div>`;
+        panel.innerHTML = `<h3>Debug Logging</h3><div class="row" style="display:flex;align-items:center;justify-content:space-between;"><label for="ct_debug_logging_toggle" style="flex:1;min-width:0;padding-right:14px"><strong style="color:#fff">Debug Logging</strong><span class="res-desc">Enable additional runtime diagnostics without installing a debug build. Turn it off after collecting logs.</span></label><input id="ct_debug_logging_toggle" class="ct-switch toggle" type="checkbox" style="flex:0 0 48px;width:48px;height:28px;"></div>`;
         log.insertBefore(panel, log.firstChild);
         const checkbox = panel.querySelector('input');
         bridge.getDebugLogging().then(enabled => { checkbox.checked = Boolean(enabled); }).catch(()=>{});
@@ -2205,7 +2205,8 @@
         'keystore_interceptor', 'telephony_interceptor', 'keybox_count', 'app_config_bytes',
         'process_cpu_percent', 'process_rss_kb', 'identity_engine', 'global_mode',
         'automatic_keybox_check', 'identity_refresh_on_boot', 'telephony',
-        'drm_passthrough', 'build_identity', 'region_property_view', 'attest_fail_ring'
+        'drm_passthrough', 'build_identity', 'region_property_view', 'attest_fail_ring',
+        'manufacturer', 'brand', 'model', 'device', 'android_version', 'android_sdk', 'rom_build_id', 'security_patch'
     ]);
 
     function sanitizeDiagnosticValue(value) {
@@ -2241,7 +2242,15 @@
             drm_passthrough: source.drm_passthrough,
             build_identity: source.spoof_build_identity,
             region_property_view: source.spoof_region_cn,
-            attest_fail_ring: source.attest_fail_ring
+            attest_fail_ring: source.attest_fail_ring,
+            manufacturer: source.manufacturer,
+            brand: source.brand,
+            model: source.model,
+            device: source.device,
+            android_version: source.android_version,
+            android_sdk: source.android_sdk,
+            rom_build_id: source.rom_build_id,
+            security_patch: source.security_patch
         };
         return ['CleveresTricky diagnostics', 'schema=2']
             .concat(DIAGNOSTIC_FIELDS.map(field => `${field}=${sanitizeDiagnosticValue(values[field])}`))

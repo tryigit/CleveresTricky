@@ -28,6 +28,14 @@ object KeystoreInterceptor : BinderInterceptor() {
     private val getKeyEntryTransaction =
         getTransactCode(IKeystoreService.Stub::class.java, "getKeyEntry") // 2
 
+    const val ERROR_SECURE_HW_COMMUNICATION_FAILED = 10
+    const val WARN_KEYMINT_TEE_BROKEN =
+        "[WARN] Platform KeyMint HAL unreachable or TEE broken (SECURE_HW_COMMUNICATION_FAILED)."
+    const val INFO_KEYMINT_ABORT_INJECTION =
+        "[INFO] CleveresTricky requires a functional hardware KeyMint; aborting injection to prevent framework deadlock."
+    const val INFO_KEYMINT_SEE_DOCS =
+        "[INFO] Please consult documentation (docs/security/Attestation.md or docs/LOG.md) for TEE recovery guidance."
+
     private val updateSubcomponentTransaction =
         getTransactCode(IKeystoreService.Stub::class.java, "updateSubcomponent").takeIf { it > 0 } ?: 3
 
@@ -46,6 +54,77 @@ object KeystoreInterceptor : BinderInterceptor() {
     @Volatile private var deathRecipientLinked = false
 
     @Volatile private var lifecycleEpoch = 0L
+
+    @Volatile private var teeBrokenCircuitBreaker = false
+
+    @Volatile private var hasLoggedKeyMintFailure = false
+
+    fun isTeeBroken(): Boolean = synchronized(this) { teeBrokenCircuitBreaker }
+
+    fun tripTeeCircuitBreaker() {
+        synchronized(this) {
+            teeBrokenCircuitBreaker = true
+        }
+        logSecureHwCommunicationFailure()
+        stopKeystoreInterceptor()
+    }
+
+    fun resetTeeCircuitBreaker() {
+        synchronized(this) {
+            teeBrokenCircuitBreaker = false
+            hasLoggedKeyMintFailure = false
+        }
+    }
+
+    fun isSecureHwCommunicationFailure(t: Throwable?): Boolean {
+        var curr = t
+        while (curr != null) {
+            val errorCode = runCatching {
+                curr.javaClass.getField("errorCode").getInt(curr)
+            }.recoverCatching {
+                curr.javaClass.getDeclaredField("errorCode").apply { isAccessible = true }.getInt(curr)
+            }.recoverCatching {
+                curr.javaClass.getMethod("getErrorCode").invoke(curr) as Int
+            }.getOrNull()
+            if (errorCode == ErrorCode.SECURE_HW_COMMUNICATION_FAILED || errorCode == ERROR_SECURE_HW_COMMUNICATION_FAILED) {
+                return true
+            }
+            val msg = curr.message
+            if (msg != null && (msg.contains("SECURE_HW_COMMUNICATION_FAILED", ignoreCase = true) || msg.contains("-49"))) {
+                return true
+            }
+            curr = curr.cause
+        }
+        return false
+    }
+
+    fun logSecureHwCommunicationFailure() {
+        synchronized(this) {
+            if (hasLoggedKeyMintFailure) return
+            hasLoggedKeyMintFailure = true
+        }
+        Logger.w(WARN_KEYMINT_TEE_BROKEN)
+        Logger.i(INFO_KEYMINT_ABORT_INJECTION)
+        Logger.i(INFO_KEYMINT_SEE_DOCS)
+
+        System.err.println(WARN_KEYMINT_TEE_BROKEN)
+        System.err.flush()
+        System.out.println(INFO_KEYMINT_ABORT_INJECTION)
+        System.out.println(INFO_KEYMINT_SEE_DOCS)
+        System.out.flush()
+
+        runCatching {
+            val logFile = java.io.File("/data/adb/cleverestricky/native_runtime.log")
+            if (logFile.parentFile?.exists() == true) {
+                logFile.appendText("$WARN_KEYMINT_TEE_BROKEN\n$INFO_KEYMINT_ABORT_INJECTION\n$INFO_KEYMINT_SEE_DOCS\n")
+            }
+        }
+    }
+
+    @Throws(Exception::class)
+    fun validateKeyMintHardware(service: IKeystoreService) {
+        service.getSecurityLevel(SecurityLevel.TRUSTED_ENVIRONMENT)
+    }
 
     override val requiresPostRequestPayload: Boolean = true
 
@@ -639,6 +718,7 @@ object KeystoreInterceptor : BinderInterceptor() {
 
     fun tryRunKeystoreInterceptor(): Boolean {
         synchronized(this) {
+            if (teeBrokenCircuitBreaker) return false
             if (registered && ::keystore.isInitialized && keystore.isBinderAlive) return true
             registered = false
         }
@@ -657,6 +737,16 @@ object KeystoreInterceptor : BinderInterceptor() {
                 Logger.e("failed to find keystore2 pid! will retry (attempt=${triedCount.get()})")
                 triedCount.incrementAndGet()
                 return false
+            }
+
+            val ksPrecheck = IKeystoreService.Stub.asInterface(b)
+            try {
+                validateKeyMintHardware(ksPrecheck)
+            } catch (e: Exception) {
+                if (isSecureHwCommunicationFailure(e)) {
+                    tripTeeCircuitBreaker()
+                    return false
+                }
             }
 
             val now = SystemClock.elapsedRealtime()
@@ -688,6 +778,10 @@ object KeystoreInterceptor : BinderInterceptor() {
             try {
                 ks.getSecurityLevel(SecurityLevel.TRUSTED_ENVIRONMENT)
             } catch (e: Exception) {
+                if (isSecureHwCommunicationFailure(e)) {
+                    tripTeeCircuitBreaker()
+                    return false
+                }
                 Logger.e("Failed to obtain TEE SecurityLevel", e)
                 null
             }

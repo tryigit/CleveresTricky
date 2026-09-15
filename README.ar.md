@@ -33,9 +33,10 @@ CleveresTricky هو موديول لـ KernelSU وAPatch على Android 12-17. ي
 
 - Android **12-17** / API **31-37**
 - **ARM64** و **x86-64**
-- **KernelSU** و **APatch**
+- **KernelSU** و **APatch** (موصى بهما، دعم كامل لـ WebUI)
+- **Magisk** (بدون واجهة مستخدم / تهيئة يدوية عبر `/data/adb/cleverestricky/`، [غير موصى به](https://tryigit.dev/advanced-android-root-architecture-concealment/))
 
-Magisk والتثبيت من recovery غير مدعومين.
+التثبيت من recovery غير مدعوم.
 
 ## أمور مهمة
 
@@ -48,6 +49,7 @@ Magisk والتثبيت من recovery غير مدعومين.
 ## المزيد من المعلومات
 
 - [دليل Strong Integrity](docs/i18n/ar/security/StrongIntegrityGuide.md) - دليل البدء السريع لاجتياز Google Play Integrity (MEETS_STRONG_INTEGRITY) على الرومات الرسمية وAOSP والمعدلة.
+- [دليل دعم Magisk](docs/i18n/ar/system/Magisk.md) - تهيئة يدوية بدون واجهة مستخدم وإرشادات إخفاء الروت لمستخدمي Magisk.
 - [Keybox Manager](docs/i18n/ar/security/KeyboxManager.md) - تحميل Keybox/CBOX والتحقق منها واختيارها وفحص الإلغاء.
 - [Application Scope](docs/i18n/ar/identity/ApplicationScope.md) و [Application Rules](docs/i18n/ar/identity/ApplicationRules.md) - تحديد التطبيقات التي تنطبق عليها الميزات.
 - [Build Identity](docs/i18n/ar/identity/BuildIdentity.md) و [Telephony Identity](docs/i18n/ar/identity/TelephonyIdentity.md) و [Patch Levels](docs/i18n/ar/identity/PatchLevels.md) - خيارات الهوية الاختيارية.

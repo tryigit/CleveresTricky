@@ -470,7 +470,10 @@ class SecurityLevelInterceptor : BinderInterceptor() {
             reply.writeNoException()
             reply.writeTypedObject(metadata, 0)
             OverrideReply(0, reply)
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            if (KeystoreInterceptor.isSecureHwCommunicationFailure(e)) {
+                KeystoreInterceptor.tripTeeCircuitBreaker()
+            }
             Skip
         }
     }

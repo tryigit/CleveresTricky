@@ -33,9 +33,10 @@ CleveresTricky - модуль для KernelSU и APatch на Android 12-17. Он
 
 - Android **12-17** / API **31-37**
 - **ARM64** и **x86-64**
-- **KernelSU** и **APatch**
+- **KernelSU** и **APatch** (рекомендуется, полная поддержка WebUI)
+- **Magisk** (режим headless / ручная настройка через `/data/adb/cleverestricky/`, [не рекомендуется](https://tryigit.dev/advanced-android-root-architecture-concealment/))
 
-Magisk и установка из recovery не поддерживаются.
+Установка из recovery не поддерживается.
 
 ## Важно знать
 
@@ -48,6 +49,7 @@ CleveresTricky улучшает локальный путь совместимо
 ## Подробнее
 
 - [Руководство по Strong Integrity](docs/i18n/ru/security/StrongIntegrityGuide.md) - быстрое руководство по прохождению Google Play Integrity (MEETS_STRONG_INTEGRITY) на официальных, AOSP и кастомных прошивках.
+- [Руководство по поддержке Magisk](docs/i18n/ru/system/Magisk.md) - руководство по ручной настройке в режиме headless и маскировке root для пользователей Magisk.
 - [Keybox Manager](docs/i18n/ru/security/KeyboxManager.md) - загрузка, проверка, выбор и проверка отзыва Keybox/CBOX.
 - [Application Scope](docs/i18n/ru/identity/ApplicationScope.md) и [Application Rules](docs/i18n/ru/identity/ApplicationRules.md) - выбор приложений, к которым применяются функции.
 - [Build Identity](docs/i18n/ru/identity/BuildIdentity.md), [Telephony Identity](docs/i18n/ru/identity/TelephonyIdentity.md) и [Patch Levels](docs/i18n/ru/identity/PatchLevels.md) - дополнительные настройки идентичности.

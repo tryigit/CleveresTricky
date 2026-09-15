@@ -33,9 +33,10 @@ El proyecto no incluye ningún Keybox utilizable ni una clave privada de attesta
 
 - Android **12-17** / API **31-37**
 - **ARM64** y **x86-64**
-- **KernelSU** y **APatch**
+- **KernelSU** y **APatch** (recomendado, soporte completo WebUI)
+- **Magisk** (headless / configuración manual mediante `/data/adb/cleverestricky/`, [no recomendado](https://tryigit.dev/advanced-android-root-architecture-concealment/))
 
-Magisk y la instalación desde recovery no son compatibles.
+La instalación desde recovery no es compatible.
 
 ## Importante
 
@@ -48,6 +49,7 @@ Utiliza únicamente configuraciones y credenciales para las que tengas autorizac
 ## Más información
 
 - [Guía de Strong Integrity](docs/i18n/es/security/StrongIntegrityGuide.md) - guía de inicio rápido para pasar Google Play Integrity (MEETS_STRONG_INTEGRITY) en ROMs oficiales, AOSP y personalizadas.
+- [Guía de soporte para Magisk](docs/i18n/es/system/Magisk.md) - configuración manual en modo headless y guía de ocultación de root para usuarios de Magisk.
 - [Keybox Manager](docs/i18n/es/security/KeyboxManager.md) - carga, verificación, selección y comprobaciones de revocación de Keybox/CBOX.
 - [Application Scope](docs/i18n/es/identity/ApplicationScope.md) y [Application Rules](docs/i18n/es/identity/ApplicationRules.md) - elige dónde se aplican las funciones.
 - [Build Identity](docs/i18n/es/identity/BuildIdentity.md), [Telephony Identity](docs/i18n/es/identity/TelephonyIdentity.md) y [Patch Levels](docs/i18n/es/identity/PatchLevels.md) - controles opcionales de identidad.

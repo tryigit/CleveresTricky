@@ -56,6 +56,7 @@ class KeystoreStrongBoxRedirectionTest {
         assertEquals(1, fieldGetSecLevel.getInt(null))
         assertEquals(2, fieldGetKeyEntry.getInt(null))
         assertEquals(-68, ErrorCode.HARDWARE_TYPE_UNAVAILABLE)
+        assertEquals(-49, ErrorCode.SECURE_HW_COMMUNICATION_FAILED)
     }
 
     private fun sourceFile(name: String): File {

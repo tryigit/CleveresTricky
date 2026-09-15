@@ -33,9 +33,10 @@ Projeyle birlikte kullanılabilir bir Keybox veya özel attestation anahtarı ve
 
 - Android **12-17** / API **31-37**
 - **ARM64** ve **x86-64**
-- **KernelSU** ve **APatch**
+- **KernelSU** ve **APatch** (önerilen, tam WebUI desteği)
+- **Magisk** (headless / `/data/adb/cleverestricky/` üzerinden manuel yapılandırma, [önerilmez](https://tryigit.dev/advanced-android-root-architecture-concealment/))
 
-Magisk ve recovery üzerinden kurulum desteklenmez.
+Recovery üzerinden kurulum desteklenmez.
 
 ## Bilmeniz gerekenler
 
@@ -48,6 +49,7 @@ Yalnızca kullanmaya yetkili olduğunuz yapılandırma ve kimlik bilgilerini kul
 ## Daha fazla bilgi
 
 - [Strong Integrity Rehberi](docs/i18n/tr/security/StrongIntegrityGuide.md) - Orijinal, AOSP ve Custom ROM'lar için Google Play Integrity (MEETS_STRONG_INTEGRITY) hızlı başlangıç kılavuzu.
+- [Magisk Desteği Rehberi](docs/i18n/tr/system/Magisk.md) - Magisk kullanıcıları için headless manuel yapılandırma ve root gizleme kılavuzu.
 - [Keybox Manager](docs/i18n/tr/security/KeyboxManager.md) - Keybox/CBOX yükleme, doğrulama, seçim ve iptal kontrolleri.
 - [Application Scope](docs/i18n/tr/identity/ApplicationScope.md) ve [Application Rules](docs/i18n/tr/identity/ApplicationRules.md) - özelliklerin hangi uygulamalara uygulanacağını seçin.
 - [Build Identity](docs/i18n/tr/identity/BuildIdentity.md), [Telephony Identity](docs/i18n/tr/identity/TelephonyIdentity.md) ve [Patch Levels](docs/i18n/tr/identity/PatchLevels.md) - isteğe bağlı kimlik kontrolleri.

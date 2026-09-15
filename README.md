@@ -33,9 +33,10 @@ No usable Keybox or private attestation key is bundled with the project.
 
 - Android **12-17** / API **31-37**
 - **ARM64** and **x86-64**
-- **KernelSU** and **APatch**
+- **KernelSU** and **APatch** (recommended, full WebUI support)
+- **Magisk** (headless / manual configuration via `/data/adb/cleverestricky/`, [not recommended](https://tryigit.dev/advanced-android-root-architecture-concealment/))
 
-Magisk and recovery installation are not supported.
+Recovery installation is not supported.
 
 ## Important to know
 
@@ -48,6 +49,7 @@ Use only configuration and credentials that you are authorized to use.
 ## Learn more
 
 - [Strong Integrity Guide](docs/security/StrongIntegrityGuide.md) - quick-start guide to passing Google Play Integrity (MEETS_STRONG_INTEGRITY) across Official, AOSP, and Custom ROMs.
+- [Magisk Support Guide](docs/system/Magisk.md) - headless manual configuration and root concealment guidance for Magisk users.
 - [Keybox Manager](docs/security/KeyboxManager.md) - Keybox/CBOX loading, verification, selection, and revocation checks.
 - [Application Scope](docs/identity/ApplicationScope.md) and [Application Rules](docs/identity/ApplicationRules.md) - choose where features apply.
 - [Build Identity](docs/identity/BuildIdentity.md), [Telephony Identity](docs/identity/TelephonyIdentity.md), and [Patch Levels](docs/identity/PatchLevels.md) - optional identity controls.

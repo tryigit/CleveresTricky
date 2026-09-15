@@ -26,4 +26,17 @@ Certificate substitution cannot create a hardware root of trust that the device 
 
 Only use key material that you own or are authorized to test. No usable private attestation key is included in the repository or release package.
 
+## Hardware TEE Provisioning & OnePlus Recovery Note
+
+CleveresTricky relies on genuine platform KeyMint/TEE operations and intentionally does not simulate or emulate a fake software TEE or fake attestation. When hardware TEE communication fails (e.g. `SECURE_HW_COMMUNICATION_FAILED` / error code 10), the module halts interception to prevent framework deadlock.
+
+On certain unlocked devices, bootloader unlocking can invalidate or break device-side hardware attestation or RKP provisioning:
+- **OnePlus 13 / 15 Unlocked-Device Attestation / TEE RKP Recovery**: As documented in [wuxianlin's investigation](https://wuxianlin.com/2025/11/12/oneplus-13-15-attestation-rkp-test/), bootloader unlocking on tested OnePlus 13 and 15 devices breaks TEE Attestation and RKP provisioning.
+- **Device-Side Provisioning Alternative**: The article reports that `KmInstallKeybox` device-ID provisioning can restore genuine TEE RKP (and on tested models Widevine L1 RKP) without injecting leaked attestation keys. This is a legitimate device-side TEE provisioning/recovery mechanism, not a keystore spoof or emulation.
+- **Scope & Limitations**:
+  - This does **NOT** universally restore the offline TEE Attestation Key.
+  - It is strictly **device- and firmware-specific**. It should not be applied generically or assumed to work across all OnePlus models.
+  - **Risk Warning**: Modifying device-side `persist` or TEE provisioning carries substantial risk of permanent keybox corruption or device bricking. Always create a full backup of your `persist` and firmware partitions before attempting any TEE provisioning recovery.
+
 [Return to the project overview](../README.md)
+

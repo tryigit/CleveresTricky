@@ -14,16 +14,20 @@ if [ "$BOOTMODE" ] && [ "$KSU" ]; then
 elif [ "$BOOTMODE" ] && [ "$APATCH" ]; then
   ui_print "- Installing from APatch app"
   ui_print "- APatch version: $APATCH_VER_CODE"
-elif [ "$MAGISK_VER_CODE" ] || command -v magisk >/dev/null 2>&1; then
+elif [ "$MAGISK_VER_CODE" ] || { [ "$BOOTMODE" ] && [ -d /data/adb/magisk ]; }; then
+  ui_print "- Installing from Magisk app"
+  ui_print "- Magisk version: ${MAGISK_VER:-unknown} (${MAGISK_VER_CODE:-unknown})"
   ui_print "*********************************************************"
-  ui_print "! Magisk is NOT supported!"
-  ui_print "! Magisk has been detected. Installation is blocked because Magisk causes issues."
-  ui_print "! Please use KernelSU or APatch instead."
-  abort    "*********************************************************"
+  ui_print "! NOTICE: Magisk is NOT recommended for CleveresTricky."
+  ui_print "! KernelSU or APatch is strongly recommended."
+  ui_print "! Learn why: https://tryigit.dev/advanced-android-root-architecture-concealment/"
+  ui_print "! WebUI is unavailable on Magisk."
+  ui_print "! Configure manually in: /data/adb/cleverestricky/"
+  ui_print "*********************************************************"
 else
   ui_print "*********************************************************"
   ui_print "! Install from recovery or unsupported root is not supported"
-  ui_print "! Please install from KernelSU or APatch app"
+  ui_print "! Please install from KernelSU, APatch, or Magisk app"
   abort    "*********************************************************"
 fi
 

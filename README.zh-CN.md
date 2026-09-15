@@ -33,9 +33,10 @@ CleveresTricky 是面向 Android 12-17 的 KernelSU / APatch 模块。它把 And
 
 - Android **12-17** / API **31-37**
 - **ARM64** 和 **x86-64**
-- **KernelSU** 和 **APatch**
+- **KernelSU** 和 **APatch**（推荐，提供完整 WebUI 支持）
+- **Magisk**（无界面 headless 模式 / 通过 `/data/adb/cleverestricky/` 手动配置，[不推荐](https://tryigit.dev/advanced-android-root-architecture-concealment/)）
 
-不支持 Magisk 和 Recovery 安装。
+不支持 Recovery 安装。
 
 ## 需要了解
 
@@ -48,6 +49,7 @@ CleveresTricky 改善的是本地兼容路径。最终远程结果仍取决于�
 ## 了解更多
 
 - [Strong Integrity 指南](docs/i18n/zh-CN/security/StrongIntegrityGuide.md) - 面向官方系统、AOSP 与第三方 ROM 的 Google Play Integrity (MEETS_STRONG_INTEGRITY) 快速配置指南。
+- [Magisk 支持指南](docs/i18n/zh-CN/system/Magisk.md) - 面向 Magisk 用户的无界面手动配置与 root 隐藏指南。
 - [Keybox Manager](docs/i18n/zh-CN/security/KeyboxManager.md) - Keybox/CBOX 加载、验证、选择和撤销检查。
 - [Application Scope](docs/i18n/zh-CN/identity/ApplicationScope.md) 与 [Application Rules](docs/i18n/zh-CN/identity/ApplicationRules.md) - 决定功能作用于哪些应用。
 - [Build Identity](docs/i18n/zh-CN/identity/BuildIdentity.md)、[Telephony Identity](docs/i18n/zh-CN/identity/TelephonyIdentity.md) 与 [Patch Levels](docs/i18n/zh-CN/identity/PatchLevels.md) - 可选身份控制。

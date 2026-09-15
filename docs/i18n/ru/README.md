@@ -34,6 +34,7 @@
 * [Diagnostics](system/Diagnostics.md)
 * [DRM Passthrough & Privacy](system/DrmPassthrough.md)
 * [Installer](system/Installer.md)
+* [Magisk Support](system/Magisk.md)
 * [Native Architecture](system/NativeArchitecture.md)
 * [Performance & Memory](system/Performance.md)
 * [Provider Coexistence](system/ProviderCoexistence.md)

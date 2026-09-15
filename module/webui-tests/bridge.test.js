@@ -37,6 +37,9 @@ const diagnosticsFormatter = uxSource.slice(
 assert.match(diagnosticsFormatter, /native_failure: runtime\.failure/);
 assert.match(diagnosticsFormatter, /schema=2/);
 assert.match(diagnosticsFormatter, /attest_fail_ring: source\.attest_fail_ring/);
+assert.match(diagnosticsFormatter, /manufacturer: source\.manufacturer/);
+assert.match(diagnosticsFormatter, /rom_build_id: source\.rom_build_id/);
+assert.match(diagnosticsFormatter, /security_patch: source\.security_patch/);
 ['pid', 'entry', 'timestamp_ms', 'package_name', 'keybox_name', 'filename', 'token', 'auth_data'].forEach(field => {
     assert.ok(!new RegExp(`['"]${field}['"]`).test(diagnosticsFormatter), `Diagnostic snapshot must not expose ${field}`);
 });
