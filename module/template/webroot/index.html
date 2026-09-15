@@ -1660,7 +1660,11 @@ const priority = Number.parseInt(document.getElementById('srvPriority').value, 1
 const refreshIntervalHours = Number.parseInt(document.getElementById('srvRefreshHours').value, 10);
 if (!Number.isInteger(priority) || priority < -1000000 || priority > 1000000) throw new Error('Priority is out of range');
 if (!Number.isInteger(refreshIntervalHours) || refreshIntervalHours < 1 || refreshIntervalHours > 720) throw new Error('Refresh interval is out of range');
+const serverId = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+    ? crypto.randomUUID()
+    : 'srv_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 10);
 const data = {
+    id: serverId,
     name: name.trim(),
     url: parsedUrl.toString(),
     authType,
