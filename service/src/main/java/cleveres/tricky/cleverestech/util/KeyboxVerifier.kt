@@ -300,12 +300,13 @@ object KeyboxVerifier {
 
         val result = try {
             val fetched = fetchNetworkCrl(requestedUrl, now)
+            val failedAt = if (fetched == null) System.currentTimeMillis() else 0L
             val finalResult = fetched ?: loadOfflineBaselineCrl()
             cacheLock.lock()
             try {
                 crlFetchNotBefore =
                     if (fetched == null) {
-                        maxOf(crlFetchNotBefore, now + CRL_FAILURE_BACKOFF_MS)
+                        maxOf(crlFetchNotBefore, failedAt + CRL_FAILURE_BACKOFF_MS)
                     } else {
                         0L
                     }
@@ -528,6 +529,7 @@ object KeyboxVerifier {
         cachedCrl = null
         cachedEtag = null
         lastFetchTime = 0
+        crlFetchNotBefore = 0L
     }
 
     @androidx.annotation.VisibleForTesting internal fun checkFile(

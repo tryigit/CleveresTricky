@@ -4,9 +4,11 @@ import cleveres.tricky.cleverestech.CrlBackend
 import cleveres.tricky.cleverestech.CrlWire
 import java.io.File
 import java.net.ServerSocket
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
@@ -112,6 +114,7 @@ class KeyboxVerifierCacheTest {
 
     @Test
     fun `failed CRL fetch is backoff protected to avoid repeated network stalls`() {
+        val responseDelayMs = TimeUnit.SECONDS.toMillis(1)
         val requestCount = AtomicInteger(0)
         val server = ServerSocket(0)
         val port = server.localPort
@@ -121,7 +124,12 @@ class KeyboxVerifierCacheTest {
                     while (!Thread.interrupted()) {
                         val client = server.accept()
                         requestCount.incrementAndGet()
-                        client.getOutputStream().close()
+                        Thread.sleep(responseDelayMs)
+                        client.outputStream.bufferedWriter().use { writer ->
+                            writer.write("HTTP/1.1 503 Service Unavailable\r\n")
+                            writer.write("Content-Length: 0\r\n")
+                            writer.write("Connection: close\r\n\r\n")
+                        }
                         client.close()
                     }
                 } catch (_: Exception) {
@@ -134,6 +142,15 @@ class KeyboxVerifierCacheTest {
 
             assertEquals(null, KeyboxVerifier.fetchCrl())
             assertEquals("first failed request should reach the CRL server", 1, requestCount.get())
+
+            val fetchCompletedAt = System.currentTimeMillis()
+            val backoffField = KeyboxVerifier::class.java.getDeclaredField("crlFetchNotBefore")
+            backoffField.isAccessible = true
+            val retryNotBefore = backoffField.getLong(KeyboxVerifier)
+            assertTrue(
+                "failure backoff must begin after the failed request completes",
+                retryNotBefore >= fetchCompletedAt + TimeUnit.SECONDS.toMillis(30) - TimeUnit.MILLISECONDS.toMillis(250),
+            )
 
             assertEquals(null, KeyboxVerifier.fetchCrl())
             assertEquals("subsequent requests during backoff must not hit the network again", 1, requestCount.get())
