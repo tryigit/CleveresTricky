@@ -899,7 +899,8 @@ fn serve_web(
                                 }
                             }
                             Err(_) => {
-                                let error = io::Error::other("adapter registration state is poisoned");
+                                let error =
+                                    io::Error::other("adapter registration state is poisoned");
                                 let _ = reply_error(&mut client, OP_WEB_REQUEST, &error);
                             }
                         }
