@@ -349,11 +349,14 @@ class WebUiBridgeTest {
         org.mockito.Mockito.`when`(mockSocket.inputStream).thenReturn(input)
         org.mockito.Mockito.`when`(mockSocket.outputStream).thenReturn(output)
 
+        bridge.setConnectedForTesting(mockSocket)
+
         try {
             bridge.serveConnected(mockSocket)
         } catch (_: java.io.IOException) {
             // Expected EOF or stream drop
         }
+        assertEquals(0, input.available())
         org.mockito.Mockito.verify(mockSocket).close()
     }
 

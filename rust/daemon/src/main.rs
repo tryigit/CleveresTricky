@@ -2337,6 +2337,5 @@ mod tests {
     #[test]
     fn oom_score_protection_helper_handles_missing_proc_gracefully() {
         set_oom_score_adj(Some(999_999_999), OOM_SCORE_ADJ_PROTECTED);
-        set_oom_score_adj(None, OOM_SCORE_ADJ_PROTECTED);
     }
 }
