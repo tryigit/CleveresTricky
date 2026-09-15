@@ -111,6 +111,39 @@ class KeyboxVerifierCacheTest {
 
 
     @Test
+    fun `failed CRL fetch is backoff protected to avoid repeated network stalls`() {
+        val requestCount = AtomicInteger(0)
+        val server = ServerSocket(0)
+        val port = server.localPort
+        val thread =
+            Thread {
+                try {
+                    while (!Thread.interrupted()) {
+                        val client = server.accept()
+                        requestCount.incrementAndGet()
+                        client.getOutputStream().close()
+                        client.close()
+                    }
+                } catch (_: Exception) {
+                }
+            }
+        thread.start()
+
+        try {
+            KeyboxVerifier.setCrlUrlForTesting("http://localhost:$port")
+
+            assertEquals(null, KeyboxVerifier.fetchCrl())
+            assertEquals("first failed request should reach the CRL server", 1, requestCount.get())
+
+            assertEquals(null, KeyboxVerifier.fetchCrl())
+            assertEquals("subsequent requests during backoff must not hit the network again", 1, requestCount.get())
+        } finally {
+            thread.interrupt()
+            server.close()
+        }
+    }
+
+    @Test
     fun `clearCacheLocked clears cache fields`() {
         // Set dummy values using reflection
         val cachedCrlField = KeyboxVerifier::class.java.getDeclaredField("cachedCrl")
@@ -120,6 +153,10 @@ class KeyboxVerifierCacheTest {
         val cachedEtagField = KeyboxVerifier::class.java.getDeclaredField("cachedEtag")
         cachedEtagField.isAccessible = true
         cachedEtagField.set(KeyboxVerifier, "dummy_etag")
+
+        val backoffField = KeyboxVerifier::class.java.getDeclaredField("crlFetchNotBefore")
+        backoffField.isAccessible = true
+        backoffField.set(KeyboxVerifier, 123456789L)
 
         val lastFetchTimeField = KeyboxVerifier::class.java.getDeclaredField("lastFetchTime")
         lastFetchTimeField.isAccessible = true
@@ -133,6 +170,7 @@ class KeyboxVerifierCacheTest {
         // Verify cleared values
         org.junit.Assert.assertNull(cachedCrlField.get(KeyboxVerifier))
         org.junit.Assert.assertNull(cachedEtagField.get(KeyboxVerifier))
+        org.junit.Assert.assertEquals(0L, backoffField.get(KeyboxVerifier))
         org.junit.Assert.assertEquals(0L, lastFetchTimeField.get(KeyboxVerifier))
     }
 
