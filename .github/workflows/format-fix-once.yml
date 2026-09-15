@@ -44,3 +44,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh workflow run build.yml --ref fix/webui-adapter-registration-starvation
+
+# One-shot helper: removed after it formats the branch.
