@@ -56,6 +56,7 @@ object KeyboxVerifier {
     private const val MAX_KEYBOX_FILES = 64
     private const val PERSISTED_CRL_FILE = "attestation_status_cache.json"
     private const val CACHE_TTL = 24 * 60 * 60 * 1000L
+    private const val CRL_FAILURE_BACKOFF_MS = 30_000L
     private const val MANUAL_VERIFY_RECOVERY_WAIT_MS = 1_200L
     private const val MANUAL_VERIFY_READY_WAIT_MS = 800L
     private const val MANUAL_VERIFY_POLL_MS = 25L
@@ -71,6 +72,7 @@ object KeyboxVerifier {
     private var lastFetchTime: Long = 0
     private val cacheLock = java.util.concurrent.locks.ReentrantLock()
     private var inFlightFetch: CompletableFuture<CrlWire.Handle?>? = null
+    private var crlFetchNotBefore: Long = 0L
 
     @androidx.annotation.VisibleForTesting
     fun setCrlUrlForTesting(url: String) {
@@ -265,6 +267,10 @@ object KeyboxVerifier {
                 }
             }
 
+            if (now < crlFetchNotBefore) {
+                return loadOfflineBaselineCrl()
+            }
+
             requestedUrl = crlUrl
             if (!isAllowedCrlUrl(requestedUrl, allowLoopbackHttp = requestedUrl != DEFAULT_CRL_URL)) {
                 Logger.e("Rejected unsafe CRL URL")
@@ -295,6 +301,20 @@ object KeyboxVerifier {
         val result = try {
             val fetched = fetchNetworkCrl(requestedUrl, now)
             val finalResult = fetched ?: loadOfflineBaselineCrl()
+            cacheLock.lock()
+            try {
+                crlFetchNotBefore =
+                    if (fetched == null) {
+                        maxOf(crlFetchNotBefore, now + CRL_FAILURE_BACKOFF_MS)
+                    } else {
+                        0L
+                    }
+            } finally {
+                cacheLock.unlock()
+            }
+            if (fetched == null) {
+                Logger.w("CRL network fetch unavailable; suppressing another network attempt for ${CRL_FAILURE_BACKOFF_MS}ms")
+            }
             future.complete(finalResult)
             finalResult
         } catch (_: Throwable) {
@@ -349,73 +369,61 @@ object KeyboxVerifier {
         } finally {
             cacheLock.unlock()
         }
-        repeat(2) { attempt ->
-            val connection = URL(requestedUrl).openConnection() as HttpURLConnection
-            try {
-                connection.instanceFollowRedirects = false
-                connection.connectTimeout = 5_000
-                connection.readTimeout = 5_000
-                connection.requestMethod = "GET"
-                connection.setRequestProperty("Accept", "application/json")
-                connection.setRequestProperty("Accept-Encoding", "identity")
-                conditionalEtag?.let { connection.setRequestProperty("If-None-Match", it) }
 
-                val responseCode = connection.responseCode
-                if (responseCode == HttpURLConnection.HTTP_NOT_MODIFIED) {
-                    cacheLock.lock()
-                    try {
-                        cachedCrl?.let { cached ->
-                            lastFetchTime = now
-                            return cached
-                        }
-                    } finally {
-                        cacheLock.unlock()
-                    }
-                    if (conditionalEtag != null && attempt == 0) {
-                        Logger.w("CRL server returned 304 without usable local state; retrying unconditionally")
-                        cacheLock.lock()
-                        try {
-                            cachedEtag = null
-                        } finally {
-                            cacheLock.unlock()
-                        }
-                        conditionalEtag = null
-                        return@repeat
-                    }
-                    Logger.e("CRL server returned 304 without usable local state")
-                    return null
-                }
-                if (responseCode != HttpURLConnection.HTTP_OK) {
-                    Logger.e("CRL fetch failed with HTTP $responseCode")
-                    return null
-                }
+        val connection = URL(requestedUrl).openConnection() as HttpURLConnection
+        try {
+            connection.instanceFollowRedirects = false
+            connection.connectTimeout = 5_000
+            connection.readTimeout = 5_000
+            connection.requestMethod = "GET"
+            connection.setRequestProperty("Accept", "application/json")
+            connection.setRequestProperty("Accept-Encoding", "identity")
+            conditionalEtag?.let { connection.setRequestProperty("If-None-Match", it) }
 
-                val declaredLength = connection.contentLengthLong
-                if (declaredLength > MAX_CRL_BYTES) throw IOException("CRL response is too large")
-                val raw = BoundedInputStream(connection.inputStream, MAX_CRL_BYTES).use(::readAllBytesBounded)
+            val responseCode = connection.responseCode
+            if (responseCode == HttpURLConnection.HTTP_NOT_MODIFIED) {
+                cacheLock.lock()
                 try {
-                    val handle = CrlBackend.refresh(raw) ?: return null
-                    cacheLock.lock()
-                    try {
-                        persistCrlLocked(raw)
-                        cachedCrl = handle
-                        cachedEtag = connection.getHeaderField("ETag")?.take(512)
+                    cachedCrl?.let { cached ->
                         lastFetchTime = now
-                    } finally {
-                        cacheLock.unlock()
+                        return cached
                     }
-                    return handle
                 } finally {
-                    raw.fill(0)
+                    cacheLock.unlock()
                 }
-            } catch (error: Exception) {
-                Logger.e("Failed to fetch CRL", error)
+                Logger.w("CRL server returned 304 without usable local state; retaining offline state")
                 return null
-            } finally {
-                connection.disconnect()
             }
+            if (responseCode != HttpURLConnection.HTTP_OK) {
+                Logger.w("CRL fetch unavailable with HTTP $responseCode")
+                return null
+            }
+
+            val declaredLength = connection.contentLengthLong
+            if (declaredLength > MAX_CRL_BYTES) throw IOException("CRL response is too large")
+            val raw = BoundedInputStream(connection.inputStream, MAX_CRL_BYTES).use(::readAllBytesBounded)
+            try {
+                val handle = CrlBackend.refresh(raw) ?: return null
+                cacheLock.lock()
+                try {
+                    persistCrlLocked(raw)
+                    cachedCrl = handle
+                    cachedEtag = connection.getHeaderField("ETag")?.take(512)
+                    lastFetchTime = now
+                    crlFetchNotBefore = 0L
+                } finally {
+                    cacheLock.unlock()
+                }
+                return handle
+            } finally {
+                raw.fill(0)
+            }
+        } catch (error: Exception) {
+            Logger.w("CRL network fetch failed; treating it as an external-source outage", error)
+            return null
+        } finally {
+            connection.disconnect()
         }
-        return null
     }
 
     /** Rebuilds only from the persisted raw cache; restart recovery never performs recursive network work. */
