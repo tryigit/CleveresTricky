@@ -2590,24 +2590,21 @@ try {
     }
 } catch(e){
     if (controller.signal.aborted || (e && e.name === 'AbortError')) {
-        if (editor.value === 'Loading...') {
+        if (editorFileController === controller && editor.value === 'Loading...') {
             editor.value = originalContent || '';
         }
         return;
     }
     console.log('[CleveresTricky] loadFile:', f, 'error -', e.message);
-    currentFile = '';
-    originalContent = '';
-    editor.value = '';
-    notify('Error loading file', 'error');
+    if (editorFileController === controller) {
+        currentFile = '';
+        originalContent = '';
+        editor.value = '';
+        notify('Error loading file', 'error');
+    }
     return;
 } finally {
     if (editorFileController !== controller) {
-        if (editor.value === 'Loading...') {
-            editor.value = originalContent || '';
-        }
-        editor.disabled = currentFile !== f;
-        updateSaveButtonState();
         return;
     }
     editorFileController = null;

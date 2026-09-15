@@ -8,7 +8,9 @@ import java.util.concurrent.CountDownLatch
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -106,8 +108,10 @@ internal fun hasConfiguredKeyboxSource(configDir: File): Boolean =
  * Initializes integrity verification, starts interceptors, and enters the main runtime loop.
  */
 fun main(args: Array<String>) {
+    val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
     Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
         Logger.e("Uncaught exception on thread ${thread.name}", throwable)
+        previousHandler?.uncaughtException(thread, throwable)
     }
     runCatching { File("/proc/self/oom_score_adj").writeText("-1000\n") }
     Logger.i("Welcome to Service!")
@@ -230,7 +234,7 @@ fun main(args: Array<String>) {
         // requests must wait until backend, configuration, and required watchers are operational.
         webUiReady.countDown()
 
-        val backgroundScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val backgroundScope = CoroutineScope(Dispatchers.IO + SupervisorJob(coroutineContext[Job]))
 
         val startupRetryJobs =
             RuntimeStartupPolicy.retryableFailures(startupResults).map { result ->
@@ -445,6 +449,7 @@ fun main(args: Array<String>) {
                 Config.awaitRuntimeController(controllerWaitMs)
             } catch (_: InterruptedException) {
                 Thread.currentThread().interrupt()
+                backgroundScope.cancel()
                 startupRetryJobs.forEach { it.cancel() }
                 CronAutoIdentity.stop()
                 KeyboxDirectoryRefreshWatcher.stop()
