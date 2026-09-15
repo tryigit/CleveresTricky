@@ -104,7 +104,7 @@ If you see:
 [INFO] CleveresTricky requires a functional hardware KeyMint; aborting injection to prevent framework deadlock.
 [INFO] Please consult documentation (docs/security/Attestation.md or docs/LOG.md) for TEE recovery guidance.
 ```
-This indicates that the device's hardware TEE or vendor KeyMint HAL is failing to communicate (error code -49 / 10). CleveresTricky intentionally trips an internal circuit breaker and halts interception rather than deadlocking the framework. Refer to [Attestation.md](docs/security/Attestation.md#hardware-tee-provisioning--oneplus-recovery-note) for device-side TEE provisioning recovery options (e.g. OnePlus 13/15 unlocked TEE RKP recovery).
+This indicates that the device's hardware TEE or vendor KeyMint HAL is failing to communicate (error code -49 / SECURE_HW_COMMUNICATION_FAILED). CleveresTricky intentionally trips an internal circuit breaker and halts interception rather than deadlocking the framework. Refer to [Attestation.md](docs/security/Attestation.md#hardware-tee-provisioning--unlocked-device-recovery-note) for device-side TEE provisioning recovery options on unlocked devices.
 
 > [!WARNING]
 > Review your logs before sharing publicly. While credentials and WebUI tokens are never logged, device model names, process IDs, and package names may still be visible.

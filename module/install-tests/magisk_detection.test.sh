@@ -36,10 +36,29 @@ output=$(
   MODPATH="$fixture/mod" \
   ZIPFILE="$fixture/dummy.zip" \
   bash -c '
-    source "'"$fixture/customize.sh"'" 2>&1 || true
-  '
+    unzip() {
+      echo "UNZIP_EXTRACT_REACHED: $*"
+      touch "$TMPDIR/verify.sh" "$TMPDIR/verify.sh.sha256"
+      exit 0
+    }
+    export -f unzip
+    source "'"$fixture/customize.sh"'"
+  ' 2>&1
 )
+status=$?
 set -e
+
+if [[ $status -ne 0 ]]; then
+  echo "FAIL: customize.sh aborted unexpectedly in Magisk environment with code $status" >&2
+  echo "$output" >&2
+  exit 1
+fi
+
+if ! echo "$output" | grep -q "UNZIP_EXTRACT_REACHED"; then
+  echo "FAIL: customize.sh did not reach post-detection extraction" >&2
+  echo "$output" >&2
+  exit 1
+fi
 
 if echo "$output" | grep -q "! Magisk is NOT supported!"; then
   echo "FAIL: customize.sh still rejected Magisk environment" >&2
@@ -58,7 +77,7 @@ if ! echo "$output" | grep -q "Magisk is NOT recommended"; then
   exit 1
 fi
 
-# Test 2: Unsupported root / recovery environment is rejected
+# Test 2: Unsupported root / recovery environment is rejected with abort exit code
 set +e
 output_unsupported=$(
   BOOTMODE= \
@@ -71,10 +90,17 @@ output_unsupported=$(
   MODPATH="$fixture/mod" \
   ZIPFILE="$fixture/dummy.zip" \
   bash -c '
-    source "'"$fixture/customize.sh"'" 2>&1 || true
-  '
+    source "'"$fixture/customize.sh"'"
+  ' 2>&1
 )
+status_unsupported=$?
 set -e
+
+if [[ $status_unsupported -ne 97 ]]; then
+  echo "FAIL: customize.sh did not exit with abort code 97 (got $status_unsupported)" >&2
+  echo "$output_unsupported" >&2
+  exit 1
+fi
 
 if ! echo "$output_unsupported" | grep -q "Install from recovery or unsupported root is not supported"; then
   echo "FAIL: customize.sh failed to reject unsupported environment" >&2

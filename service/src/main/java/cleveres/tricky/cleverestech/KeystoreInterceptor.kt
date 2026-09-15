@@ -28,7 +28,6 @@ object KeystoreInterceptor : BinderInterceptor() {
     private val getKeyEntryTransaction =
         getTransactCode(IKeystoreService.Stub::class.java, "getKeyEntry") // 2
 
-    const val ERROR_SECURE_HW_COMMUNICATION_FAILED = 10
     const val WARN_KEYMINT_TEE_BROKEN =
         "[WARN] Platform KeyMint HAL unreachable or TEE broken (SECURE_HW_COMMUNICATION_FAILED)."
     const val INFO_KEYMINT_ABORT_INJECTION =
@@ -86,7 +85,7 @@ object KeystoreInterceptor : BinderInterceptor() {
             }.recoverCatching {
                 curr.javaClass.getMethod("getErrorCode").invoke(curr) as Int
             }.getOrNull()
-            if (errorCode == ErrorCode.SECURE_HW_COMMUNICATION_FAILED || errorCode == ERROR_SECURE_HW_COMMUNICATION_FAILED) {
+            if (errorCode == ErrorCode.SECURE_HW_COMMUNICATION_FAILED) {
                 return true
             }
             val msg = curr.message

@@ -104,7 +104,7 @@ adb logcat -d -s cleverestricky CleveresTricky
 [INFO] CleveresTricky requires a functional hardware KeyMint; aborting injection to prevent framework deadlock.
 [INFO] Please consult documentation (docs/security/Attestation.md or docs/LOG.md) for TEE recovery guidance.
 ```
-Это указывает на сбой связи с аппаратным TEE или KeyMint HAL производителя (код ошибки -49 / 10). CleveresTricky намеренно прерывает перехват для предотвращения взаимных блокировок во фреймворке. Варианты восстановления TEE на стороне устройства (например, восстановление TEE RKP на разблокированных OnePlus 13/15) описаны в [Attestation.md](security/Attestation.md#аппаратный-tee-provisioning-и-примечание-по-восстановлению-oneplus).
+Это указывает на сбой связи с аппаратным TEE или KeyMint HAL производителя (код ошибки -49 / SECURE_HW_COMMUNICATION_FAILED). CleveresTricky намеренно прерывает перехват для предотвращения взаимных блокировок во фреймворке. Варианты восстановления TEE на стороне устройства описаны в [Attestation.md](security/Attestation.md#аппаратный-tee-provisioning-и-примечание-по-восстановлению-на-разблокированных-устройствах).
 
 > [!WARNING]
 > Проверьте логи перед отправкой. Данные учётных записей и токены WebUI не записываются, но имена моделей устройств, PID и имена установленных приложений могут присутствовать.

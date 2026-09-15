@@ -104,7 +104,7 @@ adb logcat -d -s cleverestricky CleveresTricky
 [INFO] CleveresTricky requires a functional hardware KeyMint; aborting injection to prevent framework deadlock.
 [INFO] Please consult documentation (docs/security/Attestation.md or docs/LOG.md) for TEE recovery guidance.
 ```
-这表明设备硬件 TEE 或厂商 KeyMint HAL 通信失败（错误码 -49 / 10）。CleveresTricky 会触发内部熔断机制中止注入，以防止系统死锁。有关设备端 TEE 恢复选项（如 OnePlus 13/15 解锁设备 TEE RKP 恢复），请参阅 [Attestation.md](security/Attestation.md#硬件-tee-预配与-oneplus-恢复说明)。
+这表明设备硬件 TEE 或厂商 KeyMint HAL 通信失败（错误码 -49 / SECURE_HW_COMMUNICATION_FAILED）。CleveresTricky 会触发内部熔断机制中止注入，以防止系统死锁。有关解锁设备端 TEE 恢复选项，请参阅 [Attestation.md](security/Attestation.md#硬件-tee-预配与解锁设备恢复说明)。
 
 > [!WARNING]
 > 公开发布日志前请仔细检查。虽然凭证和 WebUI Token 绝不会被记录，但设备型号名称、进程 ID 和包名仍可能可见。

@@ -2391,15 +2391,26 @@ class WebServer(
             json.put("keystore_interceptor_running", KeystoreInterceptor.isRunning())
             json.put("telephony_interceptor_running", TelephonyInterceptor.isRunning())
             json.put("attest_fail_ring", CertHack.attestFailureSnapshot())
-            json.put("manufacturer", Build.MANUFACTURER)
-            json.put("brand", Build.BRAND)
-            json.put("model", Build.MODEL)
-            json.put("device", Build.DEVICE)
-            json.put("android_version", Build.VERSION.RELEASE)
-            json.put("android_sdk", Build.VERSION.SDK_INT)
-            val romDisplay = Build.DISPLAY
-            json.put("rom_build_id", if (!romDisplay.isNullOrBlank()) romDisplay else Build.ID)
-            json.put("security_patch", Build.VERSION.SECURITY_PATCH)
+            val manufacturer = runCatching { Build.MANUFACTURER }.getOrDefault("unknown")
+            val brand = runCatching { Build.BRAND }.getOrDefault("unknown")
+            val model = runCatching { Build.MODEL }.getOrDefault("unknown")
+            val device = runCatching { Build.DEVICE }.getOrDefault("unknown")
+            val androidVersion = runCatching { Build.VERSION.RELEASE }.getOrDefault("unknown")
+            val androidSdk = runCatching { Build.VERSION.SDK_INT }.getOrDefault(0)
+            val romBuildId = runCatching {
+                val romDisplay = Build.DISPLAY
+                if (!romDisplay.isNullOrBlank()) romDisplay else Build.ID
+            }.getOrDefault("unknown")
+            val secPatch = runCatching { Build.VERSION.SECURITY_PATCH }.getOrDefault("unknown")
+
+            json.put("manufacturer", manufacturer)
+            json.put("brand", brand)
+            json.put("model", model)
+            json.put("device", device)
+            json.put("android_version", androidVersion)
+            json.put("android_sdk", androidSdk)
+            json.put("rom_build_id", romBuildId)
+            json.put("security_patch", secPatch)
             return secureResponse(Response.Status.OK, "application/json", json.toString())
         }
 

@@ -104,7 +104,7 @@ Jika Anda melihat baris berikut pada log:
 [INFO] CleveresTricky requires a functional hardware KeyMint; aborting injection to prevent framework deadlock.
 [INFO] Please consult documentation (docs/security/Attestation.md or docs/LOG.md) for TEE recovery guidance.
 ```
-Ini menunjukkan bahwa perangkat keras TEE atau vendor KeyMint HAL gagal berkomunikasi (kode kesalahan -49 / 10). CleveresTricky sengaja menghentikan intersepsi untuk mencegah kebuntuan (deadlock) sistem. Lihat [Attestation.md](security/Attestation.md#provisi-tee-perangkat-keras--catatan-pemulihan-oneplus) untuk opsi pemulihan provisi TEE sisi perangkat (misalnya pemulihan TEE RKP pada OnePlus 13/15 yang tidak terkunci).
+Ini menunjukkan bahwa perangkat keras TEE atau vendor KeyMint HAL gagal berkomunikasi (kode kesalahan -49 / SECURE_HW_COMMUNICATION_FAILED). CleveresTricky sengaja menghentikan intersepsi untuk mencegah kebuntuan (deadlock) sistem. Lihat [Attestation.md](security/Attestation.md#provisi-tee-perangkat-keras--catatan-pemulihan-perangkat-tidak-terkunci) untuk opsi pemulihan provisi TEE sisi perangkat.
 
 > [!WARNING]
 > Tinjau kembali isi log sebelum mengunggahnya ke publik. Meskipun token WebUI dan kredensial rahasia tidak pernah dicatat, nama model perangkat, PID, dan nama paket aplikasi mungkin tetap terlihat.

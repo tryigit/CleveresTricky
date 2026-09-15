@@ -104,7 +104,7 @@ Wenn Sie Folgendes sehen:
 [INFO] CleveresTricky requires a functional hardware KeyMint; aborting injection to prevent framework deadlock.
 [INFO] Please consult documentation (docs/security/Attestation.md or docs/LOG.md) for TEE recovery guidance.
 ```
-Dies zeigt an, dass die Hardware-TEE- oder herstellerspezifische KeyMint-HAL-Kommunikation fehlschlägt (Fehlercode -49 / 10). CleveresTricky bricht die Interzeption absichtlich ab, um Deadlocks im Framework zu verhindern. Weitere Informationen zu geräteseitigen TEE-Wiederherstellungsoptionen finden Sie unter [Attestation.md](security/Attestation.md#hardware-tee-bereitstellung-und-oneplus-wiederherstellungshinweis).
+Dies zeigt an, dass die Hardware-TEE- oder herstellerspezifische KeyMint-HAL-Kommunikation fehlschlägt (Fehlercode -49 / SECURE_HW_COMMUNICATION_FAILED). CleveresTricky bricht die Interzeption absichtlich ab, um Deadlocks im Framework zu verhindern. Weitere Informationen zu geräteseitigen TEE-Wiederherstellungsoptionen finden Sie unter [Attestation.md](security/Attestation.md#hardware-tee-bereitstellung-und-wiederherstellungshinweis-f%C3%BCr-entsperrte-ger%C3%A4te).
 
 > [!WARNING]
 > Überprüfen Sie Protokolle vor der Veröffentlichung. Passwörter und WebUI-Tokens werden nie erfasst, Gerätenamen, Prozess-IDs und Paketnamen können jedoch enthalten sein.

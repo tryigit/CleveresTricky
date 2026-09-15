@@ -104,7 +104,7 @@ Eğer günlüklerde şunu görürseniz:
 [INFO] CleveresTricky requires a functional hardware KeyMint; aborting injection to prevent framework deadlock.
 [INFO] Please consult documentation (docs/security/Attestation.md or docs/LOG.md) for TEE recovery guidance.
 ```
-Bu durum, cihazın donanımsal TEE veya üretici KeyMint HAL iletişiminin koptuğunu (hata kodu -49 / 10) gösterir. CleveresTricky, framework'ün kilitlenmesini önlemek için koruma mekanizmasını devreye sokarak araya girmeyi durdurur. Cihaz tarafı TEE kurtarma seçenekleri (ör. OnePlus 13/15 kilit açık TEE RKP kurtarma) için [Attestation.md](security/Attestation.md#donan%C4%B1msal-tee-haz%C4%B1rlama-ve-oneplus-kurtarma-notu) belgesine başvurun.
+Bu durum, cihazın donanımsal TEE veya üretici KeyMint HAL iletişiminin koptuğunu (hata kodu -49 / SECURE_HW_COMMUNICATION_FAILED) gösterir. CleveresTricky, framework'ün kilitlenmesini önlemek için koruma mekanizmasını devreye sokarak araya girmeyi durdurur. Kilit açık cihazlarda donanım TEE kurtarma seçenekleri için [Attestation.md](security/Attestation.md#donan%C4%B1msal-tee-haz%C4%B1rlama-ve-kilit-a%C3%A7%C4%B1k-cihaz-kurtarma-notu) belgesine başvurun.
 
 > [!WARNING]
 > Günlükleri herkese açık paylaşmadan önce inceleyin. Kimlik bilgileri ve WebUI token'ları asla kaydedilmese de, cihaz model adları, işlem kimlikleri (PID) ve paket adları günlüklerde yer alabilir.

@@ -104,7 +104,7 @@ Si observa lo siguiente en sus registros:
 [INFO] CleveresTricky requires a functional hardware KeyMint; aborting injection to prevent framework deadlock.
 [INFO] Please consult documentation (docs/security/Attestation.md or docs/LOG.md) for TEE recovery guidance.
 ```
-Esto indica que el TEE por hardware del dispositivo o la HAL KeyMint del fabricante no responden (código de error -49 / 10). CleveresTricky detiene intencionalmente la interceptación para evitar un bloqueo en el framework. Consulte [Attestation.md](security/Attestation.md#aprovisionamiento-de-tee-por-hardware-y-nota-de-recuperaci%C3%B3n-de-oneplus) para conocer las opciones de recuperación de TEE en el dispositivo (por ejemplo, recuperación de TEE RKP en OnePlus 13/15 desbloqueados).
+Esto indica que el TEE por hardware del dispositivo o la HAL KeyMint del fabricante no responden (código de error -49 / SECURE_HW_COMMUNICATION_FAILED). CleveresTricky detiene intencionalmente la interceptación para evitar un bloqueo en el framework. Consulte [Attestation.md](security/Attestation.md#aprovisionamiento-de-tee-por-hardware-y-nota-de-recuperaci%C3%B3n-en-dispositivos-desbloqueados) para conocer las opciones de recuperación de TEE en el dispositivo.
 
 > [!WARNING]
 > Revisa tus registros antes de publicarlos. Aunque las credenciales y los tokens de la WebUI nunca se registran, los nombres de modelos de dispositivos, IDs de procesos y nombres de paquetes pueden aparecer.

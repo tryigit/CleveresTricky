@@ -8,14 +8,13 @@ Caller infrastruktur RKP selalu tetap di jalur provisioning Android asli. Untuk 
 
 Operasi private key tetap dilakukan Android KeyMint atau StrongBox. Sebelum material aktif, kecocokan key/certificate, algoritma, chain, masa berlaku, ambiguity, dan revocation diperiksa. Substitusi sertifikat tidak menciptakan hardware root of trust, mengunci bootloader secara fisik, atau menjamin remote verdict.
 
-## Provisi TEE Perangkat Keras & Catatan Pemulihan OnePlus
+## Provisi TEE Perangkat Keras & Catatan Pemulihan Perangkat Tidak Terkunci
 
-CleveresTricky memerlukan subsistem KeyMint/TEE perangkat keras yang berfungsi dan sengaja tidak menyimulasikan atau meniru TEE perangkat lunak palsu atau pengesahan palsu. Jika komunikasi TEE perangkat keras gagal (`SECURE_HW_COMMUNICATION_FAILED` / kode kesalahan 10), modul menghentikan intersepsi untuk mencegah kebuntuan (deadlock) pada framework.
+CleveresTricky memerlukan subsistem KeyMint/TEE perangkat keras yang berfungsi dan sengaja tidak menyimulasikan atau meniru TEE perangkat lunak palsu atau pengesahan palsu. Jika komunikasi TEE perangkat keras gagal (`SECURE_HW_COMMUNICATION_FAILED` / kode kesalahan -49), modul menghentikan intersepsi untuk mencegah kebuntuan (deadlock) pada framework.
 
-Pada perangkat tertentu yang tidak terkunci, pembukaan bootloader dapat membatalkan atau merusak pengesahan perangkat keras atau provisi RKP di sisi perangkat:
-- **Pengesahan OnePlus 13 / 15 Tidak Terkunci & Pemulihan TEE RKP**: Sebagaimana didokumentasikan dalam [investigasi wuxianlin](https://wuxianlin.com/2025/11/12/oneplus-13-15-attestation-rkp-test/), pembukaan bootloader pada perangkat OnePlus 13 dan 15 yang diuji merusak TEE Attestation dan provisi RKP.
-- **Alternatif Provisi Sisi Perangkat**: Laporan tersebut mencatat bahwa provisi ID perangkat `KmInstallKeybox` dapat memulihkan TEE RKP asli (dan pada model yang diuji Widevine L1 RKP) tanpa menyuntikkan kunci atestasi yang bocor. Ini adalah alternatif pemulihan/provisi TEE sisi perangkat yang sah, bukan spoofing atau emulasi Keystore.
-- **Cakupan & Batasan**:
-  - Metode ini **TIDAK** memulihkan Kunci Pengesahan TEE offline (offline TEE Attestation Key) secara universal.
-  - Sangat **spesifik untuk perangkat dan firmware**. Tidak boleh direkomendasikan secara umum atau dianggap berlaku untuk semua model OnePlus.
-  - **Peringatan Risiko**: Memodifikasi partisi `persist` atau provisi TEE sisi perangkat memiliki risiko signifikan kerusakan permanen keystore atau brick pada perangkat. Selalu buat cadangan penuh partisi `persist` dan firmware Anda sebelum mencoba pemulihan provisi TEE.
+Pada perangkat Android yang bootloader-nya tidak terkunci, pembukaan kunci dapat merusak pengesahan perangkat keras atau Remote Key Provisioning (RKP):
+- **Pemulihan TEE RKP Sisi Perangkat**: Seperti yang ditunjukkan dalam [investigasi wuxianlin](https://wuxianlin.com/2025/11/12/oneplus-13-15-attestation-rkp-test/) (dievaluasi pada perangkat modern termasuk OnePlus 13/15), provisi ID perangkat `KmInstallKeybox` dapat memulihkan TEE RKP asli (dan Widevine L1 RKP) tanpa menyuntikkan kunci yang bocor. Ini berfungsi sebagai mekanisme pemulihan provisi TEE sisi perangkat yang sah di seluruh perangkat Android yang tidak terkunci, bukan spoofing atau emulasi perangkat lunak Keystore.
+- **Cakupan & Rekomendasi**:
+  - Provisi `KmInstallKeybox` sisi perangkat memulihkan penerbitan sertifikat TEE RKP asli dari infrastruktur provisi jarak jauh.
+  - Metode ini tidak memulihkan Kunci Pengesahan TEE offline bawaan pabrik secara universal.
+  - **Peringatan Risiko**: Memodifikasi `persist` atau provisi TEE perangkat keras memiliki risiko kerusakan permanen atau brick. Selalu buat cadangan penuh partisi `persist` dan firmware Anda sebelum mencoba pemulihan TEE.

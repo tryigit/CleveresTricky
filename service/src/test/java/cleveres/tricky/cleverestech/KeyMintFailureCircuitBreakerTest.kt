@@ -46,9 +46,9 @@ class KeyMintFailureCircuitBreakerTest {
     }
 
     @Test
-    fun `isSecureHwCommunicationFailure identifies public error code 10`() {
-        val ex = FakeServiceSpecificException(KeystoreInterceptor.ERROR_SECURE_HW_COMMUNICATION_FAILED)
-        assertTrue(KeystoreInterceptor.isSecureHwCommunicationFailure(ex))
+    fun `isSecureHwCommunicationFailure rejects generic error code 10`() {
+        val ex = FakeServiceSpecificException(10)
+        assertFalse(KeystoreInterceptor.isSecureHwCommunicationFailure(ex))
     }
 
     @Test

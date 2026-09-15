@@ -104,7 +104,7 @@ adb logcat -d -s cleverestricky CleveresTricky
 [INFO] CleveresTricky requires a functional hardware KeyMint; aborting injection to prevent framework deadlock.
 [INFO] Please consult documentation (docs/security/Attestation.md or docs/LOG.md) for TEE recovery guidance.
 ```
-यह इंगित करता है कि डिवाइस का हार्डवेयर TEE या वेंडर KeyMint HAL संचार करने में विफल हो रहा है (त्रुटि कोड -49 / 10)। CleveresTricky फ्रेमवर्क डेडलॉक को रोकने के लिए जानबूझकर इंटरसेप्शन रोक देता है। डिवाइस-साइड TEE रिकवरी विकल्पों के लिए [Attestation.md](security/Attestation.md#हार्डवेयर-tee-प्रोविज़निंग-और-oneplus-रिकवरी-नोट) देखें।
+यह इंगित करता है कि डिवाइस का हार्डवेयर TEE या वेंडर KeyMint HAL संचार करने में विफल हो रहा है (त्रुटि कोड -49 / SECURE_HW_COMMUNICATION_FAILED)। CleveresTricky फ्रेमवर्क डेडलॉक को रोकने के लिए जानबूझकर इंटरसेप्शन रोक देता है। अनलॉक किए गए उपकरणों पर TEE रिकवरी विकल्पों के लिए [Attestation.md](security/Attestation.md#हार्डवेयर-tee-प्रोविज़निंग-और-अनलॉक-डिवाइस-रिकवरी-नोट) देखें।
 
 > [!WARNING]
 > सार्वजनिक रूप से साझा करने से पहले अपने लॉग की जाँच कर लें। यद्यपि क्रेडेंशियल्स और WebUI टोकन कभी दर्ज नहीं होते, फिर भी डिवाइस मॉडल नाम, प्रक्रिया आईडी (PID) और पैकेज नाम दिख सकते हैं।
