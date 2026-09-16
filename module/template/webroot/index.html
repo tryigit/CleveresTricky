@@ -752,9 +752,9 @@
 </div>
         </div>
         <div class="panel">
-<div class="card-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-    <h3 style="margin:0;">Stored Keyboxes</h3>
-    <span id="keyboxStatus" class="status-badge status-OK" style="margin:0;">0 Keys Loaded</span>
+<div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
+    <h3>Stored Keyboxes</h3>
+    <span id="keyboxStatus" class="status-badge status-OK" style="margin-bottom:18px;">0 Keys Loaded</span>
 </div>
 <div class="search-container"><input type="search" id="keyboxFilter" placeholder="Filter keyboxes by name..." oninput="renderKeyboxes()" aria-label="Filter keyboxes" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"><button onclick="document.getElementById('keyboxFilter').value=''; renderKeyboxes(); document.getElementById('keyboxFilter').focus();" class="clear-btn" id="clearKeyboxFilterBtn" aria-label="Clear filter">&times;</button></div>
 <div id="storedKeyboxesList" style="max-height: 200px; overflow-y: auto;"></div>

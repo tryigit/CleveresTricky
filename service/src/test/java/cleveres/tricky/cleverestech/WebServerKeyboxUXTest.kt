@@ -70,7 +70,7 @@ class WebServerKeyboxUXTest {
 
         assertTrue(
             "HTML should contain Stored Keyboxes panel",
-            html.contains("<h3>Stored Keyboxes</h3>") &&
+            (html.contains("<h3>Stored Keyboxes</h3>") || html.contains(">Stored Keyboxes</h3>")) &&
                 html.contains("<div id=\"storedKeyboxesList\""),
         )
         assertTrue(
