@@ -10,7 +10,7 @@ const longPressEnd = source.indexOf('    function appendKeyboxValue(', longPress
 assert.ok(longPressStart >= 0 && longPressEnd > longPressStart, 'long-press handler is missing');
 const longPressImplementation = source.slice(longPressStart, longPressEnd);
 assert.match(longPressImplementation, /setTimeout\([\s\S]*650\)/);
-assert.match(longPressImplementation, /showKeyboxValuePopup\(label, value\)/);
+assert.match(longPressImplementation, /showKeyboxValuePopup\(label, value, node\)/);
 assert.match(longPressImplementation, /pointerdown/);
 assert.match(source, /async function copyKeyboxValue\(value\)/);
 
@@ -30,12 +30,12 @@ assert.ok(startExpired >= 0 && endExpired > startExpired, 'isKeyboxExpired imple
 const expiredImplementation = source.slice(startExpired, endExpired);
 
 function makeElement(tagName) {
-  return {
+  const element = {
     tagName: String(tagName).toUpperCase(),
     children: [],
     attributes: {},
     style: {},
-    textContent: '',
+    _textContent: '',
     className: '',
     addEventListener() {},
     appendChild(child) {
@@ -49,12 +49,19 @@ function makeElement(tagName) {
       this.attributes[name] = String(value);
     }
   };
+  Object.defineProperty(element, 'textContent', {
+    get() { return this._textContent + this.children.map(child => child.textContent).join(''); },
+    set(value) { this._textContent = String(value); this.children = []; }
+  });
+  return element;
 }
 
 const list = makeElement('div');
 const verifyResult = makeElement('div');
 const context = {
   console,
+  locale() { return 'en'; },
+  VALUE_POPUP_COPY: { en: { title: 'Details', copy: 'Copy', copied: 'Copied', close: 'Close', hold: 'Hold to view and copy' } },
   document: {
     getElementById(id) {
       if (id === 'storedKeyboxesList') return list;

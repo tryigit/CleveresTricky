@@ -3265,18 +3265,23 @@
         try { if (global.navigator?.clipboard?.writeText) { await global.navigator.clipboard.writeText(text); return true; } } catch (_) {}
         try {
             const textarea = document.createElement('textarea');
+            const previouslyFocused = document.activeElement;
             textarea.value = text; textarea.setAttribute('readonly', '');
             textarea.style.cssText = 'position:fixed;inset:-9999px;opacity:0;pointer-events:none;';
             document.body.appendChild(textarea); textarea.focus(); textarea.select();
-            const copied = Boolean(document.execCommand && document.execCommand('copy')); textarea.remove(); return copied;
+            const copied = Boolean(document.execCommand && document.execCommand('copy')); textarea.remove();
+            if (previouslyFocused?.isConnected) previouslyFocused.focus();
+            return copied;
         } catch (_) { return false; }
     }
-    function closeKeyboxValuePopup() {
+    function closeKeyboxValuePopup(restoreFocus = true) {
+        const trigger = global.__ctKeyboxPopupTrigger; global.__ctKeyboxPopupTrigger = null;
         const popup = document.getElementById('ct_keybox_value_popup'); if (popup) popup.remove();
         if (global.__ctKeyboxPopupEscapeHandler) { document.removeEventListener('keydown', global.__ctKeyboxPopupEscapeHandler); global.__ctKeyboxPopupEscapeHandler = null; }
+        if (restoreFocus && trigger?.isConnected) trigger.focus();
     }
-    function showKeyboxValuePopup(label, value) {
-        const text = String(value || ''); if (!text || !document.body) return; closeKeyboxValuePopup();
+    function showKeyboxValuePopup(label, value, trigger) {
+        const text = String(value || ''); if (!text || !document.body) return; closeKeyboxValuePopup(false);
         const copy = popupCopy();
         const overlay = document.createElement('div'); overlay.id = 'ct_keybox_value_popup'; overlay.className = 'ct-keybox-value-popup'; overlay.setAttribute('role','dialog'); overlay.setAttribute('aria-modal','true');
         overlay.addEventListener('click', event => { if (event.target === overlay) closeKeyboxValuePopup(); });
@@ -3291,16 +3296,22 @@
         copyButton.addEventListener('click', async () => setCopiedState(await copyKeyboxValue(text)));
         closeButton.addEventListener('click', closeKeyboxValuePopup);
         actions.append(copyButton, closeButton); card.append(heading, valueNode, hint, actions); overlay.appendChild(card); document.body.appendChild(overlay);
+        global.__ctKeyboxPopupTrigger = trigger;
         const escapeHandler = event => { if (event.key === 'Escape') closeKeyboxValuePopup(); };
         global.__ctKeyboxPopupEscapeHandler = escapeHandler; document.addEventListener('keydown', escapeHandler);
         global.requestAnimationFrame?.(() => overlay.classList.add('is-visible'));
+        copyButton.focus();
         copyKeyboxValue(text).then(setCopiedState); global.navigator?.vibrate?.(8);
     }
     function attachKeyboxLongPress(node, label, value) {
         if (!node || !value) return; let timer = null; let longPressed = false;
         const cancel = () => { if (timer !== null) { global.clearTimeout(timer); timer = null; } };
-        node.setAttribute('title', popupCopy().hold); node.style.cursor = 'copy'; node.style.touchAction = 'manipulation';
-        node.addEventListener('pointerdown', () => { longPressed = false; cancel(); timer = global.setTimeout(() => { timer = null; longPressed = true; showKeyboxValuePopup(label, value); }, 650); });
+        node.setAttribute('title', popupCopy().hold); node.setAttribute('role', 'button'); node.setAttribute('aria-haspopup', 'dialog'); node.tabIndex = 0; node.style.cursor = 'copy'; node.style.touchAction = 'manipulation';
+        node.addEventListener('keydown', event => {
+            if (event.key !== 'Enter' && event.key !== ' ' && event.key !== 'Spacebar') return;
+            event.preventDefault(); cancel(); showKeyboxValuePopup(label, value, node);
+        });
+        node.addEventListener('pointerdown', () => { longPressed = false; cancel(); timer = global.setTimeout(() => { timer = null; longPressed = true; showKeyboxValuePopup(label, value, node); }, 650); });
         node.addEventListener('pointerup', cancel); node.addEventListener('pointercancel', cancel); node.addEventListener('pointerleave', cancel);
         node.addEventListener('contextmenu', event => { if (longPressed) event.preventDefault(); });
     }
