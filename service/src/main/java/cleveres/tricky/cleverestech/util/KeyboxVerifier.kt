@@ -21,6 +21,9 @@ import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.security.MessageDigest
 import java.security.cert.X509Certificate
+import java.text.SimpleDateFormat
+import java.util.Locale
+import java.util.TimeZone
 import java.util.concurrent.CompletableFuture
 
 object KeyboxVerifier {
@@ -535,6 +538,20 @@ object KeyboxVerifier {
         crlFetchNotBefore = 0L
     }
 
+    @androidx.annotation.VisibleForTesting
+    internal fun getEarliestCertificateNotAfter(keyboxes: List<CertHack.KeyBox>): String? {
+        val earliest = keyboxes
+            .asSequence()
+            .flatMap { it.certificates().asSequence() }
+            .filterIsInstance<X509Certificate>()
+            .mapNotNull(X509Certificate::getNotAfter)
+            .minOrNull()
+            ?: return null
+        val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT)
+        formatter.timeZone = TimeZone.getTimeZone("UTC")
+        return formatter.format(earliest)
+    }
+
     @androidx.annotation.VisibleForTesting internal fun checkFile(
         file: File,
         scope: KeyboxLoader.FileScope,
@@ -595,7 +612,7 @@ object KeyboxVerifier {
                 )
             }
             val deviceSerial = keyboxes.asSequence().mapNotNull(CertHack::getDeviceCertificateSerial).firstOrNull()
-            val deviceNotAfter = keyboxes.asSequence().mapNotNull(CertHack::getDeviceCertificateNotAfter).firstOrNull()
+            val deviceNotAfter = getEarliestCertificateNotAfter(keyboxes)
             trackedSerial = deviceSerial
             trackedNotAfter = deviceNotAfter
             // parseFileSnapshot can discover a Rust backend restart and rebuild backend-owned CRL
