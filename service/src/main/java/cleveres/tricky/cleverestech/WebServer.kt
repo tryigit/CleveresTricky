@@ -753,10 +753,7 @@ class WebServer(
                                     .firstOrNull() ?: ""
                         }
                         if (notAfter.isEmpty()) {
-                            notAfter =
-                                parsed.keyboxes.asSequence()
-                                    .mapNotNull(CertHack::getDeviceCertificateNotAfter)
-                                    .firstOrNull() ?: ""
+                            notAfter = CertHack.getDeviceCertificateNotAfter(parsed.keyboxes) ?: ""
                         }
                         if (!isRkp) {
                             isRkp = parsed.keyboxes.any(CertHack::isRkpKeybox)

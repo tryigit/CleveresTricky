@@ -407,15 +407,15 @@
             .ct-keybox-value-popup-card { padding: 18px; border-radius: 18px; }
             .ct-keybox-value-popup-actions { grid-template-columns: 1fr; }
         }
-        .ct-keybox-name { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; min-width: 0; }
-        .ct-keybox-name > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 0 1 auto; }
-        .ct-verification-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; min-width: 0; }
-        .ct-verification-filename { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 0 1 auto; }
-        .ct-verification-badges { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; flex-shrink: 0; }
+        .ct-keybox-name { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+        .ct-keybox-name > span:first-child { width: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 0 0 100%; margin-bottom: 3px; font-weight: 600; cursor: copy; }
+        .ct-verification-title { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; }
+        .ct-verification-filename { width: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 0 0 auto; font-weight: 600; cursor: copy; }
+        .ct-verification-badges { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
         @media screen and (max-width: 480px) {
             .ct-badge { font-size: 0.65rem; padding: 2px 5px; }
             .ct-keybox-name { gap: 4px; }
-            .ct-verification-title { gap: 6px; }
+            .ct-verification-title { gap: 5px; }
             .ct-verification-badges { gap: 4px; }
         }
         input.valid { border-color: var(--success); }

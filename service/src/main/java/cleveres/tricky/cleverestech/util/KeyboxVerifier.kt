@@ -540,16 +540,7 @@ object KeyboxVerifier {
 
     @androidx.annotation.VisibleForTesting
     internal fun getEarliestCertificateNotAfter(keyboxes: List<CertHack.KeyBox>): String? {
-        val earliest = keyboxes
-            .asSequence()
-            .flatMap { it.certificates().asSequence() }
-            .filterIsInstance<X509Certificate>()
-            .mapNotNull(X509Certificate::getNotAfter)
-            .minOrNull()
-            ?: return null
-        val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT)
-        formatter.timeZone = TimeZone.getTimeZone("UTC")
-        return formatter.format(earliest)
+        return CertHack.getDeviceCertificateNotAfter(keyboxes)
     }
 
     @androidx.annotation.VisibleForTesting internal fun checkFile(

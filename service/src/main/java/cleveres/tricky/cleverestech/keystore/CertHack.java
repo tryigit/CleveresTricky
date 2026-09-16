@@ -17,6 +17,7 @@ import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
@@ -988,20 +989,34 @@ public final class CertHack {
         if (identifier == null) return null;
         List<KeyBox> boxes = state.keyboxFiles.get(identifier);
         if (boxes == null) return null;
-        for (KeyBox box : boxes) {
-            String notAfter = getDeviceCertificateNotAfter(box);
-            if (notAfter != null) return notAfter;
-        }
-        return null;
+        return getDeviceCertificateNotAfter(boxes);
     }
 
     public static String getDeviceCertificateNotAfter(KeyBox keybox) {
-        if (keybox == null || keybox.certificates().size() < 3) return null;
-        Certificate certificate = keybox.certificates().get(2);
-        if (!(certificate instanceof X509Certificate x509)) return null;
-        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd", Locale.ROOT);
+        if (keybox == null) return null;
+        return getDeviceCertificateNotAfter(Collections.singletonList(keybox));
+    }
+
+    public static String getDeviceCertificateNotAfter(List<KeyBox> boxes) {
+        if (boxes == null || boxes.isEmpty()) return null;
+        Date earliest = null;
+        for (KeyBox box : boxes) {
+            if (box == null || box.certificates() == null) continue;
+            for (Certificate certificate : box.certificates()) {
+                if (certificate instanceof X509Certificate x509) {
+                    Date notAfter = x509.getNotAfter();
+                    if (notAfter != null) {
+                        if (earliest == null || notAfter.before(earliest)) {
+                            earliest = notAfter;
+                        }
+                    }
+                }
+            }
+        }
+        if (earliest == null) return null;
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.ROOT);
         sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
-        return sdf.format(x509.getNotAfter());
+        return sdf.format(earliest);
     }
 
     /**

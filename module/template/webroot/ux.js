@@ -3121,7 +3121,7 @@
             search: 'Search', clear: 'Clear', verifySearchPlaceholder: 'Search verification results...', verifying: 'Verifying...',
             noVerify: 'No keyboxes to verify', noVerifyMatch: 'No verification results match your search.', loading: 'Loading...',
             noStored: 'No keyboxes stored.', noStoredMatch: 'No keyboxes match your filter.', delete: 'Delete',
-            status_valid: 'Valid', status_invalid: 'Invalid', status_error: 'Error', status_unknown: 'Unknown', active_keybox: 'Active Keybox', expires: 'Expires', status_expired: 'Expired'
+            status_valid: 'Valid', status_invalid: 'Invalid', status_error: 'Error', status_unknown: 'Unknown', active_keybox: 'Active Keybox', expires: 'Expires', status_expired: 'Expired', filename: 'Filename', details: 'Details'
         },
         tr: {
             selected: 'seçili', deleteSelected: 'Seçilileri sil', previous: 'Önceki', next: 'Sonraki', page: 'Sayfa {page} / {pages}',
@@ -3131,7 +3131,7 @@
             search: 'Ara', clear: 'Temizle', verifySearchPlaceholder: 'Doğrulama sonuçlarında ara...', verifying: 'Doğrulanıyor...',
             noVerify: 'Doğrulanacak keybox yok', noVerifyMatch: 'Aramanızla eşleşen doğrulama sonucu yok.', loading: 'Yükleniyor...',
             noStored: 'Kayıtlı keybox yok.', noStoredMatch: 'Filtrenizle eşleşen keybox yok.', delete: 'Sil',
-            status_valid: 'Geçerli', status_invalid: 'Geçersiz', status_error: 'Hata', status_unknown: 'Bilinmiyor', active_keybox: 'Etkin keybox', expires: 'Son geçerlilik', status_expired: 'Süresi geçmiş'
+            status_valid: 'Geçerli', status_invalid: 'Geçersiz', status_error: 'Hata', status_unknown: 'Bilinmiyor', active_keybox: 'Etkin keybox', expires: 'Son geçerlilik', status_expired: 'Süresi geçmiş', filename: 'Dosya adı', details: 'Ayrıntılar'
         },
         'zh-CN': {
             selected: '已选择', deleteSelected: '删除所选', previous: '上一页', next: '下一页', page: '第 {page} / {pages} 页',
@@ -3141,7 +3141,7 @@
             search: '搜索', clear: '清除', verifySearchPlaceholder: '搜索验证结果...', verifying: '正在验证...',
             noVerify: '没有可验证的 Keybox', noVerifyMatch: '没有符合搜索条件的验证结果。', loading: '正在加载...',
             noStored: '没有已存储的 Keybox。', noStoredMatch: '没有符合筛选条件的 Keybox。', delete: '删除',
-            status_valid: '有效', status_invalid: '无效', status_error: '错误', status_unknown: '未知', active_keybox: '活动密钥盒', expires: '有效期至', status_expired: '已过期'
+            status_valid: '有效', status_invalid: '无效', status_error: '错误', status_unknown: '未知', active_keybox: '活动密钥盒', expires: '有效期至', status_expired: '已过期', filename: '文件名', details: '详细信息'
         },
         es: {
             selected: 'seleccionados', deleteSelected: 'Eliminar seleccionados', previous: 'Anterior', next: 'Siguiente', page: 'Página {page} / {pages}',
@@ -3151,7 +3151,7 @@
             search: 'Buscar', clear: 'Limpiar', verifySearchPlaceholder: 'Buscar resultados de verificación...', verifying: 'Verificando...',
             noVerify: 'No hay keyboxes para verificar', noVerifyMatch: 'Ningún resultado de verificación coincide con la búsqueda.', loading: 'Cargando...',
             noStored: 'No hay keyboxes guardadas.', noStoredMatch: 'Ninguna keybox coincide con el filtro.', delete: 'Eliminar',
-            status_valid: 'Válido', status_invalid: 'Inválido', status_error: 'Error', status_unknown: 'Desconocido', active_keybox: 'Keybox activa', expires: 'Vence', status_expired: 'Vencido'
+            status_valid: 'Válido', status_invalid: 'Inválido', status_error: 'Error', status_unknown: 'Desconocido', active_keybox: 'Keybox activa', expires: 'Vence', status_expired: 'Vencido', filename: 'Nombre del archivo', details: 'Detalles'
         },
         de: {
             selected: 'ausgewählt', deleteSelected: 'Auswahl löschen', previous: 'Zurück', next: 'Weiter', page: 'Seite {page} / {pages}',
@@ -3161,7 +3161,7 @@
             search: 'Suchen', clear: 'Leeren', verifySearchPlaceholder: 'Prüfergebnisse durchsuchen...', verifying: 'Prüfung läuft...',
             noVerify: 'Keine Keyboxen zum Prüfen', noVerifyMatch: 'Keine Prüfergebnisse entsprechen der Suche.', loading: 'Wird geladen...',
             noStored: 'Keine Keyboxen gespeichert.', noStoredMatch: 'Keine Keybox entspricht dem Filter.', delete: 'Löschen',
-            status_valid: 'Gültig', status_invalid: 'Ungültig', status_error: 'Fehler', status_unknown: 'Unbekannt', active_keybox: 'Aktive Keybox', expires: 'Gültig bis', status_expired: 'Abgelaufen'
+            status_valid: 'Gültig', status_invalid: 'Ungültig', status_error: 'Fehler', status_unknown: 'Unbekannt', active_keybox: 'Aktive Keybox', expires: 'Gültig bis', status_expired: 'Abgelaufen', filename: 'Dateiname', details: 'Details'
         },
         ru: {
             selected: 'выбрано', deleteSelected: 'Удалить выбранные', previous: 'Назад', next: 'Далее', page: 'Страница {page} / {pages}',
@@ -3171,7 +3171,7 @@
             search: 'Поиск', clear: 'Очистить', verifySearchPlaceholder: 'Поиск по результатам проверки...', verifying: 'Проверка...',
             noVerify: 'Нет keybox для проверки', noVerifyMatch: 'Нет результатов проверки, соответствующих поиску.', loading: 'Загрузка...',
             noStored: 'Нет сохраненных keybox.', noStoredMatch: 'Нет keybox, соответствующих фильтру.', delete: 'Удалить',
-            status_valid: 'Действителен', status_invalid: 'Недействителен', status_error: 'Ошибка', status_unknown: 'Неизвестно', active_keybox: 'Активный keybox', expires: 'Истекает', status_expired: 'Истек'
+            status_valid: 'Действителен', status_invalid: 'Недействителен', status_error: 'Ошибка', status_unknown: 'Неизвестно', active_keybox: 'Активный keybox', expires: 'Истекает', status_expired: 'Истек', filename: 'Имя файла', details: 'Подробности'
         },
         id: {
             selected: 'dipilih', deleteSelected: 'Hapus pilihan', previous: 'Sebelumnya', next: 'Berikutnya', page: 'Halaman {page} / {pages}',
@@ -3181,7 +3181,7 @@
             search: 'Cari', clear: 'Bersihkan', verifySearchPlaceholder: 'Cari hasil verifikasi...', verifying: 'Memverifikasi...',
             noVerify: 'Tidak ada keybox untuk diverifikasi', noVerifyMatch: 'Tidak ada hasil verifikasi yang cocok dengan pencarian.', loading: 'Memuat...',
             noStored: 'Tidak ada keybox tersimpan.', noStoredMatch: 'Tidak ada keybox yang cocok dengan filter.', delete: 'Hapus',
-            status_valid: 'Valid', status_invalid: 'Tidak Valid', status_error: 'Kesalahan', status_unknown: 'Tidak Diketahui', active_keybox: 'Keybox aktif', expires: 'Kedaluwarsa', status_expired: 'Kedaluwarsa'
+            status_valid: 'Valid', status_invalid: 'Tidak Valid', status_error: 'Kesalahan', status_unknown: 'Tidak Diketahui', active_keybox: 'Keybox aktif', expires: 'Kedaluwarsa', status_expired: 'Kedaluwarsa', filename: 'Nama file', details: 'Detail'
         },
         hi: {
             selected: 'चयनित', deleteSelected: 'चयनित हटाएँ', previous: 'पिछला', next: 'अगला', page: 'पृष्ठ {page} / {pages}',
@@ -3191,7 +3191,7 @@
             search: 'खोजें', clear: 'साफ़ करें', verifySearchPlaceholder: 'सत्यापन परिणाम खोजें...', verifying: 'सत्यापन हो रहा है...',
             noVerify: 'सत्यापित करने के लिए Keybox नहीं', noVerifyMatch: 'खोज से मेल खाता सत्यापन परिणाम नहीं है।', loading: 'लोड हो रहा है...',
             noStored: 'कोई सहेजा Keybox नहीं।', noStoredMatch: 'फ़िल्टर से मेल खाता Keybox नहीं है।', delete: 'हटाएँ',
-            status_valid: 'मान्य', status_invalid: 'अमान्य', status_error: 'त्रुटि', status_unknown: 'अज्ञात', active_keybox: 'सक्रिय Keybox', expires: 'समाप्ति', status_expired: 'समाप्त'
+            status_valid: 'मान्य', status_invalid: 'अमान्य', status_error: 'त्रुटि', status_unknown: 'अज्ञात', active_keybox: 'सक्रिय Keybox', expires: 'समाप्ति', status_expired: 'समाप्त', filename: 'फ़ाइल का नाम', details: 'विवरण'
         },
         ar: {
             selected: 'محدد', deleteSelected: 'حذف المحدد', previous: 'السابق', next: 'التالي', page: 'الصفحة {page} / {pages}',
@@ -3201,7 +3201,7 @@
             search: 'بحث', clear: 'مسح', verifySearchPlaceholder: 'البحث في نتائج التحقق...', verifying: 'جارٍ التحقق...',
             noVerify: 'لا توجد Keybox للتحقق', noVerifyMatch: 'لا توجد نتائج تحقق تطابق البحث.', loading: 'جارٍ التحميل...',
             noStored: 'لا توجد Keybox محفوظة.', noStoredMatch: 'لا توجد Keybox تطابق الفلتر.', delete: 'حذف',
-            status_valid: 'صالح', status_invalid: 'غير صالح', status_error: 'خطأ', status_unknown: 'غير معروف', active_keybox: 'Keybox نشط', expires: 'تاريخ الانتهاء', status_expired: 'منتهي الصلاحية'
+            status_valid: 'صالح', status_invalid: 'غير صالح', status_error: 'خطأ', status_unknown: 'غير معروف', active_keybox: 'Keybox نشط', expires: 'تاريخ الانتهاء', status_expired: 'منتهي الصلاحية', filename: 'اسم الملف', details: 'التفاصيل'
         }
     };
 
@@ -3243,7 +3243,19 @@
         if (!notAfter) return false;
         const str = String(notAfter).trim();
         if (!str) return false;
-        const ts = Date.parse(str.includes('T') ? str : str + 'T23:59:59Z');
+        let parseable = str;
+        if (str.includes('T')) {
+            parseable = str;
+        } else if (str.includes(' ')) {
+            const parts = str.split(' ');
+            const datePart = parts[0];
+            let timePart = parts[1] || '00:00';
+            if (timePart.split(':').length === 2) timePart += ':00';
+            parseable = datePart + 'T' + timePart + (timePart.endsWith('Z') ? '' : 'Z');
+        } else {
+            parseable = str + 'T23:59:59Z';
+        }
+        const ts = Date.parse(parseable);
         return !Number.isNaN(ts) && ts < Date.now();
     }
 
@@ -3486,11 +3498,12 @@
             body.style.cssText = 'flex:1 1 auto;min-width:0;line-height:1.4;';
             const name = document.createElement('div');
             name.className = 'ct-keybox-name';
-            name.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:nowrap;min-width:0;font-weight:500;';
+            name.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0;font-weight:500;';
             const nameText = document.createElement('span');
-            nameText.style.cssText = 'min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:0 1 auto;';
+            nameText.style.cssText = 'width:100%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:0 0 100%;margin-bottom:3px;font-weight:600;cursor:copy;';
             nameText.title = String(item.filename || '');
             nameText.textContent = String(item.filename || '');
+            attachKeyboxLongPress(nameText, t('filename'), item.filename);
             name.append(nameText);
 
             if (item.is_rkp) {
@@ -3537,7 +3550,10 @@
             scopeLabel.textContent = t('Scope');
             const scopeValue = document.createElement('span');
             scopeValue.className = 'ct-keybox-meta-value';
-            scopeValue.textContent = item.scope === 'root' ? t('root') : t('managed');
+            const scopeDisplay = item.scope === 'root' ? t('root') : t('managed');
+            scopeValue.textContent = scopeDisplay;
+            scopeValue.style.cursor = 'copy';
+            attachKeyboxLongPress(scopeValue, t('Scope'), scopeDisplay);
             scopeNode.append(scopeLabel, scopeValue);
             meta.appendChild(scopeNode);
             if (item.certificate_serial) appendKeyboxValue(meta, t('cert'), item.certificate_serial);
@@ -3819,6 +3835,7 @@
             titleText.className = 'ct-verification-filename';
             titleText.title = String(item.filename || '');
             titleText.textContent = String(item.filename || '');
+            attachKeyboxLongPress(titleText, t('filename'), item.filename);
             title.append(titleText);
 
             const badgesContainer = document.createElement('div');
@@ -3885,10 +3902,13 @@
             if (item.certificate_serial) appendKeyboxValue(meta, t('cert'), item.certificate_serial);
             if (item.not_after) appendKeyboxValue(meta, t('expires'), item.not_after);
             const details = document.createElement('div');
-            details.style.cssText = 'font-size:.8em;color:#aaa;margin-top:2px';
+            details.style.cssText = 'font-size:.8em;color:#aaa;margin-top:2px;cursor:copy;overflow-wrap:anywhere;';
             const rawDetails = String(item.details || '');
             const detailsText = /^active keybox$/i.test(rawDetails.trim()) ? t('active_keybox') : (t(rawDetails) || rawDetails);
             details.textContent = detailsText;
+            if (rawDetails) {
+                attachKeyboxLongPress(details, t('details'), detailsText);
+            }
             row.append(title, meta, details);
             result.appendChild(row);
         });
