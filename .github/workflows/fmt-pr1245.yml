@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: fmt-pr1245-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   fmt:
     runs-on: ubuntu-latest
