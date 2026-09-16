@@ -383,6 +383,29 @@
         .ct-status-expired { background: rgba(255, 69, 58, 0.16); color: #ff453a; border: 1px solid rgba(255, 69, 58, 0.35); }
         .ct-badge-expired { background: rgba(255, 69, 58, 0.16); color: #ff453a; border: 1px solid rgba(255, 69, 58, 0.35); }
         .ct-status-unknown { background: rgba(142, 142, 147, 0.16); color: #8e8e93; border: 1px solid rgba(142, 142, 147, 0.35); }
+        .ct-keybox-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+        .ct-keybox-meta-row, .ct-verification-meta .ct-keybox-meta-row { display: flex; align-items: baseline; gap: 8px; min-width: 0; max-width: 100%; }
+        .ct-keybox-meta-label { flex: 0 0 auto; color: var(--text-muted); font-size: 0.75rem; font-weight: 600; }
+        .ct-keybox-meta-value { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; font-size: 0.72rem; letter-spacing: -0.025em; color: var(--text-muted); cursor: copy; }
+        .ct-verification-meta .ct-keybox-meta-label { font-size: 0.74rem; }
+        .ct-verification-meta .ct-keybox-meta-value { font-size: 0.72rem; }
+        .ct-keybox-value-popup { position: fixed; inset: 0; z-index: 10020; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(0,0,0,0.62); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); opacity: 0; transition: opacity .18s ease; }
+        .ct-keybox-value-popup.is-visible { opacity: 1; }
+        .ct-keybox-value-popup-card { width: min(92vw, 620px); max-height: min(78dvh, 620px); overflow: auto; padding: 22px; border-radius: 20px; border: 1px solid var(--border); background: var(--panel-elevated); box-shadow: 0 24px 80px rgba(0,0,0,.65); }
+        .ct-keybox-value-popup-heading { color: var(--text-muted); font-size: 0.82rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 10px; }
+        .ct-keybox-value-popup-value { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; font-size: clamp(1.1rem, 4.8vw, 1.8rem); line-height: 1.35; color: var(--text); overflow-wrap: anywhere; word-break: break-word; user-select: text; }
+        .ct-keybox-value-popup-hint { margin-top: 12px; color: var(--text-tertiary); font-size: 0.78rem; }
+        .ct-keybox-value-popup-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 18px; }
+        .ct-keybox-value-popup-copy, .ct-keybox-value-popup-close { min-height: 46px; }
+        .ct-keybox-value-popup-copy.is-copied { border-color: var(--success); color: var(--success); }
+        @media screen and (max-width: 480px) {
+            .ct-keybox-meta-row { gap: 6px; }
+            .ct-keybox-meta-label { font-size: 0.72rem; }
+            .ct-keybox-meta-value { font-size: 0.66rem; letter-spacing: -0.04em; }
+            .ct-verification-meta .ct-keybox-meta-value { font-size: 0.66rem; }
+            .ct-keybox-value-popup-card { padding: 18px; border-radius: 18px; }
+            .ct-keybox-value-popup-actions { grid-template-columns: 1fr; }
+        }
         .ct-keybox-name { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; min-width: 0; }
         .ct-keybox-name > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 0 1 auto; }
         .ct-verification-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; min-width: 0; }
