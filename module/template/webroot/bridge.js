@@ -141,6 +141,7 @@
 
     const REMOTE_STATUS_COPY = {
         tr: {
+            ok: 'Tamam',
             auth: 'API anahtarı eksik, geçersiz veya süresi dolmuş. Remote Server API kimlik bilgilerini güncelleyin.',
             access: 'Erişim reddedildi veya API anahtarı geçici olarak yasaklandı. Sağlayıcı erişimini ya da yasak durumunu kontrol edin.',
             accessRetry: 'API anahtarı geçici olarak yasaklandı. Kalan süre: {seconds} saniye.',
@@ -149,6 +150,7 @@
             service: 'Remote Server erişilemiyor veya şu anda uygun bir keybox yok.'
         },
         'zh-CN': {
+            ok: '正常',
             auth: 'API 密钥缺失、无效或已过期。请更新 Remote Server API 凭据。',
             access: '访问被拒绝，或 API 密钥被临时封禁。请检查服务提供方的访问权限或封禁状态。',
             accessRetry: 'API 密钥已被临时封禁。剩余时间：{seconds} 秒。',
@@ -157,6 +159,7 @@
             service: 'Remote Server 当前不可用，或目前没有符合条件的 keybox。'
         },
         es: {
+            ok: 'Correcto',
             auth: 'La clave API falta, no es válida o ha caducado. Actualiza las credenciales de la API del Remote Server.',
             access: 'Acceso denegado o clave API bloqueada temporalmente. Comprueba el acceso del proveedor o el estado del bloqueo.',
             accessRetry: 'La clave API está bloqueada temporalmente. Tiempo restante: {seconds} segundos.',
@@ -165,6 +168,7 @@
             service: 'El Remote Server no está disponible o no hay ningún keybox apto en este momento.'
         },
         de: {
+            ok: 'OK',
             auth: 'API-Schlüssel fehlt, ist ungültig oder abgelaufen. Aktualisiere die Remote-Server-API-Zugangsdaten.',
             access: 'Zugriff verweigert oder API-Schlüssel vorübergehend gesperrt. Prüfe den Anbieterzugriff oder den Sperrstatus.',
             accessRetry: 'API-Schlüssel ist vorübergehend gesperrt. Verbleibende Zeit: {seconds} Sekunden.',
@@ -173,6 +177,7 @@
             service: 'Remote Server ist nicht verfügbar oder derzeit ist keine geeignete Keybox verfügbar.'
         },
         ru: {
+            ok: 'ОК',
             auth: 'Ключ API отсутствует, недействителен или истёк. Обновите учётные данные API Remote Server.',
             access: 'Доступ запрещён или ключ API временно заблокирован. Проверьте доступ у провайдера или статус блокировки.',
             accessRetry: 'Ключ API временно заблокирован. Осталось: {seconds} с.',
@@ -181,6 +186,7 @@
             service: 'Remote Server недоступен или сейчас нет подходящего keybox.'
         },
         id: {
+            ok: 'Normal',
             auth: 'Kunci API tidak ada, tidak valid, atau kedaluwarsa. Perbarui kredensial API Remote Server.',
             access: 'Akses ditolak atau kunci API diblokir sementara. Periksa akses penyedia atau status blokir.',
             accessRetry: 'Kunci API diblokir sementara. Sisa waktu: {seconds} detik.',
@@ -189,6 +195,7 @@
             service: 'Remote Server tidak tersedia atau saat ini tidak ada keybox yang memenuhi syarat.'
         },
         hi: {
+            ok: 'सामान्य',
             auth: 'API कुंजी गायब, अमान्य या समाप्त हो चुकी है। Remote Server API क्रेडेंशियल अपडेट करें।',
             access: 'पहुंच अस्वीकृत है या API कुंजी अस्थायी रूप से प्रतिबंधित है। प्रदाता पहुंच या प्रतिबंध स्थिति जांचें।',
             accessRetry: 'API कुंजी अस्थायी रूप से प्रतिबंधित है। शेष समय: {seconds} सेकंड।',
@@ -197,6 +204,7 @@
             service: 'Remote Server उपलब्ध नहीं है या अभी कोई उपयुक्त keybox उपलब्ध नहीं है।'
         },
         ar: {
+            ok: 'سليم',
             auth: 'مفتاح API مفقود أو غير صالح أو منتهي الصلاحية. حدّث بيانات اعتماد API لـ Remote Server.',
             access: 'تم رفض الوصول أو حظر مفتاح API مؤقتًا. تحقق من وصول المزوّد أو حالة الحظر.',
             accessRetry: 'تم حظر مفتاح API مؤقتًا. الوقت المتبقي: {seconds} ثانية.',
@@ -251,6 +259,12 @@
 
     function remoteStatusText(source) {
         const raw = String(source == null ? '' : source).trim();
+        if (raw === 'OK') {
+            const locale = extensionLocale();
+            if (locale === 'en') return 'OK';
+            const catalog = REMOTE_STATUS_COPY[locale];
+            return (catalog && catalog.ok) ? catalog.ok : 'OK';
+        }
         const prefix = raw.match(remoteStatusPrefix);
         if (!prefix) return source;
         const locale = extensionLocale();
@@ -285,7 +299,7 @@
             let source = String(node.dataset.ctRemoteStatusSource || '').trim();
             if (!source) {
                 const current = String(node.textContent || '').trim();
-                if (!remoteStatusPrefix.test(current)) return;
+                if (!remoteStatusPrefix.test(current) && current !== 'OK') return;
                 source = current;
                 node.dataset.ctRemoteStatusSource = source;
             }

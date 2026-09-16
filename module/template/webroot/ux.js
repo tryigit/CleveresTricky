@@ -824,6 +824,8 @@
         'Invalid': 'Geçersiz',
         'VALID': 'GEÇERLİ',
         'INVALID': 'GEÇERSİZ',
+        'status_ok': 'Tamam',
+        'OK': 'Tamam',
         'Active keybox': 'Etkin keybox',
         'Active Keybox': 'Etkin Keybox',
         'Applies custom Keybox attestation spoofing to all applications without requiring target.txt.': 'Özel Keybox attestation taklidini target.txt gerektirmeden tüm uygulamalara uygular.',
@@ -845,6 +847,8 @@
     // source, zh-CN, es, de, ru, id, hi, ar.
     const COMPLETE_LOCALE_IDS = ['zh-CN', 'es', 'de', 'ru', 'id', 'hi', 'ar'];
     const COMPLETE_CATALOG_ROWS = [
+        ["status_ok", "正常", "Correcto", "OK", "ОК", "Normal", "सामान्य", "سليم"],
+        ["OK", "正常", "Correcto", "OK", "ОК", "Normal", "सामान्य", "سليم"],
         ["Profile saved", "配置档案已保存", "Perfil guardado", "Profil gespeichert", "Профиль сохранён", "Profil disimpan", "प्रोफ़ाइल सहेजी गई", "تم حفظ الملف الشخصي"],
         ["Notification", "通知", "Notificación", "Benachrichtigung", "Уведомление", "Notifikasi", "सूचना", "إشعار"],
         ["Close notification", "关闭通知", "Cerrar notificación", "Benachrichtigung schließen", "Закрыть уведомление", "Tutup notifikasi", "सूचना बंद करें", "إغلاق الإشعار"],
@@ -3543,6 +3547,11 @@
                 badge.className = 'ct-badge ct-badge-strongbox';
                 badge.textContent = 'StrongBox';
                 name.append(badge);
+            } else if (item.security_level === 'TEE') {
+                const badge = document.createElement('span');
+                badge.className = 'ct-badge ct-badge-tee';
+                badge.textContent = 'TEE';
+                name.append(badge);
             } else if (item.security_level === 'Unknown') {
                 const badge = document.createElement('span');
                 badge.className = 'ct-badge ct-badge-unknown';
@@ -3900,6 +3909,11 @@
                 const badge = document.createElement('span');
                 badge.className = 'ct-badge ct-badge-strongbox';
                 badge.textContent = 'StrongBox';
+                badgesContainer.append(badge);
+            } else if (item.security_level === 'TEE') {
+                const badge = document.createElement('span');
+                badge.className = 'ct-badge ct-badge-tee';
+                badge.textContent = 'TEE';
                 badgesContainer.append(badge);
             } else if (item.security_level === 'Unknown') {
                 const badge = document.createElement('span');

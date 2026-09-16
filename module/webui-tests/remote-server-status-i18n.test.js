@@ -77,6 +77,27 @@ assert.strictEqual(
     'Unowned status codes must not be rewritten'
 );
 
+assert.strictEqual(
+    createContext('tr').CleveresBridge.translateRemoteStatus('OK'),
+    'Tamam',
+    'Turkish locale should translate OK status to Tamam'
+);
+assert.strictEqual(
+    createContext('zh-CN').CleveresBridge.translateRemoteStatus('OK'),
+    '正常',
+    'Chinese locale should translate OK status to 正常'
+);
+assert.strictEqual(
+    createContext('es').CleveresBridge.translateRemoteStatus('OK'),
+    'Correcto',
+    'Spanish locale should translate OK status to Correcto'
+);
+assert.strictEqual(
+    english('OK'),
+    'OK',
+    'English locale must preserve canonical OK status'
+);
+
 assert.match(bridgeSource, /addEventListener\('ct_retranslate', refreshRemoteServerStatusCopy\)/);
 assert.match(bridgeSource, /dataset\.ctRemoteStatusSource/);
 assert.match(bridgeSource, /maxRemoteRetryAfterSeconds = 31 \* 24 \* 60 \* 60/);

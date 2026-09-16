@@ -124,7 +124,7 @@ assert.equal(sbName.children[0].textContent, 'sb.xml');
 assert.equal(sbName.children[1].className, 'ct-badge ct-badge-strongbox');
 assert.equal(sbName.children[1].textContent, 'StrongBox');
 
-// Test 2: Non-RKP TEE does NOT render TEE badge
+// Test 2: Non-RKP TEE renders TEE badge
 context.setInventory([
   { id: '2', filename: 'tee.xml', scope: 'managed', certificate_serial: '456', security_level: 'TEE' }
 ]);
@@ -135,7 +135,9 @@ const teeRow = list.children[0];
 const teeBody = teeRow.children[1];
 const teeName = teeBody.children[0];
 assert.equal(teeName.children[0].textContent, 'tee.xml');
-assert.equal(teeName.children.length, 1, 'Non-RKP keybox must not render TEE badge');
+assert.equal(teeName.children.length, 2, 'Non-RKP TEE keybox must render TEE badge');
+assert.equal(teeName.children[1].className, 'ct-badge ct-badge-tee');
+assert.equal(teeName.children[1].textContent, 'TEE');
 
 // Test 3: Unknown badge
 context.setInventory([

@@ -100,7 +100,8 @@ const context = {
               keyboxCount: 4,
               rkpCount: 2,
               rsaCount: 3,
-              cboxCount: 4
+              cboxCount: 4,
+              refreshIntervalHours: 12
             }
           ];
         },
@@ -192,6 +193,10 @@ vm.runInContext(`
   assert.equal(hubHint.style.display, 'none', 'hub recommendation must be hidden when keybox.tryigit.dev is present');
   const serverItem = appended[0];
   const infoCol = serverItem.children[0];
+  const nameRow = infoCol.children[0];
+  const intervalBadge = nameRow.children && nameRow.children.find(c => c.className === 'ct-badge ct-badge-interval');
+  assert.ok(intervalBadge, 'refresh interval badge must be rendered in header');
+  assert.equal(intervalBadge.textContent, '12h');
   const statsDiv = infoCol.children.find(c => c.className === 'ct-server-stats');
   assert.ok(statsDiv, 'stats breakdown must be rendered');
   const badgeTexts = statsDiv.children.map(c => c.textContent);

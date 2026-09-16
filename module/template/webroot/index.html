@@ -378,6 +378,7 @@
         .ct-badge-ecdsa { background: rgba(10, 132, 255, 0.15); color: #0a84ff; border: 1px solid rgba(10, 132, 255, 0.3); }
         .ct-badge-keybox { background: rgba(52, 199, 89, 0.15); color: #32d74b; border: 1px solid rgba(52, 199, 89, 0.3); }
         .ct-badge-cbox { background: rgba(191, 90, 242, 0.18); color: #bf5af2; border: 1px solid rgba(191, 90, 242, 0.35); }
+        .ct-badge-interval { background: rgba(255, 255, 255, 0.08); color: var(--text-muted); border: 1px solid var(--border); font-size: 0.70rem; }
         .ct-status-badge { text-transform: uppercase; font-size: 0.70rem; padding: 2px 8px; border-radius: 6px; }
         .ct-status-valid { background: rgba(48, 209, 88, 0.16); color: #30d158; border: 1px solid rgba(48, 209, 88, 0.35); }
         .ct-status-invalid { background: rgba(255, 69, 58, 0.16); color: #ff453a; border: 1px solid rgba(255, 69, 58, 0.35); }
@@ -385,7 +386,7 @@
         .ct-status-expired { background: rgba(255, 69, 58, 0.16); color: #ff453a; border: 1px solid rgba(255, 69, 58, 0.35); }
         .ct-badge-expired { background: rgba(255, 69, 58, 0.16); color: #ff453a; border: 1px solid rgba(255, 69, 58, 0.35); }
         .ct-status-unknown { background: rgba(142, 142, 147, 0.16); color: #8e8e93; border: 1px solid rgba(142, 142, 147, 0.35); }
-        .ct-keybox-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+        .ct-keybox-meta, .ct-verification-meta { display: flex; flex-direction: column; gap: 3px; min-width: 0; margin-top: 6px; }
         .ct-keybox-meta-row, .ct-verification-meta .ct-keybox-meta-row { display: flex; align-items: baseline; gap: 8px; min-width: 0; max-width: 100%; }
         .ct-keybox-meta-label { flex: 0 0 auto; color: var(--text-muted); font-size: 0.75rem; font-weight: 600; }
         .ct-keybox-meta-value { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; font-size: 0.72rem; letter-spacing: -0.025em; color: var(--text-muted); cursor: copy; }
@@ -405,6 +406,7 @@
             .ct-keybox-meta-row { gap: 6px; }
             .ct-keybox-meta-label { font-size: 0.72rem; }
             .ct-keybox-meta-value { font-size: 0.66rem; letter-spacing: -0.04em; }
+            .ct-keybox-meta, .ct-verification-meta { margin-top: 5px; gap: 2px; }
             .ct-verification-meta .ct-keybox-meta-value { font-size: 0.66rem; }
             .ct-keybox-value-popup-card { padding: 18px; border-radius: 18px; }
             .ct-keybox-value-popup-actions { grid-template-columns: 1fr; }
@@ -1645,7 +1647,8 @@ try {
             keyboxCount: Math.max(0, Math.min(64, Number(server?.keyboxCount) || 0)),
             rkpCount: Math.max(0, Math.min(64, Number(server?.rkpCount) || 0)),
             rsaCount: Math.max(0, Math.min(64, Number(server?.rsaCount) || 0)),
-            cboxCount: Math.max(0, Math.min(64, Number(server?.cboxCount) || 0))
+            cboxCount: Math.max(0, Math.min(64, Number(server?.cboxCount) || 0)),
+            refreshIntervalHours: Math.max(1, Math.min(720, Number(server?.refreshIntervalHours) || 24))
         })).filter(server => server.id && server.url)
         : [];
     const hasHub = servers.some(s => {
@@ -1667,8 +1670,13 @@ try {
 
         const info = document.createElement('div');
         const name = document.createElement('div');
-        name.style.fontWeight = 'bold';
-        name.textContent = String(s.name || '');
+        name.style.cssText = 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-weight:bold;';
+        const nameText = document.createElement('span');
+        nameText.textContent = String(s.name || '');
+        const intervalBadge = document.createElement('span');
+        intervalBadge.className = 'ct-badge ct-badge-interval';
+        intervalBadge.textContent = s.refreshIntervalHours + 'h';
+        name.append(nameText, intervalBadge);
         const url = document.createElement('div');
         url.className = 'ct-server-url';
         url.style.cssText = 'font-size:0.8em;color:#888;word-break:break-all';
@@ -1704,7 +1712,12 @@ try {
         const status = document.createElement('span');
         const statusText = String(s.lastStatus || 'UNKNOWN');
         status.className = `status-badge status-${statusText.startsWith('OK') ? 'OK' : 'ERROR'}`;
-        status.textContent = statusText;
+        if (statusText === 'OK') {
+            status.setAttribute('data-i18n', 'status_ok');
+            status.textContent = (typeof t === 'function' ? t('status_ok') : null) || 'OK';
+        } else {
+            status.textContent = statusText;
+        }
 
         const refresh = document.createElement('button');
         refresh.style.cssText = 'padding:8px 16px;margin-left:10px;min-height:44px';
