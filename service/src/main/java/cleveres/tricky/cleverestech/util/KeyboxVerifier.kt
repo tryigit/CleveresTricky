@@ -37,6 +37,7 @@ object KeyboxVerifier {
         val isRkp: Boolean = false,
         val hasRsa: Boolean = false,
         val hasEc: Boolean = false,
+        val notAfter: String? = null,
     )
 
     enum class Status {
@@ -608,6 +609,7 @@ object KeyboxVerifier {
                     hasEc = hasEc,
                 )
             val deviceSerial = keyboxes.asSequence().mapNotNull(CertHack::getDeviceCertificateSerial).firstOrNull()
+            val deviceNotAfter = keyboxes.asSequence().mapNotNull(CertHack::getDeviceCertificateNotAfter).firstOrNull()
 
             for (keybox in keyboxes) {
                 val status =
@@ -636,6 +638,7 @@ object KeyboxVerifier {
                             isRkp = isRkp,
                             hasRsa = hasRsa,
                             hasEc = hasEc,
+                            notAfter = deviceNotAfter,
                         )
                     }
                     Status.INVALID -> {
@@ -651,6 +654,7 @@ object KeyboxVerifier {
                             isRkp = isRkp,
                             hasRsa = hasRsa,
                             hasEc = hasEc,
+                            notAfter = deviceNotAfter,
                         )
                     }
                     Status.ERROR -> {
@@ -667,6 +671,7 @@ object KeyboxVerifier {
                             isRkp = isRkp,
                             hasRsa = hasRsa,
                             hasEc = hasEc,
+                            notAfter = deviceNotAfter,
                         )
                     }
                     Status.VALID -> Unit
@@ -684,6 +689,7 @@ object KeyboxVerifier {
                 isRkp = isRkp,
                 hasRsa = hasRsa,
                 hasEc = hasEc,
+                notAfter = deviceNotAfter,
             )
         } catch (_: RustBackendUnavailableException) {
             Result(

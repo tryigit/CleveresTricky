@@ -7,6 +7,8 @@ import android.system.keystore2.KeyMetadata;
 import androidx.annotation.VisibleForTesting;
 
 import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.TimeZone;
 import java.security.KeyPair;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
@@ -980,6 +982,26 @@ public final class CertHack {
         Certificate certificate = keybox.certificates().get(2);
         if (!(certificate instanceof X509Certificate x509)) return null;
         return x509.getSerialNumber().toString(16).toUpperCase(Locale.ROOT);
+    }
+
+    public static String getDeviceCertificateNotAfter(String identifier) {
+        if (identifier == null) return null;
+        List<KeyBox> boxes = state.keyboxFiles.get(identifier);
+        if (boxes == null) return null;
+        for (KeyBox box : boxes) {
+            String notAfter = getDeviceCertificateNotAfter(box);
+            if (notAfter != null) return notAfter;
+        }
+        return null;
+    }
+
+    public static String getDeviceCertificateNotAfter(KeyBox keybox) {
+        if (keybox == null || keybox.certificates().size() < 3) return null;
+        Certificate certificate = keybox.certificates().get(2);
+        if (!(certificate instanceof X509Certificate x509)) return null;
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd", Locale.ROOT);
+        sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
+        return sdf.format(x509.getNotAfter());
     }
 
     /**

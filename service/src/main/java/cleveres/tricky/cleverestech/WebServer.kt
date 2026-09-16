@@ -717,12 +717,13 @@ class WebServer(
         StoredKeyboxInventory.list(configDir).forEach { source ->
             val targetId = source.id.ifEmpty { source.filename }
             var certSerial = CertHack.getDeviceCertificateSerial(targetId) ?: ""
+            var notAfter = CertHack.getDeviceCertificateNotAfter(targetId) ?: ""
             var secLevel = CertHack.getKeyboxSecurityLevel(targetId)
             var isRkp = CertHack.isRkpKeybox(targetId)
             var hasRsa = CertHack.hasRsaKeybox(targetId)
             var hasEc = CertHack.hasEcKeybox(targetId)
 
-            if (secLevel == "Unknown" || certSerial.isEmpty() || (!hasRsa && !hasEc)) {
+            if (secLevel == "Unknown" || certSerial.isEmpty() || notAfter.isEmpty() || (!hasRsa && !hasEc)) {
                 val fileScope = source.scope.fileScope
                 if (fileScope != null) {
                     val parsed =
@@ -751,6 +752,12 @@ class WebServer(
                                     .mapNotNull(CertHack::getDeviceCertificateSerial)
                                     .firstOrNull() ?: ""
                         }
+                        if (notAfter.isEmpty()) {
+                            notAfter =
+                                parsed.keyboxes.asSequence()
+                                    .mapNotNull(CertHack::getDeviceCertificateNotAfter)
+                                    .firstOrNull() ?: ""
+                        }
                         if (!isRkp) {
                             isRkp = parsed.keyboxes.any(CertHack::isRkpKeybox)
                         }
@@ -771,6 +778,7 @@ class WebServer(
                     .put("filename", source.filename)
                     .put("type", if (source.isCbox) "cbox" else "xml")
                     .put("certificate_serial", certSerial)
+                    .put("not_after", notAfter)
                     .put("security_level", secLevel)
                     .put("is_rkp", isRkp)
                     .put("has_rsa", hasRsa)
@@ -3132,6 +3140,7 @@ class WebServer(
                 obj.put("status", r.status.name)
                 obj.put("details", r.details)
                 obj.put("certificate_serial", r.certificateSerial ?: "")
+                obj.put("not_after", r.notAfter ?: "")
                 array.put(obj)
             }
             return array.toString()

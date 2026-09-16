@@ -812,6 +812,34 @@
         'Disabled by default. Core Binder protection is independent from this option.': 'Varsayılan olarak kapalıdır. Temel Binder koruması bu seçenekten bağımsızdır.'
     });
 
+    Object.assign(TRANSLATIONS.tr, {
+        'Copied': 'Kopyalandı',
+        'Copied to clipboard': 'Panoya kopyalandı',
+        'Fingerprint Copied': 'Parmak İzi Kopyalandı',
+        'Copied USDT Address': 'USDT Adresi Kopyalandı',
+        'Copied XMR Address': 'XMR Adresi Kopyalandı',
+        'Copied ERC20 Address': 'ERC20 Adresi Kopyalandı',
+        'Copied Binance ID': 'Binance ID Kopyalandı',
+        'Valid': 'Geçerli',
+        'Invalid': 'Geçersiz',
+        'VALID': 'GEÇERLİ',
+        'INVALID': 'GEÇERSİZ',
+        'Active keybox': 'Etkin keybox',
+        'Active Keybox': 'Etkin Keybox',
+        'Applies custom Keybox attestation spoofing to all applications without requiring target.txt.': 'Özel Keybox attestation taklidini target.txt gerektirmeden tüm uygulamalara uygular.',
+        'Global Keybox is the module-wide attestation scope switch. Recommended ON for normal root usage.': 'Global Keybox modül genelinde attestation kapsam anahtarıdır. Normal root kullanımı için AÇIK önerilir.',
+        'Controls system, vendor, and boot security patch levels independently from Identity properties.': 'Sistem, üretici ve önyükleme güvenlik yaması seviyelerini Kimlik özelliklerinden bağımsız olarak kontrol eder.',
+        'Open Patch Settings': 'Yama Ayarlarını Aç',
+        'All Identity enable/disable controls live on Dashboard. Turn Identity on to reveal its child switches.': 'Tüm Kimlik açma/kapatma kontrolleri Gösterge Panelinde yer alır. Alt anahtarları görmek için Kimliği açın.',
+        'The Identity master toggles all child features together. When Global Identity is off, these apply only to identity_target.txt and assigned profiles.': 'Ana Kimlik anahtarı tüm alt özellikleri birlikte değiştirir. Global Kimlik kapalıyken bunlar yalnızca identity_target.txt ve atanan profillere uygulanır.',
+        'Applies Build Identity properties system-wide across all apps. When OFF, Identity applies only to identity_target.txt and configured profiles. Requires reboot.': 'Build Kimliği özelliklerini tüm uygulamalarda sistem genelinde uygular. KAPALIyken Kimlik yalnızca identity_target.txt ve yapılandırılmış profillere uygulanır. Yeniden başlatma gerekir.',
+        'Open Identity settings': 'Kimlik Ayarlarını Aç',
+        'Expires': 'Son geçerlilik',
+        'Expired': 'Süresi geçmiş',
+        'EXPIRED': 'SÜRESİ GEÇMİŞ',
+        'Expired Keybox': 'Süresi Geçmiş Keybox'
+    });
+
     // Complete catalogs share one source key per row to keep all built-in
     // locales aligned without adding locale-specific runtime assets. Columns:
     // source, zh-CN, es, de, ru, id, hi, ar.
@@ -1238,6 +1266,31 @@
         ["Refresh", "刷新", "Actualizar", "Aktualisieren", "Обновить", "Segarkan", "रीफ़्रेश करें", "تحديث"],
         ["Remove", "移除", "Eliminar", "Entfernen", "Удалить", "Hapus", "हटाएं", "إزالة"],
         ["Failed to load servers.", "无法加载服务器。", "No se pudieron cargar los servidores.", "Server konnten nicht geladen werden.", "Не удалось загрузить серверы.", "Gagal memuat server.", "सर्वर लोड करने में विफल।", "تعذر تحميل الخوادم."],
+        ["Copied", "已复制", "Copiado", "Kopiert", "Скопировано", "Disalin", "कॉपी किया गया", "تم النسخ"],
+        ["Copied to clipboard", "已复制到剪贴板", "Copiado al portapapeles", "In die Zwischenablage kopiert", "Скопировано в буфер обмена", "Disalin ke papan klip", "क्लिपबोर्ड पर कॉपी किया गया", "تم النسخ إلى الحافظة"],
+        ["Fingerprint Copied", "指纹已复制", "Huella copiada", "Fingerprint kopiert", "Отпечаток скопирован", "Sidik Jari Disalin", "फ़िंगरप्रिंट कॉपी किया गया", "تم نسخ البصمة"],
+        ["Copied USDT Address", "USDT 地址已复制", "Dirección USDT copiada", "USDT-Adresse kopiert", "Адрес USDT скопирован", "Alamat USDT Disalin", "USDT पता कॉपी किया गया", "تم نسخ عنوان USDT"],
+        ["Copied XMR Address", "XMR 地址已复制", "Dirección XMR copiada", "XMR-Adresse kopiert", "Адрес XMR скопирован", "Alamat XMR Disalin", "XMR पता कॉपी किया गया", "تم نسخ عنوان XMR"],
+        ["Copied ERC20 Address", "ERC20 地址已复制", "Dirección ERC20 copiada", "ERC20-Adresse kopiert", "Адрес ERC20 скопирован", "Alamat ERC20 Disalin", "ERC20 पता कॉपी किया गया", "تم نسخ عنوان ERC20"],
+        ["Copied Binance ID", "币安 ID 已复制", "ID de Binance copiado", "Binance-ID kopiert", "Binance ID скопирован", "ID Binance Disalin", "Binance ID कॉपी किया गया", "تم نسخ معرّف Binance"],
+        ["Valid", "有效", "Válido", "Gültig", "Действителен", "Valid", "मान्य", "صالح"],
+        ["Invalid", "无效", "Inválido", "Ungültig", "Недействителен", "Tidak Valid", "अमान्य", "غير صالح"],
+        ["VALID", "有效", "VÁLIDO", "GÜLTIG", "ДЕЙСТВИТЕЛЕН", "VALID", "मान्य", "صالح"],
+        ["INVALID", "无效", "INVÁLIDO", "UNGÜLTIG", "НЕДЕЙСТВИТЕЛЕН", "TIDAK VALID", "अमान्य", "غير صالح"],
+        ["Active keybox", "活动密钥盒", "Keybox activa", "Aktive Keybox", "Активный keybox", "Keybox aktif", "सक्रिय Keybox", "Keybox نشط"],
+        ["Active Keybox", "活动密钥盒", "Keybox Activa", "Aktive Keybox", "Активный Keybox", "Keybox Aktif", "सक्रिय Keybox", "Keybox نشط"],
+        ["Applies custom Keybox attestation spoofing to all applications without requiring target.txt.", "无需 target.txt 即可将自定义 Keybox 认证欺骗应用于所有应用程序。", "Aplica la suplantación de atestación de Keybox personalizada a todas las aplicaciones sin requerir target.txt.", "Wendet benutzerdefiniertes Keybox-Attestierungs-Spoofing auf alle Anwendungen an, ohne target.txt zu erfordern.", "Применяет пользовательскую подмену аттестации Keybox ко всем приложениям без необходимости target.txt.", "Menerapkan spoofing atestasi Keybox kustom ke semua aplikasi tanpa memerlukan target.txt.", "target.txt की आवश्यकता के बिना सभी ऐप्स पर कस्टम Keybox attestation स्पूफ़िंग लागू करता है।", "يطبق انتحال تصديق Keybox المخصص على جميع التطبيقات دون الحاجة إلى target.txt."],
+        ["Global Keybox is the module-wide attestation scope switch. Recommended ON for normal root usage.", "全局密钥盒是模块范围的认证范围开关。正常 root 使用建议开启。", "Keybox global es el interruptor de alcance de atestación de todo el módulo. Se recomienda ACTIVADO para uso normal de root.", "Globaler Keybox-Modus ist der modulweite Schalter für den Attestierungsbereich. Für normale Root-Nutzung EIN empfohlen.", "Глобальный Keybox — переключатель области аттестации всего модуля. Рекомендуется ВКЛ для обычного root-использования.", "Keybox Global adalah sakelar cakupan atestasi seluruh modul. Disarankan AKTIF untuk penggunaan root normal.", "ग्लोबल कीबॉक्स पूरे मॉड्यूल का attestation दायरा स्विच है। सामान्य रूट उपयोग के लिए चालू रखने की अनुशंसा है।", "Keybox العام هو مفتاح نطاق التصديق على مستوى الوحدة بالكامل. يوصى بتفعيله للاستخدام العادي مع الروت."],
+        ["Controls system, vendor, and boot security patch levels independently from Identity properties.", "独立于身份属性控制系统、厂商和启动安全补丁级别。", "Controla los niveles de parches de seguridad del sistema, del proveedor y de arranque de forma independiente de las propiedades de Identidad.", "Steuert die Sicherheitspatch-Ebenen von System, Hersteller und Boot unabhängig von den Identitätseigenschaften.", "Управляет уровнями патчей безопасности системы, поставщика и загрузки независимо от свойств идентичности.", "Mengontrol tingkat patch keamanan sistem, vendor, dan boot secara independen dari properti Identitas.", "पहचान गुणों से स्वतंत्र रूप से सिस्टम, वेंडर और बूट सुरक्षा पैच स्तरों को नियंत्रित करता है।", "يتحكم في مستويات تصحيح أمان النظام والمورّد والإقلاع بشكل مستقل عن خصائص الهوية."],
+        ["Open Patch Settings", "打开补丁设置", "Abrir ajustes de parches", "Patch-Einstellungen öffnen", "Открыть настройки патчей", "Buka Pengaturan Patch", "पैच सेटिंग्स खोलें", "فتح إعدادات التصحيح"],
+        ["All Identity enable/disable controls live on Dashboard. Turn Identity on to reveal its child switches.", "所有身份启用/禁用控制均位于仪表盘。开启身份以显示其子开关。", "Todos los controles de activación/desactivación de Identidad están en el Panel. Activa Identidad para mostrar sus interruptores secundarios.", "Alle Identitäts-Schalter befinden sich in der Übersicht. Schalten Sie Identität ein, um die untergeordneten Schalter anzuzeigen.", "Все переключатели идентичности находятся на Панели. Включите идентичность, чтобы открыть дочерние параметры.", "Semua kontrol aktif/nonaktif Identitas berada di Dashboard. Aktifkan Identitas untuk melihat sakelar turunannya.", "सभी पहचान सक्षम/अक्षम नियंत्रण डैशबोर्ड पर हैं। इसके उप-स्विच देखने के लिए पहचान चालू करें।", "توجد جميع عناصر تحكم تفعيل/تعطيل الهوية في لوحة التحكم. قم بتفعيل الهوية لإظهار مفاتيحها الفرعية."],
+        ["The Identity master toggles all child features together. When Global Identity is off, these apply only to identity_target.txt and assigned profiles.", "身份总开关可统一切换所有子功能。关闭全局身份时，这些设置仅适用于 identity_target.txt 和已分配的配置档案。", "El interruptor principal de Identidad conmuta todas las funciones secundarias juntas. Cuando la Identidad global está desactivada, estas se aplican solo a identity_target.txt y perfiles asignados.", "Der Identitäts-Hauptschalter schaltet alle untergeordneten Funktionen zusammen. Wenn Globale Identität aus ist, gelten diese nur für identity_target.txt und zugewiesene Profile.", "Главный переключатель идентичности управляет всеми дочерними функциями. При выключенной Глобальной идентификации они применяются только к identity_target.txt и назначенным профилям.", "Sakelar utama Identitas mengaktifkan semua fitur turunan secara bersamaan. Saat Identitas Global nonaktif, ini hanya berlaku untuk identity_target.txt dan profil yang ditetapkan.", "पहचान का मुख्य स्विच सभी उप-सुविधाओं को एक साथ बदलता है। जब ग्लोबल पहचान बंद होती है, तो ये केवल identity_target.txt और सौंपे गए प्रोफ़ाइल पर लागू होते हैं.", "يقوم مفتاح الهوية الرئيسي بتبديل جميع الميزات الفرعية معا. عند إيقاف الهوية العامة، تنطبق هذه فقط على identity_target.txt والملفات الشخصية المعينة."],
+        ["Applies Build Identity properties system-wide across all apps. When OFF, Identity applies only to identity_target.txt and configured profiles. Requires reboot.", "在所有应用程序中系统级应用构建身份属性。关闭时，身份仅适用于 identity_target.txt 和已配置的配置档案。需要重启。", "Aplica las propiedades de Identidad de compilación en todo el sistema para todas las apps. Cuando está DESACTIVADO, la Identidad se aplica solo a identity_target.txt y perfiles configurados. Requiere reiniciar.", "Wendet Build-Identitätseigenschaften systemweit auf alle Apps an. Wenn AUS, gilt die Identität nur für identity_target.txt und konfigurierte Profile. Erfordert Neustart.", "Применяет свойства идентичности сборки на уровне всей системы ко всем приложениям. В положении ВЫКЛ. идентичность применяется только к identity_target.txt и настроенным профилям. Требуется перезагрузка.", "Menerapkan properti Identitas Build di seluruh sistem ke semua aplikasi. Saat MATI, Identitas hanya berlaku untuk identity_target.txt dan profil yang dikonfigurasi. Memerlukan reboot.", "सभी ऐप्स पर सिस्टम-व्यापी बिल्ड पहचान गुण लागू करता है। बंद होने पर, पहचान केवल identity_target.txt और कॉन्फ़िगर किए गए प्रोफ़ाइल पर लागू होती है। रीबूट आवश्यक है।", "يطبق خصائص هوية build على مستوى النظام بالكامل عبر جميع التطبيقات. عند الإيقاف، تنطبق الهوية فقط على identity_target.txt والملفات الشخصية المكونة. تتطلب إعادة التشغيل."],
+        ["Open Identity settings", "打开身份设置", "Abrir ajustes de identidad", "Identitätseinstellungen öffnen", "Открыть настройки идентичности", "Buka Pengaturan Identitas", "पहचान सेटिंग्स खोलें", "فتح إعدادات الهوية"],
+        ["Expires", "有效期至", "Vence", "Gültig bis", "Истекает", "Kedaluwarsa", "समाप्ति", "تاريخ الانتهاء"],
+        ["Expired", "已过期", "Vencido", "Abgelaufen", "Истек", "Kedaluwarsa", "समाप्त", "منتهي الصلاحية"],
+        ["EXPIRED", "已过期", "VENCIDO", "ABGELAUFEN", "ИСТЕК", "KEDALUWARSA", "समाप्त", "منتهي الصلاحية"],
+        ["Expired Keybox", "已过期的密钥盒", "Keybox vencida", "Abgelaufene Keybox", "Истекший keybox", "Keybox Kedaluwarsa", "समाप्त Keybox", "Keybox منتهي الصلاحية"],
     ];
 
     for (const row of COMPLETE_CATALOG_ROWS) {
@@ -1635,7 +1688,7 @@
         if (match) return render('targeted', match[1]);
         match = value.match(/^Native runtime is active with (\d+) verified keybox(?:es)?\. Global application scope is enabled\. Core boot\/TEE compatibility remains active independently of Identity Engine; hardware bootloader and root-of-trust state remain genuine\.$/);
         if (match) return render('global', match[1]);
-        match = value.match(/^(\d+) active keyboxes$/);
+        match = value.match(/^(\d+)\s+active keybox(?:es)?$/i);
         if (match) return render('activeKeyboxes', match[1]);
         match = value.match(/^(\d+) Keys Loaded$/);
         if (match) return render('keysLoaded', match[1]);
@@ -3067,7 +3120,8 @@
             keyboxesLoaded: '{count} Keyboxes Loaded', selectFiltered: 'Select filtered', clearFiltered: 'Clear filtered selection',
             search: 'Search', clear: 'Clear', verifySearchPlaceholder: 'Search verification results...', verifying: 'Verifying...',
             noVerify: 'No keyboxes to verify', noVerifyMatch: 'No verification results match your search.', loading: 'Loading...',
-            noStored: 'No keyboxes stored.', noStoredMatch: 'No keyboxes match your filter.', delete: 'Delete'
+            noStored: 'No keyboxes stored.', noStoredMatch: 'No keyboxes match your filter.', delete: 'Delete',
+            status_valid: 'Valid', status_invalid: 'Invalid', status_error: 'Error', status_unknown: 'Unknown', active_keybox: 'Active Keybox', expires: 'Expires', status_expired: 'Expired'
         },
         tr: {
             selected: 'seçili', deleteSelected: 'Seçilileri sil', previous: 'Önceki', next: 'Sonraki', page: 'Sayfa {page} / {pages}',
@@ -3076,7 +3130,8 @@
             keyboxesLoaded: '{count} Keybox Yüklendi', selectFiltered: 'Filtrelenenleri seç', clearFiltered: 'Filtre seçimini temizle',
             search: 'Ara', clear: 'Temizle', verifySearchPlaceholder: 'Doğrulama sonuçlarında ara...', verifying: 'Doğrulanıyor...',
             noVerify: 'Doğrulanacak keybox yok', noVerifyMatch: 'Aramanızla eşleşen doğrulama sonucu yok.', loading: 'Yükleniyor...',
-            noStored: 'Kayıtlı keybox yok.', noStoredMatch: 'Filtrenizle eşleşen keybox yok.', delete: 'Sil'
+            noStored: 'Kayıtlı keybox yok.', noStoredMatch: 'Filtrenizle eşleşen keybox yok.', delete: 'Sil',
+            status_valid: 'Geçerli', status_invalid: 'Geçersiz', status_error: 'Hata', status_unknown: 'Bilinmiyor', active_keybox: 'Etkin keybox', expires: 'Son geçerlilik', status_expired: 'Süresi geçmiş'
         },
         'zh-CN': {
             selected: '已选择', deleteSelected: '删除所选', previous: '上一页', next: '下一页', page: '第 {page} / {pages} 页',
@@ -3085,7 +3140,8 @@
             keyboxesLoaded: '已加载 {count} 个 Keybox', selectFiltered: '选择筛选结果', clearFiltered: '清除筛选选择',
             search: '搜索', clear: '清除', verifySearchPlaceholder: '搜索验证结果...', verifying: '正在验证...',
             noVerify: '没有可验证的 Keybox', noVerifyMatch: '没有符合搜索条件的验证结果。', loading: '正在加载...',
-            noStored: '没有已存储的 Keybox。', noStoredMatch: '没有符合筛选条件的 Keybox。', delete: '删除'
+            noStored: '没有已存储的 Keybox。', noStoredMatch: '没有符合筛选条件的 Keybox。', delete: '删除',
+            status_valid: '有效', status_invalid: '无效', status_error: '错误', status_unknown: '未知', active_keybox: '活动密钥盒', expires: '有效期至', status_expired: '已过期'
         },
         es: {
             selected: 'seleccionados', deleteSelected: 'Eliminar seleccionados', previous: 'Anterior', next: 'Siguiente', page: 'Página {page} / {pages}',
@@ -3094,7 +3150,8 @@
             keyboxesLoaded: '{count} Keyboxes cargadas', selectFiltered: 'Seleccionar filtradas', clearFiltered: 'Limpiar selección filtrada',
             search: 'Buscar', clear: 'Limpiar', verifySearchPlaceholder: 'Buscar resultados de verificación...', verifying: 'Verificando...',
             noVerify: 'No hay keyboxes para verificar', noVerifyMatch: 'Ningún resultado de verificación coincide con la búsqueda.', loading: 'Cargando...',
-            noStored: 'No hay keyboxes guardadas.', noStoredMatch: 'Ninguna keybox coincide con el filtro.', delete: 'Eliminar'
+            noStored: 'No hay keyboxes guardadas.', noStoredMatch: 'Ninguna keybox coincide con el filtro.', delete: 'Eliminar',
+            status_valid: 'Válido', status_invalid: 'Inválido', status_error: 'Error', status_unknown: 'Desconocido', active_keybox: 'Keybox activa', expires: 'Vence', status_expired: 'Vencido'
         },
         de: {
             selected: 'ausgewählt', deleteSelected: 'Auswahl löschen', previous: 'Zurück', next: 'Weiter', page: 'Seite {page} / {pages}',
@@ -3103,7 +3160,8 @@
             keyboxesLoaded: '{count} Keyboxen geladen', selectFiltered: 'Gefilterte auswählen', clearFiltered: 'Gefilterte Auswahl löschen',
             search: 'Suchen', clear: 'Leeren', verifySearchPlaceholder: 'Prüfergebnisse durchsuchen...', verifying: 'Prüfung läuft...',
             noVerify: 'Keine Keyboxen zum Prüfen', noVerifyMatch: 'Keine Prüfergebnisse entsprechen der Suche.', loading: 'Wird geladen...',
-            noStored: 'Keine Keyboxen gespeichert.', noStoredMatch: 'Keine Keybox entspricht dem Filter.', delete: 'Löschen'
+            noStored: 'Keine Keyboxen gespeichert.', noStoredMatch: 'Keine Keybox entspricht dem Filter.', delete: 'Löschen',
+            status_valid: 'Gültig', status_invalid: 'Ungültig', status_error: 'Fehler', status_unknown: 'Unbekannt', active_keybox: 'Aktive Keybox', expires: 'Gültig bis', status_expired: 'Abgelaufen'
         },
         ru: {
             selected: 'выбрано', deleteSelected: 'Удалить выбранные', previous: 'Назад', next: 'Далее', page: 'Страница {page} / {pages}',
@@ -3112,7 +3170,8 @@
             keyboxesLoaded: 'Загружено Keybox: {count}', selectFiltered: 'Выбрать отфильтрованные', clearFiltered: 'Очистить выбор фильтра',
             search: 'Поиск', clear: 'Очистить', verifySearchPlaceholder: 'Поиск по результатам проверки...', verifying: 'Проверка...',
             noVerify: 'Нет keybox для проверки', noVerifyMatch: 'Нет результатов проверки, соответствующих поиску.', loading: 'Загрузка...',
-            noStored: 'Нет сохраненных keybox.', noStoredMatch: 'Нет keybox, соответствующих фильтру.', delete: 'Удалить'
+            noStored: 'Нет сохраненных keybox.', noStoredMatch: 'Нет keybox, соответствующих фильтру.', delete: 'Удалить',
+            status_valid: 'Действителен', status_invalid: 'Недействителен', status_error: 'Ошибка', status_unknown: 'Неизвестно', active_keybox: 'Активный keybox', expires: 'Истекает', status_expired: 'Истек'
         },
         id: {
             selected: 'dipilih', deleteSelected: 'Hapus pilihan', previous: 'Sebelumnya', next: 'Berikutnya', page: 'Halaman {page} / {pages}',
@@ -3121,7 +3180,8 @@
             keyboxesLoaded: '{count} Keybox dimuat', selectFiltered: 'Pilih yang difilter', clearFiltered: 'Hapus pilihan filter',
             search: 'Cari', clear: 'Bersihkan', verifySearchPlaceholder: 'Cari hasil verifikasi...', verifying: 'Memverifikasi...',
             noVerify: 'Tidak ada keybox untuk diverifikasi', noVerifyMatch: 'Tidak ada hasil verifikasi yang cocok dengan pencarian.', loading: 'Memuat...',
-            noStored: 'Tidak ada keybox tersimpan.', noStoredMatch: 'Tidak ada keybox yang cocok dengan filter.', delete: 'Hapus'
+            noStored: 'Tidak ada keybox tersimpan.', noStoredMatch: 'Tidak ada keybox yang cocok dengan filter.', delete: 'Hapus',
+            status_valid: 'Valid', status_invalid: 'Tidak Valid', status_error: 'Kesalahan', status_unknown: 'Tidak Diketahui', active_keybox: 'Keybox aktif', expires: 'Kedaluwarsa', status_expired: 'Kedaluwarsa'
         },
         hi: {
             selected: 'चयनित', deleteSelected: 'चयनित हटाएँ', previous: 'पिछला', next: 'अगला', page: 'पृष्ठ {page} / {pages}',
@@ -3130,7 +3190,8 @@
             keyboxesLoaded: '{count} Keybox लोड हुए', selectFiltered: 'फ़िल्टर किए चुनें', clearFiltered: 'फ़िल्टर चयन साफ़ करें',
             search: 'खोजें', clear: 'साफ़ करें', verifySearchPlaceholder: 'सत्यापन परिणाम खोजें...', verifying: 'सत्यापन हो रहा है...',
             noVerify: 'सत्यापित करने के लिए Keybox नहीं', noVerifyMatch: 'खोज से मेल खाता सत्यापन परिणाम नहीं है।', loading: 'लोड हो रहा है...',
-            noStored: 'कोई सहेजा Keybox नहीं।', noStoredMatch: 'फ़िल्टर से मेल खाता Keybox नहीं है।', delete: 'हटाएँ'
+            noStored: 'कोई सहेजा Keybox नहीं।', noStoredMatch: 'फ़िल्टर से मेल खाता Keybox नहीं है।', delete: 'हटाएँ',
+            status_valid: 'मान्य', status_invalid: 'अमान्य', status_error: 'त्रुटि', status_unknown: 'अज्ञात', active_keybox: 'सक्रिय Keybox', expires: 'समाप्ति', status_expired: 'समाप्त'
         },
         ar: {
             selected: 'محدد', deleteSelected: 'حذف المحدد', previous: 'السابق', next: 'التالي', page: 'الصفحة {page} / {pages}',
@@ -3139,7 +3200,8 @@
             keyboxesLoaded: 'تم تحميل {count} Keybox', selectFiltered: 'تحديد النتائج المفلترة', clearFiltered: 'مسح تحديد الفلتر',
             search: 'بحث', clear: 'مسح', verifySearchPlaceholder: 'البحث في نتائج التحقق...', verifying: 'جارٍ التحقق...',
             noVerify: 'لا توجد Keybox للتحقق', noVerifyMatch: 'لا توجد نتائج تحقق تطابق البحث.', loading: 'جارٍ التحميل...',
-            noStored: 'لا توجد Keybox محفوظة.', noStoredMatch: 'لا توجد Keybox تطابق الفلتر.', delete: 'حذف'
+            noStored: 'لا توجد Keybox محفوظة.', noStoredMatch: 'لا توجد Keybox تطابق الفلتر.', delete: 'حذف',
+            status_valid: 'صالح', status_invalid: 'غير صالح', status_error: 'خطأ', status_unknown: 'غير معروف', active_keybox: 'Keybox نشط', expires: 'تاريخ الانتهاء', status_expired: 'منتهي الصلاحية'
         }
     };
 
@@ -3170,11 +3232,19 @@
     }
 
     function t(key, values) {
-        let value = (COPY[locale()] || COPY.en)[key] || COPY.en[key] || key;
+        let value = (COPY[locale()] || COPY.en)[key] || COPY.en[key] || (global.CleveresI18n && typeof global.CleveresI18n.translate === 'function' ? global.CleveresI18n.translate(key) : key);
         Object.entries(values || {}).forEach(([name, replacement]) => {
             value = value.split('{' + name + '}').join(String(replacement));
         });
         return value;
+    }
+
+    function isKeyboxExpired(notAfter) {
+        if (!notAfter) return false;
+        const str = String(notAfter).trim();
+        if (!str) return false;
+        const ts = Date.parse(str.includes('T') ? str : str + 'T23:59:59Z');
+        return !Number.isNaN(ts) && ts < Date.now();
     }
 
     function statusLabel() {
@@ -3347,20 +3417,21 @@
             nameText.textContent = String(item.filename || '');
             name.append(nameText);
 
-            const isStrongBox = item.security_level === 'StrongBox';
-            const isTee = item.security_level === 'TEE' && Boolean(item.is_rkp);
-            const isUnknown = item.security_level === 'Unknown';
-            if (isStrongBox || isTee || isUnknown) {
-                const badge = document.createElement('span');
-                badge.className = 'ct-badge ' + (isStrongBox ? 'ct-badge-strongbox' : (isTee ? 'ct-badge-tee' : 'ct-badge-unknown'));
-                badge.textContent = isStrongBox ? 'StrongBox' : (isTee ? 'TEE' : 'Unknown');
-                name.append(badge);
-            }
             if (item.is_rkp) {
                 const rkpBadge = document.createElement('span');
                 rkpBadge.className = 'ct-badge ct-badge-rkp';
                 rkpBadge.textContent = 'RKP';
                 name.append(rkpBadge);
+            } else if (item.security_level === 'StrongBox') {
+                const badge = document.createElement('span');
+                badge.className = 'ct-badge ct-badge-strongbox';
+                badge.textContent = 'StrongBox';
+                name.append(badge);
+            } else if (item.security_level === 'Unknown') {
+                const badge = document.createElement('span');
+                badge.className = 'ct-badge ct-badge-unknown';
+                badge.textContent = 'Unknown';
+                name.append(badge);
             }
             const hasRsa = Boolean(item.has_rsa || (Array.isArray(item.algorithms) && item.algorithms.includes('RSA')) || item.algorithm === 'RSA');
             const hasEc = Boolean(item.has_ec || item.has_ecdsa || (Array.isArray(item.algorithms) && (item.algorithms.includes('EC') || item.algorithms.includes('ECDSA'))) || item.algorithm === 'EC' || item.algorithm === 'ECDSA');
@@ -3375,11 +3446,18 @@
                 ecBadge.textContent = 'ECDSA';
                 name.append(ecBadge);
             }
+            if (isKeyboxExpired(item.not_after)) {
+                const expBadge = document.createElement('span');
+                expBadge.className = 'ct-badge ct-status-badge ct-badge-expired ct-status-expired';
+                expBadge.textContent = t('status_expired');
+                name.append(expBadge);
+            }
             const meta = document.createElement('div');
             meta.style.cssText = 'font-size:.78em;color:#888;margin-top:3px;overflow-wrap:anywhere;word-break:break-word;';
             const scope = item.scope === 'root' ? t('root') : t('managed');
             const cert = item.certificate_serial ? t('cert') + ': ' + item.certificate_serial : t('certMissing');
-            meta.textContent = scope + ' | ' + cert;
+            const expiry = item.not_after ? ' | ' + t('expires') + ': ' + item.not_after : '';
+            meta.textContent = scope + ' | ' + cert + expiry;
             body.append(name, meta);
 
             const remove = document.createElement('button');
@@ -3423,8 +3501,12 @@
                     filename: String(item?.filename ?? '').slice(0, 256),
                     scope: item?.scope === 'root' || item?.scope === 'keyboxes' || item?.scope === 'managed' ? item.scope : '',
                     certificate_serial: String(item?.certificate_serial ?? '').slice(0, 256),
+                    not_after: String(item?.not_after ?? '').slice(0, 64),
                     security_level: item?.security_level === 'StrongBox' ? 'StrongBox' : (item?.security_level === 'TEE' ? 'TEE' : 'Unknown'),
-                    is_rkp: Boolean(item?.is_rkp)
+                    is_rkp: Boolean(item?.is_rkp),
+                    has_rsa: Boolean(item?.has_rsa),
+                    has_ec: Boolean(item?.has_ec || item?.has_ecdsa),
+                    algorithms: Array.isArray(item?.algorithms) ? item.algorithms.slice(0, 16) : []
                 })).filter(item => item.id && item.filename && item.scope)
                 : [];
             const ids = new Set(inventory.map(item => item.id));
@@ -3649,47 +3731,81 @@
             row.style.cssText = 'padding:8px 0;overflow-wrap:anywhere' + (index !== array.length - 1 ? ';border-bottom:1px solid var(--border)' : '');
             const title = document.createElement('div');
             title.className = 'ct-verification-title';
-            title.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:nowrap;min-width:0;font-weight:600;';
             const titleText = document.createElement('span');
-            titleText.style.cssText = 'min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:0 1 auto;';
-            titleText.title = String(item.filename || '') + ' - ' + String(item.status || '');
-            titleText.textContent = String(item.filename || '') + ' - ' + String(item.status || '');
+            titleText.className = 'ct-verification-filename';
+            titleText.title = String(item.filename || '');
+            titleText.textContent = String(item.filename || '');
             title.append(titleText);
 
-            const isStrongBox = item.security_level === 'StrongBox';
-            const isTee = item.security_level === 'TEE' && Boolean(item.is_rkp);
-            const isUnknown = item.security_level === 'Unknown';
-            if (isStrongBox || isTee || isUnknown) {
-                const badge = document.createElement('span');
-                badge.className = 'ct-badge ' + (isStrongBox ? 'ct-badge-strongbox' : (isTee ? 'ct-badge-tee' : 'ct-badge-unknown'));
-                badge.textContent = isStrongBox ? 'StrongBox' : (isTee ? 'TEE' : 'Unknown');
-                title.append(badge);
+            const badgesContainer = document.createElement('div');
+            badgesContainer.className = 'ct-verification-badges';
+
+            const rawStatus = String(item.status || 'UNKNOWN').trim();
+            const upperStatus = rawStatus.toUpperCase();
+            const expired = isKeyboxExpired(item.not_after);
+            let statusKey = 'status_unknown';
+            let statusClass = 'ct-status-unknown';
+            if (expired) {
+                statusKey = 'status_expired';
+                statusClass = 'ct-status-expired';
+            } else if (upperStatus === 'VALID') {
+                statusKey = 'status_valid';
+                statusClass = 'ct-status-valid';
+            } else if (upperStatus === 'INVALID') {
+                statusKey = 'status_invalid';
+                statusClass = 'ct-status-invalid';
+            } else if (upperStatus === 'ERROR') {
+                statusKey = 'status_error';
+                statusClass = 'ct-status-error';
             }
+            const statusBadge = document.createElement('span');
+            statusBadge.className = 'ct-badge ct-status-badge ' + statusClass;
+            statusBadge.textContent = t(statusKey) || (expired ? 'Expired' : rawStatus);
+            badgesContainer.append(statusBadge);
+
             if (item.is_rkp) {
                 const rkpBadge = document.createElement('span');
                 rkpBadge.className = 'ct-badge ct-badge-rkp';
                 rkpBadge.textContent = 'RKP';
-                title.append(rkpBadge);
+                badgesContainer.append(rkpBadge);
+            } else if (item.security_level === 'StrongBox') {
+                const badge = document.createElement('span');
+                badge.className = 'ct-badge ct-badge-strongbox';
+                badge.textContent = 'StrongBox';
+                badgesContainer.append(badge);
+            } else if (item.security_level === 'Unknown') {
+                const badge = document.createElement('span');
+                badge.className = 'ct-badge ct-badge-unknown';
+                badge.textContent = 'Unknown';
+                badgesContainer.append(badge);
             }
+
             const hasRsa = Boolean(item.has_rsa || (Array.isArray(item.algorithms) && item.algorithms.includes('RSA')) || item.algorithm === 'RSA');
             const hasEc = Boolean(item.has_ec || item.has_ecdsa || (Array.isArray(item.algorithms) && (item.algorithms.includes('EC') || item.algorithms.includes('ECDSA'))) || item.algorithm === 'EC' || item.algorithm === 'ECDSA');
             if (hasRsa) {
                 const rsaBadge = document.createElement('span');
                 rsaBadge.className = 'ct-badge ct-badge-rsa';
                 rsaBadge.textContent = 'RSA';
-                title.append(rsaBadge);
+                badgesContainer.append(rsaBadge);
             } else if (hasEc) {
                 const ecBadge = document.createElement('span');
                 ecBadge.className = 'ct-badge ct-badge-ecdsa';
                 ecBadge.textContent = 'ECDSA';
-                title.append(ecBadge);
+                badgesContainer.append(ecBadge);
             }
+
+            title.append(badgesContainer);
+
             const meta = document.createElement('div');
             meta.style.cssText = 'font-size:.8em;color:#888;margin-top:2px';
-            meta.textContent = item.certificate_serial ? t('cert') + ': ' + item.certificate_serial : t('certMissing');
+            const certText = item.certificate_serial ? t('cert') + ': ' + item.certificate_serial : t('certMissing');
+            const expiryText = item.not_after ? ' | ' + t('expires') + ': ' + item.not_after : '';
+            meta.textContent = certText + expiryText;
             const details = document.createElement('div');
             details.style.cssText = 'font-size:.8em;color:#aaa;margin-top:2px';
-            details.textContent = String(item.details || '');
+            const rawDetails = String(item.details || '');
+            const detailsText = /^active keybox$/i.test(rawDetails.trim()) ? t('active_keybox') : (t(rawDetails) || rawDetails);
+            details.textContent = detailsText;
             row.append(title, meta, details);
             result.appendChild(row);
         });
@@ -3713,8 +3829,12 @@
                     filename: String(item?.filename ?? '').slice(0, 256),
                     status: String(item?.status ?? 'UNKNOWN').slice(0, 128),
                     certificate_serial: String(item?.certificate_serial ?? '').slice(0, 256),
+                    not_after: String(item?.not_after ?? '').slice(0, 64),
                     security_level: item?.security_level === 'StrongBox' ? 'StrongBox' : (item?.security_level === 'TEE' ? 'TEE' : 'Unknown'),
                     is_rkp: Boolean(item?.is_rkp),
+                    has_rsa: Boolean(item?.has_rsa),
+                    has_ec: Boolean(item?.has_ec || item?.has_ecdsa),
+                    algorithms: Array.isArray(item?.algorithms) ? item.algorithms.slice(0, 16) : [],
                     details: String(item?.details ?? '').slice(0, 2048)
                 })).filter(item => item.filename)
                 : [];

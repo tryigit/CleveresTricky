@@ -376,11 +376,23 @@
         .ct-badge-rkp { background: rgba(0, 188, 212, 0.15); color: #00e5ff; border: 1px solid rgba(0, 188, 212, 0.3); }
         .ct-badge-rsa { background: rgba(255, 149, 0, 0.15); color: #ff9f0a; border: 1px solid rgba(255, 149, 0, 0.3); }
         .ct-badge-ecdsa { background: rgba(10, 132, 255, 0.15); color: #0a84ff; border: 1px solid rgba(10, 132, 255, 0.3); }
-        .ct-keybox-name, .ct-verification-title { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; min-width: 0; }
-        .ct-keybox-name > span:first-child, .ct-verification-title > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 0 1 auto; }
+        .ct-status-badge { text-transform: uppercase; font-size: 0.70rem; padding: 2px 8px; border-radius: 6px; }
+        .ct-status-valid { background: rgba(48, 209, 88, 0.16); color: #30d158; border: 1px solid rgba(48, 209, 88, 0.35); }
+        .ct-status-invalid { background: rgba(255, 69, 58, 0.16); color: #ff453a; border: 1px solid rgba(255, 69, 58, 0.35); }
+        .ct-status-error { background: rgba(255, 69, 58, 0.16); color: #ff453a; border: 1px solid rgba(255, 69, 58, 0.35); }
+        .ct-status-expired { background: rgba(255, 69, 58, 0.16); color: #ff453a; border: 1px solid rgba(255, 69, 58, 0.35); }
+        .ct-badge-expired { background: rgba(255, 69, 58, 0.16); color: #ff453a; border: 1px solid rgba(255, 69, 58, 0.35); }
+        .ct-status-unknown { background: rgba(142, 142, 147, 0.16); color: #8e8e93; border: 1px solid rgba(142, 142, 147, 0.35); }
+        .ct-keybox-name { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; min-width: 0; }
+        .ct-keybox-name > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 0 1 auto; }
+        .ct-verification-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; min-width: 0; }
+        .ct-verification-filename { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 0 1 auto; }
+        .ct-verification-badges { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; flex-shrink: 0; }
         @media screen and (max-width: 480px) {
             .ct-badge { font-size: 0.65rem; padding: 2px 5px; }
-            .ct-keybox-name, .ct-verification-title { gap: 4px; }
+            .ct-keybox-name { gap: 4px; }
+            .ct-verification-title { gap: 6px; }
+            .ct-verification-badges { gap: 4px; }
         }
         input.valid { border-color: var(--success); }
         input.invalid { border-color: var(--danger); }
@@ -1158,13 +1170,22 @@ try {
         fallback.remove();
         if (!copied) throw new Error('Clipboard unavailable');
     }
-    btn.innerText = 'Copied';
+    const copiedText = (window.CleveresI18n && typeof window.CleveresI18n.translate === 'function')
+        ? window.CleveresI18n.translate('Copied')
+        : (typeof t === 'function' ? t('Copied', 'Copied') : 'Copied');
+    btn.innerText = copiedText;
     btn.classList.add('valid');
-    notify(msg, 'normal');
+    const localizedMsg = (window.CleveresI18n && typeof window.CleveresI18n.translate === 'function')
+        ? window.CleveresI18n.translate(msg)
+        : (typeof t === 'function' ? t(msg, msg) : msg);
+    notify(localizedMsg, 'normal');
     setTimeout(() => btn.innerHTML = originalHtml, 2000);
     setTimeout(() => btn.classList.remove('valid'), 2000);
 } catch (error) {
-    notify('Copy failed. Check permissions.', 'error');
+    const failedMsg = (window.CleveresI18n && typeof window.CleveresI18n.translate === 'function')
+        ? window.CleveresI18n.translate('Copy failed. Check permissions.')
+        : 'Copy failed. Check permissions.';
+    notify(failedMsg, 'error');
 }
         }
         let notifyTimeout;

@@ -10,6 +10,16 @@ const end = source.indexOf('    function normalizeKeyboxScope(value) {', start);
 assert.ok(start >= 0 && end > start, 'render implementation is missing');
 const implementation = source.slice(start, end);
 
+const startVerify = source.indexOf('    function renderVerification() {');
+const endVerify = source.indexOf('    async function verify() {', startVerify);
+assert.ok(startVerify >= 0 && endVerify > startVerify, 'renderVerification implementation is missing');
+const verifyImplementation = source.slice(startVerify, endVerify);
+
+const startExpired = source.indexOf('    function isKeyboxExpired(notAfter) {');
+const endExpired = source.indexOf('    function statusLabel() {', startExpired);
+assert.ok(startExpired >= 0 && endExpired > startExpired, 'isKeyboxExpired implementation is missing');
+const expiredImplementation = source.slice(startExpired, endExpired);
+
 function makeElement(tagName) {
   return {
     tagName: String(tagName).toUpperCase(),
@@ -33,11 +43,13 @@ function makeElement(tagName) {
 }
 
 const list = makeElement('div');
+const verifyResult = makeElement('div');
 const context = {
   console,
   document: {
     getElementById(id) {
       if (id === 'storedKeyboxesList') return list;
+      if (id === 'verifyResult') return verifyResult;
       return null;
     },
     createElement: makeElement
@@ -45,6 +57,8 @@ const context = {
   t(key) { return key; },
   ensureControls() {},
   updateControls() {},
+  ensureVerificationControls() {},
+  updateVerificationPager() {},
   deleteOne() {}
 };
 context.window = context;
@@ -57,9 +71,17 @@ vm.runInContext(`
   let inventory = [];
   let selected = new Set();
   function filtered() { return inventory; }
+  ${expiredImplementation}
   ${implementation}
   this.setInventory = items => { inventory = items; };
   this.renderKeyboxes = render;
+
+  let verificationPage = 1;
+  let verificationItems = [];
+  function filteredVerification() { return verificationItems; }
+  ${verifyImplementation}
+  this.setVerificationItems = items => { verificationItems = items; };
+  this.renderVerification = renderVerification;
 `, context, { filename: 'ux.js#renderKeyboxes' });
 
 // Test 1: StrongBox badge
@@ -116,7 +138,7 @@ const plainName = plainBody.children[0];
 assert.equal(plainName.children[0].textContent, 'plain.xml');
 assert.equal(plainName.children.length, 1, 'plain item should not render any security badge');
 
-// Test 5: TEE + RKP badge
+// Test 5: RKP badge (mutually exclusive with TEE)
 context.setInventory([
   { id: '5', filename: 'tee_rkp.xml', scope: 'managed', certificate_serial: '789', security_level: 'TEE', is_rkp: true }
 ]);
@@ -127,11 +149,9 @@ const rkpRow = list.children[0];
 const rkpBody = rkpRow.children[1];
 const rkpName = rkpBody.children[0];
 assert.equal(rkpName.children[0].textContent, 'tee_rkp.xml');
-assert.equal(rkpName.children.length, 3);
-assert.equal(rkpName.children[1].className, 'ct-badge ct-badge-tee');
-assert.equal(rkpName.children[1].textContent, 'TEE');
-assert.equal(rkpName.children[2].className, 'ct-badge ct-badge-rkp');
-assert.equal(rkpName.children[2].textContent, 'RKP');
+assert.equal(rkpName.children.length, 2, 'RKP keybox must render only RKP badge, not both TEE and RKP');
+assert.equal(rkpName.children[1].className, 'ct-badge ct-badge-rkp');
+assert.equal(rkpName.children[1].textContent, 'RKP');
 
 // Test 6: RSA badge
 context.setInventory([
@@ -175,7 +195,7 @@ assert.equal(comboName.children.length, 2);
 assert.equal(comboName.children[1].className, 'ct-badge ct-badge-rsa');
 assert.equal(comboName.children[1].textContent, 'RSA');
 
-// Test 9: RKP + TEE + RSA together
+// Test 9: RKP + RSA together (no redundant TEE badge)
 context.setInventory([
   { id: '9', filename: 'full.xml', scope: 'managed', certificate_serial: '444', security_level: 'TEE', is_rkp: true, has_rsa: true }
 ]);
@@ -184,11 +204,10 @@ context.renderKeyboxes();
 assert.equal(list.children.length, 1);
 const fullRow = list.children[0];
 const fullName = fullRow.children[1].children[0];
-assert.equal(fullName.children.length, 4);
+assert.equal(fullName.children.length, 3);
 assert.equal(fullName.children[0].textContent, 'full.xml');
-assert.equal(fullName.children[1].className, 'ct-badge ct-badge-tee');
-assert.equal(fullName.children[2].className, 'ct-badge ct-badge-rkp');
-assert.equal(fullName.children[3].className, 'ct-badge ct-badge-rsa');
+assert.equal(fullName.children[1].className, 'ct-badge ct-badge-rkp');
+assert.equal(fullName.children[2].className, 'ct-badge ct-badge-rsa');
 
 // Test 10: Verify index.html contains badge and layout style definitions
 const htmlSource = fs.readFileSync('module/template/webroot/index.html', 'utf8');
@@ -196,6 +215,124 @@ assert.ok(htmlSource.includes('.ct-badge-rkp'), 'index.html must define .ct-badg
 assert.ok(htmlSource.includes('.ct-badge-rsa'), 'index.html must define .ct-badge-rsa');
 assert.ok(htmlSource.includes('.ct-badge-ecdsa'), 'index.html must define .ct-badge-ecdsa');
 assert.ok(htmlSource.includes('.ct-keybox-name'), 'index.html must define .ct-keybox-name');
-assert.ok(htmlSource.includes('white-space: nowrap'), 'index.html must enforce white-space: nowrap for badge wrapping');
+assert.ok(htmlSource.includes('.ct-status-badge'), 'index.html must define .ct-status-badge');
+assert.ok(htmlSource.includes('.ct-status-valid'), 'index.html must define .ct-status-valid');
+assert.ok(htmlSource.includes('.ct-status-invalid'), 'index.html must define .ct-status-invalid');
+assert.ok(htmlSource.includes('.ct-verification-title'), 'index.html must define .ct-verification-title');
+assert.ok(htmlSource.includes('.ct-verification-filename'), 'index.html must define .ct-verification-filename');
+assert.ok(htmlSource.includes('.ct-verification-badges'), 'index.html must define .ct-verification-badges');
+assert.ok(htmlSource.includes('.ct-status-expired'), 'index.html must define .ct-status-expired');
+assert.ok(htmlSource.includes('.ct-badge-expired'), 'index.html must define .ct-badge-expired');
+
+// Test 11: Verification badge rendering with status pill and algorithm badges
+context.setVerificationItems([
+  {
+    filename: 'verify_valid.xml',
+    status: 'VALID',
+    security_level: 'TEE',
+    is_rkp: true,
+    has_rsa: true,
+    certificate_serial: '777',
+    details: 'Active keybox'
+  },
+  {
+    filename: 'verify_invalid.xml',
+    status: 'INVALID',
+    security_level: 'StrongBox',
+    has_ec: true,
+    certificate_serial: '',
+    details: 'Revoked'
+  }
+]);
+verifyResult.children = [];
+context.renderVerification();
+assert.equal(verifyResult.children.length, 2);
+
+// Item 1: VALID, RKP (no TEE), RSA
+const vRow1 = verifyResult.children[0];
+const vTitle1 = vRow1.children[0];
+assert.equal(vTitle1.className, 'ct-verification-title');
+const vFilename1 = vTitle1.children[0];
+assert.equal(vFilename1.className, 'ct-verification-filename');
+assert.equal(vFilename1.textContent, 'verify_valid.xml');
+
+const vBadges1 = vTitle1.children[1];
+assert.equal(vBadges1.className, 'ct-verification-badges');
+assert.equal(vBadges1.children.length, 3);
+assert.equal(vBadges1.children[0].className, 'ct-badge ct-status-badge ct-status-valid');
+assert.equal(vBadges1.children[0].textContent, 'status_valid');
+assert.equal(vBadges1.children[1].className, 'ct-badge ct-badge-rkp');
+assert.equal(vBadges1.children[1].textContent, 'RKP');
+assert.equal(vBadges1.children[2].className, 'ct-badge ct-badge-rsa');
+assert.equal(vBadges1.children[2].textContent, 'RSA');
+
+const vDetails1 = vRow1.children[2];
+assert.equal(vDetails1.textContent, 'active_keybox');
+
+// Item 2: INVALID, StrongBox, ECDSA
+const vRow2 = verifyResult.children[1];
+const vTitle2 = vRow2.children[0];
+const vBadges2 = vTitle2.children[1];
+assert.equal(vBadges2.children.length, 3);
+assert.equal(vBadges2.children[0].className, 'ct-badge ct-status-badge ct-status-invalid');
+assert.equal(vBadges2.children[0].textContent, 'status_invalid');
+assert.equal(vBadges2.children[1].className, 'ct-badge ct-badge-strongbox');
+assert.equal(vBadges2.children[1].textContent, 'StrongBox');
+assert.equal(vBadges2.children[2].className, 'ct-badge ct-badge-ecdsa');
+assert.equal(vBadges2.children[2].textContent, 'ECDSA');
+
+// Test 12: Stored keybox with expired not_after renders expired badge and includes expiry in meta
+context.setInventory([
+  { id: '12', filename: 'expired.xml', scope: 'managed', certificate_serial: '111', security_level: 'StrongBox', not_after: '2020-01-01' }
+]);
+list.children = [];
+context.renderKeyboxes();
+assert.equal(list.children.length, 1);
+const expRow = list.children[0];
+const expBody = expRow.children[1];
+const expName = expBody.children[0];
+assert.equal(expName.children[0].textContent, 'expired.xml');
+assert.equal(expName.children[1].className, 'ct-badge ct-badge-strongbox');
+assert.equal(expName.children[2].className, 'ct-badge ct-status-badge ct-badge-expired ct-status-expired');
+assert.equal(expName.children[2].textContent, 'status_expired');
+const expMeta = expBody.children[1];
+assert.ok(expMeta.textContent.includes('2020-01-01'), 'meta must include expiry date');
+
+// Test 13: Stored keybox with future not_after does NOT render expired badge
+context.setInventory([
+  { id: '13', filename: 'future.xml', scope: 'managed', certificate_serial: '222', security_level: 'StrongBox', not_after: '2099-01-01' }
+]);
+list.children = [];
+context.renderKeyboxes();
+assert.equal(list.children.length, 1);
+const futRow = list.children[0];
+const futBody = futRow.children[1];
+const futName = futBody.children[0];
+assert.equal(futName.children.length, 2); // name + StrongBox only, no expired badge
+const futMeta = futBody.children[1];
+assert.ok(futMeta.textContent.includes('2099-01-01'), 'meta must include expiry date');
+
+// Test 14: Verification item with status VALID but expired not_after renders ct-status-expired
+context.setVerificationItems([
+  {
+    filename: 'verify_expired.xml',
+    status: 'VALID',
+    security_level: 'TEE',
+    is_rkp: true,
+    certificate_serial: '333',
+    not_after: '2020-01-01',
+    details: 'Active keybox'
+  }
+]);
+verifyResult.children = [];
+context.renderVerification();
+assert.equal(verifyResult.children.length, 1);
+const veRow = verifyResult.children[0];
+const veTitle = veRow.children[0];
+const veBadges = veTitle.children[1];
+assert.equal(veBadges.children[0].className, 'ct-badge ct-status-badge ct-status-expired');
+assert.equal(veBadges.children[0].textContent, 'status_expired');
+const veMeta = veRow.children[1];
+assert.ok(veMeta.textContent.includes('2020-01-01'), 'verification meta must include expiry date');
 
 console.log('Keybox security and algorithm badge rendering regression checks passed');

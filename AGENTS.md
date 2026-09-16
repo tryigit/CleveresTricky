@@ -231,9 +231,11 @@ Native runtime health, Binder behavior, TEE timing, and attestation state are re
 
 ## WebUI localization release guardrails
 
-- Every first-party user-visible string added to the English catalog must be added to all built-in locales in the same change, including dynamic messages, dialogs, placeholders, errors, progress states, and accessibility labels.
+- Whenever making any updates, fixes, or additions to the WebUI that touch or introduce user-visible text (including status badges, pills, labels, card metadata, buttons, dynamic copy, error/success notifications, dialogs, and tooltips), developers/agents MUST provide complete translations for all 9 supported locales (`en`, `tr`, `zh-CN`, `es`, `de`, `ru`, `id`, `hi`, `ar`) across `TRANSLATIONS`, `COMPLETE_CATALOG_ROWS`, stored keybox `COPY`, and `OWNED_COPY` as applicable.
+- Every first-party user-visible string added or updated in the English catalog must be added to all built-in locales in the same change, including dynamic messages, dialogs, placeholders, errors, progress states, and accessibility labels. Partial translations or English-only fallback for user-visible UI elements are strictly forbidden.
 - Non-English locales must not silently fall back to English for first-party UI text, except intentionally untranslated technical identifiers or protocol names.
 - Keep all locale catalogs at identical key coverage and retain automated full-catalog localization tests.
+- UI/UX and mobile layout integrity must be rigorously preserved: all badges, status pills, metadata lines, and action buttons must accommodate varying text lengths across languages without overlapping, colliding, or causing horizontal scroll issues on mobile viewports.
 
 ## Merge / release verification
 
