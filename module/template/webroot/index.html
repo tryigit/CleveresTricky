@@ -374,6 +374,14 @@
         .ct-badge-tee { background: rgba(48, 209, 88, 0.15); color: #30d158; border: 1px solid rgba(48, 209, 88, 0.3); }
         .ct-badge-unknown { background: rgba(142, 142, 147, 0.18); color: #8e8e93; border: 1px solid rgba(142, 142, 147, 0.35); }
         .ct-badge-rkp { background: rgba(0, 188, 212, 0.15); color: #00e5ff; border: 1px solid rgba(0, 188, 212, 0.3); }
+        .ct-badge-rsa { background: rgba(255, 149, 0, 0.15); color: #ff9f0a; border: 1px solid rgba(255, 149, 0, 0.3); }
+        .ct-badge-ecdsa { background: rgba(10, 132, 255, 0.15); color: #0a84ff; border: 1px solid rgba(10, 132, 255, 0.3); }
+        .ct-keybox-name, .ct-verification-title { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; min-width: 0; }
+        .ct-keybox-name > span:first-child, .ct-verification-title > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 0 1 auto; }
+        @media screen and (max-width: 480px) {
+            .ct-badge { font-size: 0.65rem; padding: 2px 5px; }
+            .ct-keybox-name, .ct-verification-title { gap: 4px; }
+        }
         input.valid { border-color: var(--success); }
         input.invalid { border-color: var(--danger); }
         .error-msg { color: var(--danger); font-size: 0.82em; margin-top: 4px; display: none; }
@@ -744,7 +752,10 @@
 </div>
         </div>
         <div class="panel">
-<h3>Stored Keyboxes</h3>
+<div class="card-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+    <h3 style="margin:0;">Stored Keyboxes</h3>
+    <span id="keyboxStatus" class="status-badge status-OK" style="margin:0;">0 Keys Loaded</span>
+</div>
 <div class="search-container"><input type="search" id="keyboxFilter" placeholder="Filter keyboxes by name..." oninput="renderKeyboxes()" aria-label="Filter keyboxes" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"><button onclick="document.getElementById('keyboxFilter').value=''; renderKeyboxes(); document.getElementById('keyboxFilter').focus();" class="clear-btn" id="clearKeyboxFilterBtn" aria-label="Clear filter">&times;</button></div>
 <div id="storedKeyboxesList" style="max-height: 200px; overflow-y: auto;"></div>
         </div>
@@ -1486,7 +1497,8 @@ try {
     if (!statusRes.ok) throw new Error(await statusRes.text());
     const configData = await configRes.json();
     if (controller.signal.aborted) return;
-    document.getElementById('keyboxStatus').innerText = `${configData.keybox_count} Keys Loaded`;
+    const kbStatus = document.getElementById('keyboxStatus');
+    if (kbStatus) kbStatus.innerText = `${configData.keybox_count} Keys Loaded`;
     const data = await statusRes.json();
     if (controller.signal.aborted) return;
 
@@ -1743,7 +1755,8 @@ if (file) {
             const body = await res.clone().json();
             if (typeof body.filename === 'string' && body.filename) storedName = body.filename;
             if (body.keybox_count !== undefined) {
-                document.getElementById('keyboxStatus').innerText = body.keybox_count + ' Keys Loaded';
+                const kbStatus = document.getElementById('keyboxStatus');
+                if (kbStatus) kbStatus.innerText = body.keybox_count + ' Keys Loaded';
             }
             const storedNameDiv = document.createElement('div');
             storedNameDiv.innerText = storedName;
@@ -1794,7 +1807,8 @@ try {
         try {
             const body = await res.clone().json();
             if (body.keybox_count !== undefined) {
-                document.getElementById('keyboxStatus').innerText = body.keybox_count + ' Keys Loaded';
+                const kbStatus = document.getElementById('keyboxStatus');
+                if (kbStatus) kbStatus.innerText = body.keybox_count + ' Keys Loaded';
             }
         } catch(e) { console.error(e); notify('Error: ' + e.message, 'error'); return; }
         loadKeyInfo();
@@ -1822,7 +1836,8 @@ document.querySelectorAll('[data-setting="' + setting + '"]').forEach(control =>
                     const data = await res.json();
                     console.log('[CleveresTricky] configuration loaded');
                     WEB_UI_SETTINGS.forEach(k => syncSettingControls(k, Boolean(data[k])));
-                    document.getElementById('keyboxStatus').innerText = `${data.keybox_count} Keys Loaded`;
+                    const kbStatus = document.getElementById('keyboxStatus');
+                    if (kbStatus) kbStatus.innerText = `${data.keybox_count} Keys Loaded`;
                 } catch(e) { console.error(e); notify('Error: ' + e.message, 'error'); }
 
                 try {

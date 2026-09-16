@@ -35,6 +35,8 @@ object KeyboxVerifier {
         internal val retryableBackendFailure: Boolean = false,
         val securityLevel: String = "Unknown",
         val isRkp: Boolean = false,
+        val hasRsa: Boolean = false,
+        val hasEc: Boolean = false,
     )
 
     enum class Status {
@@ -541,6 +543,8 @@ object KeyboxVerifier {
     ): Result {
         var trackedSecurityLevel = "Unknown"
         var trackedIsRkp = false
+        var trackedHasRsa = false
+        var trackedHasEc = false
         return try {
             if (!isSafeKeyboxFile(file)) {
                 return Result(file, file.name, Status.ERROR, "Unsafe or oversized keybox file", storageId = storageId)
@@ -569,6 +573,10 @@ object KeyboxVerifier {
             val securityLevel = trackedSecurityLevel
             val isRkp = keyboxes.any(CertHack::isRkpKeybox)
             trackedIsRkp = isRkp
+            val hasRsa = keyboxes.any(CertHack::hasRsaKeybox)
+            trackedHasRsa = hasRsa
+            val hasEc = keyboxes.any(CertHack::hasEcKeybox)
+            trackedHasEc = hasEc
             if (keyboxes.isEmpty()) {
                 return Result(
                     file,
@@ -579,6 +587,8 @@ object KeyboxVerifier {
                     snapshotSha256 = snapshotSha256,
                     securityLevel = securityLevel,
                     isRkp = isRkp,
+                    hasRsa = hasRsa,
+                    hasEc = hasEc,
                 )
             }
             // parseFileSnapshot can discover a Rust backend restart and rebuild backend-owned CRL
@@ -594,6 +604,8 @@ object KeyboxVerifier {
                     snapshotSha256 = snapshotSha256,
                     securityLevel = securityLevel,
                     isRkp = isRkp,
+                    hasRsa = hasRsa,
+                    hasEc = hasEc,
                 )
             val deviceSerial = keyboxes.asSequence().mapNotNull(CertHack::getDeviceCertificateSerial).firstOrNull()
 
@@ -622,6 +634,8 @@ object KeyboxVerifier {
                             snapshotSha256 = snapshotSha256,
                             securityLevel = securityLevel,
                             isRkp = isRkp,
+                            hasRsa = hasRsa,
+                            hasEc = hasEc,
                         )
                     }
                     Status.INVALID -> {
@@ -635,6 +649,8 @@ object KeyboxVerifier {
                             snapshotSha256 = snapshotSha256,
                             securityLevel = securityLevel,
                             isRkp = isRkp,
+                            hasRsa = hasRsa,
+                            hasEc = hasEc,
                         )
                     }
                     Status.ERROR -> {
@@ -649,6 +665,8 @@ object KeyboxVerifier {
                             retryableBackendFailure = true,
                             securityLevel = securityLevel,
                             isRkp = isRkp,
+                            hasRsa = hasRsa,
+                            hasEc = hasEc,
                         )
                     }
                     Status.VALID -> Unit
@@ -664,6 +682,8 @@ object KeyboxVerifier {
                 snapshotSha256 = snapshotSha256,
                 securityLevel = securityLevel,
                 isRkp = isRkp,
+                hasRsa = hasRsa,
+                hasEc = hasEc,
             )
         } catch (_: RustBackendUnavailableException) {
             Result(
@@ -675,6 +695,8 @@ object KeyboxVerifier {
                 retryableBackendFailure = true,
                 securityLevel = trackedSecurityLevel,
                 isRkp = trackedIsRkp,
+                hasRsa = trackedHasRsa,
+                hasEc = trackedHasEc,
             )
         } catch (error: Exception) {
             Result(
@@ -685,6 +707,8 @@ object KeyboxVerifier {
                 storageId,
                 securityLevel = trackedSecurityLevel,
                 isRkp = trackedIsRkp,
+                hasRsa = trackedHasRsa,
+                hasEc = trackedHasEc,
             )
         }
     }

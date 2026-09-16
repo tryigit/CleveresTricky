@@ -719,8 +719,10 @@ class WebServer(
             var certSerial = CertHack.getDeviceCertificateSerial(targetId) ?: ""
             var secLevel = CertHack.getKeyboxSecurityLevel(targetId)
             var isRkp = CertHack.isRkpKeybox(targetId)
+            var hasRsa = CertHack.hasRsaKeybox(targetId)
+            var hasEc = CertHack.hasEcKeybox(targetId)
 
-            if (secLevel == "Unknown" || certSerial.isEmpty()) {
+            if (secLevel == "Unknown" || certSerial.isEmpty() || (!hasRsa && !hasEc)) {
                 val fileScope = source.scope.fileScope
                 if (fileScope != null) {
                     val parsed =
@@ -752,6 +754,12 @@ class WebServer(
                         if (!isRkp) {
                             isRkp = parsed.keyboxes.any(CertHack::isRkpKeybox)
                         }
+                        if (!hasRsa) {
+                            hasRsa = parsed.keyboxes.any(CertHack::hasRsaKeybox)
+                        }
+                        if (!hasEc) {
+                            hasEc = parsed.keyboxes.any(CertHack::hasEcKeybox)
+                        }
                     }
                 }
             }
@@ -764,7 +772,9 @@ class WebServer(
                     .put("type", if (source.isCbox) "cbox" else "xml")
                     .put("certificate_serial", certSerial)
                     .put("security_level", secLevel)
-                    .put("is_rkp", isRkp),
+                    .put("is_rkp", isRkp)
+                    .put("has_rsa", hasRsa)
+                    .put("has_ec", hasEc),
             )
         }
         return array.toString()
@@ -3117,6 +3127,8 @@ class WebServer(
                 obj.put("storage_id", r.storageId)
                 obj.put("security_level", r.securityLevel.ifEmpty { "Unknown" })
                 obj.put("is_rkp", r.isRkp)
+                obj.put("has_rsa", r.hasRsa)
+                obj.put("has_ec", r.hasEc)
                 obj.put("status", r.status.name)
                 obj.put("details", r.details)
                 obj.put("certificate_serial", r.certificateSerial ?: "")

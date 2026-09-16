@@ -932,6 +932,38 @@ public final class CertHack {
         return false;
     }
 
+    public static boolean hasRsaKeybox(String identifier) {
+        if (identifier == null) return false;
+        List<KeyBox> boxes = state.keyboxFiles.get(identifier);
+        if (boxes == null) return false;
+        for (KeyBox box : boxes) {
+            if (hasRsaKeybox(box)) return true;
+        }
+        return false;
+    }
+
+    public static boolean hasRsaKeybox(KeyBox keybox) {
+        if (keybox == null || keybox.keyPair() == null || keybox.keyPair().getPublic() == null) return false;
+        String alg = keybox.keyPair().getPublic().getAlgorithm();
+        return alg != null && alg.equalsIgnoreCase("RSA");
+    }
+
+    public static boolean hasEcKeybox(String identifier) {
+        if (identifier == null) return false;
+        List<KeyBox> boxes = state.keyboxFiles.get(identifier);
+        if (boxes == null) return false;
+        for (KeyBox box : boxes) {
+            if (hasEcKeybox(box)) return true;
+        }
+        return false;
+    }
+
+    public static boolean hasEcKeybox(KeyBox keybox) {
+        if (keybox == null || keybox.keyPair() == null || keybox.keyPair().getPublic() == null) return false;
+        String alg = keybox.keyPair().getPublic().getAlgorithm();
+        return alg != null && (alg.equalsIgnoreCase("EC") || alg.equalsIgnoreCase("ECDSA"));
+    }
+
     public static String getDeviceCertificateSerial(String identifier) {
         if (identifier == null) return null;
         List<KeyBox> boxes = state.keyboxFiles.get(identifier);

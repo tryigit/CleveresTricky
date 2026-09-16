@@ -73,4 +73,44 @@ class WebServerJsonTest {
         assertEquals(true, obj.getBoolean("is_rkp"))
         assertEquals("TEE", obj.getString("security_level"))
     }
+
+    @Test
+    fun testHasRsaAndEcSerialized() {
+        val results =
+            listOf(
+                KeyboxVerifier.Result(
+                    file = File("rsa_box.xml"),
+                    filename = "rsa_box.xml",
+                    status = KeyboxVerifier.Status.VALID,
+                    details = "Active",
+                    certificateSerial = "5E6F7A8B",
+                    securityLevel = "TEE",
+                    isRkp = false,
+                    hasRsa = true,
+                    hasEc = false,
+                ),
+                KeyboxVerifier.Result(
+                    file = File("ec_box.xml"),
+                    filename = "ec_box.xml",
+                    status = KeyboxVerifier.Status.VALID,
+                    details = "Active",
+                    certificateSerial = "9C8D7E6F",
+                    securityLevel = "TEE",
+                    isRkp = true,
+                    hasRsa = false,
+                    hasEc = true,
+                ),
+            )
+        val json = WebServer.createKeyboxVerificationJson(results)
+        val array = JSONArray(json)
+        val obj0 = array.getJSONObject(0)
+        assertEquals(true, obj0.getBoolean("has_rsa"))
+        assertEquals(false, obj0.getBoolean("has_ec"))
+        assertEquals(false, obj0.getBoolean("is_rkp"))
+
+        val obj1 = array.getJSONObject(1)
+        assertEquals(false, obj1.getBoolean("has_rsa"))
+        assertEquals(true, obj1.getBoolean("has_ec"))
+        assertEquals(true, obj1.getBoolean("is_rkp"))
+    }
 }

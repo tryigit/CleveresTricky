@@ -76,7 +76,7 @@ assert.equal(sbName.children[0].textContent, 'sb.xml');
 assert.equal(sbName.children[1].className, 'ct-badge ct-badge-strongbox');
 assert.equal(sbName.children[1].textContent, 'StrongBox');
 
-// Test 2: TEE badge
+// Test 2: Non-RKP TEE does NOT render TEE badge
 context.setInventory([
   { id: '2', filename: 'tee.xml', scope: 'managed', certificate_serial: '456', security_level: 'TEE' }
 ]);
@@ -87,8 +87,7 @@ const teeRow = list.children[0];
 const teeBody = teeRow.children[1];
 const teeName = teeBody.children[0];
 assert.equal(teeName.children[0].textContent, 'tee.xml');
-assert.equal(teeName.children[1].className, 'ct-badge ct-badge-tee');
-assert.equal(teeName.children[1].textContent, 'TEE');
+assert.equal(teeName.children.length, 1, 'Non-RKP keybox must not render TEE badge');
 
 // Test 3: Unknown badge
 context.setInventory([
@@ -134,8 +133,69 @@ assert.equal(rkpName.children[1].textContent, 'TEE');
 assert.equal(rkpName.children[2].className, 'ct-badge ct-badge-rkp');
 assert.equal(rkpName.children[2].textContent, 'RKP');
 
-// Test 6: Verify index.html contains .ct-badge-rkp style definition
+// Test 6: RSA badge
+context.setInventory([
+  { id: '6', filename: 'rsa_kb.xml', scope: 'managed', certificate_serial: '111', security_level: '', has_rsa: true }
+]);
+list.children = [];
+context.renderKeyboxes();
+assert.equal(list.children.length, 1);
+const rsaRow = list.children[0];
+const rsaName = rsaRow.children[1].children[0];
+assert.equal(rsaName.className, 'ct-keybox-name');
+assert.equal(rsaName.children[0].textContent, 'rsa_kb.xml');
+assert.equal(rsaName.children.length, 2);
+assert.equal(rsaName.children[1].className, 'ct-badge ct-badge-rsa');
+assert.equal(rsaName.children[1].textContent, 'RSA');
+
+// Test 7: ECDSA badge when no RSA
+context.setInventory([
+  { id: '7', filename: 'ec_kb.xml', scope: 'managed', certificate_serial: '222', security_level: '', has_rsa: false, has_ec: true }
+]);
+list.children = [];
+context.renderKeyboxes();
+assert.equal(list.children.length, 1);
+const ecRow = list.children[0];
+const ecName = ecRow.children[1].children[0];
+assert.equal(ecName.children[0].textContent, 'ec_kb.xml');
+assert.equal(ecName.children.length, 2);
+assert.equal(ecName.children[1].className, 'ct-badge ct-badge-ecdsa');
+assert.equal(ecName.children[1].textContent, 'ECDSA');
+
+// Test 8: Both RSA and EC present -> RSA badge is rendered
+context.setInventory([
+  { id: '8', filename: 'combo.xml', scope: 'managed', certificate_serial: '333', security_level: '', has_rsa: true, has_ec: true }
+]);
+list.children = [];
+context.renderKeyboxes();
+assert.equal(list.children.length, 1);
+const comboRow = list.children[0];
+const comboName = comboRow.children[1].children[0];
+assert.equal(comboName.children.length, 2);
+assert.equal(comboName.children[1].className, 'ct-badge ct-badge-rsa');
+assert.equal(comboName.children[1].textContent, 'RSA');
+
+// Test 9: RKP + TEE + RSA together
+context.setInventory([
+  { id: '9', filename: 'full.xml', scope: 'managed', certificate_serial: '444', security_level: 'TEE', is_rkp: true, has_rsa: true }
+]);
+list.children = [];
+context.renderKeyboxes();
+assert.equal(list.children.length, 1);
+const fullRow = list.children[0];
+const fullName = fullRow.children[1].children[0];
+assert.equal(fullName.children.length, 4);
+assert.equal(fullName.children[0].textContent, 'full.xml');
+assert.equal(fullName.children[1].className, 'ct-badge ct-badge-tee');
+assert.equal(fullName.children[2].className, 'ct-badge ct-badge-rkp');
+assert.equal(fullName.children[3].className, 'ct-badge ct-badge-rsa');
+
+// Test 10: Verify index.html contains badge and layout style definitions
 const htmlSource = fs.readFileSync('module/template/webroot/index.html', 'utf8');
 assert.ok(htmlSource.includes('.ct-badge-rkp'), 'index.html must define .ct-badge-rkp');
+assert.ok(htmlSource.includes('.ct-badge-rsa'), 'index.html must define .ct-badge-rsa');
+assert.ok(htmlSource.includes('.ct-badge-ecdsa'), 'index.html must define .ct-badge-ecdsa');
+assert.ok(htmlSource.includes('.ct-keybox-name'), 'index.html must define .ct-keybox-name');
+assert.ok(htmlSource.includes('white-space: nowrap'), 'index.html must enforce white-space: nowrap for badge wrapping');
 
-console.log('Keybox security badge rendering (StrongBox, TEE, Unknown, RKP) regression checks passed');
+console.log('Keybox security and algorithm badge rendering regression checks passed');

@@ -1,10 +1,8 @@
 # Changelog
 
-## V2.8.0
+## V2.8.1
 
-- Added official headless Magisk support, allowing full module functionality via direct configuration in `/data/adb/cleverestricky/`.
-- Refined the WebUI interface with smoother, elegant system color palettes, eliminating harsh neon glare and improving visual comfort across light and dark modes.
-- Corrected switch indicators across the management panel; the Debug Logging switch now accurately illuminates with the active system green indicator.
-- Significantly enhanced logging and diagnostics: merged background runtime logs into the WebUI log viewer, added clear diagnostic warnings for hardware communication issues to prevent system freezes, and enriched support snapshots with device and ROM details.
-- Added comprehensive documentation and recovery guidance for unlocked-device hardware attestation and TEE RKP provisioning across all supported languages.
-- Improved overall performance, background communication stability, and system compatibility.
+- Improved keybox clarity: added distinct badges (RSA and ECDSA) to easily identify key types, and refined hardware security indicators so they only appear on supported profiles.
+- Optimized mobile and desktop interface layouts to keep keybox names and badges neatly arranged on a single line across all screen sizes.
+- Enhanced WebUI responsiveness and navigation speed, preventing delays or interface freezes during background operations.
+- Resolved interface inconsistencies and improved overall app stability and connection reliability.

@@ -3339,25 +3339,41 @@
             const body = document.createElement('div');
             body.style.cssText = 'flex:1 1 auto;min-width:0;line-height:1.4;';
             const name = document.createElement('div');
-            name.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;overflow-wrap:anywhere;word-break:break-word;font-weight:500;';
+            name.className = 'ct-keybox-name';
+            name.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:nowrap;min-width:0;font-weight:500;';
             const nameText = document.createElement('span');
+            nameText.style.cssText = 'min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:0 1 auto;';
+            nameText.title = String(item.filename || '');
             nameText.textContent = String(item.filename || '');
+            name.append(nameText);
+
             const isStrongBox = item.security_level === 'StrongBox';
-            const isTee = item.security_level === 'TEE';
+            const isTee = item.security_level === 'TEE' && Boolean(item.is_rkp);
             const isUnknown = item.security_level === 'Unknown';
             if (isStrongBox || isTee || isUnknown) {
                 const badge = document.createElement('span');
                 badge.className = 'ct-badge ' + (isStrongBox ? 'ct-badge-strongbox' : (isTee ? 'ct-badge-tee' : 'ct-badge-unknown'));
                 badge.textContent = isStrongBox ? 'StrongBox' : (isTee ? 'TEE' : 'Unknown');
-                name.append(nameText, badge);
-            } else {
-                name.append(nameText);
+                name.append(badge);
             }
             if (item.is_rkp) {
                 const rkpBadge = document.createElement('span');
                 rkpBadge.className = 'ct-badge ct-badge-rkp';
                 rkpBadge.textContent = 'RKP';
                 name.append(rkpBadge);
+            }
+            const hasRsa = Boolean(item.has_rsa || (Array.isArray(item.algorithms) && item.algorithms.includes('RSA')) || item.algorithm === 'RSA');
+            const hasEc = Boolean(item.has_ec || item.has_ecdsa || (Array.isArray(item.algorithms) && (item.algorithms.includes('EC') || item.algorithms.includes('ECDSA'))) || item.algorithm === 'EC' || item.algorithm === 'ECDSA');
+            if (hasRsa) {
+                const rsaBadge = document.createElement('span');
+                rsaBadge.className = 'ct-badge ct-badge-rsa';
+                rsaBadge.textContent = 'RSA';
+                name.append(rsaBadge);
+            } else if (hasEc) {
+                const ecBadge = document.createElement('span');
+                ecBadge.className = 'ct-badge ct-badge-ecdsa';
+                ecBadge.textContent = 'ECDSA';
+                name.append(ecBadge);
             }
             const meta = document.createElement('div');
             meta.style.cssText = 'font-size:.78em;color:#888;margin-top:3px;overflow-wrap:anywhere;word-break:break-word;';
@@ -3632,25 +3648,41 @@
             const row = document.createElement('div');
             row.style.cssText = 'padding:8px 0;overflow-wrap:anywhere' + (index !== array.length - 1 ? ';border-bottom:1px solid var(--border)' : '');
             const title = document.createElement('div');
-            title.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-weight:600;';
+            title.className = 'ct-verification-title';
+            title.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:nowrap;min-width:0;font-weight:600;';
             const titleText = document.createElement('span');
+            titleText.style.cssText = 'min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:0 1 auto;';
+            titleText.title = String(item.filename || '') + ' - ' + String(item.status || '');
             titleText.textContent = String(item.filename || '') + ' - ' + String(item.status || '');
+            title.append(titleText);
+
             const isStrongBox = item.security_level === 'StrongBox';
-            const isTee = item.security_level === 'TEE';
+            const isTee = item.security_level === 'TEE' && Boolean(item.is_rkp);
             const isUnknown = item.security_level === 'Unknown';
             if (isStrongBox || isTee || isUnknown) {
                 const badge = document.createElement('span');
                 badge.className = 'ct-badge ' + (isStrongBox ? 'ct-badge-strongbox' : (isTee ? 'ct-badge-tee' : 'ct-badge-unknown'));
                 badge.textContent = isStrongBox ? 'StrongBox' : (isTee ? 'TEE' : 'Unknown');
-                title.append(titleText, badge);
-            } else {
-                title.append(titleText);
+                title.append(badge);
             }
             if (item.is_rkp) {
                 const rkpBadge = document.createElement('span');
                 rkpBadge.className = 'ct-badge ct-badge-rkp';
                 rkpBadge.textContent = 'RKP';
                 title.append(rkpBadge);
+            }
+            const hasRsa = Boolean(item.has_rsa || (Array.isArray(item.algorithms) && item.algorithms.includes('RSA')) || item.algorithm === 'RSA');
+            const hasEc = Boolean(item.has_ec || item.has_ecdsa || (Array.isArray(item.algorithms) && (item.algorithms.includes('EC') || item.algorithms.includes('ECDSA'))) || item.algorithm === 'EC' || item.algorithm === 'ECDSA');
+            if (hasRsa) {
+                const rsaBadge = document.createElement('span');
+                rsaBadge.className = 'ct-badge ct-badge-rsa';
+                rsaBadge.textContent = 'RSA';
+                title.append(rsaBadge);
+            } else if (hasEc) {
+                const ecBadge = document.createElement('span');
+                ecBadge.className = 'ct-badge ct-badge-ecdsa';
+                ecBadge.textContent = 'ECDSA';
+                title.append(ecBadge);
             }
             const meta = document.createElement('div');
             meta.style.cssText = 'font-size:.8em;color:#888;margin-top:2px';
