@@ -408,10 +408,9 @@ object ServerManager {
         }
     }
 
-    private fun loadCachedKeyboxes() {
-        if (serversList.none { it.enabled }) return
+    internal fun loadCachedKeyboxes() {
         val checkEnabled = Config.isAutoKeyboxCheckEnabled
-        val revoked = if (checkEnabled) KeyboxVerifier.fetchCrl() else null
+        val revoked = if (checkEnabled && serversList.any { it.enabled }) KeyboxVerifier.fetchCrl() else null
         serversList.forEach { server ->
             if (server.enabled) {
                 val cacheFile = File(Config.keyboxDirectory.parentFile, "server_cache_${server.id}.enc")
@@ -452,7 +451,11 @@ object ServerManager {
                         cachePayload?.fill(0)
                         decrypted?.fill(0)
                     }
+                } else {
+                    deactivateServerContent(server.id, deleteCache = false)
                 }
+            } else {
+                deactivateServerContent(server.id, deleteCache = false)
             }
         }
     }
