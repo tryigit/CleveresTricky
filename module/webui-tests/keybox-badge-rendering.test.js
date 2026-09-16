@@ -58,8 +58,10 @@ function makeElement(tagName) {
 
 const list = makeElement('div');
 const verifyResult = makeElement('div');
+let now = Date.now();
 const context = {
   console,
+  Date: { parse: Date.parse, now: () => now },
   locale() { return 'en'; },
   VALUE_POPUP_COPY: { en: { title: 'Details', copy: 'Copy', copied: 'Copied', close: 'Close', hold: 'Hold to view and copy' } },
   document: {
@@ -88,6 +90,7 @@ vm.runInContext(`
   let selected = new Set();
   function filtered() { return inventory; }
   ${expiredImplementation}
+  this.isKeyboxExpired = isKeyboxExpired;
   ${implementation}
   this.setInventory = items => { inventory = items; };
   this.renderKeyboxes = render;
@@ -99,6 +102,13 @@ vm.runInContext(`
   this.setVerificationItems = items => { verificationItems = items; };
   this.renderVerification = renderVerification;
 `, context, { filename: 'ux.js#renderKeyboxes' });
+
+// A minute-precision expiry represents the end of its displayed minute.
+now = Date.parse('2030-01-01T10:45:30Z');
+assert.equal(context.isKeyboxExpired('2030-01-01 10:45'), false, 'a minute-precision expiry must remain active through :59');
+assert.equal(context.isKeyboxExpired('2030-01-01 10:45:15'), true, 'a second-precision expiry must retain its exact instant');
+now = Date.parse('2030-01-01T10:46:00Z');
+assert.equal(context.isKeyboxExpired('2030-01-01 10:45'), true, 'a minute-precision expiry must expire after its displayed minute');
 
 // Test 1: StrongBox badge
 context.setInventory([

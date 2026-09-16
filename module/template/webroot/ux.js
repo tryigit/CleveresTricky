@@ -3250,7 +3250,7 @@
             const parts = str.split(' ');
             const datePart = parts[0];
             let timePart = parts[1] || '00:00';
-            if (timePart.split(':').length === 2) timePart += ':00';
+            if (/^\d{2}:\d{2}$/.test(timePart)) timePart += ':59';
             parseable = datePart + 'T' + timePart + (timePart.endsWith('Z') ? '' : 'Z');
         } else {
             parseable = str + 'T23:59:59Z';
