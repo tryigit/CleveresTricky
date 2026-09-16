@@ -3248,15 +3248,15 @@
     }
 
     const VALUE_POPUP_COPY = {
-        en: { title: 'Details', copy: 'Copy', copied: 'Copied', hold: 'Hold to view and copy' },
-        tr: { title: 'Ayrıntı', copy: 'Kopyala', copied: 'Kopyalandı', hold: 'Görüntülemek ve kopyalamak için basılı tut' },
-        'zh-CN': { title: '详细信息', copy: '复制', copied: '已复制', hold: '长按查看并复制' },
-        es: { title: 'Detalle', copy: 'Copiar', copied: 'Copiado', hold: 'Mantén pulsado para ver y copiar' },
-        de: { title: 'Details', copy: 'Kopieren', copied: 'Kopiert', hold: 'Gedrückt halten zum Anzeigen und Kopieren' },
-        ru: { title: 'Подробности', copy: 'Копировать', copied: 'Скопировано', hold: 'Нажмите и удерживайте для просмотра и копирования' },
-        id: { title: 'Detail', copy: 'Salin', copied: 'Tersalin', hold: 'Tekan lama untuk melihat dan menyalin' },
-        hi: { title: 'विवरण', copy: 'कॉपी करें', copied: 'कॉपी किया गया', hold: 'देखने और कॉपी करने के लिए दबाकर रखें' },
-        ar: { title: 'التفاصيل', copy: 'نسخ', copied: 'تم النسخ', hold: 'اضغط مطولاً للعرض والنسخ' }
+        en: { title: 'Details', copy: 'Copy', copied: 'Copied', close: 'Close', hold: 'Hold to view and copy' },
+        tr: { title: 'Ayrıntı', copy: 'Kopyala', copied: 'Kopyalandı', close: 'Kapat', hold: 'Görüntülemek ve kopyalamak için basılı tut' },
+        'zh-CN': { title: '详细信息', copy: '复制', copied: '已复制', close: '关闭', hold: '长按查看并复制' },
+        es: { title: 'Detalle', copy: 'Copiar', copied: 'Copiado', close: 'Cerrar', hold: 'Mantén pulsado para ver y copiar' },
+        de: { title: 'Details', copy: 'Kopieren', copied: 'Kopiert', close: 'Schließen', hold: 'Gedrückt halten zum Anzeigen und Kopieren' },
+        ru: { title: 'Подробности', copy: 'Копировать', copied: 'Скопировано', close: 'Закрыть', hold: 'Нажмите и удерживайте для просмотра и копирования' },
+        id: { title: 'Detail', copy: 'Salin', copied: 'Tersalin', close: 'Tutup', hold: 'Tekan lama untuk melihat dan menyalin' },
+        hi: { title: 'विवरण', copy: 'कॉपी करें', copied: 'कॉपी किया गया', close: 'बंद करें', hold: 'देखने और कॉपी करने के लिए दबाकर रखें' },
+        ar: { title: 'التفاصيل', copy: 'نسخ', copied: 'تم النسخ', close: 'إغلاق', hold: 'اضغط مطولاً للعرض والنسخ' }
     };
     function popupCopy() { return VALUE_POPUP_COPY[locale()] || VALUE_POPUP_COPY.en; }
     async function copyKeyboxValue(value) {
@@ -3286,7 +3286,7 @@
         const hint = document.createElement('div'); hint.className = 'ct-keybox-value-popup-hint'; hint.textContent = copy.hold;
         const actions = document.createElement('div'); actions.className = 'ct-keybox-value-popup-actions';
         const copyButton = document.createElement('button'); copyButton.type = 'button'; copyButton.className = 'ct-keybox-value-popup-copy'; copyButton.textContent = copy.copy;
-        const closeButton = document.createElement('button'); closeButton.type = 'button'; closeButton.className = 'ct-keybox-value-popup-close'; closeButton.textContent = t('clear') || 'Close';
+        const closeButton = document.createElement('button'); closeButton.type = 'button'; closeButton.className = 'ct-keybox-value-popup-close'; closeButton.textContent = copy.close;
         const setCopiedState = copied => { copyButton.textContent = copied ? copy.copied : copy.copy; copyButton.classList.toggle('is-copied', copied); };
         copyButton.addEventListener('click', async () => setCopiedState(await copyKeyboxValue(text)));
         closeButton.addEventListener('click', closeKeyboxValuePopup);
