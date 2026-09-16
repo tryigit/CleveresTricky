@@ -14,7 +14,44 @@ assert.match(implementation, /\.filter\(server => server\.id && server\.url\)/);
 
 const appended = [];
 const hubHint = { id: 'ct_keyboxhub_hint', style: { display: '' } };
-const list = { innerHTML: '', children: [], appendChild(node) { appended.push(node); this.children.push(node); } };
+
+function collectNodes(root, matcher) {
+  const matches = [];
+  function traverse(node) {
+    if (!node) return;
+    if (matcher(node)) matches.push(node);
+    if (node.children) node.children.forEach(traverse);
+  }
+  if (root && root.children) root.children.forEach(traverse);
+  return matches;
+}
+
+function createNode(tag) {
+  return {
+    tagName: tag || 'div',
+    style: {},
+    children: [],
+    append(...items) { items.forEach(item => this.appendChild(item)); },
+    appendChild(child) { this.children.push(child); return child; },
+    setAttribute(k, v) { this[k] = v; },
+    getAttribute(k) { return this[k]; },
+    querySelectorAll(sel) {
+      return collectNodes(this, node => {
+        if (sel.includes('ct-server-url') && node.className && node.className.includes('ct-server-url')) return true;
+        if (sel.includes('.server-item div') && node.tagName === 'div') return true;
+        return false;
+      });
+    },
+    textContent: '',
+    className: '',
+    onclick: null
+  };
+}
+
+const list = Object.assign(createNode('div'), {
+  innerHTML: '',
+  appendChild(node) { appended.push(node); this.children.push(node); return node; }
+});
 let calls = 0;
 const context = {
   console,
@@ -26,18 +63,7 @@ const context = {
       return null;
     },
     createElement(tag) {
-      return {
-        tagName: tag,
-        style: {},
-        children: [],
-        append(...items) { items.forEach(item => this.appendChild(item)); },
-        appendChild(child) { this.children.push(child); return child; },
-        setAttribute(k, v) { this[k] = v; },
-        getAttribute(k) { return this[k]; },
-        textContent: '',
-        className: '',
-        onclick: null
-      };
+      return createNode(tag);
     }
   },
   fetchAuth(path, options) {
@@ -202,13 +228,39 @@ vm.runInContext(`
   const syncImpl = uxSource.slice(syncStart, syncEnd);
   vm.runInContext(`${syncImpl}; this.syncKeyboxHubHintVisibility = syncKeyboxHubHintVisibility;`, context);
 
-  list.textContent = 'Server 1: https://keybox.tryigit.dev/feed';
-  context.syncKeyboxHubHintVisibility();
-  assert.equal(hubHint.style.display, 'none', 'ux.js must hide recommendation if list contains keybox.tryigit.dev');
+  // Test 1: item with exact hostname hides hint
+  list.children = [];
+  const hubItem = createNode('div');
+  hubItem.className = 'server-item';
+  const urlNode = createNode('div');
+  urlNode.className = 'ct-server-url';
+  urlNode.textContent = 'https://keybox.tryigit.dev/feed';
+  hubItem.appendChild(urlNode);
+  list.appendChild(hubItem);
 
-  list.textContent = 'Server 2: https://example.com/feed';
   context.syncKeyboxHubHintVisibility();
-  assert.equal(hubHint.style.display, '', 'ux.js must restore recommendation if list does not contain keybox.tryigit.dev');
+  assert.equal(hubHint.style.display, 'none', 'ux.js must hide recommendation if list contains keybox.tryigit.dev hostname');
+
+  // Test 2: server name contains keybox.tryigit.dev but URL is different -> recommendation must NOT be hidden
+  list.children = [];
+  const fakeItem = createNode('div');
+  fakeItem.className = 'server-item';
+  const nameNode = createNode('div');
+  nameNode.textContent = 'keybox.tryigit.dev mirror';
+  const fakeUrlNode = createNode('div');
+  fakeUrlNode.className = 'ct-server-url';
+  fakeUrlNode.textContent = 'https://other-domain.com/feed';
+  fakeItem.appendChild(nameNode);
+  fakeItem.appendChild(fakeUrlNode);
+  list.appendChild(fakeItem);
+
+  context.syncKeyboxHubHintVisibility();
+  assert.equal(hubHint.style.display, '', 'ux.js must not hide recommendation when only server name matches');
+
+  // Test 3: URL path contains keybox.tryigit.dev but hostname is different -> recommendation must NOT be hidden
+  fakeUrlNode.textContent = 'https://other-domain.com/keybox.tryigit.dev';
+  context.syncKeyboxHubHintVisibility();
+  assert.equal(hubHint.style.display, '', 'ux.js must not hide recommendation when only URL path matches');
 
   console.log('Server list bounds, malformed-response, and addServer replay-safe regression checks passed');
 })().catch(error => {

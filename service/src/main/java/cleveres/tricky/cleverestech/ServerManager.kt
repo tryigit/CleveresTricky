@@ -155,7 +155,7 @@ object ServerManager {
         }
     }
 
-    private fun parseServer(json: JSONObject): ServerConfig {
+    internal fun parseServer(json: JSONObject): ServerConfig {
         return ServerConfig(
             id = json.getString("id"),
             name = json.getString("name"),
@@ -178,7 +178,7 @@ object ServerManager {
         )
     }
 
-    private fun serializeServer(server: ServerConfig): JSONObject {
+    internal fun serializeServer(server: ServerConfig): JSONObject {
         val json = JSONObject()
         json.put("id", server.id)
         json.put("name", server.name)
@@ -860,10 +860,14 @@ object ServerManager {
         serverKeyboxes.remove(serverId)
         val server = serversMap[serverId]
         if (server != null) {
+            val hadCounts = server.keyboxCount != 0 || server.rkpCount != 0 || server.rsaCount != 0 || server.cboxCount != 0
             server.keyboxCount = 0
             server.rkpCount = 0
             server.rsaCount = 0
             server.cboxCount = 0
+            if (hadCounts) {
+                persistStatusSafely()
+            }
         }
         if (!deleteCache) return
         val cacheFile = File(Config.keyboxDirectory.parentFile, "server_cache_$serverId.enc")

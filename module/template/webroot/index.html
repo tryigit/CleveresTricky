@@ -1648,7 +1648,13 @@ try {
             cboxCount: Math.max(0, Math.min(64, Number(server?.cboxCount) || 0))
         })).filter(server => server.id && server.url)
         : [];
-    const hasHub = servers.some(s => s.url && s.url.toLowerCase().includes('keybox.tryigit.dev'));
+    const hasHub = servers.some(s => {
+        try {
+            return new URL(s.url).hostname.toLowerCase() === 'keybox.tryigit.dev';
+        } catch (_) {
+            return false;
+        }
+    });
     const hubHint = document.getElementById('ct_keyboxhub_hint');
     if (hubHint) hubHint.style.display = hasHub ? 'none' : '';
     if (list) list.innerHTML = '';
@@ -1664,6 +1670,7 @@ try {
         name.style.fontWeight = 'bold';
         name.textContent = String(s.name || '');
         const url = document.createElement('div');
+        url.className = 'ct-server-url';
         url.style.cssText = 'font-size:0.8em;color:#888;word-break:break-all';
         url.textContent = String(s.url || '');
         info.append(name, url);

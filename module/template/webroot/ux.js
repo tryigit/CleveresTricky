@@ -2075,8 +2075,19 @@
         if (!hint) return;
         const serverList = document.getElementById('serverList');
         if (!serverList) return;
-        const text = serverList.textContent || '';
-        const hasHub = text.toLowerCase().includes('keybox.tryigit.dev');
+        const urlNodes = serverList.querySelectorAll('.ct-server-url, .server-item div');
+        let hasHub = false;
+        for (const node of urlNodes) {
+            const raw = (node.textContent || '').trim();
+            if (!raw.startsWith('https://') && !raw.startsWith('http://')) continue;
+            try {
+                const parsed = new URL(raw);
+                if (parsed.hostname.toLowerCase() === 'keybox.tryigit.dev') {
+                    hasHub = true;
+                    break;
+                }
+            } catch (_) {}
+        }
         hint.style.display = hasHub ? 'none' : '';
     }
 
