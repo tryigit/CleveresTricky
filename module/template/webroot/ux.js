@@ -3430,7 +3430,7 @@
             } else if (item.security_level === 'Unknown') {
                 const badge = document.createElement('span');
                 badge.className = 'ct-badge ct-badge-unknown';
-                badge.textContent = 'Unknown';
+                badge.textContent = t('status_unknown') || 'Unknown';
                 name.append(badge);
             }
             const hasRsa = Boolean(item.has_rsa || (Array.isArray(item.algorithms) && item.algorithms.includes('RSA')) || item.algorithm === 'RSA');
@@ -3776,7 +3776,7 @@
             } else if (item.security_level === 'Unknown') {
                 const badge = document.createElement('span');
                 badge.className = 'ct-badge ct-badge-unknown';
-                badge.textContent = 'Unknown';
+                badge.textContent = t('status_unknown') || 'Unknown';
                 badgesContainer.append(badge);
             }
 

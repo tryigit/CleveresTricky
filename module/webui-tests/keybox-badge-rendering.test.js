@@ -123,7 +123,7 @@ const unkBody = unkRow.children[1];
 const unkName = unkBody.children[0];
 assert.equal(unkName.children[0].textContent, 'unknown.xml');
 assert.equal(unkName.children[1].className, 'ct-badge ct-badge-unknown');
-assert.equal(unkName.children[1].textContent, 'Unknown');
+assert.equal(unkName.children[1].textContent, 'status_unknown');
 
 // Test 4: Missing / other security_level has no badge
 context.setInventory([

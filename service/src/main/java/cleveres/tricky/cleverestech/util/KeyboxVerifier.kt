@@ -546,6 +546,8 @@ object KeyboxVerifier {
         var trackedIsRkp = false
         var trackedHasRsa = false
         var trackedHasEc = false
+        var trackedSerial: String? = null
+        var trackedNotAfter: String? = null
         return try {
             if (!isSafeKeyboxFile(file)) {
                 return Result(file, file.name, Status.ERROR, "Unsafe or oversized keybox file", storageId = storageId)
@@ -592,6 +594,10 @@ object KeyboxVerifier {
                     hasEc = hasEc,
                 )
             }
+            val deviceSerial = keyboxes.asSequence().mapNotNull(CertHack::getDeviceCertificateSerial).firstOrNull()
+            val deviceNotAfter = keyboxes.asSequence().mapNotNull(CertHack::getDeviceCertificateNotAfter).firstOrNull()
+            trackedSerial = deviceSerial
+            trackedNotAfter = deviceNotAfter
             // parseFileSnapshot can discover a Rust backend restart and rebuild backend-owned CRL
             // state. Resolve the handle only after that recovery boundary so this request never
             // keeps using the pre-recovery generation on its first manual verification attempt.
@@ -602,14 +608,14 @@ object KeyboxVerifier {
                     Status.ERROR,
                     "Failed to initialize CRL index",
                     storageId,
+                    certificateSerial = deviceSerial,
+                    notAfter = deviceNotAfter,
                     snapshotSha256 = snapshotSha256,
                     securityLevel = securityLevel,
                     isRkp = isRkp,
                     hasRsa = hasRsa,
                     hasEc = hasEc,
                 )
-            val deviceSerial = keyboxes.asSequence().mapNotNull(CertHack::getDeviceCertificateSerial).firstOrNull()
-            val deviceNotAfter = keyboxes.asSequence().mapNotNull(CertHack::getDeviceCertificateNotAfter).firstOrNull()
 
             for (keybox in keyboxes) {
                 val status =
@@ -698,6 +704,8 @@ object KeyboxVerifier {
                 Status.ERROR,
                 "Rust backend unavailable",
                 storageId,
+                certificateSerial = trackedSerial,
+                notAfter = trackedNotAfter,
                 retryableBackendFailure = true,
                 securityLevel = trackedSecurityLevel,
                 isRkp = trackedIsRkp,
@@ -711,6 +719,8 @@ object KeyboxVerifier {
                 Status.ERROR,
                 "Error: ${error.javaClass.simpleName}",
                 storageId,
+                certificateSerial = trackedSerial,
+                notAfter = trackedNotAfter,
                 securityLevel = trackedSecurityLevel,
                 isRkp = trackedIsRkp,
                 hasRsa = trackedHasRsa,

@@ -1170,10 +1170,10 @@ try {
         fallback.remove();
         if (!copied) throw new Error('Clipboard unavailable');
     }
-    const copiedText = (window.CleveresI18n && typeof window.CleveresI18n.translate === 'function')
-        ? window.CleveresI18n.translate('Copied')
-        : (typeof t === 'function' ? t('Copied', 'Copied') : 'Copied');
-    btn.innerText = copiedText;
+    btn.innerText = 'Copied';
+    if (window.CleveresI18n && typeof window.CleveresI18n.translate === 'function') {
+        btn.innerText = window.CleveresI18n.translate('Copied');
+    }
     btn.classList.add('valid');
     const localizedMsg = (window.CleveresI18n && typeof window.CleveresI18n.translate === 'function')
         ? window.CleveresI18n.translate(msg)
