@@ -11,8 +11,28 @@ import org.junit.Assert.assertThrows
 import org.junit.Test
 import java.io.File
 import org.mockito.Mockito
+import java.text.SimpleDateFormat
+import java.util.TimeZone
 
 class KeyboxVerifierTest {
+    @Test
+    fun `earliest certificate expiry is used instead of certificate #3 only`() {
+        val formatter = SimpleDateFormat("yyyy-MM-dd").apply {
+            timeZone = TimeZone.getTimeZone("UTC")
+        }
+        val later = formatter.parse("2029-02-08")
+        val earlier = formatter.parse("2027-01-15")
+
+        val first = Mockito.mock(X509Certificate::class.java)
+        Mockito.`when`(first.notAfter).thenReturn(later)
+        val second = Mockito.mock(X509Certificate::class.java)
+        Mockito.`when`(second.notAfter).thenReturn(earlier)
+
+        val keybox = Mockito.mock(CertHack.KeyBox::class.java)
+        Mockito.`when`(keybox.certificates()).thenReturn(listOf(first, second))
+
+        assertEquals("2027-01-15", KeyboxVerifier.getEarliestCertificateNotAfter(listOf(keybox)))
+    }
     @Test
     fun `clearMemoryCacheForTesting clears cache values`() {
         val etagField = KeyboxVerifier::class.java.getDeclaredField("cachedEtag")
