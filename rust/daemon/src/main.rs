@@ -824,8 +824,7 @@ fn serve_web(
                         registered.take()
                     }
                     Err(_) => {
-                        let error =
-                            io::Error::other("adapter registration state is poisoned");
+                        let error = io::Error::other("adapter registration state is poisoned");
                         let _ = reply_error(&mut request.client, OP_WEB_REQUEST, &error);
                         continue;
                     }
@@ -882,7 +881,9 @@ fn serve_web(
                 }
             }
         })
-        .map_err(|error| io::Error::other(format!("could not spawn WebUI relay worker: {error}")))?;
+        .map_err(|error| {
+            io::Error::other(format!("could not spawn WebUI relay worker: {error}"))
+        })?;
     loop {
         let (mut client, _) = match listener.accept() {
             Ok(value) => value,
@@ -959,10 +960,7 @@ fn serve_web(
                 let _ = write_frame(&mut client, OP_PING, 0, b"pong");
             }
             OP_WEB_REQUEST if header.flags == 0 && header.payload_len <= MAX_FRAME_BYTES => {
-                let request = WebRequest {
-                    client,
-                    header,
-                };
+                let request = WebRequest { client, header };
                 match web_relay_tx.try_send(request) {
                     Ok(()) => {}
                     Err(mpsc::TrySendError::Full(mut request)) => {
