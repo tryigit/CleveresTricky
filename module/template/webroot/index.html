@@ -1173,6 +1173,8 @@ try {
     btn.innerText = 'Copied';
     if (window.CleveresI18n && typeof window.CleveresI18n.translate === 'function') {
         btn.innerText = window.CleveresI18n.translate('Copied');
+    } else if (typeof t === 'function') {
+        btn.innerText = t('Copied', 'Copied');
     }
     btn.classList.add('valid');
     const localizedMsg = (window.CleveresI18n && typeof window.CleveresI18n.translate === 'function')
