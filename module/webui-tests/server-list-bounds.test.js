@@ -13,19 +13,27 @@ assert.match(implementation, /String\(server\?\.url \?\? ''\)\.slice\(0, 2048\)/
 assert.match(implementation, /\.filter\(server => server\.id && server\.url\)/);
 
 const appended = [];
-const list = { innerHTML: '', appendChild(node) { appended.push(node); } };
+const hubHint = { id: 'ct_keyboxhub_hint', style: { display: '' } };
+const list = { innerHTML: '', children: [], appendChild(node) { appended.push(node); this.children.push(node); } };
 let calls = 0;
 const context = {
   console,
   AbortController,
   document: {
-    getElementById(id) { return id === 'serverList' ? list : null; },
-    createElement() {
+    getElementById(id) {
+      if (id === 'serverList') return list;
+      if (id === 'ct_keyboxhub_hint') return hubHint;
+      return null;
+    },
+    createElement(tag) {
       return {
+        tagName: tag,
         style: {},
-        append() {},
-        appendChild() {},
-        setAttribute() {},
+        children: [],
+        append(...items) { items.forEach(item => this.appendChild(item)); },
+        appendChild(child) { this.children.push(child); return child; },
+        setAttribute(k, v) { this[k] = v; },
+        getAttribute(k) { return this[k]; },
         textContent: '',
         className: '',
         onclick: null
@@ -50,7 +58,30 @@ const context = {
         async text() { return ''; }
       });
     }
-    return Promise.resolve({ ok: true, async json() { return { malformed: true }; }, async text() { return ''; } });
+    if (calls === 2) {
+      return Promise.resolve({ ok: true, async json() { return { malformed: true }; }, async text() { return ''; } });
+    }
+    if (calls === 3) {
+      return Promise.resolve({
+        ok: true,
+        async json() {
+          return [
+            {
+              id: 'hub-server',
+              name: 'My KeyboxHub',
+              url: 'https://keybox.tryigit.dev/feed',
+              lastStatus: 'OK',
+              keyboxCount: 4,
+              rkpCount: 2,
+              rsaCount: 3,
+              cboxCount: 4
+            }
+          ];
+        },
+        async text() { return ''; }
+      });
+    }
+    return Promise.resolve({ ok: true, async json() { return []; }, async text() { return ''; } });
   },
   runWithState() {},
   requireConfirm() {},
@@ -124,8 +155,30 @@ vm.runInContext(`
   assert.equal(appended.length, 256, 'server rendering must be capped at 256 entries');
   assert.equal(appended[0].className, 'server-item');
   assert.equal(appended[0].style, appended[0].style, 'server row must be created as a bounded DOM node');
+  assert.equal(hubHint.style.display, '', 'hub recommendation must remain visible when no keybox.tryigit.dev is configured');
+
   await context.loadServers();
   assert.equal(appended.length, 256, 'a malformed non-array server response must not append rows');
+
+  appended.length = 0;
+  await context.loadServers();
+  assert.equal(appended.length, 1);
+  assert.equal(hubHint.style.display, 'none', 'hub recommendation must be hidden when keybox.tryigit.dev is present');
+  const serverItem = appended[0];
+  const infoCol = serverItem.children[0];
+  const statsDiv = infoCol.children.find(c => c.className === 'ct-server-stats');
+  assert.ok(statsDiv, 'stats breakdown must be rendered');
+  const badgeTexts = statsDiv.children.map(c => c.textContent);
+  assert.deepEqual(badgeTexts, ['Keybox: 4', 'CBOX: 4', 'RKP: 2', 'RSA: 3']);
+  // Ensure no sensitive or internal names/IDs are rendered
+  assert.ok(!JSON.stringify(badgeTexts).includes('.xml'));
+  assert.ok(!JSON.stringify(badgeTexts).includes('hub-server'));
+
+  // Test removing keybox.tryigit.dev server restores recommendation
+  appended.length = 0;
+  await context.loadServers();
+  assert.equal(appended.length, 0);
+  assert.equal(hubHint.style.display, '', 'hub recommendation must be restored when keybox.tryigit.dev server is removed');
 
   context.loadServers = async () => { loadCalled = true; };
   await context.addServer();
@@ -139,6 +192,23 @@ vm.runInContext(`
   assert.equal(addServerPostPayload.url, 'https://example.test/repo');
   assert.equal(resetCalled, true, 'resetServerForm must be called');
   assert.equal(loadCalled, true, 'loadServers must be called');
+
+  // Verify ux.js syncKeyboxHubHintVisibility behavior
+  const uxSource = fs.readFileSync('module/template/webroot/ux.js', 'utf8');
+  assert.ok(uxSource.includes('function syncKeyboxHubHintVisibility()'), 'ux.js must define syncKeyboxHubHintVisibility');
+  const syncStart = uxSource.indexOf('function syncKeyboxHubHintVisibility()');
+  const syncEnd = uxSource.indexOf('function installKeyboxHubHint()', syncStart);
+  assert.ok(syncStart >= 0 && syncEnd > syncStart);
+  const syncImpl = uxSource.slice(syncStart, syncEnd);
+  vm.runInContext(`${syncImpl}; this.syncKeyboxHubHintVisibility = syncKeyboxHubHintVisibility;`, context);
+
+  list.textContent = 'Server 1: https://keybox.tryigit.dev/feed';
+  context.syncKeyboxHubHintVisibility();
+  assert.equal(hubHint.style.display, 'none', 'ux.js must hide recommendation if list contains keybox.tryigit.dev');
+
+  list.textContent = 'Server 2: https://example.com/feed';
+  context.syncKeyboxHubHintVisibility();
+  assert.equal(hubHint.style.display, '', 'ux.js must restore recommendation if list does not contain keybox.tryigit.dev');
 
   console.log('Server list bounds, malformed-response, and addServer replay-safe regression checks passed');
 })().catch(error => {

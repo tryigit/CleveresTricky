@@ -376,6 +376,8 @@
         .ct-badge-rkp { background: rgba(0, 188, 212, 0.15); color: #00e5ff; border: 1px solid rgba(0, 188, 212, 0.3); }
         .ct-badge-rsa { background: rgba(255, 149, 0, 0.15); color: #ff9f0a; border: 1px solid rgba(255, 149, 0, 0.3); }
         .ct-badge-ecdsa { background: rgba(10, 132, 255, 0.15); color: #0a84ff; border: 1px solid rgba(10, 132, 255, 0.3); }
+        .ct-badge-keybox { background: rgba(52, 199, 89, 0.15); color: #32d74b; border: 1px solid rgba(52, 199, 89, 0.3); }
+        .ct-badge-cbox { background: rgba(191, 90, 242, 0.18); color: #bf5af2; border: 1px solid rgba(191, 90, 242, 0.35); }
         .ct-status-badge { text-transform: uppercase; font-size: 0.70rem; padding: 2px 8px; border-radius: 6px; }
         .ct-status-valid { background: rgba(48, 209, 88, 0.16); color: #30d158; border: 1px solid rgba(48, 209, 88, 0.35); }
         .ct-status-invalid { background: rgba(255, 69, 58, 0.16); color: #ff453a; border: 1px solid rgba(255, 69, 58, 0.35); }
@@ -1639,9 +1641,16 @@ try {
             id: String(server?.id ?? '').slice(0, 128),
             name: String(server?.name ?? '').slice(0, 256),
             url: String(server?.url ?? '').slice(0, 2048),
-            lastStatus: String(server?.lastStatus ?? 'UNKNOWN').slice(0, 128)
+            lastStatus: String(server?.lastStatus ?? 'UNKNOWN').slice(0, 128),
+            keyboxCount: Math.max(0, Math.min(64, Number(server?.keyboxCount) || 0)),
+            rkpCount: Math.max(0, Math.min(64, Number(server?.rkpCount) || 0)),
+            rsaCount: Math.max(0, Math.min(64, Number(server?.rsaCount) || 0)),
+            cboxCount: Math.max(0, Math.min(64, Number(server?.cboxCount) || 0))
         })).filter(server => server.id && server.url)
         : [];
+    const hasHub = servers.some(s => s.url && s.url.toLowerCase().includes('keybox.tryigit.dev'));
+    const hubHint = document.getElementById('ct_keyboxhub_hint');
+    if (hubHint) hubHint.style.display = hasHub ? 'none' : '';
     if (list) list.innerHTML = '';
     if (servers.length === 0) {
         if (list) list.innerHTML = '<div style="text-align:center; padding:15px; color:#666;"><span data-i18n="noServers">No servers configured. Add one below to fetch keyboxes automatically.</span></div>';
@@ -1658,6 +1667,31 @@ try {
         url.style.cssText = 'font-size:0.8em;color:#888;word-break:break-all';
         url.textContent = String(s.url || '');
         info.append(name, url);
+
+        if (s.keyboxCount > 0 || s.lastStatus === 'OK') {
+            const stats = document.createElement('div');
+            stats.className = 'ct-server-stats';
+            stats.style.cssText = 'display:flex;align-items:center;gap:6px;margin-top:6px;flex-wrap:wrap';
+
+            const kbBadge = document.createElement('span');
+            kbBadge.className = 'ct-badge ct-badge-keybox';
+            kbBadge.textContent = 'Keybox: ' + s.keyboxCount;
+
+            const cboxBadge = document.createElement('span');
+            cboxBadge.className = 'ct-badge ct-badge-cbox';
+            cboxBadge.textContent = 'CBOX: ' + s.cboxCount;
+
+            const rkpBadge = document.createElement('span');
+            rkpBadge.className = 'ct-badge ct-badge-rkp';
+            rkpBadge.textContent = 'RKP: ' + s.rkpCount;
+
+            const rsaBadge = document.createElement('span');
+            rsaBadge.className = 'ct-badge ct-badge-rsa';
+            rsaBadge.textContent = 'RSA: ' + s.rsaCount;
+
+            stats.append(kbBadge, cboxBadge, rkpBadge, rsaBadge);
+            info.append(stats);
+        }
 
         const actions = document.createElement('div');
         const status = document.createElement('span');

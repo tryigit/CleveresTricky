@@ -1699,6 +1699,10 @@ class WebServer(
                 obj.put("lastStatus", s.lastStatus)
                 obj.put("lastChecked", s.lastChecked)
                 obj.put("lastAuthor", s.lastAuthor)
+                obj.put("keyboxCount", s.keyboxCount)
+                obj.put("rkpCount", s.rkpCount)
+                obj.put("rsaCount", s.rsaCount)
+                obj.put("cboxCount", s.cboxCount)
                 json.put(obj)
             }
             return secureResponse(Response.Status.OK, "application/json", json.toString())

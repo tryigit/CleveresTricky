@@ -1,9 +1,7 @@
 # Changelog
 
-## V2.8.2
+## V2.8.3
 
-- **Keybox Expiration & Time Accuracy:** Resolved keybox expiration calculation discrepancies between stored inventory and verification results. Both now evaluate the earliest expiring certificate in the chain and present accurate expiration dates with hour/minute timestamps in UTC.
-- **Enhanced Mobile Card Layout:** Redesigned keybox inventory and verification cards for mobile devices. Badges now cleanly drop to their own dedicated line beneath filenames, preventing crowding, awkward wrapping, and truncation.
-- **Clean Monospaced Certificate Serials:** Streamlined long certificate serial numbers into compact, single-line monospaced text to eliminate multiline wrapping glitches.
-- **Universal Long-Press Inspection:** Extended touch long-press and keyboard interactions across the interface. Users can now hold or activate any filename, certificate serial, expiration date, scope, or verification detail to open a detailed modal and copy the exact value with haptic feedback.
-- **Comprehensive Localization:** Complete multilingual coverage across all 9 supported languages for all updated card elements and popup strings.
+- **Remote Server Keybox Breakdown:** Added detailed stats badges for configured remote servers in WebUI, displaying the exact counts of fetched keyboxes broken down by type (`Keybox`, `CBOX`, `RKP`, `RSA`) in a clean, non-disclosing badge layout without exposing private certificate names or identifiers.
+- **Dynamic KeyboxHub Recommendation:** Smart detection of KeyboxHub servers (`keybox.tryigit.dev`). The recommendation banner is automatically hidden when KeyboxHub is already added, and dynamically reappears if the server is removed.
+- **Enhanced Remote Server Architecture:** Robust server response tracking and state synchronization across live fetch, cached reloads, and server deactivation.

@@ -166,6 +166,30 @@ class ServerManagerCacheTest {
         return FusedCboxBackend.Payload("cache-test", document, hasSignature)
     }
 
+    @Test
+    fun `server config preserves keybox counts across serialization and validates bounds`() {
+        val server =
+            serverConfig().copy(
+                keyboxCount = 10,
+                rkpCount = 3,
+                rsaCount = 8,
+                cboxCount = 7,
+            )
+        ServerManager.validateServer(server)
+
+        val json = ServerManager.serializeServer(server)
+        assertEquals(10, json.getInt("keyboxCount"))
+        assertEquals(3, json.getInt("rkpCount"))
+        assertEquals(8, json.getInt("rsaCount"))
+        assertEquals(7, json.getInt("cboxCount"))
+
+        val parsed = ServerManager.parseServer(json)
+        assertEquals(10, parsed.keyboxCount)
+        assertEquals(3, parsed.rkpCount)
+        assertEquals(8, parsed.rsaCount)
+        assertEquals(7, parsed.cboxCount)
+    }
+
     private fun serverConfig(contentPublicKey: String? = null) =
         ServerManager.ServerConfig(
             id = "cache-test",

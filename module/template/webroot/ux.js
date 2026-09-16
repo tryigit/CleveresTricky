@@ -2070,6 +2070,16 @@
         }
     }
 
+    function syncKeyboxHubHintVisibility() {
+        const hint = document.getElementById('ct_keyboxhub_hint');
+        if (!hint) return;
+        const serverList = document.getElementById('serverList');
+        if (!serverList) return;
+        const text = serverList.textContent || '';
+        const hasHub = text.toLowerCase().includes('keybox.tryigit.dev');
+        hint.style.display = hasHub ? 'none' : '';
+    }
+
     function installKeyboxHubHint() {
         const serverList = document.getElementById('serverList');
         if (!serverList) return;
@@ -2083,6 +2093,12 @@
             const addButton = Array.from(panel.querySelectorAll('button')).find(button => /addServerForm/.test(button.getAttribute('onclick') || ''));
             if (addButton) addButton.insertAdjacentElement('afterend', hint);
             else panel.appendChild(hint);
+        }
+        syncKeyboxHubHintVisibility();
+        if (!serverList.dataset.ctHubObserverAttached && typeof MutationObserver !== 'undefined') {
+            serverList.dataset.ctHubObserverAttached = '1';
+            const observer = new MutationObserver(() => syncKeyboxHubHintVisibility());
+            observer.observe(serverList, { childList: true, subtree: true, characterData: true });
         }
     }
 
