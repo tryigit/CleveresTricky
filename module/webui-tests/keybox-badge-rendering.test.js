@@ -5,6 +5,15 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 
 const source = fs.readFileSync('module/template/webroot/ux.js', 'utf8');
+const longPressStart = source.indexOf('    function attachKeyboxLongPress(');
+const longPressEnd = source.indexOf('    function appendKeyboxValue(', longPressStart);
+assert.ok(longPressStart >= 0 && longPressEnd > longPressStart, 'long-press handler is missing');
+const longPressImplementation = source.slice(longPressStart, longPressEnd);
+assert.match(longPressImplementation, /setTimeout\([\s\S]*650\)/);
+assert.match(longPressImplementation, /showKeyboxValuePopup\(label, value\)/);
+assert.match(longPressImplementation, /pointerdown/);
+assert.match(source, /async function copyKeyboxValue\(value\)/);
+
 const start = source.indexOf('    function render() {');
 const end = source.indexOf('    function normalizeKeyboxScope(value) {', start);
 assert.ok(start >= 0 && end > start, 'render implementation is missing');
@@ -334,5 +343,17 @@ assert.equal(veBadges.children[0].className, 'ct-badge ct-status-badge ct-status
 assert.equal(veBadges.children[0].textContent, 'status_expired');
 const veMeta = veRow.children[1];
 assert.ok(veMeta.textContent.includes('2020-01-01'), 'verification meta must include expiry date');
+
+// Test 15: Stored metadata keeps scope, serial, and expiry on separate rows.
+context.setInventory([
+  { id: '15', filename: 'compact.xml', scope: 'managed', certificate_serial: 'ABCDEF0123456789ABCDEF0123456789', security_level: 'StrongBox', not_after: '2029-02-08' }
+]);
+list.children = [];
+context.renderKeyboxes();
+const compactBody = list.children[0].children[1];
+const compactMeta = compactBody.children[1];
+assert.equal(compactMeta.children.length, 3);
+assert.equal(compactMeta.children[1].children[1].textContent, 'ABCDEF0123456789ABCDEF0123456789');
+assert.equal(compactMeta.children[2].children[1].textContent, '2029-02-08');
 
 console.log('Keybox security and algorithm badge rendering regression checks passed');
