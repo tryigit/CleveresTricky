@@ -817,7 +817,7 @@ class WebServer(
             }
 
             val isRkp = unauthenticatedKeyboxes.all(RkpProvenanceStore::hasVerifiedRkpCertificates)
-            val effectiveRkp = isRkp && (authenticatedRkpHint || isRkp)
+            val effectiveRkp = authenticatedRkpHint && isRkp
 
             val keyboxes =
                 if (effectiveRkp) {

@@ -407,12 +407,19 @@ ${TestKeyboxFixtures.certificate.prependIndent("                    ")}
             server.start()
 
             val nonRkpXml = TestKeyboxFixtures.validEcKeyboxXml
+            val selfSignedRkpXml = TestKeyboxFixtures.selfSignedRkpKeyboxXml
 
             // Non-RKP keybox claiming authenticated RKP must NOT bypass revocation
             val (formCode, _) = uploadKeyboxResponse("fake_rkp.xml", nonRkpXml, authenticatedRkp = true)
             assertEquals(HttpURLConnection.HTTP_UNAVAILABLE, formCode)
             assertFalse(File(configDir, "keyboxes/fake_rkp.xml").exists())
             assertFalse(RkpProvenanceStore.isRkp("fake_rkp.xml", configDir))
+
+            // Self-signed certificate claiming RKP (unanchored) must also be rejected
+            val (selfSignedCode, _) = uploadKeyboxResponse("self_signed_rkp.xml", selfSignedRkpXml, authenticatedRkp = true)
+            assertEquals(HttpURLConnection.HTTP_UNAVAILABLE, selfSignedCode)
+            assertFalse(File(configDir, "keyboxes/self_signed_rkp.xml").exists())
+            assertFalse(RkpProvenanceStore.isRkp("self_signed_rkp.xml", configDir))
 
             // Multipart non-RKP keybox claiming authenticated RKP must also be rejected
             val multipartCode = uploadMultipartKeybox(
@@ -436,12 +443,19 @@ ${TestKeyboxFixtures.certificate.prependIndent("                    ")}
             Config.setRootForTesting(configDir)
             ManagedKeyboxParserOracle.install()
             KeyboxLoader.activeSetOverride = { true }
+            RkpProvenanceStore.addTrustedAnchorForTesting(TestKeyboxFixtures.rkpRootCert)
             File(configDir, "auto_keybox_check").createNewFile()
             server.stop()
             server = WebServer(0, configDir, crlFetcher = { null })
             server.start()
 
             val genuineRkpXml = TestKeyboxFixtures.validRkpKeyboxXml
+
+            // Genuine RKP uploaded WITHOUT authenticated hint must NOT bypass revocation when CRL offline
+            val (unhintedCode, _) = uploadKeyboxResponse("rkp_unhinted.xml", genuineRkpXml, authenticatedRkp = false)
+            assertEquals(HttpURLConnection.HTTP_UNAVAILABLE, unhintedCode)
+            assertFalse(File(configDir, "keyboxes/rkp_unhinted.xml").exists())
+            assertFalse(RkpProvenanceStore.isRkp("rkp_unhinted.xml", configDir))
 
             // Genuine RKP upload via form post must succeed even with offline CRL
             val (formCode, _) = uploadKeyboxResponse("rkp_form.xml", genuineRkpXml, authenticatedRkp = true)
