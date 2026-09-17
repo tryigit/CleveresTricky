@@ -1770,6 +1770,7 @@ class WebServer(
     ): Response? {
         if (uri == "/api/servers" && method == Method.GET) {
             val json = JSONArray()
+            val exposeSecrets = trustedBridge
             ServerManager.getServers().forEach { s ->
                 val obj = JSONObject()
                 obj.put("id", s.id)
@@ -1778,10 +1779,9 @@ class WebServer(
                 obj.put("priority", s.priority)
                 obj.put("enabled", s.enabled)
                 obj.put("authType", s.authType)
-                obj.put("authData", s.authData)
                 obj.put("autoRefresh", s.autoRefresh)
                 obj.put("refreshIntervalHours", s.refreshIntervalHours)
-                obj.put("contentPassword", s.contentPassword ?: "")
+                obj.put("hasContentPassword", s.hasContentPassword)
                 obj.put("contentPublicKey", s.contentPublicKey ?: "")
                 obj.put("lastStatus", s.lastStatus)
                 obj.put("lastChecked", s.lastChecked)
@@ -1790,6 +1790,14 @@ class WebServer(
                 obj.put("rkpCount", s.rkpCount)
                 obj.put("rsaCount", s.rsaCount)
                 obj.put("cboxCount", s.cboxCount)
+                if (exposeSecrets) {
+                    val realServer = ServerManager.findServer(s.id) ?: s
+                    obj.put("authData", realServer.authData)
+                    obj.put("contentPassword", realServer.contentPassword ?: "")
+                } else {
+                    obj.put("authData", s.authData)
+                    obj.put("contentPassword", "")
+                }
                 json.put(obj)
             }
             return secureResponse(Response.Status.OK, "application/json", json.toString())
@@ -1808,6 +1816,30 @@ class WebServer(
                     val obj = JSONObject(jsonStr)
                     val existingId = obj.optString("id")
                     val existing = if (existingId.isNotEmpty()) ServerManager.findServer(existingId) else null
+                    val authType = obj.getString("authType")
+                    val incomingAuthData = obj.optJSONObject("authData") ?: JSONObject()
+                    val authData =
+                        if (existing != null && existing.authType == authType) {
+                            mergeExistingAuthData(authType, incomingAuthData, existing.authData)
+                        } else {
+                            incomingAuthData
+                        }
+                    val submittedPassword = obj.optString("contentPassword")
+                    val contentPassword =
+                        when {
+                            submittedPassword.isNotEmpty() -> submittedPassword
+                            existing != null && obj.optBoolean("clearContentPassword", false) -> null
+                            existing != null -> existing.contentPassword
+                            else -> null
+                        }
+                    val submittedPublicKey = obj.optString("contentPublicKey").ifEmpty { null }
+                    val contentPublicKey =
+                        when {
+                            submittedPublicKey != null -> submittedPublicKey
+                            existing != null && obj.optBoolean("clearContentPublicKey", false) -> null
+                            existing != null -> existing.contentPublicKey
+                            else -> null
+                        }
                     val server =
                         ServerManager.ServerConfig(
                             id = if (existingId.isNotEmpty()) existingId else UUID.randomUUID().toString(),
@@ -1815,15 +1847,15 @@ class WebServer(
                             url = obj.getString("url"),
                             priority = obj.optInt("priority", 0),
                             enabled = obj.optBoolean("enabled", true),
-                            authType = obj.getString("authType"),
-                            authData = obj.optJSONObject("authData") ?: JSONObject(),
+                            authType = authType,
+                            authData = authData,
                             autoRefresh = obj.optBoolean("autoRefresh", true),
                             refreshIntervalHours = obj.optInt("refreshIntervalHours", 24),
                             lastStatus = existing?.lastStatus ?: "OK",
                             lastChecked = existing?.lastChecked ?: 0L,
                             lastAuthor = existing?.lastAuthor ?: "",
-                            contentPassword = obj.optString("contentPassword").ifEmpty { null },
-                            contentPublicKey = obj.optString("contentPublicKey").ifEmpty { null },
+                            contentPassword = contentPassword,
+                            contentPublicKey = contentPublicKey,
                             keyboxCount = existing?.keyboxCount ?: 0,
                             rkpCount = existing?.rkpCount ?: 0,
                             rsaCount = existing?.rsaCount ?: 0,
@@ -1885,6 +1917,58 @@ class WebServer(
         }
 
         return null
+    }
+
+    private fun mergeExistingAuthData(
+        authType: String,
+        incoming: JSONObject,
+        existing: JSONObject,
+    ): JSONObject {
+        val merged = JSONObject(incoming.toString())
+        when (authType) {
+            "BEARER" -> {
+                val token = incoming.optString("token")
+                if (token.isEmpty() && existing.has("token")) {
+                    merged.put("token", existing.optString("token"))
+                }
+            }
+            "BASIC" -> {
+                val username = incoming.optString("username")
+                val password = incoming.optString("password")
+                if (username.isEmpty() && existing.has("username")) {
+                    merged.put("username", existing.optString("username"))
+                }
+                if (password.isEmpty() && existing.has("password")) {
+                    merged.put("password", existing.optString("password"))
+                }
+            }
+            "API_KEY" -> {
+                val key = incoming.optString("key")
+                if (key.isEmpty() && existing.has("key")) {
+                    merged.put("key", existing.optString("key"))
+                }
+                val headerName = incoming.optString("headerName")
+                if (headerName.isEmpty() && existing.has("headerName")) {
+                    merged.put("headerName", existing.optString("headerName"))
+                }
+            }
+            "CUSTOM" -> {
+                val incomingHeaders = incoming.optJSONObject("headers")
+                val existingHeaders = existing.optJSONObject("headers")
+                if (existingHeaders != null) {
+                    val mergedHeaders = if (incomingHeaders != null) JSONObject(incomingHeaders.toString()) else JSONObject()
+                    val keys = existingHeaders.keys()
+                    while (keys.hasNext()) {
+                        val k = keys.next()
+                        if (!mergedHeaders.has(k) || mergedHeaders.optString(k).isEmpty()) {
+                            mergedHeaders.put(k, existingHeaders.optString(k))
+                        }
+                    }
+                    merged.put("headers", mergedHeaders)
+                }
+            }
+        }
+        return merged
     }
 
     private fun handleIdentityAndTemplateRoutes(
@@ -2918,6 +3002,26 @@ class WebServer(
             // Basic validation based on known file types
             if (filename == PolicyState.STATE_FILE) {
                 return PolicyState.validateStateJson(content, validateReferences = false).isSuccess
+            }
+            if (filename == RkpProvenanceStore.PROVENANCE_FILE_NAME) {
+                if (content.utf8ByteLength() > 64 * 1024) return false
+                return runCatching {
+                    val json = JSONObject(content)
+                    val keys = json.keys().asSequence().toSet()
+                    if (keys != setOf("rkp_keyboxes")) return@runCatching false
+                    val array = json.getJSONArray("rkp_keyboxes")
+                    if (array.length() > 256) return@runCatching false
+                    val seen = HashSet<String>()
+                    for (i in 0 until array.length()) {
+                        val raw = array.optString(i, "")
+                        if (raw.isBlank()) return@runCatching false
+                        val normalized = RkpProvenanceStore.normalizeIdentifier(raw)
+                        if (normalized != raw || !isValidKeyboxFilename(normalized) || !seen.add(normalized)) {
+                            return@runCatching false
+                        }
+                    }
+                    true
+                }.getOrDefault(false)
             }
             if (filename == "target.txt" || filename == "identity_target.txt") {
                 var ruleCount = 0

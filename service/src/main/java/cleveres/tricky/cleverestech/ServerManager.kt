@@ -47,6 +47,7 @@ object ServerManager {
         var rkpCount: Int = 0,
         var rsaCount: Int = 0,
         var cboxCount: Int = 0,
+        val hasContentPassword: Boolean = !contentPassword.isNullOrEmpty(),
     )
 
     private data class FetchContext(
@@ -201,14 +202,53 @@ object ServerManager {
         return json
     }
 
+    internal fun sanitizeAuthDataForApi(
+        authType: String,
+        authData: JSONObject,
+    ): JSONObject {
+        val safe = JSONObject()
+        when (authType) {
+            "NONE" -> Unit
+            "BEARER" -> {
+                val token = authData.optString("token")
+                safe.put("hasToken", token.isNotEmpty())
+            }
+            "BASIC" -> {
+                val username = authData.optString("username")
+                val password = authData.optString("password")
+                if (username.isNotEmpty()) safe.put("username", username)
+                safe.put("hasPassword", password.isNotEmpty())
+            }
+            "API_KEY" -> {
+                val headerName = authData.optString("headerName", "X-API-Key")
+                val key = authData.optString("key")
+                safe.put("headerName", headerName)
+                safe.put("hasKey", key.isNotEmpty())
+            }
+            "CUSTOM" -> {
+                val headers = authData.optJSONObject("headers")
+                if (headers != null) {
+                    val safeHeaders = JSONObject()
+                    val keys = headers.keys()
+                    while (keys.hasNext()) {
+                        val k = keys.next()
+                        safeHeaders.put(k, headers.optString(k).isNotEmpty())
+                    }
+                    safe.put("headers", safeHeaders)
+                }
+            }
+        }
+        return safe
+    }
+
     internal fun getServers(): List<ServerConfig> =
         serversList
             .sortedBy { it.priority }
             .map {
                 it.copy(
-                    authData = JSONObject(),
+                    authData = sanitizeAuthDataForApi(it.authType, it.authData),
                     contentPassword = null,
-                    contentPublicKey = null,
+                    contentPublicKey = it.contentPublicKey,
                 )
             }
 

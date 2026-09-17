@@ -1805,7 +1805,10 @@ if (refreshHoursInput) refreshHoursInput.value = '24';
 const autoRefreshCheckbox = document.getElementById('srvAutoRefresh');
 if (autoRefreshCheckbox) autoRefreshCheckbox.checked = true;
 const contentPasswordInput = document.getElementById('srvContentPassword');
-if (contentPasswordInput) contentPasswordInput.value = '';
+if (contentPasswordInput) {
+    contentPasswordInput.value = '';
+    contentPasswordInput.placeholder = 'CBOX content password (optional)';
+}
 const contentPublicKeyInput = document.getElementById('srvContentPublicKey');
 if (contentPublicKeyInput) contentPublicKeyInput.value = '';
         }
@@ -1866,17 +1869,26 @@ if (authTypeSelect) {
     const authData = s.authData || {};
     if (authTypeSelect.value === 'BEARER') {
         const tokenInput = document.getElementById('srvAuthToken');
-        if (tokenInput && authData.token) tokenInput.value = authData.token;
+        if (tokenInput) {
+            tokenInput.value = authData.token || '';
+            if (!authData.token && authData.hasToken) tokenInput.placeholder = '•••••••• (unchanged)';
+        }
     } else if (authTypeSelect.value === 'BASIC') {
         const userInput = document.getElementById('srvAuthUser');
         if (userInput && authData.username) userInput.value = authData.username;
         const passInput = document.getElementById('srvAuthPass');
-        if (passInput && authData.password) passInput.value = authData.password;
+        if (passInput) {
+            passInput.value = authData.password || '';
+            if (!authData.password && authData.hasPassword) passInput.placeholder = '•••••••• (unchanged)';
+        }
     } else if (authTypeSelect.value === 'API_KEY') {
         const nameKeyInput = document.getElementById('srvApiKeyName');
         if (nameKeyInput && authData.headerName) nameKeyInput.value = authData.headerName;
         const valKeyInput = document.getElementById('srvApiKeyValue');
-        if (valKeyInput && authData.key) valKeyInput.value = authData.key;
+        if (valKeyInput) {
+            valKeyInput.value = authData.key || '';
+            if (!authData.key && authData.hasKey) valKeyInput.placeholder = '•••••••• (unchanged)';
+        }
     }
 }
 
@@ -1890,7 +1902,10 @@ const autoRefreshCheckbox = document.getElementById('srvAutoRefresh');
 if (autoRefreshCheckbox) autoRefreshCheckbox.checked = s.autoRefresh !== false;
 
 const contentPasswordInput = document.getElementById('srvContentPassword');
-if (contentPasswordInput) contentPasswordInput.value = s.contentPassword || '';
+if (contentPasswordInput) {
+    contentPasswordInput.value = s.contentPassword || '';
+    if (!s.contentPassword && s.hasContentPassword) contentPasswordInput.placeholder = '•••••••• (unchanged)';
+}
 
 const contentPublicKeyInput = document.getElementById('srvContentPublicKey');
 if (contentPublicKeyInput) contentPublicKeyInput.value = s.contentPublicKey || '';

@@ -150,15 +150,15 @@ const serverInputs = {
   srvName: { value: 'Primary Feed' },
   srvUrl: { value: 'https://example.test/repo' },
   srvAuthType: { value: 'BEARER' },
-  srvAuthToken: { value: 'secret-token' },
-  srvApiKeyName: { value: '' },
-  srvApiKeyValue: { value: '' },
-  srvAuthUser: { value: '' },
-  srvAuthPass: { value: '' },
+  srvAuthToken: { value: 'secret-token', placeholder: '' },
+  srvApiKeyName: { value: '', placeholder: '' },
+  srvApiKeyValue: { value: '', placeholder: '' },
+  srvAuthUser: { value: '', placeholder: '' },
+  srvAuthPass: { value: '', placeholder: '' },
   srvPriority: { value: '10' },
   srvRefreshHours: { value: '6' },
   srvAutoRefresh: { checked: true },
-  srvContentPassword: { value: 'pass' },
+  srvContentPassword: { value: 'pass', placeholder: '' },
   srvContentPublicKey: { value: 'pubkey' },
   srvFormTitle: createNode('h4'),
   srvSaveBtn: createNode('button'),
@@ -304,11 +304,35 @@ vm.runInContext(`
   assert.equal(addServerPostPayload.enabled, false, 'editing must preserve a disabled server state');
   assert.equal(lastNotification, 'Server Updated');
 
+  // Test editing server with masked credentials from secure API
+  const maskedServer = {
+    id: 'hub-server-masked',
+    name: 'Masked Hub',
+    url: 'https://keybox.tryigit.dev/feed',
+    authType: 'BEARER',
+    authData: { hasToken: true },
+    priority: 5,
+    enabled: true,
+    refreshIntervalHours: 24,
+    autoRefresh: true,
+    hasContentPassword: true,
+    contentPassword: '',
+    contentPublicKey: 'masked-pubkey'
+  };
+  context.editServer(maskedServer);
+  assert.equal(serverInputs.srvEditId.value, 'hub-server-masked');
+  assert.equal(serverInputs.srvAuthToken.value, '', 'masked token must not expose plaintext value');
+  assert.equal(serverInputs.srvAuthToken.placeholder, '•••••••• (unchanged)');
+  assert.equal(serverInputs.srvContentPassword.value, '', 'masked password must not expose plaintext value');
+  assert.equal(serverInputs.srvContentPassword.placeholder, '•••••••• (unchanged)');
+  assert.equal(serverInputs.srvContentPublicKey.value, 'masked-pubkey');
+
   // Verify resetServerForm clears edit state
   context.realResetServerForm();
   assert.equal(serverInputs.srvEditId.value, '', 'edit ID must be cleared on form reset');
   assert.equal(serverInputs.srvName.value, '');
   assert.equal(serverInputs.srvUrl.value, '');
+  assert.equal(serverInputs.srvContentPassword.placeholder, 'CBOX content password (optional)');
   assert.equal(serverInputs.srvFormTitle.textContent, '+ Add Server');
 
   // Verify ux.js syncKeyboxHubHintVisibility behavior

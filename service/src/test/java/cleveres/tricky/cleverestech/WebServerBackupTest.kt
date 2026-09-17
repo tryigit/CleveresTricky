@@ -1,5 +1,6 @@
 package cleveres.tricky.cleverestech
 
+import cleveres.tricky.cleverestech.util.RestoreFileOperations
 import cleveres.tricky.cleverestech.util.SecureFile
 import cleveres.tricky.cleverestech.util.SecureFileOperations
 import org.junit.After
@@ -33,7 +34,7 @@ class WebServerBackupTest {
 
         // Mock SecureFile to use standard IO
         SecureFile.impl =
-            object : SecureFileOperations {
+            object : SecureFileOperations, RestoreFileOperations {
                 override fun writeText(
                     file: File,
                     content: String,
@@ -84,6 +85,56 @@ class WebServerBackupTest {
                     file.parentFile?.mkdirs()
                     file.createNewFile()
                 }
+
+                override fun begin(
+                    configDir: File,
+                    token: String,
+                    maxSnapshotBytes: Long,
+                ) = Unit
+
+                override fun snapshot(
+                    configDir: File,
+                    token: String,
+                    target: File,
+                ) = Unit
+
+                override fun replace(
+                    configDir: File,
+                    token: String,
+                    target: File,
+                    content: ByteArray,
+                ) {
+                    target.parentFile?.mkdirs()
+                    target.writeBytes(content)
+                }
+
+                override fun delete(
+                    configDir: File,
+                    token: String,
+                    target: File,
+                ) {
+                    target.delete()
+                }
+
+                override fun commit(
+                    configDir: File,
+                    token: String,
+                ) = Unit
+
+                override fun rollback(
+                    configDir: File,
+                    token: String,
+                ) = Unit
+
+                override fun abort(
+                    configDir: File,
+                    token: String,
+                ) = Unit
+
+                override fun exportRecovery(
+                    configDir: File,
+                    token: String,
+                ): String = ""
             }
     }
 
@@ -172,5 +223,51 @@ class WebServerBackupTest {
         assertFalse(File(configDir, "keybox.xml").exists())
         assertFalse(File(keyboxDir, "stale.xml").exists())
         assertEquals("com.example.app", File(configDir, "target.txt").readText())
+    }
+
+    @Test
+    fun testRkpProvenanceBackupAndRestore() {
+        val provenanceContent = """{"rkp_keyboxes":["kb1.xml"]}"""
+        File(configDir, RkpProvenanceStore.PROVENANCE_FILE_NAME).writeText(provenanceContent)
+        File(configDir, "target.txt").writeText("com.example.app")
+
+        val zipBytes = WebServer.createBackupZip(configDir)
+        assertTrue(zipBytes.isNotEmpty())
+
+        configDir.deleteRecursively()
+        configDir.mkdirs()
+
+        WebServer.restoreBackupZip(configDir, ByteArrayInputStream(zipBytes))
+        val restored = File(configDir, RkpProvenanceStore.PROVENANCE_FILE_NAME)
+        assertTrue(restored.exists())
+        assertEquals(provenanceContent, restored.readText())
+    }
+
+    @Test
+    fun testRkpProvenanceValidation() {
+        assertTrue(WebServer.validateContent(RkpProvenanceStore.PROVENANCE_FILE_NAME, """{"rkp_keyboxes":["keybox.xml","test.cbox"]}"""))
+        assertTrue(WebServer.validateContent(RkpProvenanceStore.PROVENANCE_FILE_NAME, """{"rkp_keyboxes":[]}"""))
+
+        // Malformed / invalid JSON
+        assertFalse(WebServer.validateContent(RkpProvenanceStore.PROVENANCE_FILE_NAME, "not json"))
+        assertFalse(WebServer.validateContent(RkpProvenanceStore.PROVENANCE_FILE_NAME, ""))
+
+        // Missing or extra root keys
+        assertFalse(WebServer.validateContent(RkpProvenanceStore.PROVENANCE_FILE_NAME, """{"other":[]}"""))
+        assertFalse(WebServer.validateContent(RkpProvenanceStore.PROVENANCE_FILE_NAME, """{"rkp_keyboxes":[],"extra":1}"""))
+
+        // Invalid elements
+        assertFalse(WebServer.validateContent(RkpProvenanceStore.PROVENANCE_FILE_NAME, """{"rkp_keyboxes":[""]}"""))
+        assertFalse(WebServer.validateContent(RkpProvenanceStore.PROVENANCE_FILE_NAME, """{"rkp_keyboxes":["../invalid.xml"]}"""))
+        assertFalse(WebServer.validateContent(RkpProvenanceStore.PROVENANCE_FILE_NAME, """{"rkp_keyboxes":["not_xml_or_cbox.txt"]}"""))
+        assertFalse(WebServer.validateContent(RkpProvenanceStore.PROVENANCE_FILE_NAME, """{"rkp_keyboxes":["kb1.xml","kb1.xml"]}"""))
+
+        // Max entries bound (>256)
+        val tooMany = (0..257).joinToString(prefix = """{"rkp_keyboxes":[""", postfix = "]}", separator = ",") { """"kb$it.xml"""" }
+        assertFalse(WebServer.validateContent(RkpProvenanceStore.PROVENANCE_FILE_NAME, tooMany))
+
+        // Max size bound (>64KB)
+        val large = """{"rkp_keyboxes":[""" + " ".repeat(65 * 1024) + """]}"""
+        assertFalse(WebServer.validateContent(RkpProvenanceStore.PROVENANCE_FILE_NAME, large))
     }
 }
