@@ -1960,7 +1960,8 @@ class WebServer(
                     val keys = existingHeaders.keys()
                     while (keys.hasNext()) {
                         val k = keys.next()
-                        if (!mergedHeaders.has(k) || mergedHeaders.optString(k).isEmpty()) {
+                        val value = mergedHeaders.opt(k)
+                        if (value !is String || value.isEmpty()) {
                             mergedHeaders.put(k, existingHeaders.optString(k))
                         }
                     }

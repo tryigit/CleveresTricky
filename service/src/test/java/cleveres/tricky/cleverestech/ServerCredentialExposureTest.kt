@@ -230,4 +230,78 @@ class ServerCredentialExposureTest {
         assertEquals("preserved-pubkey", updated.contentPublicKey)
         assertEquals("preserved-token", updated.authData.optString("token"))
     }
+
+    @Test
+    fun testUpdateServerPreservesCustomAuthHeadersWithBooleanMarkers() {
+        val serverId = "test-srv-custom"
+        val initialServer =
+            ServerManager.ServerConfig(
+                id = serverId,
+                name = "Custom Auth Server",
+                url = "https://example.test/feed",
+                priority = 1,
+                enabled = true,
+                authType = "CUSTOM",
+                authData =
+                    JSONObject().put(
+                        "headers",
+                        JSONObject()
+                            .put("X-Secret-1", "secret-val-1")
+                            .put("X-Secret-2", "secret-val-2"),
+                    ),
+                autoRefresh = true,
+                refreshIntervalHours = 12,
+            )
+        ServerManager.addServer(initialServer)
+
+        // Simulate client sending back sanitized authData (where X-Secret-1 is Boolean true, X-Secret-2 is omitted, X-Secret-3 is a new string)
+        val updatePayload =
+            JSONObject().apply {
+                put("id", serverId)
+                put("name", "Custom Auth Server Updated")
+                put("url", "https://example.test/feed")
+                put("priority", 2)
+                put("enabled", true)
+                put("authType", "CUSTOM")
+                put(
+                    "authData",
+                    JSONObject().put(
+                        "headers",
+                        JSONObject()
+                            .put("X-Secret-1", true) // boolean marker from sanitizeAuthDataForApi
+                            .put("X-Secret-3", "new-secret-val-3"),
+                    ),
+                )
+                put("autoRefresh", true)
+                put("refreshIntervalHours", 12)
+            }
+
+        val port = server.listeningPort
+        val token = server.token
+        val boundary = "----Boundary" + UUID.randomUUID().toString().replace("-", "")
+        val conn = URL("http://localhost:$port/api/server/add?token=$token").openConnection() as HttpURLConnection
+        conn.requestMethod = "POST"
+        conn.doOutput = true
+        conn.setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+
+        conn.outputStream.use { out ->
+            val body =
+                buildString {
+                    append("--$boundary\r\n")
+                    append("Content-Disposition: form-data; name=\"data\"\r\n\r\n")
+                    append(updatePayload.toString())
+                    append("\r\n--$boundary--\r\n")
+                }
+            out.write(body.toByteArray(Charsets.UTF_8))
+        }
+
+        assertEquals(200, conn.responseCode)
+
+        val updated = ServerManager.findServer(serverId)
+        assertNotNull(updated)
+        val updatedHeaders = updated!!.authData.getJSONObject("headers")
+        assertEquals("secret-val-1", updatedHeaders.getString("X-Secret-1"))
+        assertEquals("secret-val-2", updatedHeaders.getString("X-Secret-2"))
+        assertEquals("new-secret-val-3", updatedHeaders.getString("X-Secret-3"))
+    }
 }
