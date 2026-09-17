@@ -32,18 +32,7 @@ class DeviceKeyManagerInitializeTest {
         tempDir = createTempDirectory("test-key-manager")
         fallbackFile = File(tempDir.toFile(), "device_secret.key")
 
-        val instance = DeviceKeyManager
-        val fallbackField = instance.javaClass.getDeclaredField("fallbackKey")
-        fallbackField.isAccessible = true
-        fallbackField.set(instance, null)
-
-        val useFallbackField = instance.javaClass.getDeclaredField("useFallback")
-        useFallbackField.isAccessible = true
-        useFallbackField.set(instance, false)
-
-        val cachedKeyField = instance.javaClass.getDeclaredField("cachedKey")
-        cachedKeyField.isAccessible = true
-        cachedKeyField.set(instance, null)
+        DeviceKeyManager.resetForTesting()
 
         keyStoreMock = mock(KeyStore::class.java)
         keyStoreStaticMock = mockStatic(KeyStore::class.java)

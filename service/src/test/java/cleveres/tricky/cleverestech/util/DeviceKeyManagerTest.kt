@@ -31,19 +31,7 @@ class DeviceKeyManagerTest {
 
     @Before
     fun setUp() {
-        // Reset DeviceKeyManager state via reflection
-        val instance = DeviceKeyManager
-        val fallbackField = instance.javaClass.getDeclaredField("fallbackKey")
-        fallbackField.isAccessible = true
-        fallbackField.set(instance, null)
-
-        val useFallbackField = instance.javaClass.getDeclaredField("useFallback")
-        useFallbackField.isAccessible = true
-        useFallbackField.set(instance, false)
-
-        val cachedKeyField = instance.javaClass.getDeclaredField("cachedKey")
-        cachedKeyField.isAccessible = true
-        cachedKeyField.set(instance, null)
+        DeviceKeyManager.resetForTesting()
 
         // Setup Mocks
         keyStoreMock = mock(KeyStore::class.java)

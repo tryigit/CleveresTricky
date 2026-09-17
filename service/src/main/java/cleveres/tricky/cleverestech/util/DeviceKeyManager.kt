@@ -175,6 +175,15 @@ object DeviceKeyManager {
         }
     }
 
+    @androidx.annotation.VisibleForTesting
+    fun resetForTesting() {
+        synchronized(this) {
+            fallbackKey = null
+            useFallback = false
+            cachedKey = null
+        }
+    }
+
     private const val GCM_IV_LENGTH = 12
     private const val GCM_TAG_LENGTH = 16
     private const val FALLBACK_KEY_BYTES = 32

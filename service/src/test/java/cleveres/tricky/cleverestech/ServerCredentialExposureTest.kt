@@ -86,7 +86,7 @@ class ServerCredentialExposureTest {
     fun tearDown() {
         server.stop()
         SecureFile.impl = originalSecureFileImpl
-        DeviceKeyManager.initialize(originalConfigRoot)
+        DeviceKeyManager.resetForTesting()
         Config.setRootForTesting(originalConfigRoot)
     }
 
