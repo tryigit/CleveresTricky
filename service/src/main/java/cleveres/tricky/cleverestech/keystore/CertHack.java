@@ -919,20 +919,32 @@ public final class CertHack {
     }
 
     public static boolean isRkpKeybox(KeyBox keybox) {
-        if (keybox == null || keybox.certificates() == null) return false;
+        if (keybox == null || keybox.certificates() == null || keybox.certificates().isEmpty()) return false;
+        if (keybox.filename() != null && keybox.filename().toLowerCase(Locale.ROOT).contains("rkp")) {
+            return true;
+        }
         for (Certificate cert : keybox.certificates()) {
             if (cert instanceof X509Certificate x509) {
                 var subject = x509.getSubjectX500Principal();
-                if (subject != null && subject.getName().toLowerCase(Locale.ROOT).contains("droid ca")) {
+                if (subject != null && isRkpDn(subject.getName().toLowerCase(Locale.ROOT))) {
                     return true;
                 }
                 var issuer = x509.getIssuerX500Principal();
-                if (issuer != null && issuer.getName().toLowerCase(Locale.ROOT).contains("droid ca")) {
+                if (issuer != null && isRkpDn(issuer.getName().toLowerCase(Locale.ROOT))) {
                     return true;
                 }
             }
         }
         return false;
+    }
+
+    private static boolean isRkpDn(String dn) {
+        if (dn == null || dn.isEmpty()) return false;
+        return dn.contains("droid ca")
+                || dn.contains("rkp")
+                || dn.contains("remote provisioning")
+                || dn.contains("remoteprovisioning")
+                || dn.contains("key provisioning");
     }
 
     public static boolean hasRsaKeybox(String identifier) {

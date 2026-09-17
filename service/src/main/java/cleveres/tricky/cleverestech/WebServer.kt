@@ -792,6 +792,19 @@ class WebServer(
         BACKEND_UNAVAILABLE,
     }
 
+    private fun normalizeKeyboxXmlContent(raw: String): String {
+        val trimmed = raw.trim()
+        if (!trimmed.contains("<AndroidAttestation", ignoreCase = true) &&
+            trimmed.contains("<Keybox", ignoreCase = true)
+        ) {
+            val hasXmlDecl = trimmed.startsWith("<?xml", ignoreCase = true)
+            val decl = if (hasXmlDecl) trimmed.substringBefore("?>") + "?>\n" else "<?xml version=\"1.0\"?>\n"
+            val body = if (hasXmlDecl) trimmed.substringAfter("?>").trim() else trimmed
+            return "$decl<AndroidAttestation>\n    <NumberOfKeyboxes>1</NumberOfKeyboxes>\n    $body\n</AndroidAttestation>"
+        }
+        return raw
+    }
+
     private fun validateUploadedKeyboxXml(
         bytes: ByteArray,
         filename: String,
@@ -802,14 +815,18 @@ class WebServer(
             if (!Config.isAutoKeyboxCheckEnabled) {
                 return KeyboxUploadValidation.VALID
             }
+            if (keyboxes.all(CertHack::isRkpKeybox)) {
+                return KeyboxUploadValidation.VALID
+            }
+            val nonRkpKeyboxes = keyboxes.filterNot(CertHack::isRkpKeybox)
             val allValid =
                 crlFetcher?.let { legacyFetcher ->
                     val revoked = legacyFetcher() ?: return KeyboxUploadValidation.REVOCATION_UNAVAILABLE
-                    keyboxes.all { KeyboxVerifier.verifyKeyboxLegacy(it, revoked) == KeyboxVerifier.Status.VALID }
+                    nonRkpKeyboxes.all { KeyboxVerifier.verifyKeyboxLegacy(it, revoked) == KeyboxVerifier.Status.VALID }
                 } ?: run {
                     val revoked = KeyboxVerifier.fetchCrl()
                         ?: return KeyboxUploadValidation.REVOCATION_UNAVAILABLE
-                    keyboxes.all { KeyboxVerifier.verifyKeybox(it, revoked) == KeyboxVerifier.Status.VALID }
+                    nonRkpKeyboxes.all { KeyboxVerifier.verifyKeybox(it, revoked) == KeyboxVerifier.Status.VALID }
                 }
             if (allValid) KeyboxUploadValidation.VALID else KeyboxUploadValidation.INVALID
         } catch (_: RustBackendUnavailableException) {
@@ -1492,8 +1509,22 @@ class WebServer(
             } catch (e: Exception) {
                 return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Failed to parse body")
             }
+            val rawContent = getParam(session, "content")
+                ?: map["content"]?.let { path ->
+                    val f = File(path)
+                    if (Files.isRegularFile(f.toPath(), LinkOption.NOFOLLOW_LINKS) && f.length() in 1..MAX_KEYBOX_XML_UPLOAD_SIZE) {
+                        try {
+                            f.readText(Charsets.UTF_8)
+                        } catch (_: Exception) {
+                            null
+                        }
+                    } else {
+                        null
+                    }
+                }
+            val content = rawContent?.let(::normalizeKeyboxXmlContent)
             val filename = getParam(session, "filename")
-            val content = getParam(session, "content")
+                ?: (if (content != null && (content.contains("droid ca", ignoreCase = true) || content.contains("rkp", ignoreCase = true) || content.contains("remote provisioning", ignoreCase = true) || content.contains("key provisioning", ignoreCase = true))) "rkp.xml" else null)
             val tmpFilePath = map["file"]
             if (tmpFilePath != null) {
                 val originalName = getParam(session, "filename") ?: "upload.bin"
@@ -1694,8 +1725,11 @@ class WebServer(
                 obj.put("priority", s.priority)
                 obj.put("enabled", s.enabled)
                 obj.put("authType", s.authType)
+                obj.put("authData", s.authData)
                 obj.put("autoRefresh", s.autoRefresh)
                 obj.put("refreshIntervalHours", s.refreshIntervalHours)
+                obj.put("contentPassword", s.contentPassword ?: "")
+                obj.put("contentPublicKey", s.contentPublicKey ?: "")
                 obj.put("lastStatus", s.lastStatus)
                 obj.put("lastChecked", s.lastChecked)
                 obj.put("lastAuthor", s.lastAuthor)
@@ -1719,9 +1753,11 @@ class WebServer(
             if (jsonStr != null) {
                 try {
                     val obj = JSONObject(jsonStr)
+                    val existingId = obj.optString("id")
+                    val existing = if (existingId.isNotEmpty()) ServerManager.findServer(existingId) else null
                     val server =
                         ServerManager.ServerConfig(
-                            id = obj.optString("id").ifEmpty { UUID.randomUUID().toString() },
+                            id = if (existingId.isNotEmpty()) existingId else UUID.randomUUID().toString(),
                             name = obj.getString("name"),
                             url = obj.getString("url"),
                             priority = obj.optInt("priority", 0),
@@ -1730,8 +1766,15 @@ class WebServer(
                             authData = obj.optJSONObject("authData") ?: JSONObject(),
                             autoRefresh = obj.optBoolean("autoRefresh", true),
                             refreshIntervalHours = obj.optInt("refreshIntervalHours", 24),
+                            lastStatus = existing?.lastStatus ?: "OK",
+                            lastChecked = existing?.lastChecked ?: 0L,
+                            lastAuthor = existing?.lastAuthor ?: "",
                             contentPassword = obj.optString("contentPassword").ifEmpty { null },
                             contentPublicKey = obj.optString("contentPublicKey").ifEmpty { null },
+                            keyboxCount = existing?.keyboxCount ?: 0,
+                            rkpCount = existing?.rkpCount ?: 0,
+                            rsaCount = existing?.rsaCount ?: 0,
+                            cboxCount = existing?.cboxCount ?: 0,
                         )
                     ServerManager.addServer(server)
                     Config.updateKeyBoxes()

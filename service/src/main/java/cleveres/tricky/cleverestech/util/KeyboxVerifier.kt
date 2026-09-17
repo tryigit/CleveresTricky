@@ -609,8 +609,10 @@ object KeyboxVerifier {
             // parseFileSnapshot can discover a Rust backend restart and rebuild backend-owned CRL
             // state. Resolve the handle only after that recovery boundary so this request never
             // keeps using the pre-recovery generation on its first manual verification attempt.
+            val allRkp = keyboxes.isNotEmpty() && keyboxes.all(CertHack::isRkpKeybox)
             val crl = crlFetcher()
-                ?: return Result(
+            if (!allRkp && crl == null) {
+                return Result(
                     file,
                     file.name,
                     Status.ERROR,
@@ -624,12 +626,15 @@ object KeyboxVerifier {
                     hasRsa = hasRsa,
                     hasEc = hasEc,
                 )
+            }
 
             for (keybox in keyboxes) {
+                if (CertHack.isRkpKeybox(keybox)) continue
                 val status =
                     when (crl) {
                         is RevocationSource.Rust -> verifyKeybox(keybox, crl.handle)
                         is RevocationSource.Legacy -> verifyKeyboxLegacy(keybox, crl.entries)
+                        null -> Status.VALID
                     }
                 when (status) {
                     Status.REVOKED -> {
@@ -747,6 +752,7 @@ object KeyboxVerifier {
         keybox: CertHack.KeyBox,
         crl: CrlWire.Handle,
     ): Status {
+        if (CertHack.isRkpKeybox(keybox)) return Status.VALID
         val certificates = keybox.certificates()
         if (certificates.isEmpty()) return Status.INVALID
         val queries = ArrayList<CrlWire.Query>(certificates.size)
@@ -774,6 +780,7 @@ object KeyboxVerifier {
         keybox: CertHack.KeyBox,
         revoked: Set<String>,
     ): Status {
+        if (CertHack.isRkpKeybox(keybox)) return Status.VALID
         val certificates = keybox.certificates()
         if (certificates.isEmpty()) return Status.INVALID
         for (certificate in certificates) {

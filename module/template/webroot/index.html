@@ -742,19 +742,14 @@
         <div class="panel">
 <h3>Remote Servers</h3>
 <div id="serverList"></div>
-<button onclick="document.getElementById('addServerForm').style.display='block'" class="primary" style="width:100%">+ Add Server</button>
+<button onclick="showAddServerForm()" class="primary" style="width:100%" data-i18n="add_server_btn">+ Add Server</button>
 
 <div id="addServerForm" style="display:none; margin-top:15px; border-top:1px solid var(--border); padding-top:15px;">
+    <input type="hidden" id="srvEditId" value="">
+    <h4 id="srvFormTitle" style="margin-top:0;margin-bottom:12px;font-size:1rem;font-weight:600;" data-i18n="add_server_title">+ Add Server</h4>
     <input type="text" id="srvName" placeholder="Name" style="margin-bottom:5px;" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off">
     <input type="text" id="srvUrl" placeholder="URL (HTTPS)" style="margin-bottom:5px;" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off">
-    <select id="srvAuthType" style="margin-bottom:5px;" onchange="
-        const t = this.value;
-        const af = document.getElementById('authFields');
-        if (t === 'NONE') af.innerHTML = '';
-        else if (t === 'BEARER') af.innerHTML = '<div class=\'pwd-wrapper\'><input type=\'password\' id=\'srvAuthToken\' placeholder=\'Bearer Token\' style=\'margin-bottom:5px;\' spellcheck=\'false\' autocomplete=\'off\' autocorrect=\'off\' autocapitalize=\'off\'><button type=\'button\' class=\'pwd-toggle\' onclick=\'togglePassword(this)\'>Show</button></div>';
-        else if (t === 'BASIC') af.innerHTML = '<input type=\'text\' id=\'srvAuthUser\' placeholder=\'Username\' style=\'margin-bottom:5px;\' spellcheck=\'false\' autocomplete=\'off\' autocorrect=\'off\' autocapitalize=\'off\'><div class=\'pwd-wrapper\'><input type=\'password\' id=\'srvAuthPass\' placeholder=\'Password\' style=\'margin-bottom:5px;\' spellcheck=\'false\' autocomplete=\'off\' autocorrect=\'off\' autocapitalize=\'off\'><button type=\'button\' class=\'pwd-toggle\' onclick=\'togglePassword(this)\'>Show</button></div>';
-        else if (t === 'API_KEY') af.innerHTML = '<input type=\'text\' id=\'srvApiKeyName\' placeholder=\'Header Name (e.g. X-API-Key)\' style=\'margin-bottom:5px;\' spellcheck=\'false\' autocomplete=\'off\' autocorrect=\'off\' autocapitalize=\'off\'><div class=\'pwd-wrapper\'><input type=\'password\' id=\'srvApiKeyValue\' placeholder=\'API Key\' style=\'margin-bottom:5px;\' spellcheck=\'false\' autocomplete=\'off\' autocorrect=\'off\' autocapitalize=\'off\'><button type=\'button\' class=\'pwd-toggle\' onclick=\'togglePassword(this)\'>Show</button></div>';
-    ">
+    <select id="srvAuthType" style="margin-bottom:5px;" onchange="updateAuthFields(this.value)">
         <option value="NONE">No Auth</option>
         <option value="BEARER">Bearer Token</option>
         <option value="BASIC">Basic Auth</option>
@@ -769,8 +764,8 @@
     <label for="srvContentPassword">CBOX content password (optional)</label><div class="pwd-wrapper"><input type="password" id="srvContentPassword" placeholder="CBOX content password (optional)" maxlength="1024" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"><button type="button" class="pwd-toggle" onclick="togglePassword(this)">Show</button></div>
     <label for="srvContentPublicKey">CBOX signature public key (optional)</label><textarea id="srvContentPublicKey" placeholder="CBOX signature public key (optional)" maxlength="16384" style="height:90px; margin-bottom:5px;" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
     <div style="display: flex; gap: 10px; margin-top: 10px;">
-        <button onclick="runWithState(this, 'Saving...', addServer)" class="primary" style="flex: 1;">Save Server</button>
-        <button onclick="resetServerForm()" style="flex: 1;">Cancel</button>
+        <button id="srvSaveBtn" onclick="runWithState(this, 'Saving...', addServer)" class="primary" style="flex: 1;" data-i18n="save_server">Save Server</button>
+        <button type="button" onclick="resetServerForm()" style="flex: 1;" data-i18n="cancel">Cancel</button>
     </div>
 </div>
         </div>
@@ -1648,6 +1643,18 @@ try {
             rkpCount: Math.max(0, Math.min(64, Number(server?.rkpCount) || 0)),
             rsaCount: Math.max(0, Math.min(64, Number(server?.rsaCount) || 0)),
             cboxCount: Math.max(0, Math.min(64, Number(server?.cboxCount) || 0)),
+            priority: Number.isInteger(server?.priority) ? server.priority : (Number.parseInt(server?.priority, 10) || 0),
+            enabled: server?.enabled !== false,
+            authType: String(server?.authType || 'NONE'),
+            authData: (server?.authData && typeof server.authData === 'object') ? server.authData : {},
+            autoRefresh: server?.autoRefresh !== false,
+            contentPassword: String(server?.contentPassword || ''),
+            contentPublicKey: String(server?.contentPublicKey || ''),
+            lastStatus: String(server?.lastStatus ?? 'UNKNOWN').slice(0, 128),
+            keyboxCount: Math.max(0, Math.min(64, Number(server?.keyboxCount) || 0)),
+            rkpCount: Math.max(0, Math.min(64, Number(server?.rkpCount) || 0)),
+            rsaCount: Math.max(0, Math.min(64, Number(server?.rsaCount) || 0)),
+            cboxCount: Math.max(0, Math.min(64, Number(server?.cboxCount) || 0)),
             refreshIntervalHours: Math.max(1, Math.min(720, Number(server?.refreshIntervalHours) || 24))
         })).filter(server => server.id && server.url)
         : [];
@@ -1721,16 +1728,30 @@ try {
 
         const refresh = document.createElement('button');
         refresh.style.cssText = 'padding:8px 16px;margin-left:10px;min-height:44px';
-        refresh.textContent = 'Refresh'; refresh.setAttribute('data-i18n', 'refresh');
+        refresh.textContent = (window.CleveresI18n && typeof window.CleveresI18n.translate === 'function')
+            ? window.CleveresI18n.translate('refresh')
+            : ((typeof t === 'function' ? t('refresh') : null) || 'Refresh');
+        refresh.setAttribute('data-i18n', 'refresh');
         refresh.onclick = () => runWithState(refresh, 'Refreshing...', () => refreshServer(String(s.id)));
+
+        const edit = document.createElement('button');
+        edit.style.cssText = 'padding:8px 16px;margin-left:5px;min-height:44px';
+        edit.textContent = (window.CleveresI18n && typeof window.CleveresI18n.translate === 'function')
+            ? window.CleveresI18n.translate('edit')
+            : ((typeof t === 'function' ? t('edit') : null) || 'Edit');
+        edit.setAttribute('data-i18n', 'edit');
+        edit.onclick = () => editServer(s);
 
         const remove = document.createElement('button');
         remove.className = 'danger';
         remove.style.cssText = 'padding:8px 16px;margin-left:5px;min-height:44px';
-        remove.textContent = 'Remove'; remove.setAttribute('data-i18n', 'remove');
+        remove.textContent = (window.CleveresI18n && typeof window.CleveresI18n.translate === 'function')
+            ? window.CleveresI18n.translate('remove')
+            : ((typeof t === 'function' ? t('remove') : null) || 'Remove');
+        remove.setAttribute('data-i18n', 'remove');
         remove.onclick = () => requireConfirm(remove, () => runWithState(remove, 'Removing...', () => deleteServer(String(s.id))), 'Confirm Remove');
 
-        actions.append(status, refresh, remove);
+        actions.append(status, refresh, edit, remove);
         div.append(info, actions);
         list.appendChild(div);
     });
@@ -1747,16 +1768,132 @@ try {
         }
 
         function resetServerForm() {
-document.getElementById('addServerForm').style.display = 'none';
-document.getElementById('srvName').value = '';
-document.getElementById('srvUrl').value = '';
-document.getElementById('srvAuthType').value = 'NONE';
-document.getElementById('authFields').innerHTML = '';
-document.getElementById('srvPriority').value = '0';
-document.getElementById('srvRefreshHours').value = '24';
-document.getElementById('srvAutoRefresh').checked = true;
-document.getElementById('srvContentPassword').value = '';
-document.getElementById('srvContentPublicKey').value = '';
+const editIdInput = document.getElementById('srvEditId');
+if (editIdInput) editIdInput.value = '';
+const form = document.getElementById('addServerForm');
+if (form) form.style.display = 'none';
+const title = document.getElementById('srvFormTitle');
+if (title) {
+    const titleText = (window.CleveresI18n && typeof window.CleveresI18n.translate === 'function')
+        ? window.CleveresI18n.translate('add_server_title')
+        : ((typeof t === 'function' ? t('add_server_title') : null) || '+ Add Server');
+    title.textContent = titleText;
+    title.setAttribute('data-i18n', 'add_server_title');
+}
+const saveBtn = document.getElementById('srvSaveBtn');
+if (saveBtn) {
+    const saveText = (window.CleveresI18n && typeof window.CleveresI18n.translate === 'function')
+        ? window.CleveresI18n.translate('save_server')
+        : ((typeof t === 'function' ? t('save_server') : null) || 'Save Server');
+    saveBtn.textContent = saveText;
+    saveBtn.setAttribute('data-i18n', 'save_server');
+}
+const nameInput = document.getElementById('srvName');
+if (nameInput) nameInput.value = '';
+const urlInput = document.getElementById('srvUrl');
+if (urlInput) urlInput.value = '';
+const authTypeSelect = document.getElementById('srvAuthType');
+if (authTypeSelect) authTypeSelect.value = 'NONE';
+updateAuthFields('NONE');
+const priorityInput = document.getElementById('srvPriority');
+if (priorityInput) priorityInput.value = '0';
+const refreshHoursInput = document.getElementById('srvRefreshHours');
+if (refreshHoursInput) refreshHoursInput.value = '24';
+const autoRefreshCheckbox = document.getElementById('srvAutoRefresh');
+if (autoRefreshCheckbox) autoRefreshCheckbox.checked = true;
+const contentPasswordInput = document.getElementById('srvContentPassword');
+if (contentPasswordInput) contentPasswordInput.value = '';
+const contentPublicKeyInput = document.getElementById('srvContentPublicKey');
+if (contentPublicKeyInput) contentPublicKeyInput.value = '';
+        }
+
+        function updateAuthFields(type) {
+const af = document.getElementById('authFields');
+if (!af) return;
+if (type === 'NONE') af.innerHTML = '';
+else if (type === 'BEARER') af.innerHTML = '<div class="pwd-wrapper"><input type="password" id="srvAuthToken" placeholder="Bearer Token" style="margin-bottom:5px;" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"><button type="button" class="pwd-toggle" onclick="togglePassword(this)">Show</button></div>';
+else if (type === 'BASIC') af.innerHTML = '<input type="text" id="srvAuthUser" placeholder="Username" style="margin-bottom:5px;" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"><div class="pwd-wrapper"><input type="password" id="srvAuthPass" placeholder="Password" style="margin-bottom:5px;" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"><button type="button" class="pwd-toggle" onclick="togglePassword(this)">Show</button></div>';
+else if (type === 'API_KEY') af.innerHTML = '<input type="text" id="srvApiKeyName" placeholder="Header Name (e.g. X-API-Key)" style="margin-bottom:5px;" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"><div class="pwd-wrapper"><input type="password" id="srvApiKeyValue" placeholder="API Key" style="margin-bottom:5px;" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"><button type="button" class="pwd-toggle" onclick="togglePassword(this)">Show</button></div>';
+        }
+
+        function showAddServerForm() {
+resetServerForm();
+const form = document.getElementById('addServerForm');
+if (form) {
+    form.style.display = 'block';
+    try { form.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch (_) {}
+}
+        }
+
+        function editServer(s) {
+if (!s) return;
+resetServerForm();
+const editIdInput = document.getElementById('srvEditId');
+if (editIdInput) editIdInput.value = String(s.id || '');
+
+const title = document.getElementById('srvFormTitle');
+if (title) {
+    const label = (window.CleveresI18n && typeof window.CleveresI18n.translate === 'function')
+        ? window.CleveresI18n.translate('edit_server')
+        : ((typeof t === 'function' ? t('edit_server') : null) || 'Edit Server');
+    title.textContent = label + ': ' + (s.name || s.id || '');
+    title.removeAttribute('data-i18n');
+}
+const saveBtn = document.getElementById('srvSaveBtn');
+if (saveBtn) {
+    const saveText = (window.CleveresI18n && typeof window.CleveresI18n.translate === 'function')
+        ? window.CleveresI18n.translate('save_server')
+        : ((typeof t === 'function' ? t('save_server') : null) || 'Save Server');
+    saveBtn.textContent = saveText;
+}
+
+const nameInput = document.getElementById('srvName');
+if (nameInput) nameInput.value = s.name || '';
+
+const urlInput = document.getElementById('srvUrl');
+if (urlInput) urlInput.value = s.url || '';
+
+const authTypeSelect = document.getElementById('srvAuthType');
+if (authTypeSelect) {
+    authTypeSelect.value = s.authType || 'NONE';
+    updateAuthFields(authTypeSelect.value);
+    const authData = s.authData || {};
+    if (authTypeSelect.value === 'BEARER') {
+        const tokenInput = document.getElementById('srvAuthToken');
+        if (tokenInput && authData.token) tokenInput.value = authData.token;
+    } else if (authTypeSelect.value === 'BASIC') {
+        const userInput = document.getElementById('srvAuthUser');
+        if (userInput && authData.username) userInput.value = authData.username;
+        const passInput = document.getElementById('srvAuthPass');
+        if (passInput && authData.password) passInput.value = authData.password;
+    } else if (authTypeSelect.value === 'API_KEY') {
+        const nameKeyInput = document.getElementById('srvApiKeyName');
+        if (nameKeyInput && authData.headerName) nameKeyInput.value = authData.headerName;
+        const valKeyInput = document.getElementById('srvApiKeyValue');
+        if (valKeyInput && authData.key) valKeyInput.value = authData.key;
+    }
+}
+
+const priorityInput = document.getElementById('srvPriority');
+if (priorityInput) priorityInput.value = s.priority !== undefined ? s.priority : 0;
+
+const refreshHoursInput = document.getElementById('srvRefreshHours');
+if (refreshHoursInput) refreshHoursInput.value = s.refreshIntervalHours || 24;
+
+const autoRefreshCheckbox = document.getElementById('srvAutoRefresh');
+if (autoRefreshCheckbox) autoRefreshCheckbox.checked = s.autoRefresh !== false;
+
+const contentPasswordInput = document.getElementById('srvContentPassword');
+if (contentPasswordInput) contentPasswordInput.value = s.contentPassword || '';
+
+const contentPublicKeyInput = document.getElementById('srvContentPublicKey');
+if (contentPublicKeyInput) contentPublicKeyInput.value = s.contentPublicKey || '';
+
+const form = document.getElementById('addServerForm');
+if (form) {
+    form.style.display = 'block';
+    try { form.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch (_) {}
+}
         }
 
         async function addServer() {
@@ -1775,9 +1912,10 @@ const priority = Number.parseInt(document.getElementById('srvPriority').value, 1
 const refreshIntervalHours = Number.parseInt(document.getElementById('srvRefreshHours').value, 10);
 if (!Number.isInteger(priority) || priority < -1000000 || priority > 1000000) throw new Error('Priority is out of range');
 if (!Number.isInteger(refreshIntervalHours) || refreshIntervalHours < 1 || refreshIntervalHours > 720) throw new Error('Refresh interval is out of range');
-const serverId = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+const editId = (document.getElementById('srvEditId')?.value || '').trim();
+const serverId = editId || ((typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
     ? crypto.randomUUID()
-    : 'srv_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 10);
+    : 'srv_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 10));
 const data = {
     id: serverId,
     name: name.trim(),
@@ -1796,7 +1934,10 @@ const formData = new FormData();
 formData.append('data', JSON.stringify(data));
 const res = await fetchAuth('/api/server/add', { method: 'POST', body: formData, idempotent: true });
 if (!res.ok) throw new Error(await res.text());
-notify('Server Added');
+const successMsg = (window.CleveresI18n && typeof window.CleveresI18n.translate === 'function')
+    ? window.CleveresI18n.translate(editId ? 'Server Updated' : 'Server Added')
+    : ((typeof t === 'function' ? t(editId ? 'Server Updated' : 'Server Added') : null) || (editId ? 'Server Updated' : 'Server Added'));
+notify(successMsg);
 resetServerForm();
 await loadServers();
         }
@@ -1887,7 +2028,7 @@ if (!content) {
     return;
 }
 let filenameInput = document.getElementById('kbFilenameInput').value.trim();
-let filename = filenameInput || 'keybox.xml';
+let filename = filenameInput || (/droid\s*ca|rkp|remote\s*provisioning|key\s*provisioning/i.test(content) ? 'rkp.xml' : 'keybox.xml');
 if (!filename.toLowerCase().endsWith('.xml')) filename += '.xml';
 
 notify('Saving...', 'working');

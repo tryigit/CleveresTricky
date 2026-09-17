@@ -656,7 +656,10 @@ object Config {
                             )
                             allKeyboxes.toList()
                         } else {
-                            val statuses = allKeyboxes.map { keybox -> verifier(keybox, revocation) }
+                            val statuses =
+                                allKeyboxes.map { keybox ->
+                                    if (CertHack.isRkpKeybox(keybox)) KeyboxVerifier.Status.VALID else verifier(keybox, revocation)
+                                }
                             val invalidEntries = allKeyboxes.zip(statuses).filter { it.second != KeyboxVerifier.Status.VALID }
                             if (invalidEntries.isEmpty()) {
                                 allKeyboxes.toList()

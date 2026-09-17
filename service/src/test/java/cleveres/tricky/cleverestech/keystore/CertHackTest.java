@@ -297,7 +297,13 @@ public class CertHackTest {
         CertHack.KeyBox standardBox = new CertHack.KeyBox(kp, List.of(attCert, standardCert), "standard.xml");
         CertHack.KeyBox emptyBox = new CertHack.KeyBox(kp, List.of(), "empty.xml");
 
+        X509Certificate remoteProvCert = generateIssuerCert(kp, "CN=Google Remote Key Provisioning, O=Google LLC, C=US");
+        CertHack.KeyBox remoteProvBox = new CertHack.KeyBox(kp, List.of(attCert, remoteProvCert), "keybox.xml");
+        CertHack.KeyBox filenameRkpBox = new CertHack.KeyBox(kp, List.of(attCert, standardCert), "custom_rkp_keybox.xml");
+
         assertTrue(CertHack.isRkpKeybox(rkpBox));
+        assertTrue(CertHack.isRkpKeybox(remoteProvBox));
+        assertTrue(CertHack.isRkpKeybox(filenameRkpBox));
         assertFalse(CertHack.isRkpKeybox(standardBox));
         assertFalse(CertHack.isRkpKeybox(emptyBox));
         assertFalse(CertHack.isRkpKeybox((CertHack.KeyBox) null));

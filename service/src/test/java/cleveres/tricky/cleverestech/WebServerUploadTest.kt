@@ -272,4 +272,106 @@ class WebServerUploadTest {
         val responseCode = uploadKeybox("../foo.xml", "<xml>bad</xml>")
         assertEquals(400, responseCode)
     }
+
+    private fun uploadKeyboxPost(
+        params: Map<String, String>,
+    ): Pair<Int, String> {
+        val port = server.listeningPort
+        val token = server.token
+        val url = URL("http://localhost:$port/api/upload_keybox?token=$token")
+
+        val postData = params.entries.joinToString("&") { (k, v) ->
+            java.net.URLEncoder.encode(k, StandardCharsets.UTF_8.name()) + "=" +
+                java.net.URLEncoder.encode(v, StandardCharsets.UTF_8.name())
+        }
+        val postDataBytes = postData.toByteArray(StandardCharsets.UTF_8)
+
+        val conn = url.openConnection() as HttpURLConnection
+        conn.requestMethod = "POST"
+        conn.doOutput = true
+        conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+        conn.outputStream.use { it.write(postDataBytes) }
+        val responseCode = conn.responseCode
+        val stream = if (responseCode >= 400) conn.errorStream else conn.inputStream
+        val responseBody = stream?.bufferedReader(StandardCharsets.UTF_8)?.use { it.readText() }.orEmpty()
+        conn.disconnect()
+        return responseCode to responseBody
+    }
+
+    @Test
+    fun testUploadRkpKeyboxWithoutWrapperOrCounts() {
+        val rawRkpXml = """
+            <Keybox>
+              <Key algorithm="ecdsa">
+                <PrivateKey>
+${TestKeyboxFixtures.ecPrivateKey.prependIndent("                  ")}
+                </PrivateKey>
+                <CertificateChain>
+                  <Certificate>
+${TestKeyboxFixtures.certificate.prependIndent("                    ")}
+                  </Certificate>
+                </CertificateChain>
+              </Key>
+            </Keybox>
+        """.trimIndent()
+
+        val (responseCode, _) = uploadKeyboxResponse("rkp.xml", rawRkpXml)
+        assertEquals(200, responseCode)
+        val file = File(configDir, "keyboxes/rkp.xml")
+        assertTrue(file.isFile)
+        val saved = file.readText()
+        assertTrue(saved.contains("<AndroidAttestation>"))
+        assertTrue(saved.contains("<NumberOfKeyboxes>1</NumberOfKeyboxes>"))
+    }
+
+    @Test
+    fun testUploadRkpKeyboxWithoutFilenameDefaultsToRkpXml() {
+        val rawRkpXml = """
+            <Keybox>
+              <Key algorithm="ecdsa">
+                <PrivateKey>
+${TestKeyboxFixtures.ecPrivateKey.prependIndent("                  ")}
+                </PrivateKey>
+                <CertificateChain>
+                  <Certificate>
+${TestKeyboxFixtures.certificate.prependIndent("                    ")}
+                  </Certificate>
+                </CertificateChain>
+              </Key>
+            </Keybox>
+        """.trimIndent()
+
+        val (responseCode, _) = uploadKeyboxPost(mapOf("content" to "<!-- rkp -->\n$rawRkpXml"))
+        assertEquals(200, responseCode)
+        val file = File(configDir, "keyboxes/rkp.xml")
+        assertTrue(file.isFile)
+    }
+
+    @Test
+    fun testUploadRkpKeyboxWithOfflineCrlSucceeds() {
+        val originalRoot = Config.getConfigRoot()
+        try {
+            Config.setRootForTesting(configDir)
+            ManagedKeyboxParserOracle.install()
+            KeyboxLoader.activeSetOverride = { true }
+            File(configDir, "auto_keybox_check").createNewFile()
+            server.stop()
+            server = WebServer(0, configDir, crlFetcher = { null })
+            server.start()
+
+            val rkpXml = TestKeyboxFixtures.validEcKeyboxXml
+
+            // Uploading RKP keybox with offline CRL must succeed
+            val (rkpCode, _) = uploadKeyboxResponse("rkp.xml", rkpXml)
+            assertEquals(200, rkpCode)
+            assertTrue(File(configDir, "keyboxes/rkp.xml").isFile)
+
+            // Uploading standard non-RKP keybox with offline CRL must fail with 503
+            val (standardCode, _) = uploadKeyboxResponse("standard.xml", rkpXml)
+            assertEquals(HttpURLConnection.HTTP_UNAVAILABLE, standardCode)
+        } finally {
+            Config.setRootForTesting(originalRoot)
+            ManagedKeyboxParserOracle.install()
+        }
+    }
 }

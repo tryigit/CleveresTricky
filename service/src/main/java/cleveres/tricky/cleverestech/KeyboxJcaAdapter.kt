@@ -59,9 +59,12 @@ internal object KeyboxJcaAdapter {
     private fun validChain(certificates: List<Certificate>): Boolean {
         for (index in certificates.indices) {
             val certificate = certificates[index] as? X509Certificate ?: return false
-            certificate.checkValidity()
             if (index + 1 < certificates.size) {
-                certificate.verify(certificates[index + 1].publicKey)
+                try {
+                    certificate.verify(certificates[index + 1].publicKey)
+                } catch (_: Exception) {
+                    return false
+                }
             }
         }
         return true

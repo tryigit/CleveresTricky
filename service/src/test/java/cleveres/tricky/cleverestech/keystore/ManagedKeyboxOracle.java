@@ -56,14 +56,20 @@ public final class ManagedKeyboxOracle {
         try {
             XMLParser xmlParser = new XMLParser(reader);
             XMLParser.Element root = xmlParser.getRoot();
-            if (root == null || !"AndroidAttestation".equals(root.name)) return Collections.emptyList();
+            if (root == null || (!"AndroidAttestation".equalsIgnoreCase(root.name) && !"Keybox".equalsIgnoreCase(root.name))) return Collections.emptyList();
 
-            XMLParser.Element numKeyboxes = root.getChild("NumberOfKeyboxes");
-            if (numKeyboxes == null || numKeyboxes.getText() == null) return Collections.emptyList();
-            List<XMLParser.Element> keyboxes = root.getChildren("Keybox");
-            int declaredKeyboxes = Integer.parseInt(Objects.requireNonNull(numKeyboxes.getText()));
-            if (declaredKeyboxes < 1 || declaredKeyboxes > MAX_KEYBOXES_PER_FILE || keyboxes.size() != declaredKeyboxes) {
-                return Collections.emptyList();
+            List<XMLParser.Element> keyboxes;
+            if ("Keybox".equalsIgnoreCase(root.name)) {
+                keyboxes = Collections.singletonList(root);
+            } else {
+                XMLParser.Element numKeyboxes = root.getChild("NumberOfKeyboxes");
+                keyboxes = root.getChildren("Keybox");
+                int declaredKeyboxes = numKeyboxes != null && numKeyboxes.getText() != null
+                        ? Integer.parseInt(Objects.requireNonNull(numKeyboxes.getText()))
+                        : keyboxes.size();
+                if (declaredKeyboxes < 1 || declaredKeyboxes > MAX_KEYBOXES_PER_FILE || keyboxes.size() != declaredKeyboxes) {
+                    return Collections.emptyList();
+                }
             }
 
             for (XMLParser.Element keybox : keyboxes) {
@@ -77,14 +83,14 @@ public final class ManagedKeyboxOracle {
 
                     XMLParser.Element certChain = key.getChild("CertificateChain");
                     if (certChain == null) return Collections.emptyList();
+                    List<XMLParser.Element> certificates = certChain.getChildren("Certificate");
                     XMLParser.Element numCertsElement = certChain.getChild("NumberOfCertificates");
-                    if (numCertsElement == null || numCertsElement.getText() == null) return Collections.emptyList();
-                    int numberOfCertificates = Integer.parseInt(Objects.requireNonNull(numCertsElement.getText()));
-                    if (numberOfCertificates < 1 || numberOfCertificates > MAX_CERTIFICATES_PER_CHAIN) {
+                    int numberOfCertificates = numCertsElement != null && numCertsElement.getText() != null
+                            ? Integer.parseInt(Objects.requireNonNull(numCertsElement.getText()))
+                            : certificates.size();
+                    if (numberOfCertificates < 1 || numberOfCertificates > MAX_CERTIFICATES_PER_CHAIN || certificates.size() != numberOfCertificates) {
                         return Collections.emptyList();
                     }
-                    List<XMLParser.Element> certificates = certChain.getChildren("Certificate");
-                    if (certificates.size() != numberOfCertificates) return Collections.emptyList();
 
                     LinkedList<Certificate> certificateChain = new LinkedList<>();
                     for (int index = 0; index < numberOfCertificates; index++) {
@@ -156,7 +162,6 @@ public final class ManagedKeyboxOracle {
             }
             for (int index = 0; index < certificateChain.size(); index++) {
                 if (!(certificateChain.get(index) instanceof X509Certificate certificate)) return false;
-                certificate.checkValidity();
                 if (index + 1 < certificateChain.size()) certificate.verify(certificateChain.get(index + 1).getPublicKey());
             }
             return true;

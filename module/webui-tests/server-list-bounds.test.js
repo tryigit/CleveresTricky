@@ -42,6 +42,8 @@ function createNode(tag) {
         return false;
       });
     },
+    removeAttribute(k) { delete this[k]; },
+    scrollIntoView() {},
     textContent: '',
     className: '',
     onclick: null
@@ -123,21 +125,45 @@ vm.runInContext(`
   this.loadServers = loadServers;
 `, context, { filename: 'index.html#loadServers' });
 
+const editServerStart = source.indexOf('function editServer(s)');
+const editServerEnd = source.indexOf('async function addServer()', editServerStart);
+assert.ok(editServerStart >= 0 && editServerEnd > editServerStart, 'editServer implementation is missing');
+const editServerImpl = source.slice(editServerStart, editServerEnd);
+
+const resetServerStart = source.indexOf('function resetServerForm()');
+const resetServerEnd = source.indexOf('function updateAuthFields', resetServerStart);
+assert.ok(resetServerStart >= 0 && resetServerEnd > resetServerStart, 'resetServerForm implementation is missing');
+const resetServerImpl = source.slice(resetServerStart, resetServerEnd);
+
+const updateAuthStart = source.indexOf('function updateAuthFields(type)');
+const updateAuthEnd = source.indexOf('function showAddServerForm()', updateAuthStart);
+assert.ok(updateAuthStart >= 0 && updateAuthEnd > updateAuthStart, 'updateAuthFields implementation is missing');
+const updateAuthImpl = source.slice(updateAuthStart, updateAuthEnd);
+
 const addServerStart = source.indexOf('async function addServer()');
 const addServerEnd = source.indexOf('async function deleteServer', addServerStart);
 assert.ok(addServerStart >= 0 && addServerEnd > addServerStart, 'addServer implementation is missing');
 const addServerImpl = source.slice(addServerStart, addServerEnd);
 
 const serverInputs = {
+  srvEditId: { value: '' },
   srvName: { value: 'Primary Feed' },
   srvUrl: { value: 'https://example.test/repo' },
   srvAuthType: { value: 'BEARER' },
   srvAuthToken: { value: 'secret-token' },
+  srvApiKeyName: { value: '' },
+  srvApiKeyValue: { value: '' },
+  srvAuthUser: { value: '' },
+  srvAuthPass: { value: '' },
   srvPriority: { value: '10' },
   srvRefreshHours: { value: '6' },
   srvAutoRefresh: { checked: true },
   srvContentPassword: { value: 'pass' },
-  srvContentPublicKey: { value: 'pubkey' }
+  srvContentPublicKey: { value: 'pubkey' },
+  srvFormTitle: createNode('h4'),
+  srvSaveBtn: createNode('button'),
+  addServerForm: createNode('div'),
+  authFields: createNode('div')
 };
 
 let addServerPostPayload = null;
@@ -154,7 +180,7 @@ context.FormData = TestFormData;
 context.URL = URL;
 context.crypto = crypto;
 context.notify = () => {};
-context.resetServerForm = () => { resetCalled = true; };
+context.onResetServerForm = () => { resetCalled = true; };
 
 const origGetElementById = context.document.getElementById;
 context.document.getElementById = (id) => {
@@ -173,9 +199,20 @@ context.fetchAuth = (path, options) => {
 };
 
 vm.runInContext(`
+  ${updateAuthImpl}
+  ${resetServerImpl}
+  ${editServerImpl}
+  const realReset = resetServerForm;
+  resetServerForm = () => {
+    if (typeof this.onResetServerForm === 'function') this.onResetServerForm();
+    return realReset();
+  };
   ${addServerImpl}
+  this.updateAuthFields = updateAuthFields;
+  this.realResetServerForm = realReset;
+  this.editServer = editServer;
   this.addServer = addServer;
-`, context, { filename: 'index.html#addServer' });
+`, context, { filename: 'index.html#serverFormHandlers' });
 
 (async () => {
   await context.loadServers();
@@ -193,6 +230,11 @@ vm.runInContext(`
   assert.equal(hubHint.style.display, 'none', 'hub recommendation must be hidden when keybox.tryigit.dev is present');
   const serverItem = appended[0];
   const infoCol = serverItem.children[0];
+  const actionsCol = serverItem.children[1];
+  assert.ok(actionsCol, 'actions column must be rendered');
+  const editBtn = actionsCol.children.find(c => c.getAttribute('data-i18n') === 'edit');
+  assert.ok(editBtn, 'edit action button must be rendered');
+  assert.equal(editBtn.textContent, 'Edit');
   const nameRow = infoCol.children[0];
   const intervalBadge = nameRow.children && nameRow.children.find(c => c.className === 'ct-badge ct-badge-interval');
   assert.ok(intervalBadge, 'refresh interval badge must be rendered in header');
@@ -223,6 +265,48 @@ vm.runInContext(`
   assert.equal(addServerPostPayload.url, 'https://example.test/repo');
   assert.equal(resetCalled, true, 'resetServerForm must be called');
   assert.equal(loadCalled, true, 'loadServers must be called');
+
+  // Test editing server pre-populates form fields
+  const testServer = {
+    id: 'hub-server-custom',
+    name: 'Custom Hub',
+    url: 'https://keybox.tryigit.dev/feed',
+    authType: 'API_KEY',
+    authData: { headerName: 'X-API-Key', key: 'secret-key-123' },
+    priority: 15,
+    refreshIntervalHours: 48,
+    autoRefresh: true,
+    contentPassword: 'my-cbox-password',
+    contentPublicKey: 'my-cbox-public-key'
+  };
+  context.editServer(testServer);
+  assert.equal(serverInputs.srvEditId.value, 'hub-server-custom');
+  assert.equal(serverInputs.srvName.value, 'Custom Hub');
+  assert.equal(serverInputs.srvUrl.value, 'https://keybox.tryigit.dev/feed');
+  assert.equal(serverInputs.srvAuthType.value, 'API_KEY');
+  assert.equal(serverInputs.srvApiKeyName.value, 'X-API-Key');
+  assert.equal(serverInputs.srvApiKeyValue.value, 'secret-key-123');
+  assert.equal(serverInputs.srvPriority.value, 15);
+  assert.equal(serverInputs.srvRefreshHours.value, 48);
+  assert.equal(serverInputs.srvContentPassword.value, 'my-cbox-password');
+  assert.equal(serverInputs.srvContentPublicKey.value, 'my-cbox-public-key');
+  assert.equal(serverInputs.srvFormTitle.textContent, 'Edit Server: Custom Hub');
+  assert.equal(serverInputs.srvSaveBtn.textContent, 'Save Server');
+
+  // Verify addServer preserves edit ID and notifies update
+  let lastNotification = '';
+  context.notify = (msg) => { lastNotification = msg; };
+  await context.addServer();
+  assert.equal(addServerPostPayload.id, 'hub-server-custom', 'addServer must preserve server ID when editing');
+  assert.equal(addServerPostPayload.name, 'Custom Hub');
+  assert.equal(lastNotification, 'Server Updated');
+
+  // Verify resetServerForm clears edit state
+  context.realResetServerForm();
+  assert.equal(serverInputs.srvEditId.value, '', 'edit ID must be cleared on form reset');
+  assert.equal(serverInputs.srvName.value, '');
+  assert.equal(serverInputs.srvUrl.value, '');
+  assert.equal(serverInputs.srvFormTitle.textContent, '+ Add Server');
 
   // Verify ux.js syncKeyboxHubHintVisibility behavior
   const uxSource = fs.readFileSync('module/template/webroot/ux.js', 'utf8');

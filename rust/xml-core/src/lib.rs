@@ -284,13 +284,22 @@ pub fn parse_keybox_xml(input: &str) -> Result<KeyboxDocument, XmlError> {
     if !state.root_seen {
         return Err(XmlError::InvalidRoot);
     }
-    let declared_keyboxes = parse_bounded_count(
-        state.declared_keyboxes.as_deref(),
-        MAX_KEYBOXES_PER_FILE,
-        XmlError::InvalidKeyboxCount,
-    )?;
-    if declared_keyboxes != state.keybox_count {
-        return Err(XmlError::InvalidKeyboxCount);
+    let declared_keyboxes = match state.declared_keyboxes.as_deref() {
+        Some(declared) => {
+            let count = parse_bounded_count(
+                Some(declared),
+                MAX_KEYBOXES_PER_FILE,
+                XmlError::InvalidKeyboxCount,
+            )?;
+            if count != state.keybox_count {
+                return Err(XmlError::InvalidKeyboxCount);
+            }
+            count
+        }
+        None => state.keybox_count,
+    };
+    if declared_keyboxes == 0 {
+        return Err(XmlError::MissingField);
     }
 
     Ok(KeyboxDocument {
@@ -327,14 +336,21 @@ fn begin_element(
         }
         state.root_seen = true;
         validate_attributes(start, None)?;
-        if name != "AndroidAttestation" {
+        if name.eq_ignore_ascii_case("Keybox") {
+            if state.current_keybox.is_some() || state.keybox_count >= MAX_KEYBOXES_PER_FILE {
+                return Err(XmlError::InvalidKeyboxCount);
+            }
+            state.current_keybox = Some(KeyboxBuilder::default());
+            return Ok(Frame::plain(Role::Keybox));
+        }
+        if !name.eq_ignore_ascii_case("AndroidAttestation") {
             return Err(XmlError::InvalidRoot);
         }
         return Ok(Frame::plain(Role::Root));
     }
 
     let mut algorithm = None;
-    let is_direct_key = parent == Some(Role::Keybox) && name == "Key";
+    let is_direct_key = parent == Some(Role::Keybox) && name.eq_ignore_ascii_case("Key");
     validate_attributes(
         start,
         if is_direct_key {
@@ -344,18 +360,20 @@ fn begin_element(
         },
     )?;
 
-    match (parent, name) {
-        (Some(Role::Root), "NumberOfKeyboxes") if state.declared_keyboxes.is_none() => {
+    let name_is = |expected: &str| -> bool { name.eq_ignore_ascii_case(expected) };
+
+    match parent {
+        Some(Role::Root) if name_is("NumberOfKeyboxes") && state.declared_keyboxes.is_none() => {
             Ok(Frame::capture(Role::NumberOfKeyboxes))
         }
-        (Some(Role::Root), "Keybox") => {
+        Some(Role::Root) if name_is("Keybox") => {
             if state.current_keybox.is_some() || state.keybox_count >= MAX_KEYBOXES_PER_FILE {
                 return Err(XmlError::InvalidKeyboxCount);
             }
             state.current_keybox = Some(KeyboxBuilder::default());
             Ok(Frame::plain(Role::Keybox))
         }
-        (Some(Role::Keybox), "Key") => {
+        Some(Role::Keybox) if name_is("Key") => {
             let keybox = state.current_keybox.as_ref().ok_or(XmlError::Malformed)?;
             if state.current_key.is_some() || keybox.keys.len() >= MAX_KEYS_PER_KEYBOX {
                 return Err(XmlError::InvalidKeyCount);
@@ -372,34 +390,37 @@ fn begin_element(
             });
             Ok(Frame::plain(Role::Key))
         }
-        (Some(Role::Key), "PrivateKey")
-            if state
-                .current_key
-                .as_ref()
-                .is_some_and(|key| key.private_key.is_none()) =>
+        Some(Role::Key)
+            if name_is("PrivateKey")
+                && state
+                    .current_key
+                    .as_ref()
+                    .is_some_and(|key| key.private_key.is_none()) =>
         {
             Ok(Frame::capture(Role::PrivateKey))
         }
-        (Some(Role::Key), "CertificateChain")
-            if state
-                .current_key
-                .as_ref()
-                .is_some_and(|key| key.chain.is_none()) =>
+        Some(Role::Key)
+            if name_is("CertificateChain")
+                && state
+                    .current_key
+                    .as_ref()
+                    .is_some_and(|key| key.chain.is_none()) =>
         {
             state.current_key.as_mut().ok_or(XmlError::Malformed)?.chain =
                 Some(ChainBuilder::default());
             Ok(Frame::plain(Role::CertificateChain))
         }
-        (Some(Role::CertificateChain), "NumberOfCertificates")
-            if state
-                .current_key
-                .as_ref()
-                .and_then(|key| key.chain.as_ref())
-                .is_some_and(|chain| chain.declared_count.is_none()) =>
+        Some(Role::CertificateChain)
+            if name_is("NumberOfCertificates")
+                && state
+                    .current_key
+                    .as_ref()
+                    .and_then(|key| key.chain.as_ref())
+                    .is_some_and(|chain| chain.declared_count.is_none()) =>
         {
             Ok(Frame::capture(Role::NumberOfCertificates))
         }
-        (Some(Role::CertificateChain), "Certificate") => {
+        Some(Role::CertificateChain) if name_is("Certificate") => {
             let chain = state
                 .current_key
                 .as_ref()
@@ -523,13 +544,22 @@ fn finish_key(state: &mut ParseState) -> Result<(), XmlError> {
         return Err(XmlError::MissingField);
     }
     let chain = key.chain.take().ok_or(XmlError::MissingField)?;
-    let declared_count = parse_bounded_count(
-        chain.declared_count.as_deref(),
-        MAX_CERTIFICATES_PER_CHAIN,
-        XmlError::InvalidCertificateCount,
-    )?;
-    if declared_count != chain.certificates.len() {
-        return Err(XmlError::InvalidCertificateCount);
+    let declared_count = match chain.declared_count.as_deref() {
+        Some(declared) => {
+            let count = parse_bounded_count(
+                Some(declared),
+                MAX_CERTIFICATES_PER_CHAIN,
+                XmlError::InvalidCertificateCount,
+            )?;
+            if count != chain.certificates.len() {
+                return Err(XmlError::InvalidCertificateCount);
+            }
+            count
+        }
+        None => chain.certificates.len(),
+    };
+    if declared_count == 0 {
+        return Err(XmlError::MissingField);
     }
     let destination = state.current_keybox.as_mut().ok_or(XmlError::Malformed)?;
     let private_key_pem = key.private_key.take().ok_or(XmlError::MissingField)?;
@@ -774,5 +804,42 @@ mod tests {
         }
         nested.push_str("</AndroidAttestation>");
         assert_eq!(parse_keybox_xml(&nested).unwrap_err(), XmlError::DepthLimit);
+    }
+
+    #[test]
+    fn keybox_root_and_missing_counts_are_supported() {
+        let direct_keybox = r#"<Keybox DeviceID="test-rkp">
+            <Key algorithm="ecdsa">
+                <PrivateKey>KEY_MATERIAL</PrivateKey>
+                <CertificateChain>
+                    <Certificate>CERT_ONE</Certificate>
+                    <Certificate>CERT_TWO</Certificate>
+                </CertificateChain>
+            </Key>
+        </Keybox>"#;
+        let parsed = parse_keybox_xml(direct_keybox).expect("direct Keybox root must parse");
+        assert_eq!(parsed.declared_keyboxes, 1);
+        assert_eq!(parsed.keybox_count, 1);
+        assert_eq!(parsed.keys.len(), 1);
+        assert_eq!(parsed.keys[0].certificates_pem.len(), 2);
+    }
+
+    #[test]
+    fn missing_count_elements_default_to_actual_counts() {
+        let no_counts = r#"<AndroidAttestation>
+            <Keybox>
+                <Key algorithm="EC">
+                    <PrivateKey>KEY_MATERIAL</PrivateKey>
+                    <CertificateChain>
+                        <Certificate>CERT_ONE</Certificate>
+                    </CertificateChain>
+                </Key>
+            </Keybox>
+        </AndroidAttestation>"#;
+        let parsed = parse_keybox_xml(no_counts).expect("missing count elements must parse");
+        assert_eq!(parsed.declared_keyboxes, 1);
+        assert_eq!(parsed.keybox_count, 1);
+        assert_eq!(parsed.keys.len(), 1);
+        assert_eq!(parsed.keys[0].certificates_pem.len(), 1);
     }
 }
