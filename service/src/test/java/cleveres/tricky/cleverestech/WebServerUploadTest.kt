@@ -548,6 +548,11 @@ ${TestKeyboxFixtures.certificate.prependIndent("                    ")}
             assertTrue(File(configDir, "keyboxes/mixed_rkp.xml").isFile)
             assertTrue(RkpProvenanceStore.isRkp("mixed_rkp.xml", configDir))
 
+            val storedFileText = File(configDir, "keyboxes/mixed_rkp.xml").readText()
+            assertTrue(storedFileText.contains("algorithm=\"ecdsa\""))
+            assertFalse(storedFileText.contains("algorithm=\"rsa\""))
+            assertFalse(storedFileText.contains("Rm9yIG1vcmU"))
+
             val reloaded = KeyboxLoader.parseFileSnapshot(KeyboxLoader.FileScope.KEYBOX_DIRECTORY, "mixed_rkp.xml")
             assertEquals(1, reloaded.keyboxes.size)
             assertEquals("EC", reloaded.keyboxes.first().keyPair()?.public?.algorithm)

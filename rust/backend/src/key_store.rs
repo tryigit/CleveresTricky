@@ -66,11 +66,7 @@ pub fn register_document(document: &KeyboxDocument) -> Result<Vec<PublicKeyRecor
         .try_reserve_exact(document.keys.len())
         .map_err(|_| "keybox store allocation failed")?;
     for raw in &document.keys {
-        match build_stored_key(
-            &raw.algorithm,
-            &raw.private_key_pem,
-            &raw.certificates_pem,
-        ) {
+        match build_stored_key(&raw.algorithm, &raw.private_key_pem, &raw.certificates_pem) {
             Ok(key) => pending.push(key),
             Err(_) => {
                 // Sibling key in multi-key keybox may be malformed or dummy placeholder.

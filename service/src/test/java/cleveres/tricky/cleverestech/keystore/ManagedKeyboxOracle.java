@@ -83,45 +83,33 @@ public final class ManagedKeyboxOracle {
                 List<XMLParser.Element> keys = keybox.getChildren("Key");
                 if (keys.isEmpty() || keys.size() > MAX_KEYS_PER_KEYBOX) return Collections.emptyList();
                 for (XMLParser.Element key : keys) {
-                    try {
-                        String declaredAlgorithm = key.attributes.get("algorithm");
-                        XMLParser.Element privateKeyElement = key.getChild("PrivateKey");
-                        String privateKey = privateKeyElement != null ? privateKeyElement.getText() : null;
-                        if (privateKey == null || privateKey.length() > MAX_PEM_CHARS) continue;
+                    String declaredAlgorithm = key.attributes.get("algorithm");
+                    XMLParser.Element privateKeyElement = key.getChild("PrivateKey");
+                    String privateKey = privateKeyElement != null ? privateKeyElement.getText() : null;
+                    if (privateKey == null || privateKey.length() > MAX_PEM_CHARS) return Collections.emptyList();
 
-                        XMLParser.Element certChain = key.getChild("CertificateChain");
-                        if (certChain == null) continue;
-                        List<XMLParser.Element> certificates = certChain.getChildren("Certificate");
-                        XMLParser.Element numCertsElement = certChain.getChild("NumberOfCertificates");
-                        int numberOfCertificates = numCertsElement != null && numCertsElement.getText() != null
-                                ? Integer.parseInt(Objects.requireNonNull(numCertsElement.getText()))
-                                : certificates.size();
-                        if (numberOfCertificates < 1 || numberOfCertificates > MAX_CERTIFICATES_PER_CHAIN || certificates.size() != numberOfCertificates) {
-                            continue;
-                        }
-
-                        LinkedList<Certificate> certificateChain = new LinkedList<>();
-                        boolean certsOk = true;
-                        for (int index = 0; index < numberOfCertificates; index++) {
-                            String certPem = certificates.get(index).getText();
-                            if (certPem == null || certPem.length() > MAX_PEM_CHARS) {
-                                certsOk = false;
-                                break;
-                            }
-                            certificateChain.add(parseCert(certPem));
-                        }
-                        if (!certsOk || certificateChain.isEmpty() || certificateChain.size() != numberOfCertificates) {
-                            continue;
-                        }
-                        KeyPair pair = parseKeyPair(privateKey, certificateChain.getFirst().getPublicKey());
-                        if (!isValidKeybox(pair, certificateChain, declaredAlgorithm)) continue;
-                        parsedList.add(new CertHack.KeyBox(pair, certificateChain, filename, authenticatedRkpProvenance));
-                    } catch (Throwable keyError) {
-                        Logger.w("Managed keybox oracle skipped invalid key: " + keyError.getMessage());
+                    XMLParser.Element certChain = key.getChild("CertificateChain");
+                    if (certChain == null) return Collections.emptyList();
+                    List<XMLParser.Element> certificates = certChain.getChildren("Certificate");
+                    XMLParser.Element numCertsElement = certChain.getChild("NumberOfCertificates");
+                    int numberOfCertificates = numCertsElement != null && numCertsElement.getText() != null
+                            ? Integer.parseInt(Objects.requireNonNull(numCertsElement.getText()))
+                            : certificates.size();
+                    if (numberOfCertificates < 1 || numberOfCertificates > MAX_CERTIFICATES_PER_CHAIN || certificates.size() != numberOfCertificates) {
+                        return Collections.emptyList();
                     }
+
+                    LinkedList<Certificate> certificateChain = new LinkedList<>();
+                    for (int index = 0; index < numberOfCertificates; index++) {
+                        String certPem = certificates.get(index).getText();
+                        if (certPem == null || certPem.length() > MAX_PEM_CHARS) return Collections.emptyList();
+                        certificateChain.add(parseCert(certPem));
+                    }
+                    KeyPair pair = parseKeyPair(privateKey, certificateChain.getFirst().getPublicKey());
+                    if (!isValidKeybox(pair, certificateChain, declaredAlgorithm)) return Collections.emptyList();
+                    parsedList.add(new CertHack.KeyBox(pair, certificateChain, filename, authenticatedRkpProvenance));
                 }
             }
-            if (parsedList.isEmpty()) return Collections.emptyList();
             return parsedList;
         } catch (Throwable error) {
             Logger.e("Managed keybox oracle rejected XML: " + error.getClass().getName());
