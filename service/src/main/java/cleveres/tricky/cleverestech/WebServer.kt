@@ -808,50 +808,66 @@ class WebServer(
     private fun validateUploadedKeyboxXml(
         bytes: ByteArray,
         filename: String,
-        authenticatedRkpProvenance: Boolean = false,
-    ): KeyboxUploadValidation {
+        authenticatedRkpHint: Boolean = false,
+    ): Pair<KeyboxUploadValidation, Boolean> {
         return try {
-            val keyboxes = KeyboxLoader.parse(bytes.copyOf(), filename, authenticatedRkpProvenance)
-            if (keyboxes.isEmpty()) return KeyboxUploadValidation.INVALID
+            val unauthenticatedKeyboxes = KeyboxLoader.parse(bytes.copyOf(), filename, false)
+            if (unauthenticatedKeyboxes.isEmpty()) {
+                return Pair(KeyboxUploadValidation.INVALID, false)
+            }
+
+            val isRkp = unauthenticatedKeyboxes.all(RkpProvenanceStore::hasVerifiedRkpCertificates)
+            val effectiveRkp = isRkp && (authenticatedRkpHint || isRkp)
+
+            val keyboxes =
+                if (effectiveRkp) {
+                    KeyboxLoader.parse(bytes.copyOf(), filename, true)
+                } else {
+                    unauthenticatedKeyboxes
+                }
+
             if (!Config.isAutoKeyboxCheckEnabled) {
-                return KeyboxUploadValidation.VALID
+                return Pair(KeyboxUploadValidation.VALID, effectiveRkp)
             }
             if (keyboxes.all(CertHack::isRkpKeybox)) {
-                return KeyboxUploadValidation.VALID
+                return Pair(KeyboxUploadValidation.VALID, effectiveRkp)
             }
             val nonRkpKeyboxes = keyboxes.filterNot(CertHack::isRkpKeybox)
             val allValid =
                 crlFetcher?.let { legacyFetcher ->
-                    val revoked = legacyFetcher() ?: return KeyboxUploadValidation.REVOCATION_UNAVAILABLE
+                    val revoked = legacyFetcher() ?: return Pair(KeyboxUploadValidation.REVOCATION_UNAVAILABLE, false)
                     nonRkpKeyboxes.all { KeyboxVerifier.verifyKeyboxLegacy(it, revoked) == KeyboxVerifier.Status.VALID }
                 } ?: run {
                     val revoked = KeyboxVerifier.fetchCrl()
-                        ?: return KeyboxUploadValidation.REVOCATION_UNAVAILABLE
+                        ?: return Pair(KeyboxUploadValidation.REVOCATION_UNAVAILABLE, false)
                     nonRkpKeyboxes.all { KeyboxVerifier.verifyKeybox(it, revoked) == KeyboxVerifier.Status.VALID }
                 }
-            if (allValid) KeyboxUploadValidation.VALID else KeyboxUploadValidation.INVALID
+            val validation = if (allValid) KeyboxUploadValidation.VALID else KeyboxUploadValidation.INVALID
+            Pair(validation, if (validation == KeyboxUploadValidation.VALID) effectiveRkp else false)
         } catch (_: RustBackendUnavailableException) {
-            KeyboxUploadValidation.BACKEND_UNAVAILABLE
+            Pair(KeyboxUploadValidation.BACKEND_UNAVAILABLE, false)
         } catch (_: Exception) {
-            KeyboxUploadValidation.INVALID
+            Pair(KeyboxUploadValidation.INVALID, false)
         }
     }
 
     private fun validateUploadedKeyboxXml(
         content: String,
         filename: String,
-        authenticatedRkpProvenance: Boolean = false,
-    ): KeyboxUploadValidation =
-        validateUploadedKeyboxXml(content.toByteArray(Charsets.UTF_8), filename, authenticatedRkpProvenance)
+        authenticatedRkpHint: Boolean = false,
+    ): Pair<KeyboxUploadValidation, Boolean> =
+        validateUploadedKeyboxXml(content.toByteArray(Charsets.UTF_8), filename, authenticatedRkpHint)
 
-    private fun isAuthenticatedRkpUpload(
+    private fun isRkpUploadHint(
         session: IHTTPSession,
         map: Map<String, String>,
     ): Boolean {
         fun isTrue(value: String?): Boolean =
             value?.equals("true", ignoreCase = true) == true || value == "1"
 
-        return isTrue(getParam(session, "authenticated_rkp")) ||
+        return isTrue(getParam(session, "rkp_hint")) ||
+            isTrue(map["rkp_hint"]) ||
+            isTrue(getParam(session, "authenticated_rkp")) ||
             isTrue(map["authenticated_rkp"]) ||
             isTrue(getParam(session, "is_rkp")) ||
             isTrue(map["is_rkp"]) ||
@@ -1541,7 +1557,7 @@ class WebServer(
             val content = rawContent?.let(::normalizeKeyboxXmlContent)
             val filename = getParam(session, "filename")
                 ?: (if (content != null && (content.contains("droid ca", ignoreCase = true) || content.contains("rkp", ignoreCase = true) || content.contains("remote provisioning", ignoreCase = true) || content.contains("key provisioning", ignoreCase = true))) "rkp.xml" else null)
-            val authenticatedRkp = isAuthenticatedRkpUpload(session, map)
+            val authenticatedRkp = isRkpUploadHint(session, map)
             val tmpFilePath = map["file"]
             if (tmpFilePath != null) {
                 val originalName = getParam(session, "filename") ?: "upload.bin"
@@ -1583,8 +1599,14 @@ class WebServer(
                             val normalizedBytes =
                                 normalizeKeyboxXmlContent(bytes.toString(Charsets.UTF_8)).toByteArray(Charsets.UTF_8)
                             try {
-                                keyboxValidationError(validateUploadedKeyboxXml(normalizedBytes, storedName, authenticatedRkp))?.let { return it }
+                                val (validation, isRkp) = validateUploadedKeyboxXml(normalizedBytes, storedName, authenticatedRkp)
+                                keyboxValidationError(validation)?.let { return it }
                                 SecureFile.writeBytes(dest, normalizedBytes)
+                                if (isRkp) {
+                                    RkpProvenanceStore.recordRkp(storedName, configDir)
+                                } else {
+                                    RkpProvenanceStore.removeRkp(storedName, configDir)
+                                }
                             } finally {
                                 normalizedBytes.fill(0)
                             }
@@ -1613,7 +1635,8 @@ class WebServer(
                 isValidKeyboxFilename(storedName)
             ) {
                 synchronized(fileLock) {
-                    keyboxValidationError(validateUploadedKeyboxXml(content, storedName, authenticatedRkp))?.let { return it }
+                    val (validation, isRkp) = validateUploadedKeyboxXml(content, storedName, authenticatedRkp)
+                    keyboxValidationError(validation)?.let { return it }
                     val keyboxDir = File(configDir, "keyboxes")
                     SecureFile.mkdirs(keyboxDir, 448)
                     val file = getSafeFile(keyboxDir, storedName)
@@ -1622,6 +1645,11 @@ class WebServer(
                     }
                     try {
                         SecureFile.writeText(file, content)
+                        if (isRkp) {
+                            RkpProvenanceStore.recordRkp(storedName, configDir)
+                        } else {
+                            RkpProvenanceStore.removeRkp(storedName, configDir)
+                        }
                         if (!updateKeyboxesFromConfiguredRevocationSource()) {
                             return keyboxActivationFailureResponse()
                         }
@@ -1654,6 +1682,7 @@ class WebServer(
                 val source = StoredKeyboxInventory.resolve(configDir, scope, filename)
                     ?: return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid keybox source")
                 if (source.file.delete()) {
+                    RkpProvenanceStore.removeRkp(source.filename, configDir)
                     if (source.isCbox) {
                         Files.deleteIfExists(File(source.file.parentFile, "${source.filename}.cache").toPath())
                         CboxManager.refresh()
@@ -1695,6 +1724,7 @@ class WebServer(
                         continue
                     }
                     deleted++
+                    RkpProvenanceStore.removeRkp(source.filename, configDir)
                     if (source.isCbox) {
                         Files.deleteIfExists(File(source.file.parentFile, "${source.filename}.cache").toPath())
                         cboxChanged = true
@@ -2777,6 +2807,7 @@ class WebServer(
                 "spoof_region_cn",
                 "telephony",
                 "camera_visibility",
+                RkpProvenanceStore.PROVENANCE_FILE_NAME,
                 // Retained only for legacy backup compatibility.
                 "rkp_passthrough",
                 "drm_passthrough",

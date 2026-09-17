@@ -2044,7 +2044,8 @@ try {
     formData.append('filename', filename);
     formData.append('content', content);
     if (isRkp) {
-        formData.append('authenticated_rkp', 'true');
+        // Advisory hint only; server enforces cryptographic chain validation before establishing RKP provenance
+        formData.append('rkp_hint', 'true');
     }
     const res = await fetchAuth('/api/upload_keybox', {
         method: 'POST',

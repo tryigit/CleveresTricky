@@ -45,4 +45,56 @@ object TestKeyboxFixtures {
             appendLine("  </Keybox>")
             append("</AndroidAttestation>")
         }
+
+    val validRkpKeyboxXml: String by lazy {
+        val kpg = java.security.KeyPairGenerator.getInstance("EC")
+        kpg.initialize(java.security.spec.ECGenParameterSpec("secp256r1"))
+        val kp = kpg.generateKeyPair()
+
+        val notBefore = java.util.Date(System.currentTimeMillis() - 10_000L)
+        val notAfter = java.util.Date(System.currentTimeMillis() + 100_000_000L)
+        val name = org.bouncycastle.asn1.x500.X500Name("CN=Droid CA2, O=Google LLC, C=US")
+        val serial = java.math.BigInteger.valueOf(System.currentTimeMillis())
+        val builder = org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder(
+            name,
+            serial,
+            notBefore,
+            notAfter,
+            name,
+            kp.public,
+        )
+        val signer = org.bouncycastle.operator.jcajce.JcaContentSignerBuilder("SHA256withECDSA").build(kp.private)
+        val cert = org.bouncycastle.cert.jcajce.JcaX509CertificateConverter().getCertificate(builder.build(signer))
+
+        val keyPem = buildString {
+            appendLine("-----BEGIN PRIVATE KEY-----")
+            appendLine(java.util.Base64.getMimeEncoder(64, "\n".toByteArray()).encodeToString(kp.private.encoded))
+            appendLine("-----END PRIVATE KEY-----")
+        }
+        val certPem = buildString {
+            appendLine("-----BEGIN CERTIFICATE-----")
+            appendLine(java.util.Base64.getMimeEncoder(64, "\n".toByteArray()).encodeToString(cert.encoded))
+            appendLine("-----END CERTIFICATE-----")
+        }
+
+        buildString {
+            appendLine("""<?xml version="1.0"?>""")
+            appendLine("<AndroidAttestation>")
+            appendLine("  <NumberOfKeyboxes>1</NumberOfKeyboxes>")
+            appendLine("  <Keybox>")
+            appendLine("    <Key algorithm=\"ecdsa\">")
+            appendLine("      <PrivateKey>")
+            appendLine(keyPem.trim().prependIndent("        "))
+            appendLine("      </PrivateKey>")
+            appendLine("      <CertificateChain>")
+            appendLine("        <NumberOfCertificates>1</NumberOfCertificates>")
+            appendLine("        <Certificate>")
+            appendLine(certPem.trim().prependIndent("          "))
+            appendLine("        </Certificate>")
+            appendLine("      </CertificateChain>")
+            appendLine("    </Key>")
+            appendLine("  </Keybox>")
+            append("</AndroidAttestation>")
+        }
+    }
 }

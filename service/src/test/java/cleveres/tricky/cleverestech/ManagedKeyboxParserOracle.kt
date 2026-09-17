@@ -9,11 +9,9 @@ import java.security.MessageDigest
 internal object ManagedKeyboxParserOracle {
     fun install() {
         ManagedOpaqueKeyOracle.reset()
+        KeyboxLoader.parserOverride = null
         KeyboxLoader.parserWithProvenanceOverride = { bytes, filename, authenticatedRkpProvenance ->
             ManagedOpaqueKeyOracle.parse(StringReader(bytes.toString(Charsets.UTF_8)), filename, authenticatedRkpProvenance)
-        }
-        KeyboxLoader.parserOverride = { bytes, filename ->
-            ManagedOpaqueKeyOracle.parse(StringReader(bytes.toString(Charsets.UTF_8)), filename, false)
         }
         KeyboxLoader.fileParserOverride = { scope, filename ->
             val file =
@@ -23,9 +21,10 @@ internal object ManagedKeyboxParserOracle {
                 }
             val snapshot = readFileSnapshotBounded(file, 1, StoredKeyboxInventory.MAX_XML_BYTES)
             try {
+                val isRkp = RkpProvenanceStore.isRkp(filename)
                 KeyboxLoader.ParsedFile(
                     snapshotSha256 = sha256Hex(snapshot),
-                    keyboxes = ManagedOpaqueKeyOracle.parse(StringReader(snapshot.toString(Charsets.UTF_8)), filename),
+                    keyboxes = ManagedOpaqueKeyOracle.parse(StringReader(snapshot.toString(Charsets.UTF_8)), filename, isRkp),
                 )
             } finally {
                 snapshot.fill(0)
@@ -37,6 +36,7 @@ internal object ManagedKeyboxParserOracle {
     fun reset() {
         KeyboxLoader.resetForTesting()
         ManagedOpaqueKeyOracle.reset()
+        RkpProvenanceStore.resetForTesting()
     }
 
     private fun sha256Hex(bytes: ByteArray): String {

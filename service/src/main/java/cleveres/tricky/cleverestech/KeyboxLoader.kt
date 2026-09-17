@@ -49,12 +49,12 @@ internal object KeyboxLoader {
         authenticatedRkpProvenance: Boolean = false,
     ): List<CertHack.KeyBox> =
         try {
-            val withProvenance = parserWithProvenanceOverride
             val override = parserOverride
-            if (withProvenance != null) {
-                withProvenance(xml, filename, authenticatedRkpProvenance)
-            } else if (override != null) {
+            val withProvenance = parserWithProvenanceOverride
+            if (override != null) {
                 override(xml, filename)
+            } else if (withProvenance != null) {
+                withProvenance(xml, filename, authenticatedRkpProvenance)
             } else {
                 val document = NativeBackend.parseKeybox(xml)
                 if (document == null) emptyList() else KeyboxJcaAdapter.materialize(document, filename, authenticatedRkpProvenance)
@@ -83,9 +83,10 @@ internal object KeyboxLoader {
             } else {
                 val document = NativeBackend.parseKeyboxFile(scope.wireValue, filename)
                     ?: return ParsedFile(null, emptyList())
+                val isRkp = RkpProvenanceStore.isRkp(storageId.ifEmpty { filename })
                 ParsedFile(
                     snapshotSha256 = document.snapshotSha256,
-                    keyboxes = KeyboxJcaAdapter.materialize(document, storageId.ifEmpty { filename }),
+                    keyboxes = KeyboxJcaAdapter.materialize(document, storageId.ifEmpty { filename }, isRkp),
                 )
             }
         } catch (error: RustBackendUnavailableException) {

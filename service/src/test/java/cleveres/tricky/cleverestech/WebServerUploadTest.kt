@@ -395,7 +395,7 @@ ${TestKeyboxFixtures.certificate.prependIndent("                    ")}
     }
 
     @Test
-    fun `authenticated RKP upload remains valid when revocation checks are unavailable`() {
+    fun `untrusted RKP hint cannot bypass unavailable revocation checks for non-RKP keybox`() {
         val originalRoot = Config.getConfigRoot()
         try {
             Config.setRootForTesting(configDir)
@@ -406,21 +406,73 @@ ${TestKeyboxFixtures.certificate.prependIndent("                    ")}
             server = WebServer(0, configDir, crlFetcher = { null })
             server.start()
 
-            val rkpXml = TestKeyboxFixtures.validEcKeyboxXml
+            val nonRkpXml = TestKeyboxFixtures.validEcKeyboxXml
 
-            // Authenticated RKP upload via form post must succeed even with offline CRL
-            val (formCode, _) = uploadKeyboxResponse("rkp_form.xml", rkpXml, authenticatedRkp = true)
+            // Non-RKP keybox claiming authenticated RKP must NOT bypass revocation
+            val (formCode, _) = uploadKeyboxResponse("fake_rkp.xml", nonRkpXml, authenticatedRkp = true)
+            assertEquals(HttpURLConnection.HTTP_UNAVAILABLE, formCode)
+            assertFalse(File(configDir, "keyboxes/fake_rkp.xml").exists())
+            assertFalse(RkpProvenanceStore.isRkp("fake_rkp.xml", configDir))
+
+            // Multipart non-RKP keybox claiming authenticated RKP must also be rejected
+            val multipartCode = uploadMultipartKeybox(
+                "fake_rkp_multi.xml",
+                nonRkpXml.toByteArray(StandardCharsets.UTF_8),
+                authenticatedRkp = true,
+            )
+            assertEquals(HttpURLConnection.HTTP_UNAVAILABLE, multipartCode)
+            assertFalse(File(configDir, "keyboxes/fake_rkp_multi.xml").exists())
+            assertFalse(RkpProvenanceStore.isRkp("fake_rkp_multi.xml", configDir))
+        } finally {
+            Config.setRootForTesting(originalRoot)
+            ManagedKeyboxParserOracle.install()
+        }
+    }
+
+    @Test
+    fun `authenticated RKP upload remains valid and persists provenance across restarts`() {
+        val originalRoot = Config.getConfigRoot()
+        try {
+            Config.setRootForTesting(configDir)
+            ManagedKeyboxParserOracle.install()
+            KeyboxLoader.activeSetOverride = { true }
+            File(configDir, "auto_keybox_check").createNewFile()
+            server.stop()
+            server = WebServer(0, configDir, crlFetcher = { null })
+            server.start()
+
+            val genuineRkpXml = TestKeyboxFixtures.validRkpKeyboxXml
+
+            // Genuine RKP upload via form post must succeed even with offline CRL
+            val (formCode, _) = uploadKeyboxResponse("rkp_form.xml", genuineRkpXml, authenticatedRkp = true)
             assertEquals(200, formCode)
             assertTrue(File(configDir, "keyboxes/rkp_form.xml").isFile)
+            assertTrue(RkpProvenanceStore.isRkp("rkp_form.xml", configDir))
 
-            // Authenticated RKP upload via multipart must also succeed even with offline CRL
+            // Reloading keybox from disk snapshot must restore authenticated RKP provenance
+            val reloaded = KeyboxLoader.parseFileSnapshot(KeyboxLoader.FileScope.KEYBOX_DIRECTORY, "rkp_form.xml")
+            assertTrue(reloaded.keyboxes.isNotEmpty())
+            assertTrue(reloaded.keyboxes.all(cleveres.tricky.cleverestech.keystore.CertHack::isRkpKeybox))
+
+            // Genuine RKP upload via multipart must also succeed and record provenance
             val multipartCode = uploadMultipartKeybox(
                 "rkp_multipart.xml",
-                rkpXml.toByteArray(StandardCharsets.UTF_8),
+                genuineRkpXml.toByteArray(StandardCharsets.UTF_8),
                 authenticatedRkp = true,
             )
             assertEquals(200, multipartCode)
             assertTrue(File(configDir, "keyboxes/rkp_multipart.xml").isFile)
+            assertTrue(RkpProvenanceStore.isRkp("rkp_multipart.xml", configDir))
+
+            // Deleting keybox must clean up RKP provenance
+            val deleteUrl = URL("http://localhost:${server.listeningPort}/api/delete_keybox?token=${server.token}")
+            val conn = deleteUrl.openConnection() as HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.doOutput = true
+            conn.outputStream.use { it.write("filename=rkp_form.xml&scope=keyboxes".toByteArray(StandardCharsets.UTF_8)) }
+            assertEquals(200, conn.responseCode)
+            assertFalse(File(configDir, "keyboxes/rkp_form.xml").exists())
+            assertFalse(RkpProvenanceStore.isRkp("rkp_form.xml", configDir))
         } finally {
             Config.setRootForTesting(originalRoot)
             ManagedKeyboxParserOracle.install()
