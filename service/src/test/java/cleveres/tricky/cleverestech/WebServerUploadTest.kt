@@ -432,11 +432,11 @@ ${TestKeyboxFixtures.certificate.prependIndent("                    ")}
             assertFalse(File(configDir, "keyboxes/fake_rkp_multi.xml").exists())
             assertFalse(RkpProvenanceStore.isRkp("fake_rkp_multi.xml", configDir))
 
-            // Keybox with non-CA intermediate signed by anchor must be rejected by CA constraint checks
+            // Keybox with non-CA intermediate signed by anchor must be rejected by CA constraint checks (400 Bad Request)
             RkpProvenanceStore.addTrustedAnchorForTesting(TestKeyboxFixtures.rkpRootCert)
             val nonCaRkpXml = TestKeyboxFixtures.nonCaIntermediateRkpKeyboxXml
             val (nonCaCode, _) = uploadKeyboxResponse("non_ca_rkp.xml", nonCaRkpXml, authenticatedRkp = true)
-            assertEquals(HttpURLConnection.HTTP_UNAVAILABLE, nonCaCode)
+            assertEquals(HttpURLConnection.HTTP_BAD_REQUEST, nonCaCode)
             assertFalse(File(configDir, "keyboxes/non_ca_rkp.xml").exists())
             assertFalse(RkpProvenanceStore.isRkp("non_ca_rkp.xml", configDir))
         } finally {
