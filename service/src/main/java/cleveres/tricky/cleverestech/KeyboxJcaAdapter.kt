@@ -16,11 +16,12 @@ internal object KeyboxJcaAdapter {
     fun materialize(
         document: KeyboxWire.Document,
         filename: String,
+        authenticatedRkpProvenance: Boolean = false,
     ): List<CertHack.KeyBox> {
         if (filename.isEmpty() || document.keys.isEmpty()) return emptyList()
         val parsed = ArrayList<CertHack.KeyBox>(document.keys.size)
         for (raw in document.keys) {
-            val keybox = materializeKey(raw, filename) ?: return emptyList()
+            val keybox = materializeKey(raw, filename, authenticatedRkpProvenance) ?: return emptyList()
             parsed += keybox
         }
         return parsed
@@ -29,6 +30,7 @@ internal object KeyboxJcaAdapter {
     private fun materializeKey(
         raw: KeyboxWire.RawKey,
         filename: String,
+        authenticatedRkpProvenance: Boolean = false,
     ): CertHack.KeyBox? =
         try {
             val certificates = parseCertificates(raw.certificatesDer) ?: return null
@@ -39,7 +41,7 @@ internal object KeyboxJcaAdapter {
             if (!validChain(certificates)) return null
 
             val handle = BackendKeyHandle(publicAlgorithm, raw.keyId)
-            CertHack.KeyBox(KeyPair(leaf.publicKey, handle), certificates, filename)
+            CertHack.KeyBox(KeyPair(leaf.publicKey, handle), certificates, filename, authenticatedRkpProvenance)
         } catch (_: Exception) {
             null
         }

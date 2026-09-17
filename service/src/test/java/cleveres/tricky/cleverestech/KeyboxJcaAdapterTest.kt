@@ -86,6 +86,36 @@ class KeyboxJcaAdapterTest {
         Mockito.verify(expired).checkValidity()
     }
 
+    @Test
+    fun `materialize propagates authenticated RKP provenance when requested`() {
+        silenceLogger()
+        val legacy = readLegacyFixture("/keybox/valid_ec.xml", "valid_ec.xml").single()
+        val document =
+            KeyboxWire.Document(
+                declaredKeyboxes = 1,
+                keyboxCount = 1,
+                snapshotSha256 = validSnapshotSha256(),
+                keys =
+                    listOf(
+                        KeyboxWire.RawKey(
+                            "EC",
+                            validKeyId(),
+                            legacy.certificates().map { it.encoded },
+                        ),
+                    ),
+            )
+
+        val authenticated = KeyboxJcaAdapter.materialize(document, "rkp.xml", authenticatedRkpProvenance = true)
+        assertEquals(1, authenticated.size)
+        assertTrue(authenticated.single().authenticatedRkpProvenance())
+        assertTrue(CertHack.isRkpKeybox(authenticated.single()))
+
+        val unauthenticated = KeyboxJcaAdapter.materialize(document, "rkp.xml")
+        assertEquals(1, unauthenticated.size)
+        assertFalse(unauthenticated.single().authenticatedRkpProvenance())
+        assertFalse(CertHack.isRkpKeybox(unauthenticated.single()))
+    }
+
     private fun assertAdapterMatchesLegacy(
         resource: String,
         filename: String,

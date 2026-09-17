@@ -51,6 +51,13 @@ public final class ManagedKeyboxOracle {
     }
 
     public static List<CertHack.KeyBox> parse(Reader reader, String filename) {
+        return parse(reader, filename, false);
+    }
+
+    public static List<CertHack.KeyBox> parse(
+            Reader reader,
+            String filename,
+            boolean authenticatedRkpProvenance) {
         if (reader == null) return Collections.emptyList();
         List<CertHack.KeyBox> parsedList = new ArrayList<>();
         try {
@@ -100,7 +107,7 @@ public final class ManagedKeyboxOracle {
                     }
                     KeyPair pair = parseKeyPair(privateKey, certificateChain.getFirst().getPublicKey());
                     if (!isValidKeybox(pair, certificateChain, declaredAlgorithm)) return Collections.emptyList();
-                    parsedList.add(new CertHack.KeyBox(pair, certificateChain, filename));
+                    parsedList.add(new CertHack.KeyBox(pair, certificateChain, filename, authenticatedRkpProvenance));
                 }
             }
             return parsedList;

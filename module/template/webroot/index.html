@@ -2034,8 +2034,8 @@ if (!content) {
     notify('Please paste XML content first', 'error');
     return;
 }
-let filenameInput = document.getElementById('kbFilenameInput').value.trim();
-let filename = filenameInput || (/droid\s*ca|rkp|remote\s*provisioning|key\s*provisioning/i.test(content) ? 'rkp.xml' : 'keybox.xml');
+let isRkp = (/droid\s*ca|rkp|remote\s*provisioning|key\s*provisioning/i.test(content) || /rkp/i.test(filenameInput));
+let filename = filenameInput || (isRkp ? 'rkp.xml' : 'keybox.xml');
 if (!filename.toLowerCase().endsWith('.xml')) filename += '.xml';
 
 notify('Saving...', 'working');
@@ -2043,6 +2043,9 @@ try {
     const formData = new FormData();
     formData.append('filename', filename);
     formData.append('content', content);
+    if (isRkp) {
+        formData.append('authenticated_rkp', 'true');
+    }
     const res = await fetchAuth('/api/upload_keybox', {
         method: 'POST',
         body: formData,

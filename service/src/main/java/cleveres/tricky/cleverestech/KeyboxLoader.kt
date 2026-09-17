@@ -35,6 +35,9 @@ internal object KeyboxLoader {
     internal var parserOverride: ((ByteArray, String) -> List<CertHack.KeyBox>)? = null
 
     @VisibleForTesting
+    internal var parserWithProvenanceOverride: ((ByteArray, String, Boolean) -> List<CertHack.KeyBox>)? = null
+
+    @VisibleForTesting
     internal var fileParserOverride: ((FileScope, String) -> ParsedFile)? = null
 
     @VisibleForTesting
@@ -43,14 +46,18 @@ internal object KeyboxLoader {
     fun parse(
         xml: ByteArray,
         filename: String,
+        authenticatedRkpProvenance: Boolean = false,
     ): List<CertHack.KeyBox> =
         try {
+            val withProvenance = parserWithProvenanceOverride
             val override = parserOverride
-            if (override != null) {
+            if (withProvenance != null) {
+                withProvenance(xml, filename, authenticatedRkpProvenance)
+            } else if (override != null) {
                 override(xml, filename)
             } else {
                 val document = NativeBackend.parseKeybox(xml)
-                if (document == null) emptyList() else KeyboxJcaAdapter.materialize(document, filename)
+                if (document == null) emptyList() else KeyboxJcaAdapter.materialize(document, filename, authenticatedRkpProvenance)
             }
         } catch (error: RustBackendUnavailableException) {
             backendOutageObserved.set(true)
@@ -152,6 +159,7 @@ internal object KeyboxLoader {
     @VisibleForTesting
     internal fun resetForTesting() {
         parserOverride = null
+        parserWithProvenanceOverride = null
         fileParserOverride = null
         activeSetOverride = null
         backendOutageObserved.set(false)

@@ -9,8 +9,11 @@ import java.security.MessageDigest
 internal object ManagedKeyboxParserOracle {
     fun install() {
         ManagedOpaqueKeyOracle.reset()
+        KeyboxLoader.parserWithProvenanceOverride = { bytes, filename, authenticatedRkpProvenance ->
+            ManagedOpaqueKeyOracle.parse(StringReader(bytes.toString(Charsets.UTF_8)), filename, authenticatedRkpProvenance)
+        }
         KeyboxLoader.parserOverride = { bytes, filename ->
-            ManagedOpaqueKeyOracle.parse(StringReader(bytes.toString(Charsets.UTF_8)), filename)
+            ManagedOpaqueKeyOracle.parse(StringReader(bytes.toString(Charsets.UTF_8)), filename, false)
         }
         KeyboxLoader.fileParserOverride = { scope, filename ->
             val file =

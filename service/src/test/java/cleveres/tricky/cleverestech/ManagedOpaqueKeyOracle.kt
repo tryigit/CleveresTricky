@@ -18,26 +18,31 @@ internal object ManagedOpaqueKeyOracle {
 
     private val materials = LinkedHashMap<String, Material>()
 
+    @JvmStatic
+    @JvmOverloads
     @Synchronized
     fun parse(
         reader: Reader,
         filename: String,
+        authenticatedRkpProvenance: Boolean = false,
     ): List<CertHack.KeyBox> {
-        val legacy = ManagedKeyboxOracle.parse(reader, filename)
+        val legacy = ManagedKeyboxOracle.parse(reader, filename, authenticatedRkpProvenance)
         if (legacy.isEmpty()) return emptyList()
         val opaque = ArrayList<CertHack.KeyBox>(legacy.size)
         for (box in legacy) {
-            opaque += wrap(box.keyPair(), box.certificates(), filename)
+            opaque += wrap(box.keyPair(), box.certificates(), filename, authenticatedRkpProvenance)
         }
         return opaque
     }
 
     @JvmStatic
+    @JvmOverloads
     @Synchronized
     fun wrap(
         keyPair: KeyPair,
         certificates: List<Certificate>,
         filename: String,
+        authenticatedRkpProvenance: Boolean = false,
     ): CertHack.KeyBox {
         val leaf = certificates.firstOrNull() as? X509Certificate
             ?: throw IllegalArgumentException("Opaque key fixture requires an X.509 issuer certificate")
@@ -67,6 +72,7 @@ internal object ManagedOpaqueKeyOracle {
                 ),
                 certificates,
                 filename,
+                authenticatedRkpProvenance,
             )
         } finally {
             keyId.fill(0)

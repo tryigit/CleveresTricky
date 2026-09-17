@@ -808,9 +808,10 @@ class WebServer(
     private fun validateUploadedKeyboxXml(
         bytes: ByteArray,
         filename: String,
+        authenticatedRkpProvenance: Boolean = false,
     ): KeyboxUploadValidation {
         return try {
-            val keyboxes = KeyboxLoader.parse(bytes.copyOf(), filename)
+            val keyboxes = KeyboxLoader.parse(bytes.copyOf(), filename, authenticatedRkpProvenance)
             if (keyboxes.isEmpty()) return KeyboxUploadValidation.INVALID
             if (!Config.isAutoKeyboxCheckEnabled) {
                 return KeyboxUploadValidation.VALID
@@ -839,8 +840,23 @@ class WebServer(
     private fun validateUploadedKeyboxXml(
         content: String,
         filename: String,
+        authenticatedRkpProvenance: Boolean = false,
     ): KeyboxUploadValidation =
-        validateUploadedKeyboxXml(content.toByteArray(Charsets.UTF_8), filename)
+        validateUploadedKeyboxXml(content.toByteArray(Charsets.UTF_8), filename, authenticatedRkpProvenance)
+
+    private fun isAuthenticatedRkpUpload(
+        session: IHTTPSession,
+        map: Map<String, String>,
+    ): Boolean {
+        fun isTrue(value: String?): Boolean =
+            value?.equals("true", ignoreCase = true) == true || value == "1"
+
+        return isTrue(getParam(session, "authenticated_rkp")) ||
+            isTrue(map["authenticated_rkp"]) ||
+            isTrue(getParam(session, "is_rkp")) ||
+            isTrue(map["is_rkp"]) ||
+            isTrue(session.headers["x-authenticated-rkp"])
+    }
 
     private fun keyboxValidationError(validation: KeyboxUploadValidation): Response? =
         when (validation) {
@@ -1525,6 +1541,7 @@ class WebServer(
             val content = rawContent?.let(::normalizeKeyboxXmlContent)
             val filename = getParam(session, "filename")
                 ?: (if (content != null && (content.contains("droid ca", ignoreCase = true) || content.contains("rkp", ignoreCase = true) || content.contains("remote provisioning", ignoreCase = true) || content.contains("key provisioning", ignoreCase = true))) "rkp.xml" else null)
+            val authenticatedRkp = isAuthenticatedRkpUpload(session, map)
             val tmpFilePath = map["file"]
             if (tmpFilePath != null) {
                 val originalName = getParam(session, "filename") ?: "upload.bin"
@@ -1566,7 +1583,7 @@ class WebServer(
                             val normalizedBytes =
                                 normalizeKeyboxXmlContent(bytes.toString(Charsets.UTF_8)).toByteArray(Charsets.UTF_8)
                             try {
-                                keyboxValidationError(validateUploadedKeyboxXml(normalizedBytes, storedName))?.let { return it }
+                                keyboxValidationError(validateUploadedKeyboxXml(normalizedBytes, storedName, authenticatedRkp))?.let { return it }
                                 SecureFile.writeBytes(dest, normalizedBytes)
                             } finally {
                                 normalizedBytes.fill(0)
@@ -1596,7 +1613,7 @@ class WebServer(
                 isValidKeyboxFilename(storedName)
             ) {
                 synchronized(fileLock) {
-                    keyboxValidationError(validateUploadedKeyboxXml(content, storedName))?.let { return it }
+                    keyboxValidationError(validateUploadedKeyboxXml(content, storedName, authenticatedRkp))?.let { return it }
                     val keyboxDir = File(configDir, "keyboxes")
                     SecureFile.mkdirs(keyboxDir, 448)
                     val file = getSafeFile(keyboxDir, storedName)

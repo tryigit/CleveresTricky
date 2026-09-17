@@ -112,6 +112,7 @@ class WebServerUploadTest {
     private fun uploadKeyboxResponse(
         filename: String,
         content: String,
+        authenticatedRkp: Boolean = false,
     ): Pair<Int, String> {
         val port = server.listeningPort
         val token = server.token
@@ -119,7 +120,10 @@ class WebServerUploadTest {
 
         val encodedFilename = java.net.URLEncoder.encode(filename, StandardCharsets.UTF_8.name())
         val encodedContent = java.net.URLEncoder.encode(content, StandardCharsets.UTF_8.name())
-        val postData = "filename=$encodedFilename&content=$encodedContent"
+        var postData = "filename=$encodedFilename&content=$encodedContent"
+        if (authenticatedRkp) {
+            postData += "&authenticated_rkp=true"
+        }
         val postDataBytes = postData.toByteArray(StandardCharsets.UTF_8)
 
         val conn = url.openConnection() as HttpURLConnection
@@ -142,6 +146,7 @@ class WebServerUploadTest {
     private fun uploadMultipartKeybox(
         filename: String,
         content: ByteArray,
+        authenticatedRkp: Boolean = false,
     ): Int {
         val boundary = "CleveresTrickyUploadBoundary"
         val output = ByteArrayOutputStream()
@@ -151,6 +156,11 @@ class WebServerUploadTest {
         write("--$boundary\r\n")
         write("Content-Disposition: form-data; name=\"filename\"\r\n\r\n")
         write("$filename\r\n")
+        if (authenticatedRkp) {
+            write("--$boundary\r\n")
+            write("Content-Disposition: form-data; name=\"authenticated_rkp\"\r\n\r\n")
+            write("true\r\n")
+        }
         write("--$boundary\r\n")
         write("Content-Disposition: form-data; name=\"file\"; filename=\"$filename\"\r\n")
         write("Content-Type: application/octet-stream\r\n\r\n")
@@ -378,6 +388,39 @@ ${TestKeyboxFixtures.certificate.prependIndent("                    ")}
             val (rkpCode, _) = uploadKeyboxResponse("rkp.xml", rkpXml)
             assertEquals(HttpURLConnection.HTTP_UNAVAILABLE, rkpCode)
             assertFalse(File(configDir, "keyboxes/rkp.xml").exists())
+        } finally {
+            Config.setRootForTesting(originalRoot)
+            ManagedKeyboxParserOracle.install()
+        }
+    }
+
+    @Test
+    fun `authenticated RKP upload remains valid when revocation checks are unavailable`() {
+        val originalRoot = Config.getConfigRoot()
+        try {
+            Config.setRootForTesting(configDir)
+            ManagedKeyboxParserOracle.install()
+            KeyboxLoader.activeSetOverride = { true }
+            File(configDir, "auto_keybox_check").createNewFile()
+            server.stop()
+            server = WebServer(0, configDir, crlFetcher = { null })
+            server.start()
+
+            val rkpXml = TestKeyboxFixtures.validEcKeyboxXml
+
+            // Authenticated RKP upload via form post must succeed even with offline CRL
+            val (formCode, _) = uploadKeyboxResponse("rkp_form.xml", rkpXml, authenticatedRkp = true)
+            assertEquals(200, formCode)
+            assertTrue(File(configDir, "keyboxes/rkp_form.xml").isFile)
+
+            // Authenticated RKP upload via multipart must also succeed even with offline CRL
+            val multipartCode = uploadMultipartKeybox(
+                "rkp_multipart.xml",
+                rkpXml.toByteArray(StandardCharsets.UTF_8),
+                authenticatedRkp = true,
+            )
+            assertEquals(200, multipartCode)
+            assertTrue(File(configDir, "keyboxes/rkp_multipart.xml").isFile)
         } finally {
             Config.setRootForTesting(originalRoot)
             ManagedKeyboxParserOracle.install()
