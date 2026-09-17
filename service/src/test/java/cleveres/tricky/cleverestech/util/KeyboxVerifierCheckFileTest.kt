@@ -371,4 +371,64 @@ class KeyboxVerifierCheckFileTest {
         assertEquals("TEE", result.securityLevel)
         assertFalse(result.isRkp)
     }
+
+    @Test
+    fun `checkFile normalizes securityLevel to RKP when keybox is authenticated RKP and not StrongBox`() {
+        tempFile.writeText("content")
+        val mockKeyBox = Mockito.mock(CertHack.KeyBox::class.java)
+        val mockCert = Mockito.mock(java.security.cert.X509Certificate::class.java)
+        Mockito.`when`(mockKeyBox.filename()).thenReturn("standard_keybox.xml")
+        Mockito.`when`(mockKeyBox.certificates()).thenReturn(listOf(mockCert))
+        Mockito.`when`(mockKeyBox.authenticatedRkpProvenance()).thenReturn(true)
+
+        KeyboxLoader.fileParserOverride = { _, _ ->
+            KeyboxLoader.ParsedFile(
+                snapshotSha256 = null,
+                keyboxes = listOf(mockKeyBox),
+            )
+        }
+
+        val result = KeyboxVerifier.checkFile(
+            tempFile,
+            KeyboxLoader.FileScope.CONFIG_ROOT,
+            tempFile.name,
+            "storage123",
+        ) {
+            throw RuntimeException("test")
+        }
+
+        assertEquals(KeyboxVerifier.Status.ERROR, result.status)
+        assertEquals("RKP", result.securityLevel)
+        assertTrue(result.isRkp)
+    }
+
+    @Test
+    fun `checkFile preserves StrongBox securityLevel when keybox is StrongBox even if RKP`() {
+        tempFile.writeText("content")
+        val mockKeyBox = Mockito.mock(CertHack.KeyBox::class.java)
+        val mockCert = Mockito.mock(java.security.cert.X509Certificate::class.java)
+        Mockito.`when`(mockKeyBox.filename()).thenReturn("strongbox_keybox.xml")
+        Mockito.`when`(mockKeyBox.certificates()).thenReturn(listOf(mockCert))
+        Mockito.`when`(mockKeyBox.authenticatedRkpProvenance()).thenReturn(true)
+
+        KeyboxLoader.fileParserOverride = { _, _ ->
+            KeyboxLoader.ParsedFile(
+                snapshotSha256 = null,
+                keyboxes = listOf(mockKeyBox),
+            )
+        }
+
+        val result = KeyboxVerifier.checkFile(
+            tempFile,
+            KeyboxLoader.FileScope.CONFIG_ROOT,
+            tempFile.name,
+            "storage123",
+        ) {
+            throw RuntimeException("test")
+        }
+
+        assertEquals(KeyboxVerifier.Status.ERROR, result.status)
+        assertEquals("StrongBox", result.securityLevel)
+        assertTrue(result.isRkp)
+    }
 }

@@ -583,6 +583,9 @@ object KeyboxVerifier {
             if (resolvedSecurityLevel == "Unknown" && hasTee) {
                 resolvedSecurityLevel = "TEE"
             }
+            if (isRkp && resolvedSecurityLevel != "StrongBox") {
+                resolvedSecurityLevel = "RKP"
+            }
             trackedSecurityLevel = resolvedSecurityLevel
             val securityLevel = trackedSecurityLevel
             val hasRsa = keyboxes.any(CertHack::hasRsaKeybox)
