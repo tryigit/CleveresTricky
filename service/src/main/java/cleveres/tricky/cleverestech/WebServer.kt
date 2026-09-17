@@ -841,6 +841,8 @@ class WebServer(
      */
     private fun sanitizeKeyboxXmlContent(xml: String): String {
         val keyRegex = Regex("(?is)<Key(?:\\s+[^>]*)?>.*?</Key>")
+        val keyboxRegex = Regex("(?is)<Keybox(?:\\s+[^>]*)?>.*?</Keybox>")
+        val nonElementContentRegex = Regex("(?s)<!--.*?-->|<!\\[CDATA\\[.*?]]>|<\\?.*?\\?>")
         val matches = keyRegex.findAll(xml).toList()
         if (matches.size <= 1) return xml
 
@@ -869,7 +871,10 @@ class WebServer(
             for (invalid in invalidKeys) {
                 sanitized = sanitized.replace(invalid.value, "")
             }
-            sanitized = sanitized.replace(Regex("(?is)<Keybox(?:\\s+[^>]*)?>\\s*</Keybox>"), "")
+            sanitized =
+                keyboxRegex.replace(sanitized) { keybox ->
+                    if (keyRegex.containsMatchIn(keybox.value.replace(nonElementContentRegex, ""))) keybox.value else ""
+                }
             val keyboxCount = Regex("(?is)<Keybox[\\s>]").findAll(sanitized).count()
             if (keyboxCount > 0) {
                 sanitized =
