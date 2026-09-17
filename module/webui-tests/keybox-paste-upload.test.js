@@ -1,11 +1,11 @@
-﻿const assert = require('node:assert/strict');
+const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
 const indexSource = fs.readFileSync('module/template/webroot/index.html', 'utf8');
 
-const fnStart = indexSource.indexOf('async function savePastedKeybox()');
-assert.ok(fnStart >= 0, 'savePastedKeybox function must exist in index.html');
+const fnStart = indexSource.indexOf('function transliterateTurkish(');
+assert.ok(fnStart >= 0, 'transliterateTurkish function must exist in index.html');
 const fnEnd = indexSource.indexOf('const WEB_UI_SETTINGS =', fnStart);
 assert.ok(fnEnd > fnStart, 'savePastedKeybox end boundary must be found');
 
@@ -14,6 +14,7 @@ const implementation = indexSource.slice(fnStart, fnEnd);
 // Architecture guard: verify that bare undeclared filenameInput is NOT used
 assert.ok(!implementation.includes('/rkp/i.test(filenameInput);'), 'Must not reference undeclared filenameInput');
 assert.ok(implementation.includes('document.getElementById(\'kbFilenameInput\')'), 'Must read filename from kbFilenameInput element');
+assert.ok(implementation.includes('transliterateTurkish'), 'Must call transliterateTurkish');
 
 async function runTest() {
   const elements = {
@@ -54,7 +55,7 @@ async function runTest() {
     ctx.window = ctx;
     ctx.global = ctx;
     vm.createContext(ctx);
-    vm.runInContext(implementation + '\nthis.savePastedKeybox = savePastedKeybox;', ctx);
+    vm.runInContext(implementation + '\nthis.savePastedKeybox = savePastedKeybox;\nthis.transliterateTurkish = transliterateTurkish;', ctx);
     return ctx;
   }
 
@@ -126,6 +127,22 @@ async function runTest() {
     await ctx.savePastedKeybox();
     assert.equal(fetchAuthCalls.length, 1);
     assert.equal(fetchAuthCalls[0].options.body.get('filename'), 'custom_keybox.xml', 'Must append .xml extension');
+  }
+
+  // Test 6: Turkish characters in filename are transliterated to ASCII
+  {
+    const ctx = createTestContext();
+    assert.equal(ctx.transliterateTurkish('sağlam_şüpheli_özel_çözüm_üretici_ışık'), 'saglam_supheli_ozel_cozum_uretici_isik');
+    assert.equal(ctx.transliterateTurkish('SAĞLAM_ŞÜPHELİ_ÖZEL_ÇÖZÜM_ÜRETİCİ_IŞIK'), 'SAGLAM_SUPHELI_OZEL_COZUM_URETICI_ISIK');
+
+    elements.kbContent.value = '<Keybox><CertificateChain/></Keybox>';
+    elements.kbFilenameInput.value = 'sağlam_özel.xml';
+    notifications.length = 0;
+    fetchAuthCalls.length = 0;
+
+    await ctx.savePastedKeybox();
+    assert.equal(fetchAuthCalls.length, 1);
+    assert.equal(fetchAuthCalls[0].options.body.get('filename'), 'saglam_ozel.xml', 'Must transliterate Turkish characters in filename');
   }
 
   console.log('All keybox-paste-upload tests passed successfully.');

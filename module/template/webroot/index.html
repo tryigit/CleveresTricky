@@ -1996,9 +1996,10 @@ if (file) {
     dz.innerHTML = '<div style="font-size: 1.2em; margin-bottom: 10px; color:var(--accent); font-weight:bold; display: flex; align-items: center; justify-content: center;"><div class="inline-spinner"></div>Uploading: ' + safeFileName + '...</div>';
     document.getElementById('dropZone').style.borderColor = 'var(--success)';
 
+    const normalizedUploadName = transliterateTurkish(file.name);
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('filename', file.name);
+    formData.append('filename', normalizedUploadName);
     if (/droid\s*ca|rkp|remote\s*provisioning|key\s*provisioning/i.test(file.name)) {
         formData.append('rkp_hint', 'true');
     }
@@ -2034,6 +2035,19 @@ if (file) {
 }
         }
 
+        function transliterateTurkish(str) {
+            if (!str) return '';
+            const map = {
+                'ç': 'c', 'Ç': 'C',
+                'ğ': 'g', 'Ğ': 'G',
+                'ı': 'i', 'İ': 'I',
+                'ö': 'o', 'Ö': 'O',
+                'ş': 's', 'Ş': 'S',
+                'ü': 'u', 'Ü': 'U'
+            };
+            return str.replace(/[çÇğĞıİöÖşŞüÜ]/g, m => map[m] || m);
+        }
+
         function resetDropZone() {
 const dz = document.getElementById('dropZoneContent');
 dz.innerHTML = '<div style="font-size: 1.5em; margin-bottom: 10px; color: #888;">[ Drag &amp; Drop ]</div><div style="font-size: 0.9em; color: #888;">Select .xml or .cbox</div>';
@@ -2048,7 +2062,8 @@ if (!content) {
     return;
 }
 const filenameEl = document.getElementById('kbFilenameInput');
-const filenameInput = filenameEl ? filenameEl.value.trim() : '';
+let filenameInput = filenameEl ? filenameEl.value.trim() : '';
+if (filenameInput) filenameInput = transliterateTurkish(filenameInput);
 let isRkp = (/droid\s*ca|rkp|remote\s*provisioning|key\s*provisioning/i.test(content) || /rkp/i.test(filenameInput));
 let filename = filenameInput || (isRkp ? 'rkp.xml' : 'keybox.xml');
 if (!filename.toLowerCase().endsWith('.xml')) filename += '.xml';

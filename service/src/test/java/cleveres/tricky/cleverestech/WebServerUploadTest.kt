@@ -264,6 +264,15 @@ class WebServerUploadTest {
     }
 
     @Test
+    fun `turkish characters in filename are transliterated before storage`() {
+        val (responseCode, responseBody) = uploadKeyboxResponse("sağlam_türkçe_özel_keybox.xml", TestKeyboxFixtures.validEcKeyboxXml)
+        assertEquals(200, responseCode)
+        assertEquals("saglam_turkce_ozel_keybox.xml", JSONObject(responseBody).getString("filename"))
+        assertTrue(File(configDir, "keyboxes/saglam_turkce_ozel_keybox.xml").isFile)
+        assertFalse(File(configDir, "keyboxes/sağlam_türkçe_özel_keybox.xml").exists())
+    }
+
+    @Test
     fun `android clone suffix is normalized before CBOX storage`() {
         val content = ByteArray(CboxWireLimits.MIN_BYTES)
         ByteBuffer.wrap(content)
