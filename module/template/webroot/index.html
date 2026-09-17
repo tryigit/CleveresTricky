@@ -2004,6 +2004,9 @@ if (file) {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('filename', file.name);
+    if (/droid\s*ca|rkp|remote\s*provisioning|key\s*provisioning/i.test(file.name)) {
+        formData.append('rkp_hint', 'true');
+    }
 
     notify('Uploading...', 'working');
     try {

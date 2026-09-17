@@ -37,6 +37,7 @@ import cleveres.tricky.cleverestech.Logger;
 import cleveres.tricky.cleverestech.ManagedAttestKeyRegistry;
 import cleveres.tricky.cleverestech.ManagedAttestKeyRehydrator;
 import cleveres.tricky.cleverestech.PolicyState;
+import cleveres.tricky.cleverestech.RkpProvenanceStore;
 import cleveres.tricky.cleverestech.UtilKt;
 import cleveres.tricky.cleverestech.util.FastByteArrayOutputStream;
 
@@ -400,7 +401,11 @@ public final class CertHack {
             for (Map.Entry<String, List<KeyBox>> entry : this.keyboxFiles.entrySet()) {
                 boolean fileHasStrongBox = false;
                 boolean fileHasTee = false;
+                boolean fileHasRkp = false;
                 for (KeyBox box : entry.getValue()) {
+                    if (isRkpKeybox(box)) {
+                        fileHasRkp = true;
+                    }
                     KeyboxSecurityLevel level = classifications.getOrDefault(box, KeyboxSecurityLevel.UNKNOWN);
                     if (level == KeyboxSecurityLevel.STRONGBOX) {
                         fileHasStrongBox = true;
@@ -408,7 +413,7 @@ public final class CertHack {
                         fileHasTee = true;
                     }
                 }
-                String fileLevel = fileHasStrongBox ? "StrongBox" : (fileHasTee ? "TEE" : "Unknown");
+                String fileLevel = fileHasStrongBox ? "StrongBox" : (fileHasRkp ? "RKP" : (fileHasTee ? "TEE" : "Unknown"));
                 secLevelById.put(entry.getKey(), fileLevel);
             }
 
@@ -911,16 +916,32 @@ public final class CertHack {
     public static boolean isRkpKeybox(String identifier) {
         if (identifier == null) return false;
         List<KeyBox> boxes = state.keyboxFiles.get(identifier);
-        if (boxes == null) return false;
-        for (KeyBox box : boxes) {
-            if (isRkpKeybox(box)) return true;
+        if (boxes != null) {
+            for (KeyBox box : boxes) {
+                if (isRkpKeybox(box)) return true;
+            }
+        }
+        int colonIdx = identifier.indexOf(':');
+        if (colonIdx >= 0 && colonIdx < identifier.length() - 1) {
+            String shortName = identifier.substring(colonIdx + 1);
+            List<KeyBox> shortBoxes = state.keyboxFiles.get(shortName);
+            if (shortBoxes != null) {
+                for (KeyBox box : shortBoxes) {
+                    if (isRkpKeybox(box)) return true;
+                }
+            }
         }
         return false;
     }
 
     public static boolean isRkpKeybox(KeyBox keybox) {
         if (keybox == null || keybox.certificates() == null || keybox.certificates().isEmpty()) return false;
-        return keybox.authenticatedRkpProvenance();
+        if (keybox.authenticatedRkpProvenance()) return true;
+        try {
+            return RkpProvenanceStore.hasVerifiedRkpCertificates(keybox.certificates());
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     public static boolean hasRsaKeybox(String identifier) {

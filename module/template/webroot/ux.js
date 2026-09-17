@@ -3372,21 +3372,71 @@
         global.__ctKeyboxPopupTrigger = trigger;
         const escapeHandler = event => { if (event.key === 'Escape') closeKeyboxValuePopup(); };
         global.__ctKeyboxPopupEscapeHandler = escapeHandler; document.addEventListener('keydown', escapeHandler);
-        global.requestAnimationFrame?.(() => overlay.classList.add('is-visible'));
+        if (typeof global.requestAnimationFrame === 'function') {
+            global.requestAnimationFrame(() => overlay.classList.add('is-visible'));
+        } else {
+            overlay.classList.add('is-visible');
+        }
         copyButton.focus();
-        copyKeyboxValue(text).then(setCopiedState); global.navigator?.vibrate?.(8);
+        copyKeyboxValue(text).then(setCopiedState);
+        if (typeof global.navigator?.vibrate === 'function') {
+            try { global.navigator.vibrate(8); } catch (_) {}
+        }
     }
     function attachKeyboxLongPress(node, label, value) {
-        if (!node || !value) return; let timer = null; let longPressed = false;
-        const cancel = () => { if (timer !== null) { global.clearTimeout(timer); timer = null; } };
-        node.setAttribute('title', popupCopy().hold); node.setAttribute('role', 'button'); node.setAttribute('aria-haspopup', 'dialog'); node.tabIndex = 0; node.style.cursor = 'copy'; node.style.touchAction = 'manipulation';
+        if (!node || !value) return;
+        let timer = null;
+        let longPressed = false;
+        let startX = 0;
+        let startY = 0;
+        const cancel = () => {
+            if (timer !== null) {
+                global.clearTimeout(timer);
+                timer = null;
+            }
+        };
+        node.setAttribute('title', popupCopy().hold);
+        node.setAttribute('role', 'button');
+        node.setAttribute('aria-haspopup', 'dialog');
+        node.tabIndex = 0;
+        node.style.cursor = 'copy';
+        node.style.userSelect = 'none';
+        node.style.webkitUserSelect = 'none';
+        node.style.touchAction = 'manipulation';
         node.addEventListener('keydown', event => {
             if (event.key !== 'Enter' && event.key !== ' ' && event.key !== 'Spacebar') return;
-            event.preventDefault(); cancel(); showKeyboxValuePopup(label, value, node);
+            event.preventDefault();
+            cancel();
+            showKeyboxValuePopup(label, value, node);
         });
-        node.addEventListener('pointerdown', () => { longPressed = false; cancel(); timer = global.setTimeout(() => { timer = null; longPressed = true; showKeyboxValuePopup(label, value, node); }, 650); });
-        node.addEventListener('pointerup', cancel); node.addEventListener('pointercancel', cancel); node.addEventListener('pointerleave', cancel);
-        node.addEventListener('contextmenu', event => { if (longPressed) event.preventDefault(); });
+        node.addEventListener('pointerdown', event => {
+            longPressed = false;
+            startX = event.clientX;
+            startY = event.clientY;
+            cancel();
+            timer = global.setTimeout(() => {
+                timer = null;
+                longPressed = true;
+                showKeyboxValuePopup(label, value, node);
+            }, 650);
+        });
+        node.addEventListener('pointermove', event => {
+            if (timer !== null && event.clientX !== undefined && event.clientY !== undefined) {
+                if (Math.hypot(event.clientX - startX, event.clientY - startY) > 12) {
+                    cancel();
+                }
+            }
+        });
+        node.addEventListener('pointerup', cancel);
+        node.addEventListener('pointercancel', cancel);
+        node.addEventListener('pointerleave', cancel);
+        node.addEventListener('contextmenu', event => {
+            event.preventDefault();
+            event.stopPropagation();
+            cancel();
+            if (document.getElementById('ct_keybox_value_popup')) return;
+            showKeyboxValuePopup(label, value, node);
+        });
     }
     function appendKeyboxValue(parent, label, value, options = {}) {
         const text = String(value || '').trim(); if (!text) return;
@@ -3567,7 +3617,8 @@
             attachKeyboxLongPress(nameText, t('filename'), item.filename);
             name.append(nameText);
 
-            if (item.is_rkp) {
+            const isRkp = Boolean(item.is_rkp || item.security_level === 'RKP');
+            if (isRkp) {
                 const rkpBadge = document.createElement('span');
                 rkpBadge.className = 'ct-badge ct-badge-rkp';
                 rkpBadge.textContent = 'RKP';
@@ -3668,8 +3719,8 @@
                     scope: item?.scope === 'root' || item?.scope === 'keyboxes' || item?.scope === 'managed' ? item.scope : '',
                     certificate_serial: String(item?.certificate_serial ?? '').slice(0, 256),
                     not_after: String(item?.not_after ?? '').slice(0, 64),
-                    security_level: item?.security_level === 'StrongBox' ? 'StrongBox' : (item?.security_level === 'TEE' ? 'TEE' : 'Unknown'),
-                    is_rkp: Boolean(item?.is_rkp),
+                    security_level: item?.security_level === 'StrongBox' ? 'StrongBox' : (item?.security_level === 'RKP' ? 'RKP' : (item?.security_level === 'TEE' ? 'TEE' : 'Unknown')),
+                    is_rkp: Boolean(item?.is_rkp || item?.security_level === 'RKP'),
                     has_rsa: Boolean(item?.has_rsa),
                     has_ec: Boolean(item?.has_ec || item?.has_ecdsa),
                     algorithms: Array.isArray(item?.algorithms) ? item.algorithms.slice(0, 16) : []
@@ -3930,7 +3981,8 @@
             statusBadge.textContent = t(statusKey) || (expired ? 'Expired' : rawStatus);
             badgesContainer.append(statusBadge);
 
-            if (item.is_rkp) {
+            const isRkp = Boolean(item.is_rkp || item.security_level === 'RKP');
+            if (isRkp) {
                 const rkpBadge = document.createElement('span');
                 rkpBadge.className = 'ct-badge ct-badge-rkp';
                 rkpBadge.textContent = 'RKP';
@@ -4004,8 +4056,8 @@
                     status: String(item?.status ?? 'UNKNOWN').slice(0, 128),
                     certificate_serial: String(item?.certificate_serial ?? '').slice(0, 256),
                     not_after: String(item?.not_after ?? '').slice(0, 64),
-                    security_level: item?.security_level === 'StrongBox' ? 'StrongBox' : (item?.security_level === 'TEE' ? 'TEE' : 'Unknown'),
-                    is_rkp: Boolean(item?.is_rkp),
+                    security_level: item?.security_level === 'StrongBox' ? 'StrongBox' : (item?.security_level === 'RKP' ? 'RKP' : (item?.security_level === 'TEE' ? 'TEE' : 'Unknown')),
+                    is_rkp: Boolean(item?.is_rkp || item?.security_level === 'RKP'),
                     has_rsa: Boolean(item?.has_rsa),
                     has_ec: Boolean(item?.has_ec || item?.has_ecdsa),
                     algorithms: Array.isArray(item?.algorithms) ? item.algorithms.slice(0, 16) : [],

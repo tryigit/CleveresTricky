@@ -473,7 +473,7 @@ object ServerManager {
                             if (parsed.isNotEmpty() && (statuses.isEmpty() || statuses.all { it == KeyboxVerifier.Status.VALID })) {
                                 serverKeyboxes[server.id] = parsed
                                 server.keyboxCount = parsed.size
-                                server.rkpCount = parsed.count { CertHack.isRkpKeybox(it) }
+                                server.rkpCount = parsed.count { CertHack.isRkpKeybox(it) || RkpProvenanceStore.hasVerifiedRkpCertificates(it) }
                                 server.rsaCount = parsed.count { CertHack.hasRsaKeybox(it) }
                                 server.cboxCount = parsed.count { isCboxKeybox(it) }
                                 Logger.i("Loaded cached keyboxes for server: ${server.name}")
@@ -571,7 +571,7 @@ object ServerManager {
                 "Unknown"
             }
         target.keyboxCount = keyboxes.size
-        target.rkpCount = keyboxes.count { CertHack.isRkpKeybox(it) }
+        target.rkpCount = keyboxes.count { CertHack.isRkpKeybox(it) || RkpProvenanceStore.hasVerifiedRkpCertificates(it) }
         target.rsaCount = keyboxes.count { CertHack.hasRsaKeybox(it) }
         target.cboxCount = keyboxes.count { isCboxKeybox(it) }
         serverKeyboxes[target.id] = keyboxes

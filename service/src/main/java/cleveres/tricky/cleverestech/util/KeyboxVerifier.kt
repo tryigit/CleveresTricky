@@ -6,6 +6,7 @@ import cleveres.tricky.cleverestech.CrlWire
 import cleveres.tricky.cleverestech.KeyboxLoader
 import cleveres.tricky.cleverestech.Logger
 import cleveres.tricky.cleverestech.NativeBackend
+import cleveres.tricky.cleverestech.RkpProvenanceStore
 import cleveres.tricky.cleverestech.RustBackendUnavailableException
 import cleveres.tricky.cleverestech.StoredKeyboxInventory
 import cleveres.tricky.cleverestech.getModuleDir
@@ -577,13 +578,13 @@ object KeyboxVerifier {
                     CertHack.KeyboxSecurityLevel.UNKNOWN -> {}
                 }
             }
+            val isRkp = keyboxes.any(CertHack::isRkpKeybox) || keyboxes.any(RkpProvenanceStore::hasVerifiedRkpCertificates)
+            trackedIsRkp = isRkp
             if (resolvedSecurityLevel == "Unknown" && hasTee) {
                 resolvedSecurityLevel = "TEE"
             }
             trackedSecurityLevel = resolvedSecurityLevel
             val securityLevel = trackedSecurityLevel
-            val isRkp = keyboxes.any(CertHack::isRkpKeybox)
-            trackedIsRkp = isRkp
             val hasRsa = keyboxes.any(CertHack::hasRsaKeybox)
             trackedHasRsa = hasRsa
             val hasEc = keyboxes.any(CertHack::hasEcKeybox)

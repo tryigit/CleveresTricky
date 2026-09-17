@@ -9,6 +9,7 @@ import java.io.File
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.security.cert.CertPathValidator
+import java.security.cert.Certificate
 import java.security.cert.CertificateFactory
 import java.security.cert.PKIXParameters
 import java.security.cert.TrustAnchor
@@ -20,7 +21,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 /**
  * Thread-safe persistent storage for authenticated Remote Key Provisioning (RKP) provenance metadata.
  */
-internal object RkpProvenanceStore {
+object RkpProvenanceStore {
     const val PROVENANCE_FILE_NAME = "rkp_provenance.json"
     private const val MAX_ENTRIES = 256
     private const val MAX_FILE_SIZE = 64 * 1024L
@@ -132,9 +133,9 @@ internal object RkpProvenanceStore {
         }
     }
 
-    fun hasVerifiedRkpCertificates(keybox: CertHack.KeyBox): Boolean {
-        val certs = keybox.certificates() ?: return false
-        if (certs.isEmpty()) return false
+    @JvmStatic
+    fun hasVerifiedRkpCertificates(certs: List<Certificate>?): Boolean {
+        if (certs.isNullOrEmpty()) return false
         val x509Certs = ArrayList<X509Certificate>(certs.size)
         for (cert in certs) {
             val x509 = cert as? X509Certificate ?: return false
@@ -192,6 +193,10 @@ internal object RkpProvenanceStore {
             isRkpDn(subject) || isRkpDn(issuer)
         }
     }
+
+    @JvmStatic
+    fun hasVerifiedRkpCertificates(keybox: CertHack.KeyBox?): Boolean =
+        if (keybox == null) false else hasVerifiedRkpCertificates(keybox.certificates())
 
     private fun load(baseDir: File): Set<String> {
         val file = File(baseDir, PROVENANCE_FILE_NAME)

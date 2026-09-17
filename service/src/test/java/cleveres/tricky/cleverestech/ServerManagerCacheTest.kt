@@ -1,6 +1,8 @@
 package cleveres.tricky.cleverestech
 
+import cleveres.tricky.cleverestech.keystore.CertHack
 import cleveres.tricky.cleverestech.keystore.ManagedKeyboxOracle
+import cleveres.tricky.cleverestech.TestKeyboxFixtures
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
@@ -188,6 +190,24 @@ class ServerManagerCacheTest {
         assertEquals(3, parsed.rkpCount)
         assertEquals(8, parsed.rsaCount)
         assertEquals(7, parsed.cboxCount)
+    }
+
+    @Test
+    fun `rkp keybox in cache increments server rkpCount and identifies RKP`() {
+        ManagedKeyboxParserOracle.install()
+        try {
+            RkpProvenanceStore.addTrustedAnchorForTesting(TestKeyboxFixtures.rkpRootCert)
+            val rkpXml = TestKeyboxFixtures.validRkpKeyboxXml.toByteArray(StandardCharsets.UTF_8)
+            val server = serverConfig()
+            val parsed = ServerManager.parseCachedKeyboxes(rkpXml, server)
+            assertEquals(1, parsed.size)
+            assertTrue(CertHack.isRkpKeybox(parsed.first()) || RkpProvenanceStore.hasVerifiedRkpCertificates(parsed.first()))
+
+            val rkpCount = parsed.count { CertHack.isRkpKeybox(it) || RkpProvenanceStore.hasVerifiedRkpCertificates(it) }
+            assertEquals(1, rkpCount)
+        } finally {
+            ManagedKeyboxParserOracle.reset()
+        }
     }
 
     private fun serverConfig(contentPublicKey: String? = null) =

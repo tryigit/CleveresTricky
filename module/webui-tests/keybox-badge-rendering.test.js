@@ -181,6 +181,21 @@ assert.equal(rkpName.children.length, 2, 'RKP keybox must render only RKP badge,
 assert.equal(rkpName.children[1].className, 'ct-badge ct-badge-rkp');
 assert.equal(rkpName.children[1].textContent, 'RKP');
 
+// Test 5b: security_level RKP without explicit is_rkp renders RKP badge
+context.setInventory([
+  { id: '5b', filename: 'rkp_level.xml', scope: 'managed', certificate_serial: '790', security_level: 'RKP' }
+]);
+list.children = [];
+context.renderKeyboxes();
+assert.equal(list.children.length, 1);
+const rkpRow5b = list.children[0];
+const rkpBody5b = rkpRow5b.children[1];
+const rkpName5b = rkpBody5b.children[0];
+assert.equal(rkpName5b.children[0].textContent, 'rkp_level.xml');
+assert.equal(rkpName5b.children.length, 2, 'security_level RKP keybox must render only RKP badge');
+assert.equal(rkpName5b.children[1].className, 'ct-badge ct-badge-rkp');
+assert.equal(rkpName5b.children[1].textContent, 'RKP');
+
 // Test 6: RSA badge
 context.setInventory([
   { id: '6', filename: 'rsa_kb.xml', scope: 'managed', certificate_serial: '111', security_level: '', has_rsa: true }

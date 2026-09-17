@@ -41,7 +41,10 @@ internal object KeyboxJcaAdapter {
             if (!validChain(certificates)) return null
 
             val handle = BackendKeyHandle(publicAlgorithm, raw.keyId)
-            CertHack.KeyBox(KeyPair(leaf.publicKey, handle), certificates, filename, authenticatedRkpProvenance)
+            val isRkp = authenticatedRkpProvenance ||
+                RkpProvenanceStore.isRkp(filename) ||
+                RkpProvenanceStore.hasVerifiedRkpCertificates(certificates)
+            CertHack.KeyBox(KeyPair(leaf.publicKey, handle), certificates, filename, isRkp)
         } catch (_: Exception) {
             null
         }
