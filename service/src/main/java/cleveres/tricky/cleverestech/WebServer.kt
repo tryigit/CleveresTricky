@@ -726,7 +726,7 @@ class WebServer(
             var hasRsa = CertHack.hasRsaKeybox(targetId) || CertHack.hasRsaKeybox(source.filename)
             var hasEc = CertHack.hasEcKeybox(targetId) || CertHack.hasEcKeybox(source.filename)
 
-            if (isRkp) {
+            if (isRkp && secLevel != "StrongBox") {
                 secLevel = "RKP"
             }
 
@@ -778,8 +778,10 @@ class WebServer(
                 }
             }
 
-            if (isRkp) {
+            if (isRkp && secLevel != "StrongBox") {
                 secLevel = "RKP"
+            }
+            if (isRkp) {
                 RkpProvenanceStore.recordRkp(source.filename, configDir)
                 if (source.id.isNotEmpty() && source.id != source.filename) {
                     RkpProvenanceStore.recordRkp(source.id, configDir)
@@ -794,7 +796,7 @@ class WebServer(
                     .put("type", if (source.isCbox) "cbox" else "xml")
                     .put("certificate_serial", certSerial)
                     .put("not_after", notAfter)
-                    .put("security_level", if (isRkp) "RKP" else secLevel)
+                    .put("security_level", secLevel)
                     .put("is_rkp", isRkp)
                     .put("has_rsa", hasRsa)
                     .put("has_ec", hasEc),

@@ -3617,17 +3617,16 @@
             attachKeyboxLongPress(nameText, t('filename'), item.filename);
             name.append(nameText);
 
-            const isRkp = Boolean(item.is_rkp || item.security_level === 'RKP');
-            if (isRkp) {
-                const rkpBadge = document.createElement('span');
-                rkpBadge.className = 'ct-badge ct-badge-rkp';
-                rkpBadge.textContent = 'RKP';
-                name.append(rkpBadge);
-            } else if (item.security_level === 'StrongBox') {
+            if (item.security_level === 'StrongBox') {
                 const badge = document.createElement('span');
                 badge.className = 'ct-badge ct-badge-strongbox';
                 badge.textContent = 'StrongBox';
                 name.append(badge);
+            } else if (Boolean(item.is_rkp || item.security_level === 'RKP')) {
+                const rkpBadge = document.createElement('span');
+                rkpBadge.className = 'ct-badge ct-badge-rkp';
+                rkpBadge.textContent = 'RKP';
+                name.append(rkpBadge);
             } else if (item.security_level === 'TEE') {
                 const badge = document.createElement('span');
                 badge.className = 'ct-badge ct-badge-tee';
@@ -3981,17 +3980,16 @@
             statusBadge.textContent = t(statusKey) || (expired ? 'Expired' : rawStatus);
             badgesContainer.append(statusBadge);
 
-            const isRkp = Boolean(item.is_rkp || item.security_level === 'RKP');
-            if (isRkp) {
-                const rkpBadge = document.createElement('span');
-                rkpBadge.className = 'ct-badge ct-badge-rkp';
-                rkpBadge.textContent = 'RKP';
-                badgesContainer.append(rkpBadge);
-            } else if (item.security_level === 'StrongBox') {
+            if (item.security_level === 'StrongBox') {
                 const badge = document.createElement('span');
                 badge.className = 'ct-badge ct-badge-strongbox';
                 badge.textContent = 'StrongBox';
                 badgesContainer.append(badge);
+            } else if (Boolean(item.is_rkp || item.security_level === 'RKP')) {
+                const rkpBadge = document.createElement('span');
+                rkpBadge.className = 'ct-badge ct-badge-rkp';
+                rkpBadge.textContent = 'RKP';
+                badgesContainer.append(rkpBadge);
             } else if (item.security_level === 'TEE') {
                 const badge = document.createElement('span');
                 badge.className = 'ct-badge ct-badge-tee';

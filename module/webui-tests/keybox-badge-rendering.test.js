@@ -124,6 +124,20 @@ assert.equal(sbName.children[0].textContent, 'sb.xml');
 assert.equal(sbName.children[1].className, 'ct-badge ct-badge-strongbox');
 assert.equal(sbName.children[1].textContent, 'StrongBox');
 
+// Test 1b: StrongBox with is_rkp: true still renders StrongBox badge
+context.setInventory([
+  { id: '1b', filename: 'sb_rkp.xml', scope: 'root', certificate_serial: '123b', security_level: 'StrongBox', is_rkp: true }
+]);
+list.children = [];
+context.renderKeyboxes();
+assert.equal(list.children.length, 1);
+const sbRkpRow = list.children[0];
+const sbRkpBody = sbRkpRow.children[1];
+const sbRkpName = sbRkpBody.children[0];
+assert.equal(sbRkpName.children[0].textContent, 'sb_rkp.xml');
+assert.equal(sbRkpName.children[1].className, 'ct-badge ct-badge-strongbox');
+assert.equal(sbRkpName.children[1].textContent, 'StrongBox');
+
 // Test 2: Non-RKP TEE renders TEE badge
 context.setInventory([
   { id: '2', filename: 'tee.xml', scope: 'managed', certificate_serial: '456', security_level: 'TEE' }
@@ -323,6 +337,18 @@ assert.equal(vBadges2.children[1].className, 'ct-badge ct-badge-strongbox');
 assert.equal(vBadges2.children[1].textContent, 'StrongBox');
 assert.equal(vBadges2.children[2].className, 'ct-badge ct-badge-ecdsa');
 assert.equal(vBadges2.children[2].textContent, 'ECDSA');
+
+// Item 3: VALID, StrongBox, is_rkp: true renders StrongBox badge
+context.setVerificationItems([
+  { filename: 'box_sb_rkp.xml', status: 'VALID', details: 'Active', security_level: 'StrongBox', is_rkp: true }
+]);
+verifyResult.children = [];
+context.renderVerification();
+assert.equal(verifyResult.children.length, 1);
+const vRowSbRkp = verifyResult.children[0];
+const vBadgesSbRkp = vRowSbRkp.children[0].children[1];
+assert.equal(vBadgesSbRkp.children[1].className, 'ct-badge ct-badge-strongbox');
+assert.equal(vBadgesSbRkp.children[1].textContent, 'StrongBox');
 
 // Test 12: Stored keybox with expired not_after renders expired badge and includes expiry in meta
 context.setInventory([
