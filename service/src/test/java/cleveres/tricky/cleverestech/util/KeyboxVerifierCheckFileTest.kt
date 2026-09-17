@@ -5,6 +5,7 @@ import cleveres.tricky.cleverestech.RustBackendUnavailableException
 import cleveres.tricky.cleverestech.keystore.CertHack
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -341,7 +342,7 @@ class KeyboxVerifierCheckFileTest {
     }
 
     @Test
-    fun `checkFile classifies isRkp for keybox with Droid CA certificate`() {
+    fun `checkFile does not trust RKP filename or certificate subject`() {
         tempFile.writeText("content")
         val mockKeyBox = Mockito.mock(CertHack.KeyBox::class.java)
         val mockCert = Mockito.mock(java.security.cert.X509Certificate::class.java)
@@ -368,6 +369,6 @@ class KeyboxVerifierCheckFileTest {
 
         assertEquals(KeyboxVerifier.Status.ERROR, result.status)
         assertEquals("TEE", result.securityLevel)
-        assertTrue(result.isRkp)
+        assertFalse(result.isRkp)
     }
 }

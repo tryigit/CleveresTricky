@@ -1769,7 +1769,10 @@ try {
 
         function resetServerForm() {
 const editIdInput = document.getElementById('srvEditId');
-if (editIdInput) editIdInput.value = '';
+if (editIdInput) {
+    editIdInput.value = '';
+    editIdInput.dataset.serverEnabled = 'true';
+}
 const form = document.getElementById('addServerForm');
 if (form) form.style.display = 'none';
 const title = document.getElementById('srvFormTitle');
@@ -1829,7 +1832,10 @@ if (form) {
 if (!s) return;
 resetServerForm();
 const editIdInput = document.getElementById('srvEditId');
-if (editIdInput) editIdInput.value = String(s.id || '');
+if (editIdInput) {
+    editIdInput.value = String(s.id || '');
+    editIdInput.dataset.serverEnabled = String(s.enabled !== false);
+}
 
 const title = document.getElementById('srvFormTitle');
 if (title) {
@@ -1913,6 +1919,7 @@ const refreshIntervalHours = Number.parseInt(document.getElementById('srvRefresh
 if (!Number.isInteger(priority) || priority < -1000000 || priority > 1000000) throw new Error('Priority is out of range');
 if (!Number.isInteger(refreshIntervalHours) || refreshIntervalHours < 1 || refreshIntervalHours > 720) throw new Error('Refresh interval is out of range');
 const editId = (document.getElementById('srvEditId')?.value || '').trim();
+const existingEnabled = document.getElementById('srvEditId')?.dataset.serverEnabled;
 const serverId = editId || ((typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
     ? crypto.randomUUID()
     : 'srv_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 10));
@@ -1923,7 +1930,7 @@ const data = {
     authType,
     authData,
     priority,
-    enabled: true,
+    enabled: editId ? existingEnabled !== 'false' : true,
     autoRefresh: document.getElementById('srvAutoRefresh').checked,
     refreshIntervalHours,
     contentPassword: document.getElementById('srvContentPassword').value || '',

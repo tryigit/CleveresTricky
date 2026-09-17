@@ -1563,8 +1563,14 @@ class WebServer(
                             SecureFile.writeBytes(dest, bytes)
                             CboxManager.refresh()
                         } else {
-                            keyboxValidationError(validateUploadedKeyboxXml(bytes, storedName))?.let { return it }
-                            SecureFile.writeBytes(dest, bytes)
+                            val normalizedBytes =
+                                normalizeKeyboxXmlContent(bytes.toString(Charsets.UTF_8)).toByteArray(Charsets.UTF_8)
+                            try {
+                                keyboxValidationError(validateUploadedKeyboxXml(normalizedBytes, storedName))?.let { return it }
+                                SecureFile.writeBytes(dest, normalizedBytes)
+                            } finally {
+                                normalizedBytes.fill(0)
+                            }
                         }
                         if (!updateKeyboxesFromConfiguredRevocationSource()) {
                             return keyboxActivationFailureResponse()

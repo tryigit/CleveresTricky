@@ -300,10 +300,13 @@ public class CertHackTest {
         X509Certificate remoteProvCert = generateIssuerCert(kp, "CN=Google Remote Key Provisioning, O=Google LLC, C=US");
         CertHack.KeyBox remoteProvBox = new CertHack.KeyBox(kp, List.of(attCert, remoteProvCert), "keybox.xml");
         CertHack.KeyBox filenameRkpBox = new CertHack.KeyBox(kp, List.of(attCert, standardCert), "custom_rkp_keybox.xml");
+        CertHack.KeyBox authenticatedRkpBox =
+                new CertHack.KeyBox(kp, List.of(attCert, standardCert), "trusted.xml", true);
 
-        assertTrue(CertHack.isRkpKeybox(rkpBox));
-        assertTrue(CertHack.isRkpKeybox(remoteProvBox));
-        assertTrue(CertHack.isRkpKeybox(filenameRkpBox));
+        assertFalse(CertHack.isRkpKeybox(rkpBox));
+        assertFalse(CertHack.isRkpKeybox(remoteProvBox));
+        assertFalse(CertHack.isRkpKeybox(filenameRkpBox));
+        assertTrue(CertHack.isRkpKeybox(authenticatedRkpBox));
         assertFalse(CertHack.isRkpKeybox(standardBox));
         assertFalse(CertHack.isRkpKeybox(emptyBox));
         assertFalse(CertHack.isRkpKeybox((CertHack.KeyBox) null));
@@ -321,12 +324,14 @@ public class CertHackTest {
         X509Certificate plainCert = generateIssuerCert(kp, "CN=Google Root CA, O=Google Inc, C=US");
 
         CertHack.KeyBox rkpBox = new CertHack.KeyBox(kp, List.of(rkpCert), "rkp.xml");
+        CertHack.KeyBox authenticatedRkpBox = new CertHack.KeyBox(kp, List.of(plainCert), "trusted.xml", true);
         CertHack.KeyBox plainBox = new CertHack.KeyBox(kp, List.of(plainCert), "plain.xml");
 
         Map<String, List<CertHack.KeyBox>> keyboxes = new HashMap<>();
-        keyboxes.put("RSA", List.of(rkpBox, plainBox));
+        keyboxes.put("RSA", List.of(rkpBox, authenticatedRkpBox, plainBox));
         Map<String, List<CertHack.KeyBox>> keyboxFiles = new HashMap<>();
         keyboxFiles.put("rkp.xml", List.of(rkpBox));
+        keyboxFiles.put("trusted.xml", List.of(authenticatedRkpBox));
         keyboxFiles.put("plain.xml", List.of(plainBox));
 
         Class<?> stateClass = Class.forName("cleveres.tricky.cleverestech.keystore.CertHack$State");
@@ -340,7 +345,8 @@ public class CertHackTest {
         stateField.set(null, newState);
 
         try {
-            assertTrue(CertHack.isRkpKeybox("rkp.xml"));
+            assertFalse(CertHack.isRkpKeybox("rkp.xml"));
+            assertTrue(CertHack.isRkpKeybox("trusted.xml"));
             assertFalse(CertHack.isRkpKeybox("plain.xml"));
             assertFalse(CertHack.isRkpKeybox("unknown.xml"));
         } finally {

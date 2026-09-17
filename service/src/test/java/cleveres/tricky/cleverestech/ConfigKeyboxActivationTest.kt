@@ -241,6 +241,26 @@ class ConfigKeyboxActivationTest {
     }
 
     @Test
+    fun `RKP filename cannot bypass Config revocation verification`() {
+        withKeyboxRoot { root ->
+            val keyboxDir = File(root, "keyboxes").also { check(it.mkdirs()) }
+            File(keyboxDir, "rkp_spoof.xml").writeText(TestKeyboxFixtures.validEcKeyboxXml)
+            ManagedKeyboxParserOracle.install()
+            File(root, "auto_keybox_check").writeText("")
+
+            val verificationCalls = AtomicInteger()
+            KeyboxLoader.activeSetOverride = { ids -> ids.all(ManagedOpaqueKeyOracle::contains) }
+            Config.updateKeyBoxesSyncWithoutExternalSourcesForTesting(emptySet()) { _, _ ->
+                verificationCalls.incrementAndGet()
+                KeyboxVerifier.Status.REVOKED
+            }
+
+            assertEquals(1, verificationCalls.get())
+            assertEquals(0, CertHack.getKeyboxCount())
+        }
+    }
+
+    @Test
     fun `offline keybox admission followed by online CRL refresh deactivates revoked keybox`() {
         withKeyboxRoot { root ->
             val keyboxDir = File(root, "keyboxes").also { check(it.mkdirs()) }

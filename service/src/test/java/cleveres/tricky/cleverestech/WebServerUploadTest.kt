@@ -206,6 +206,20 @@ class WebServerUploadTest {
     }
 
     @Test
+    fun `multipart standalone Keybox is stored in AndroidAttestation wrapper`() {
+        val standalone = TestKeyboxFixtures.validEcKeyboxXml
+            .substringAfter("<Keybox")
+            .substringBeforeLast("</Keybox>")
+            .let { "<Keybox$it</Keybox>" }
+
+        assertEquals(200, uploadMultipartKeybox("standalone.xml", standalone.toByteArray(StandardCharsets.UTF_8)))
+        val stored = File(configDir, "keyboxes/standalone.xml").readText()
+        assertTrue(stored.contains("<AndroidAttestation>"))
+        assertTrue(stored.contains("<NumberOfKeyboxes>1</NumberOfKeyboxes>"))
+        assertTrue(stored.contains("<Keybox"))
+    }
+
+    @Test
     fun `multipart upload accepts full CBOX wire bound`() {
         val content = ByteArray(CboxWireLimits.MAX_BYTES)
         ByteBuffer.wrap(content)
@@ -348,7 +362,7 @@ ${TestKeyboxFixtures.certificate.prependIndent("                    ")}
     }
 
     @Test
-    fun testUploadRkpKeyboxWithOfflineCrlSucceeds() {
+    fun `RKP filename cannot bypass unavailable revocation checks`() {
         val originalRoot = Config.getConfigRoot()
         try {
             Config.setRootForTesting(configDir)
@@ -361,14 +375,9 @@ ${TestKeyboxFixtures.certificate.prependIndent("                    ")}
 
             val rkpXml = TestKeyboxFixtures.validEcKeyboxXml
 
-            // Uploading RKP keybox with offline CRL must succeed
             val (rkpCode, _) = uploadKeyboxResponse("rkp.xml", rkpXml)
-            assertEquals(200, rkpCode)
-            assertTrue(File(configDir, "keyboxes/rkp.xml").isFile)
-
-            // Uploading standard non-RKP keybox with offline CRL must fail with 503
-            val (standardCode, _) = uploadKeyboxResponse("standard.xml", rkpXml)
-            assertEquals(HttpURLConnection.HTTP_UNAVAILABLE, standardCode)
+            assertEquals(HttpURLConnection.HTTP_UNAVAILABLE, rkpCode)
+            assertFalse(File(configDir, "keyboxes/rkp.xml").exists())
         } finally {
             Config.setRootForTesting(originalRoot)
             ManagedKeyboxParserOracle.install()

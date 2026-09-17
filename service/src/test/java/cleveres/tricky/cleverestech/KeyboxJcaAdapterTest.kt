@@ -3,10 +3,14 @@ package cleveres.tricky.cleverestech
 import cleveres.tricky.cleverestech.keystore.CertHack
 import cleveres.tricky.cleverestech.keystore.ManagedKeyboxOracle
 import java.io.InputStreamReader
+import java.security.cert.CertificateExpiredException
+import java.security.cert.X509Certificate
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.mockito.Mockito
 
 class KeyboxJcaAdapterTest {
     @Test
@@ -69,6 +73,17 @@ class KeyboxJcaAdapterTest {
             )
 
         assertTrue(KeyboxJcaAdapter.materialize(document, "corrupt.xml").isEmpty())
+    }
+
+    @Test
+    fun `expired certificate makes chain validation fail closed`() {
+        val expired = Mockito.mock(X509Certificate::class.java)
+        Mockito.doThrow(CertificateExpiredException()).`when`(expired).checkValidity()
+        val method = KeyboxJcaAdapter::class.java.getDeclaredMethod("validChain", List::class.java)
+        method.isAccessible = true
+
+        assertFalse(method.invoke(KeyboxJcaAdapter, listOf(expired)) as Boolean)
+        Mockito.verify(expired).checkValidity()
     }
 
     private fun assertAdapterMatchesLegacy(

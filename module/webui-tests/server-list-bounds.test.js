@@ -146,7 +146,7 @@ assert.ok(addServerStart >= 0 && addServerEnd > addServerStart, 'addServer imple
 const addServerImpl = source.slice(addServerStart, addServerEnd);
 
 const serverInputs = {
-  srvEditId: { value: '' },
+  srvEditId: { value: '', dataset: {} },
   srvName: { value: 'Primary Feed' },
   srvUrl: { value: 'https://example.test/repo' },
   srvAuthType: { value: 'BEARER' },
@@ -274,6 +274,7 @@ vm.runInContext(`
     authType: 'API_KEY',
     authData: { headerName: 'X-API-Key', key: 'secret-key-123' },
     priority: 15,
+    enabled: false,
     refreshIntervalHours: 48,
     autoRefresh: true,
     contentPassword: 'my-cbox-password',
@@ -287,6 +288,7 @@ vm.runInContext(`
   assert.equal(serverInputs.srvApiKeyName.value, 'X-API-Key');
   assert.equal(serverInputs.srvApiKeyValue.value, 'secret-key-123');
   assert.equal(serverInputs.srvPriority.value, 15);
+  assert.equal(serverInputs.srvEditId.dataset.serverEnabled, 'false');
   assert.equal(serverInputs.srvRefreshHours.value, 48);
   assert.equal(serverInputs.srvContentPassword.value, 'my-cbox-password');
   assert.equal(serverInputs.srvContentPublicKey.value, 'my-cbox-public-key');
@@ -299,6 +301,7 @@ vm.runInContext(`
   await context.addServer();
   assert.equal(addServerPostPayload.id, 'hub-server-custom', 'addServer must preserve server ID when editing');
   assert.equal(addServerPostPayload.name, 'Custom Hub');
+  assert.equal(addServerPostPayload.enabled, false, 'editing must preserve a disabled server state');
   assert.equal(lastNotification, 'Server Updated');
 
   // Verify resetServerForm clears edit state
