@@ -1,9 +1,7 @@
 # Changelog
 
-## V2.8.2
+## V2.8.3
 
-- **Remote Server Keybox Breakdown:** Added detailed stats badges for configured remote servers in WebUI, displaying the exact counts of loaded remote keyboxes (including fetched and validated cached keyboxes) broken down by type (`Keybox`, `CBOX`, `RKP`, `RSA`) in a clean, non-disclosing badge layout without exposing private certificate names or identifiers.
-- **Dynamic KeyboxHub Recommendation:** Smart detection of KeyboxHub servers (`keybox.tryigit.dev`). The recommendation banner is automatically hidden when KeyboxHub is already added, and dynamically reappears if the server is removed.
-- **Enhanced Remote Server Architecture:** Robust server response tracking and state synchronization across live fetch, cached reloads, and server deactivation.
-- **WebUI TEE Badge & Layout Refinements:** Restored explicit `TEE` security badge rendering for keyboxes without RKP protection. Improved visual breathing room between security/algorithm badges and certificate/scope metadata rows in stored keyboxes and verification cards.
-- **Remote Server Refresh Interval & Status Localization:** Display configured refresh interval badge directly in the remote server header. Added multilingual localization support for remote server `OK` status badges.
+- **WebUI XML Keybox Paste Fix:** Fixed an input reference error (`filenameInput is not defined`) when saving pasted XML keybox content. Automatically defaults to `keybox.xml` (or `rkp.xml` for RKP keyboxes) when the filename field is left blank.
+- **Improved Keybox Upload Compatibility:** Added UTF-8 BOM stripping to prevent XML parse errors on upload. Fixed keybox addition so keyboxes can be added and inspected in the verification view regardless of expiration status, while honoring automatic deletion when auto keybox check is enabled.
+- **Remote Server TEE Badges:** Replaced the technical `RSA` certificate badge on remote servers with a unified `TEE` security classification badge for all non-RKP keyboxes.

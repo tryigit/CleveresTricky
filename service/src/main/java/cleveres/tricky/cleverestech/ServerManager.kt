@@ -45,6 +45,7 @@ object ServerManager {
         var contentPublicKey: String? = null,
         var keyboxCount: Int = 0,
         var rkpCount: Int = 0,
+        var teeCount: Int = 0,
         var rsaCount: Int = 0,
         var cboxCount: Int = 0,
         val hasContentPassword: Boolean = !contentPassword.isNullOrEmpty(),
@@ -157,6 +158,9 @@ object ServerManager {
     }
 
     internal fun parseServer(json: JSONObject): ServerConfig {
+        val teeOpt = json.optInt("teeCount", -1)
+        val rsaOpt = json.optInt("rsaCount", 0).coerceIn(0, MAX_REMOTE_KEYBOXES)
+        val resolvedTee = if (teeOpt >= 0) teeOpt.coerceIn(0, MAX_REMOTE_KEYBOXES) else rsaOpt
         return ServerConfig(
             id = json.getString("id"),
             name = json.getString("name"),
@@ -174,7 +178,8 @@ object ServerManager {
             contentPublicKey = json.optString("contentPublicKey").ifEmpty { null },
             keyboxCount = json.optInt("keyboxCount", 0).coerceIn(0, MAX_REMOTE_KEYBOXES),
             rkpCount = json.optInt("rkpCount", 0).coerceIn(0, MAX_REMOTE_KEYBOXES),
-            rsaCount = json.optInt("rsaCount", 0).coerceIn(0, MAX_REMOTE_KEYBOXES),
+            teeCount = resolvedTee,
+            rsaCount = if (json.has("rsaCount")) rsaOpt else resolvedTee,
             cboxCount = json.optInt("cboxCount", 0).coerceIn(0, MAX_REMOTE_KEYBOXES),
         )
     }
@@ -197,6 +202,7 @@ object ServerManager {
         json.put("contentPublicKey", server.contentPublicKey ?: "")
         json.put("keyboxCount", server.keyboxCount)
         json.put("rkpCount", server.rkpCount)
+        json.put("teeCount", server.teeCount)
         json.put("rsaCount", server.rsaCount)
         json.put("cboxCount", server.cboxCount)
         return json
@@ -356,6 +362,7 @@ object ServerManager {
         }
         require(server.keyboxCount in 0..MAX_REMOTE_KEYBOXES) { "Invalid keybox count" }
         require(server.rkpCount in 0..MAX_REMOTE_KEYBOXES) { "Invalid rkp count" }
+        require(server.teeCount in 0..MAX_REMOTE_KEYBOXES) { "Invalid tee count" }
         require(server.rsaCount in 0..MAX_REMOTE_KEYBOXES) { "Invalid rsa count" }
         require(server.cboxCount in 0..MAX_REMOTE_KEYBOXES) { "Invalid cbox count" }
         validateAuthentication(server)
@@ -474,7 +481,8 @@ object ServerManager {
                                 serverKeyboxes[server.id] = parsed
                                 server.keyboxCount = parsed.size
                                 server.rkpCount = parsed.count { CertHack.isRkpKeybox(it) || RkpProvenanceStore.hasVerifiedRkpCertificates(it) }
-                                server.rsaCount = parsed.count { CertHack.hasRsaKeybox(it) }
+                                server.teeCount = (parsed.size - server.rkpCount).coerceAtLeast(0)
+                                server.rsaCount = server.teeCount
                                 server.cboxCount = parsed.count { isCboxKeybox(it) }
                                 Logger.i("Loaded cached keyboxes for server: ${server.name}")
                             } else {
@@ -572,7 +580,8 @@ object ServerManager {
             }
         target.keyboxCount = keyboxes.size
         target.rkpCount = keyboxes.count { CertHack.isRkpKeybox(it) || RkpProvenanceStore.hasVerifiedRkpCertificates(it) }
-        target.rsaCount = keyboxes.count { CertHack.hasRsaKeybox(it) }
+        target.teeCount = (keyboxes.size - target.rkpCount).coerceAtLeast(0)
+        target.rsaCount = target.teeCount
         target.cboxCount = keyboxes.count { isCboxKeybox(it) }
         serverKeyboxes[target.id] = keyboxes
         if (cacheBytes != null) cacheXml(context.snapshot, cacheBytes)
@@ -903,9 +912,10 @@ object ServerManager {
         serverKeyboxes.remove(serverId)
         val server = serversMap[serverId]
         if (server != null) {
-            val hadCounts = server.keyboxCount != 0 || server.rkpCount != 0 || server.rsaCount != 0 || server.cboxCount != 0
+            val hadCounts = server.keyboxCount != 0 || server.rkpCount != 0 || server.teeCount != 0 || server.rsaCount != 0 || server.cboxCount != 0
             server.keyboxCount = 0
             server.rkpCount = 0
+            server.teeCount = 0
             server.rsaCount = 0
             server.cboxCount = 0
             if (hadCounts) {

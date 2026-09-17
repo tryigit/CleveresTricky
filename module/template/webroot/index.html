@@ -1641,7 +1641,7 @@ try {
             lastStatus: String(server?.lastStatus ?? 'UNKNOWN').slice(0, 128),
             keyboxCount: Math.max(0, Math.min(64, Number(server?.keyboxCount) || 0)),
             rkpCount: Math.max(0, Math.min(64, Number(server?.rkpCount) || 0)),
-            rsaCount: Math.max(0, Math.min(64, Number(server?.rsaCount) || 0)),
+            teeCount: Math.max(0, Math.min(64, Number(server?.teeCount !== undefined ? server.teeCount : server?.rsaCount) || 0)),
             cboxCount: Math.max(0, Math.min(64, Number(server?.cboxCount) || 0)),
             priority: Number.isInteger(server?.priority) ? server.priority : (Number.parseInt(server?.priority, 10) || 0),
             enabled: server?.enabled !== false,
@@ -1650,11 +1650,6 @@ try {
             autoRefresh: server?.autoRefresh !== false,
             contentPassword: String(server?.contentPassword || ''),
             contentPublicKey: String(server?.contentPublicKey || ''),
-            lastStatus: String(server?.lastStatus ?? 'UNKNOWN').slice(0, 128),
-            keyboxCount: Math.max(0, Math.min(64, Number(server?.keyboxCount) || 0)),
-            rkpCount: Math.max(0, Math.min(64, Number(server?.rkpCount) || 0)),
-            rsaCount: Math.max(0, Math.min(64, Number(server?.rsaCount) || 0)),
-            cboxCount: Math.max(0, Math.min(64, Number(server?.cboxCount) || 0)),
             refreshIntervalHours: Math.max(1, Math.min(720, Number(server?.refreshIntervalHours) || 24))
         })).filter(server => server.id && server.url)
         : [];
@@ -1707,11 +1702,11 @@ try {
             rkpBadge.className = 'ct-badge ct-badge-rkp';
             rkpBadge.textContent = 'RKP: ' + s.rkpCount;
 
-            const rsaBadge = document.createElement('span');
-            rsaBadge.className = 'ct-badge ct-badge-rsa';
-            rsaBadge.textContent = 'RSA: ' + s.rsaCount;
+            const teeBadge = document.createElement('span');
+            teeBadge.className = 'ct-badge ct-badge-tee';
+            teeBadge.textContent = 'TEE: ' + s.teeCount;
 
-            stats.append(kbBadge, cboxBadge, rkpBadge, rsaBadge);
+            stats.append(kbBadge, cboxBadge, rkpBadge, teeBadge);
             info.append(stats);
         }
 
@@ -2052,6 +2047,8 @@ if (!content) {
     notify('Please paste XML content first', 'error');
     return;
 }
+const filenameEl = document.getElementById('kbFilenameInput');
+const filenameInput = filenameEl ? filenameEl.value.trim() : '';
 let isRkp = (/droid\s*ca|rkp|remote\s*provisioning|key\s*provisioning/i.test(content) || /rkp/i.test(filenameInput));
 let filename = filenameInput || (isRkp ? 'rkp.xml' : 'keybox.xml');
 if (!filename.toLowerCase().endsWith('.xml')) filename += '.xml';

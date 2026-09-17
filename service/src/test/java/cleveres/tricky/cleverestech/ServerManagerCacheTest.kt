@@ -174,6 +174,7 @@ class ServerManagerCacheTest {
             serverConfig().copy(
                 keyboxCount = 10,
                 rkpCount = 3,
+                teeCount = 7,
                 rsaCount = 8,
                 cboxCount = 7,
             )
@@ -182,12 +183,14 @@ class ServerManagerCacheTest {
         val json = ServerManager.serializeServer(server)
         assertEquals(10, json.getInt("keyboxCount"))
         assertEquals(3, json.getInt("rkpCount"))
+        assertEquals(7, json.getInt("teeCount"))
         assertEquals(8, json.getInt("rsaCount"))
         assertEquals(7, json.getInt("cboxCount"))
 
         val parsed = ServerManager.parseServer(json)
         assertEquals(10, parsed.keyboxCount)
         assertEquals(3, parsed.rkpCount)
+        assertEquals(7, parsed.teeCount)
         assertEquals(8, parsed.rsaCount)
         assertEquals(7, parsed.cboxCount)
     }

@@ -101,6 +101,7 @@ const context = {
               lastStatus: 'OK',
               keyboxCount: 4,
               rkpCount: 2,
+              teeCount: 2,
               rsaCount: 3,
               cboxCount: 4,
               refreshIntervalHours: 12
@@ -242,7 +243,7 @@ vm.runInContext(`
   const statsDiv = infoCol.children.find(c => c.className === 'ct-server-stats');
   assert.ok(statsDiv, 'stats breakdown must be rendered');
   const badgeTexts = statsDiv.children.map(c => c.textContent);
-  assert.deepEqual(badgeTexts, ['Keybox: 4', 'CBOX: 4', 'RKP: 2', 'RSA: 3']);
+  assert.deepEqual(badgeTexts, ['Keybox: 4', 'CBOX: 4', 'RKP: 2', 'TEE: 2']);
   // Ensure no sensitive or internal names/IDs are rendered
   assert.ok(!JSON.stringify(badgeTexts).includes('.xml'));
   assert.ok(!JSON.stringify(badgeTexts).includes('hub-server'));

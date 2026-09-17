@@ -813,16 +813,16 @@ class WebServer(
     }
 
     private fun normalizeKeyboxXmlContent(raw: String): String {
-        val trimmed = raw.trim()
-        if (!trimmed.contains("<AndroidAttestation", ignoreCase = true) &&
-            trimmed.contains("<Keybox", ignoreCase = true)
+        val stripped = raw.removePrefix("\uFEFF").trim()
+        if (!stripped.contains("<AndroidAttestation", ignoreCase = true) &&
+            stripped.contains("<Keybox", ignoreCase = true)
         ) {
-            val hasXmlDecl = trimmed.startsWith("<?xml", ignoreCase = true)
-            val decl = if (hasXmlDecl) trimmed.substringBefore("?>") + "?>\n" else "<?xml version=\"1.0\"?>\n"
-            val body = if (hasXmlDecl) trimmed.substringAfter("?>").trim() else trimmed
+            val hasXmlDecl = stripped.startsWith("<?xml", ignoreCase = true)
+            val decl = if (hasXmlDecl) stripped.substringBefore("?>") + "?>\n" else "<?xml version=\"1.0\"?>\n"
+            val body = if (hasXmlDecl) stripped.substringAfter("?>").trim() else stripped
             return "$decl<AndroidAttestation>\n    <NumberOfKeyboxes>1</NumberOfKeyboxes>\n    $body\n</AndroidAttestation>"
         }
-        return raw
+        return stripped
     }
 
     private fun validateUploadedKeyboxXml(
@@ -1810,6 +1810,7 @@ class WebServer(
                 obj.put("lastAuthor", s.lastAuthor)
                 obj.put("keyboxCount", s.keyboxCount)
                 obj.put("rkpCount", s.rkpCount)
+                obj.put("teeCount", s.teeCount)
                 obj.put("rsaCount", s.rsaCount)
                 obj.put("cboxCount", s.cboxCount)
                 if (exposeSecrets) {
@@ -1880,6 +1881,7 @@ class WebServer(
                             contentPublicKey = contentPublicKey,
                             keyboxCount = existing?.keyboxCount ?: 0,
                             rkpCount = existing?.rkpCount ?: 0,
+                            teeCount = existing?.teeCount ?: 0,
                             rsaCount = existing?.rsaCount ?: 0,
                             cboxCount = existing?.cboxCount ?: 0,
                         )
