@@ -63,10 +63,10 @@ public final class ManagedKeyboxOracle {
         try {
             XMLParser xmlParser = new XMLParser(reader);
             XMLParser.Element root = xmlParser.getRoot();
-            if (root == null || (!"AndroidAttestation".equalsIgnoreCase(root.name) && !"Keybox".equalsIgnoreCase(root.name))) return Collections.emptyList();
+            if (root == null || (!"AndroidAttestation".equals(root.name) && !"Keybox".equals(root.name))) return Collections.emptyList();
 
             List<XMLParser.Element> keyboxes;
-            if ("Keybox".equalsIgnoreCase(root.name)) {
+            if ("Keybox".equals(root.name)) {
                 keyboxes = Collections.singletonList(root);
             } else {
                 XMLParser.Element numKeyboxes = root.getChild("NumberOfKeyboxes");
