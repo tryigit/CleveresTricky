@@ -54,6 +54,17 @@ public final class ManagedKeyboxOracle {
         return parse(reader, filename, false);
     }
 
+    /**
+     * Parses a keybox document using the managed compatibility oracle.
+     *
+     * <p>The entire document is rejected when any declared keybox, key, certificate chain, or
+     * key pair is malformed or inconsistent.
+     *
+     * @param reader source XML reader
+     * @param filename source name attached to parsed keyboxes
+     * @param authenticatedRkpProvenance whether verified RKP provenance should be retained
+     * @return parsed keyboxes, or an empty list when the document is invalid
+     */
     public static List<CertHack.KeyBox> parse(
             Reader reader,
             String filename,

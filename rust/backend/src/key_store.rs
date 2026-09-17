@@ -56,6 +56,9 @@ pub(crate) fn reset_for_testing() {
     store.clear_poison();
 }
 
+/// Validates and atomically registers every key in a parsed keybox document.
+///
+/// Registration fails before the shared store is mutated when any key is invalid.
 pub fn register_document(document: &KeyboxDocument) -> Result<Vec<PublicKeyRecord>, &'static str> {
     if document.keys.is_empty() || document.keys.len() > MAX_STORED_KEYS {
         return Err("keybox key count exceeds store bound");

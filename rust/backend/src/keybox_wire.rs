@@ -194,6 +194,7 @@ fn encode_document(
     Ok(output)
 }
 
+/// Validates keybox metadata and key records before they are encoded for the wire protocol.
 fn validate_wire_fields(
     declared_keyboxes: usize,
     keybox_count: usize,

@@ -835,6 +835,10 @@ class WebServer(
         BACKEND_UNAVAILABLE,
     }
 
+    /**
+     * Removes invalid sibling keys from a mixed keybox document while preserving valid keys.
+     * Documents without both valid and invalid keys are returned unchanged for normal validation.
+     */
     private fun sanitizeKeyboxXmlContent(xml: String): String {
         val keyRegex = Regex("(?is)<Key(?:\\s+[^>]*)?>.*?</Key>")
         val matches = keyRegex.findAll(xml).toList()
@@ -879,6 +883,9 @@ class WebServer(
         return xml
     }
 
+    /**
+     * Normalizes uploaded keybox XML and wraps a bare Keybox element in its required container.
+     */
     private fun normalizeKeyboxXmlContent(raw: String): String {
         val stripped = raw.removePrefix("\uFEFF").trim()
         val wrapped =

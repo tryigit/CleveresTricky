@@ -513,6 +513,7 @@ ${TestKeyboxFixtures.certificate.prependIndent("                    ")}
         }
     }
 
+    /** Verifies that mixed RKP uploads persist only the valid key and retain RKP provenance. */
     @Test
     fun `keybox with valid RKP EC key and dummy sibling RSA key uploads successfully and retains valid key`() {
         val originalRoot = Config.getConfigRoot()
