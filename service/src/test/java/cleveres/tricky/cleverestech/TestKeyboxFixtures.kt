@@ -65,6 +65,18 @@ object TestKeyboxFixtures {
             name,
             rkpRootKeyPair.public,
         )
+        builder.addExtension(
+            org.bouncycastle.asn1.x509.Extension.basicConstraints,
+            true,
+            org.bouncycastle.asn1.x509.BasicConstraints(true),
+        )
+        builder.addExtension(
+            org.bouncycastle.asn1.x509.Extension.keyUsage,
+            true,
+            org.bouncycastle.asn1.x509.KeyUsage(
+                org.bouncycastle.asn1.x509.KeyUsage.keyCertSign or org.bouncycastle.asn1.x509.KeyUsage.cRLSign,
+            ),
+        )
         val signer = org.bouncycastle.operator.jcajce.JcaContentSignerBuilder("SHA256withECDSA").build(rkpRootKeyPair.private)
         org.bouncycastle.cert.jcajce.JcaX509CertificateConverter().getCertificate(builder.build(signer))
     }
@@ -142,10 +154,106 @@ object TestKeyboxFixtures {
             intermediateName,
             intermediateKp.public,
         )
+        intermediateBuilder.addExtension(
+            org.bouncycastle.asn1.x509.Extension.basicConstraints,
+            true,
+            org.bouncycastle.asn1.x509.BasicConstraints(true),
+        )
+        intermediateBuilder.addExtension(
+            org.bouncycastle.asn1.x509.Extension.keyUsage,
+            true,
+            org.bouncycastle.asn1.x509.KeyUsage(
+                org.bouncycastle.asn1.x509.KeyUsage.keyCertSign or org.bouncycastle.asn1.x509.KeyUsage.cRLSign,
+            ),
+        )
         val rootSigner = org.bouncycastle.operator.jcajce.JcaContentSignerBuilder("SHA256withECDSA").build(rkpRootKeyPair.private)
         val intermediateCert = org.bouncycastle.cert.jcajce.JcaX509CertificateConverter().getCertificate(intermediateBuilder.build(rootSigner))
 
         // Leaf cert signed by Intermediate (Droid CA2)
+        val leafBuilder = org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder(
+            intermediateName,
+            java.math.BigInteger.valueOf(3),
+            notBefore,
+            notAfter,
+            leafName,
+            leafKp.public,
+        )
+        val intermediateSigner = org.bouncycastle.operator.jcajce.JcaContentSignerBuilder("SHA256withECDSA").build(intermediateKp.private)
+        val leafCert = org.bouncycastle.cert.jcajce.JcaX509CertificateConverter().getCertificate(leafBuilder.build(intermediateSigner))
+
+        val keyPem = buildString {
+            appendLine("-----BEGIN PRIVATE KEY-----")
+            appendLine(java.util.Base64.getMimeEncoder(64, "\n".toByteArray()).encodeToString(leafKp.private.encoded))
+            appendLine("-----END PRIVATE KEY-----")
+        }
+        val leafCertPem = buildString {
+            appendLine("-----BEGIN CERTIFICATE-----")
+            appendLine(java.util.Base64.getMimeEncoder(64, "\n".toByteArray()).encodeToString(leafCert.encoded))
+            appendLine("-----END CERTIFICATE-----")
+        }
+        val intermediateCertPem = buildString {
+            appendLine("-----BEGIN CERTIFICATE-----")
+            appendLine(java.util.Base64.getMimeEncoder(64, "\n".toByteArray()).encodeToString(intermediateCert.encoded))
+            appendLine("-----END CERTIFICATE-----")
+        }
+        val rootCertPem = buildString {
+            appendLine("-----BEGIN CERTIFICATE-----")
+            appendLine(java.util.Base64.getMimeEncoder(64, "\n".toByteArray()).encodeToString(rkpRootCert.encoded))
+            appendLine("-----END CERTIFICATE-----")
+        }
+
+        buildString {
+            appendLine("""<?xml version="1.0"?>""")
+            appendLine("<AndroidAttestation>")
+            appendLine("  <NumberOfKeyboxes>1</NumberOfKeyboxes>")
+            appendLine("  <Keybox>")
+            appendLine("    <Key algorithm=\"ecdsa\">")
+            appendLine("      <PrivateKey>")
+            appendLine(keyPem.trim().prependIndent("        "))
+            appendLine("      </PrivateKey>")
+            appendLine("      <CertificateChain>")
+            appendLine("        <NumberOfCertificates>3</NumberOfCertificates>")
+            appendLine("        <Certificate>")
+            appendLine(leafCertPem.trim().prependIndent("          "))
+            appendLine("        </Certificate>")
+            appendLine("        <Certificate>")
+            appendLine(intermediateCertPem.trim().prependIndent("          "))
+            appendLine("        </Certificate>")
+            appendLine("        <Certificate>")
+            appendLine(rootCertPem.trim().prependIndent("          "))
+            appendLine("        </Certificate>")
+            appendLine("      </CertificateChain>")
+            appendLine("    </Key>")
+            appendLine("  </Keybox>")
+            append("</AndroidAttestation>")
+        }
+    }
+
+    val nonCaIntermediateRkpKeyboxXml: String by lazy {
+        val kpg = java.security.KeyPairGenerator.getInstance("EC")
+        kpg.initialize(java.security.spec.ECGenParameterSpec("secp256r1"))
+        val leafKp = kpg.generateKeyPair()
+        val intermediateKp = kpg.generateKeyPair()
+
+        val notBefore = java.util.Date(System.currentTimeMillis() - 10_000L)
+        val notAfter = java.util.Date(System.currentTimeMillis() + 100_000_000L)
+        val rootName = org.bouncycastle.asn1.x500.X500Name("CN=Key Attestation CA1, OU=Android, O=Google LLC, C=US")
+        val intermediateName = org.bouncycastle.asn1.x500.X500Name("CN=Droid CA2, O=Google LLC, C=US")
+        val leafName = org.bouncycastle.asn1.x500.X500Name("CN=Android Keystore Key")
+
+        // Intermediate cert without CA BasicConstraints (defaults to end-entity)
+        val intermediateBuilder = org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder(
+            rootName,
+            java.math.BigInteger.valueOf(2),
+            notBefore,
+            notAfter,
+            intermediateName,
+            intermediateKp.public,
+        )
+        val rootSigner = org.bouncycastle.operator.jcajce.JcaContentSignerBuilder("SHA256withECDSA").build(rkpRootKeyPair.private)
+        val intermediateCert = org.bouncycastle.cert.jcajce.JcaX509CertificateConverter().getCertificate(intermediateBuilder.build(rootSigner))
+
+        // Leaf cert signed by non-CA intermediate
         val leafBuilder = org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder(
             intermediateName,
             java.math.BigInteger.valueOf(3),

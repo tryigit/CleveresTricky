@@ -169,7 +169,14 @@ public final class ManagedKeyboxOracle {
             }
             for (int index = 0; index < certificateChain.size(); index++) {
                 if (!(certificateChain.get(index) instanceof X509Certificate certificate)) return false;
-                if (index + 1 < certificateChain.size()) certificate.verify(certificateChain.get(index + 1).getPublicKey());
+                certificate.checkValidity();
+                if (index + 1 < certificateChain.size()) {
+                    if (!(certificateChain.get(index + 1) instanceof X509Certificate issuerCert)) return false;
+                    certificate.verify(issuerCert.getPublicKey());
+                    if (issuerCert.getBasicConstraints() < 0) return false;
+                    boolean[] keyUsage = issuerCert.getKeyUsage();
+                    if (keyUsage != null && (keyUsage.length <= 5 || !keyUsage[5])) return false;
+                }
             }
             return true;
         } catch (Exception error) {

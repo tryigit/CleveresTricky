@@ -8,7 +8,10 @@ import java.io.ByteArrayInputStream
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.LinkOption
+import java.security.cert.CertPathValidator
 import java.security.cert.CertificateFactory
+import java.security.cert.PKIXParameters
+import java.security.cert.TrustAnchor
 import java.security.cert.X509Certificate
 import java.util.Arrays
 import java.util.Locale
@@ -138,36 +141,43 @@ internal object RkpProvenanceStore {
             x509Certs.add(x509)
         }
 
-        // Verify the signature chain from leaf up
-        for (i in 0 until x509Certs.size - 1) {
-            try {
-                x509Certs[i].verify(x509Certs[i + 1].publicKey)
-            } catch (_: Exception) {
-                return false
-            }
-        }
-
-        // Validate the chain root against an allowed RKP trust anchor
         val anchors = getAllowedTrustAnchors()
-        val rootCert = x509Certs.last()
-        val isAnchored = anchors.any { anchor ->
-            if (Arrays.equals(rootCert.encoded, anchor.encoded)) {
-                true
-            } else {
-                try {
-                    rootCert.verify(anchor.publicKey)
-                    true
-                } catch (_: Exception) {
-                    false
+        val terminalCert = x509Certs.last()
+
+        val matchingAnchor = anchors.firstOrNull { Arrays.equals(it.encoded, terminalCert.encoded) }
+        val (selectedAnchor, pathCerts) =
+            when {
+                matchingAnchor != null -> {
+                    if (x509Certs.size < 2) return false
+                    matchingAnchor to x509Certs.subList(0, x509Certs.size - 1)
+                }
+                else -> {
+                    val issuingAnchor =
+                        anchors.firstOrNull { anchor ->
+                            if (anchor.subjectX500Principal != terminalCert.issuerX500Principal) {
+                                false
+                            } else {
+                                try {
+                                    terminalCert.verify(anchor.publicKey)
+                                    true
+                                } catch (_: Exception) {
+                                    false
+                                }
+                            }
+                        } ?: return false
+                    issuingAnchor to x509Certs
                 }
             }
-        }
-        if (!isAnchored) return false
 
-        // A single self-signed cert is only valid if it is explicitly an allowed trust anchor
-        if (x509Certs.size == 1 && rootCert.issuerX500Principal == rootCert.subjectX500Principal) {
-            val isExplicitAnchor = anchors.any { Arrays.equals(rootCert.encoded, it.encoded) }
-            if (!isExplicitAnchor) return false
+        try {
+            val cf = CertificateFactory.getInstance("X.509")
+            val certPath = cf.generateCertPath(pathCerts)
+            val validator = CertPathValidator.getInstance("PKIX")
+            val params = PKIXParameters(setOf(TrustAnchor(selectedAnchor, null)))
+            params.isRevocationEnabled = false
+            validator.validate(certPath, params)
+        } catch (_: Exception) {
+            return false
         }
 
         // Ensure the chain represents Remote Key Provisioning (RKP)

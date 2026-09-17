@@ -102,6 +102,7 @@ class WebServerUploadTest {
     @After
     fun tearDown() {
         KeyboxLoader.resetForTesting()
+        RkpProvenanceStore.resetForTesting(configDir)
         BackendRecovery.recoveryOverride = null
         cleveres.tricky.cleverestech.keystore.CertHack.setKeyboxes(emptyList())
         ManagedKeyboxParserOracle.reset()
@@ -430,8 +431,17 @@ ${TestKeyboxFixtures.certificate.prependIndent("                    ")}
             assertEquals(HttpURLConnection.HTTP_UNAVAILABLE, multipartCode)
             assertFalse(File(configDir, "keyboxes/fake_rkp_multi.xml").exists())
             assertFalse(RkpProvenanceStore.isRkp("fake_rkp_multi.xml", configDir))
+
+            // Keybox with non-CA intermediate signed by anchor must be rejected by CA constraint checks
+            RkpProvenanceStore.addTrustedAnchorForTesting(TestKeyboxFixtures.rkpRootCert)
+            val nonCaRkpXml = TestKeyboxFixtures.nonCaIntermediateRkpKeyboxXml
+            val (nonCaCode, _) = uploadKeyboxResponse("non_ca_rkp.xml", nonCaRkpXml, authenticatedRkp = true)
+            assertEquals(HttpURLConnection.HTTP_UNAVAILABLE, nonCaCode)
+            assertFalse(File(configDir, "keyboxes/non_ca_rkp.xml").exists())
+            assertFalse(RkpProvenanceStore.isRkp("non_ca_rkp.xml", configDir))
         } finally {
             Config.setRootForTesting(originalRoot)
+            RkpProvenanceStore.resetForTesting(configDir)
             ManagedKeyboxParserOracle.install()
         }
     }
@@ -489,6 +499,7 @@ ${TestKeyboxFixtures.certificate.prependIndent("                    ")}
             assertFalse(RkpProvenanceStore.isRkp("rkp_form.xml", configDir))
         } finally {
             Config.setRootForTesting(originalRoot)
+            RkpProvenanceStore.resetForTesting(configDir)
             ManagedKeyboxParserOracle.install()
         }
     }
