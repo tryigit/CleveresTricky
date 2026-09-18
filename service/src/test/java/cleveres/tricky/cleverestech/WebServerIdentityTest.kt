@@ -3,6 +3,7 @@ package cleveres.tricky.cleverestech
 import cleveres.tricky.cleverestech.util.RandomUtils
 import cleveres.tricky.cleverestech.util.SecureFile
 import cleveres.tricky.cleverestech.util.SecureFileOperations
+import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -311,6 +312,89 @@ class WebServerIdentityTest {
         val response = postIdentity(JSONObject().put("serial", "DEVICE01"))
         assertEquals(400, response.first)
         assertEquals("SAFE", destination.readText())
+    }
+
+    @Test
+    fun `custom template saved to templates_json can be applied via identity API`() {
+        val customTemplates =
+            """
+            [{
+              "id":"mycustompixel",
+              "manufacturer":"Google",
+              "model":"Pixel Custom",
+              "fingerprint":"google/custom/custom:15/BUILD/1:user/release-keys",
+              "brand":"google",
+              "product":"custom",
+              "device":"custom",
+              "release":"15",
+              "buildId":"BUILD",
+              "incremental":"1",
+              "securityPatch":"2026-09-05"
+            }]
+            """.trimIndent()
+        val saveResponse = postSave("templates.json", customTemplates)
+        assertEquals(200, saveResponse.first)
+
+        val identityResponse = postIdentity(JSONObject().put("template", "mycustompixel"))
+        assertEquals(200, identityResponse.first)
+
+        val spoofFile = File(configDir, "spoof_build_vars")
+        assertTrue(spoofFile.exists())
+        val text = spoofFile.readText()
+        assertTrue(text.contains("TEMPLATE=mycustompixel"))
+        assertTrue(text.contains("MODEL=Pixel Custom"))
+        assertTrue(text.contains("FINGERPRINT=google/custom/custom:15/BUILD/1:user/release-keys"))
+    }
+
+    @Test
+    fun `custom template can be saved in spoof_build_vars via file save API`() {
+        val customTemplates =
+            """
+            [{
+              "id":"mycustomdevice",
+              "manufacturer":"Google",
+              "model":"Pixel Custom 2",
+              "fingerprint":"google/custom2/custom2:15/BUILD/2:user/release-keys",
+              "brand":"google",
+              "product":"custom2",
+              "device":"custom2",
+              "release":"15",
+              "buildId":"BUILD",
+              "incremental":"2",
+              "securityPatch":"2026-09-05"
+            }]
+            """.trimIndent()
+        val saveTmplResponse = postSave("templates.json", customTemplates)
+        assertEquals(200, saveTmplResponse.first)
+
+        val spoofContent = "TEMPLATE=mycustomdevice\n"
+        val saveSpoofResponse = postSave("spoof_build_vars", spoofContent)
+        assertEquals(200, saveSpoofResponse.first)
+
+        val spoofFile = File(configDir, "spoof_build_vars")
+        assertTrue(spoofFile.exists())
+        assertTrue(spoofFile.readText().contains("TEMPLATE=mycustomdevice"))
+    }
+
+    @Test
+    fun `templates_json file endpoint returns valid JSON array when file does not exist on disk`() {
+        val file = File(configDir, "templates.json")
+        file.delete()
+        assertFalse(file.exists())
+
+        val response = request("GET", "/api/file?filename=templates.json")
+        assertEquals(200, response.first)
+        val array = JSONArray(response.second)
+        assertTrue(array.length() > 0)
+        val first = array.getJSONObject(0)
+        assertTrue(first.has("id"))
+        assertTrue(first.has("model"))
+    }
+
+    private fun postSave(filename: String, content: String): Pair<Int, String> {
+        val encFilename = URLEncoder.encode(filename, StandardCharsets.UTF_8.name())
+        val encContent = URLEncoder.encode(content, StandardCharsets.UTF_8.name())
+        return request("POST", "/api/save", "filename=$encFilename&content=$encContent")
     }
 
     private fun postIdentity(json: JSONObject): Pair<Int, String> {

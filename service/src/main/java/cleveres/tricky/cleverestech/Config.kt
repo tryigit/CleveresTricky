@@ -1047,9 +1047,9 @@ object Config {
             Logger.i("Updated templates: ${templates.keys}")
         }.onFailure { Logger.e("failed to update custom templates", it) }
 
-    fun getTemplateNames(): Set<String> = templates.keys
+    fun getTemplateNames(): Set<String> = templates.keys + DeviceTemplateManager.listTemplates().map { it.id.lowercase() }
 
-    fun getTemplate(name: String): Map<String, String>? = templates[name.lowercase()]
+    fun getTemplate(name: String): Map<String, String>? = templates[name.lowercase()] ?: DeviceTemplateManager.getTemplateAsMap(name)
 
     fun getBuildVar(key: String): String? = buildVars[key]
 
@@ -1331,7 +1331,7 @@ object Config {
             ProfileAutoIdentityStore.get(key)?.let { return it }
         }
         val appConfig = getAppConfig(uid)
-        val template = if (appConfig?.template != null) templates[appConfig.template] else null
+        val template = if (appConfig?.template != null) getTemplate(appConfig.template) else null
         return template?.get(key) ?: buildVars[key]
     }
 
@@ -1350,7 +1350,7 @@ object Config {
     internal fun isValidBuildVarEntry(key: String, value: String): Boolean {
         if (key !in supportedBuildVarKeys || value.isEmpty() || value.length > MAX_BUILD_VAR_VALUE_LENGTH) return false
         if (value.any(Char::isISOControl)) return false
-        if (key == "TEMPLATE") return value.length <= 64 && templates.containsKey(value.lowercase())
+        if (key == "TEMPLATE") return value.length <= 64 && (templates.containsKey(value.lowercase()) || DeviceTemplateManager.getTemplate(value) != null)
         if (key == "MODULE_HASH") return value.length == 64 && value.all { it.digitToIntOrNull(16) != null }
         if (key == "VISIBLE_SIM_COUNT") return value.length == 1 && value[0] in '0'..'8'
         if (key == "VISIBLE_CAMERA_COUNT") return value.toIntOrNull()?.let { it in 0..16 } == true
@@ -1416,7 +1416,7 @@ object Config {
                         require(isValidBuildVarEntry(key, value)) { "Unsupported or invalid build variable" }
                         require(newVars.size < MAX_BUILD_VAR_ENTRIES || newVars.containsKey(key)) { "Too many build variables" }
                         if (key == "TEMPLATE") {
-                            val template = templates[value.lowercase()] ?: throw IllegalArgumentException("Unknown template")
+                            val template = getTemplate(value) ?: throw IllegalArgumentException("Unknown template")
                             newVars[key] = value.lowercase()
                             newVars.putAll(template.filterKeys { it in supportedTemplateProperties })
                         } else {

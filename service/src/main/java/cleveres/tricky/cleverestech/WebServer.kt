@@ -2436,7 +2436,32 @@ class WebServer(
         if (uri == "/api/file" && method == Method.GET) {
             val filename = getParam(session, "filename")
             if (filename != null && filename in EDITABLE_CONFIG_FILES) {
-                return secureResponse(Response.Status.OK, "text/plain", readFile(filename))
+                val content = readFile(filename)
+                if (content.isEmpty() && filename == "templates.json") {
+                    val templates = DeviceTemplateManager.listTemplates()
+                    val array = JSONArray()
+                    for (t in templates) {
+                        array.put(
+                            JSONObject().apply {
+                                put("id", t.id)
+                                put("manufacturer", t.manufacturer)
+                                put("model", t.model)
+                                put("fingerprint", t.fingerprint)
+                                put("brand", t.brand)
+                                put("product", t.product)
+                                put("device", t.device)
+                                put("release", t.release)
+                                put("buildId", t.buildId)
+                                put("incremental", t.incremental)
+                                put("type", t.type)
+                                put("tags", t.tags)
+                                put("securityPatch", t.securityPatch)
+                            },
+                        )
+                    }
+                    return secureResponse(Response.Status.OK, "text/plain", array.toString(2))
+                }
+                return secureResponse(Response.Status.OK, "text/plain", content)
             }
             return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid filename")
         }
@@ -2455,6 +2480,7 @@ class WebServer(
                     if (saveFile(filename, content)) {
                         if (filename == "templates.json") {
                             DeviceTemplateManager.initialize(configDir)
+                            Config.updateCustomTemplates(File(configDir, "custom_templates"))
                         } else if (filename == "keybox.xml") {
                             updateKeyboxesFromConfiguredRevocationSource()
                         }

@@ -842,8 +842,13 @@ async function saveCustomTemplate() {
 
   const currentResponse = await bridge.fetch('/api/file?filename=templates.json');
   if (!currentResponse.ok) throw new Error('Template catalog is unavailable');
+  const catalogText = (await currentResponse.text()).trim();
   let current;
-  try { current = JSON.parse(await currentResponse.text()); } catch (_) { throw new Error('Template catalog is unavailable'); }
+  if (!catalogText) {
+    current = [];
+  } else {
+    try { current = JSON.parse(catalogText); } catch (_) { throw new Error('Template catalog is unavailable'); }
+  }
   if (!Array.isArray(current)) throw new Error('Template catalog is unavailable');
   const next = current.filter(item => String(item && item.id || '').toLowerCase() !== template.id);
   next.push(template);

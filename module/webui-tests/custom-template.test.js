@@ -8,4 +8,6 @@ assert(policy.includes("body.set('filename','templates.json')"), 'builder must s
 assert(policy.includes("const templateValues = templates.map") && policy.includes("fillSelect(document.getElementById('ct_profile_template'),templateValues"), 'Profiles must consume shared template catalog');
 for (const field of ['id','manufacturer','model','fingerprint','brand','product','device','release','buildId','incremental','type','tags','securityPatch']) assert(policy.includes(`['${field}'`), `missing template field ${field}`);
 assert(/if\s*\(\s*filename\s*==\s*"templates\.json"\s*\)\s*\{\s*DeviceTemplateManager\.initialize\(configDir\)/.test(web), 'saving templates must refresh runtime catalog');
+assert(web.includes('Config.updateCustomTemplates(File(configDir, "custom_templates"))'), 'saving templates must update Config custom templates');
+assert(policy.includes('if (!catalogText)') && policy.includes('current = [];'), 'empty template file must initialize empty catalog rather than failing');
 console.log('custom-template regression checks passed');
