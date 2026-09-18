@@ -41,7 +41,7 @@ object AutoIdentityManager {
                 put("FINGERPRINT", fingerprint)
                 put("BUILD_ID", buildId)
                 put("INCREMENTAL", incremental)
-                put("RELEASE", release ?: "CANARY")
+                release?.let { put("RELEASE", it) }
                 put("TYPE", "user")
                 put("TAGS", "release-keys")
                 put("SECURITY_PATCH", securityPatch)

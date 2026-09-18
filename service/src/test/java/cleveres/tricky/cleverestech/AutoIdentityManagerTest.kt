@@ -408,4 +408,22 @@ class AutoIdentityManagerTest {
             AutoIdentityManager.findSecurityPatchInBulletin(bulletin, "canary-202609"),
         )
     }
+
+    @Test
+    fun `buildVars omits RELEASE when release is null so fingerprint reconstruction stays authoritative`() {
+        val result =
+            AutoIdentityManager.Result(
+                model = "Pixel 9",
+                product = "tokay_beta",
+                device = "tokay",
+                fingerprint = "google/tokay_beta/tokay:17/BP31.260801.001/12345678:user/release-keys",
+                buildId = "BP31.260801.001",
+                incremental = "12345678",
+                release = null,
+                securityPatch = "2026-08-05",
+                securityPatchEstimated = false,
+            )
+
+        assertFalse(result.buildVars().containsKey("RELEASE"))
+    }
 }
