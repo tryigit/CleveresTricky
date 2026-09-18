@@ -2946,6 +2946,8 @@ class WebServer(
             val template = Config.getBuildVar("TEMPLATE")
             return if (template == null) {
                 Config.updateBuildVars(file).isSuccess
+            } else if (Config.getTemplate(template) == null) {
+                persistIdentityUpdates(configDir, mapOf("TEMPLATE" to null))
             } else {
                 persistIdentityUpdates(configDir, mapOf("TEMPLATE" to template))
             }

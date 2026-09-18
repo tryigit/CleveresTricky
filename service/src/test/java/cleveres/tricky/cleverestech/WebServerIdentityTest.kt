@@ -412,6 +412,39 @@ class WebServerIdentityTest {
     }
 
     @Test
+    fun `template save clears a selected custom identity when its template is removed`() {
+        val spoofFile =
+            File(configDir, "spoof_build_vars").apply {
+                writeText("# Keep this line\nSERIAL=KEEP_ME\n")
+            }
+        Config.updateBuildVars(spoofFile).getOrThrow()
+
+        assertEquals(200, postSave("templates.json", customTemplate("Selected Model", "BUILD/1")).first)
+        assertEquals(200, postIdentity(JSONObject().put("template", "selectedtemplate")).first)
+
+        assertEquals(200, postSave("templates.json", "[]").first)
+        val refreshed = spoofFile.readText()
+        assertTrue(refreshed.contains("# Keep this line"))
+        assertTrue(refreshed.contains("SERIAL=KEEP_ME"))
+        assertFalse(refreshed.contains("CLEVERESTRICKY BUILD IDENTITY"))
+        assertFalse(refreshed.lineSequence().any { it.startsWith("TEMPLATE=") })
+        assertEquals(null, Config.getBuildVar("TEMPLATE"))
+        assertEquals(null, Config.getBuildVar("MODEL"))
+    }
+
+    @Test
+    fun `template save keeps a selected built in identity`() {
+        assertEquals(200, postIdentity(JSONObject().put("template", "pixel8pro")).first)
+
+        assertEquals(200, postSave("templates.json", customTemplate("Custom Model", "BUILD/1")).first)
+        val refreshed = File(configDir, "spoof_build_vars").readText()
+        assertTrue(refreshed.contains("TEMPLATE=pixel8pro"))
+        assertTrue(refreshed.contains("MODEL=Pixel 8 Pro"))
+        assertEquals("pixel8pro", Config.getBuildVar("TEMPLATE"))
+        assertEquals("Pixel 8 Pro", Config.getBuildVar("MODEL"))
+    }
+
+    @Test
     fun `templates_json file endpoint returns valid JSON array when file does not exist on disk`() {
         val file = File(configDir, "templates.json")
         file.delete()
