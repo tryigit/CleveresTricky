@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.IOException
 
 class AutoIdentityManagerTest {
     @Test
@@ -302,6 +303,93 @@ class AutoIdentityManagerTest {
 
         assertEquals("komodo", result.device)
         assertEquals("Pixel 9 Pro XL", result.model)
+        assertEquals("CANARY", result.release)
+    }
+
+    @Test
+    fun `canary lookup retries after fetch and parse IO failures and uses parent track`() {
+        val pages =
+            mapOf(
+                "https://developer.android.com/about/versions" to
+                    """<a href="/about/versions/17">17 preview</a>""",
+                "https://developer.android.com/about/versions/17" to
+                    """<a href="/about/versions/17/download">Factory</a>""",
+                "https://developer.android.com/about/versions/17/download" to
+                    """<table><tr id="caiman"><td>Pixel 9 Pro</td></tr><tr id="komodo"><td>Pixel 9 Pro XL</td></tr><tr id="tokay"><td>Pixel 9</td></tr></table>""",
+                "https://flash.android.com/" to
+                    """<body data-client-config="client;apiKey=abcdefghijklmnopQRST_1234&project=x"></body>""",
+                "https://source.android.com/docs/security/bulletin/pixel" to
+                    """<table><tr><td>2026-09</td><td>2026-09-05</td></tr></table>""",
+            )
+        val fetcher =
+            AutoIdentityManager.Fetcher { url, _ ->
+                if (url.startsWith("https://content-flashstation-pa.googleapis.com/v1/builds?")) {
+                    when {
+                        url.contains("product=caiman_beta") -> throw IOException("fetch failed")
+                        url.contains("product=komodo_beta") -> "not-json"
+                        else ->
+                            """
+                            {
+                              "flashstationBuild": [{
+                                "id": "canary-202609",
+                                "canary": true,
+                                "releaseCandidateName": "ZP11.260821.010",
+                                "buildId": "16290768",
+                                "releaseTrackVersionName": "Android 17 Canary",
+                                "previewMetadata": {"releaseTrackVersionName": "   "}
+                              }]
+                            }
+                            """.trimIndent()
+                    }
+                } else {
+                    pages[url] ?: error("Unexpected URL: $url")
+                }
+            }
+
+        val result = AutoIdentityManager.fetchLatest(fetcher) { candidates ->
+            candidates.first { it.device == "caiman" }
+        }
+
+        assertEquals("tokay", result.device)
+        assertEquals("17", result.release)
+    }
+
+    @Test
+    fun `blank preview release track name falls back to parent canary track`() {
+        val pages =
+            mapOf(
+                "https://developer.android.com/about/versions" to
+                    """<a href="/about/versions/17">17 preview</a>""",
+                "https://developer.android.com/about/versions/17" to
+                    """<a href="/about/versions/17/download">Factory</a>""",
+                "https://developer.android.com/about/versions/17/download" to
+                    """<table><tr id="tokay"><td>Pixel 9</td></tr></table>""",
+                "https://flash.android.com/" to
+                    """<body data-client-config="client;apiKey=abcdefghijklmnopQRST_1234&project=x"></body>""",
+                "https://source.android.com/docs/security/bulletin/pixel" to
+                    """<table><tr><td>2026-09</td><td>2026-09-05</td></tr></table>""",
+            )
+        val fetcher =
+            AutoIdentityManager.Fetcher { url, _ ->
+                if (url.startsWith("https://content-flashstation-pa.googleapis.com/v1/builds?")) {
+                    """
+                    {
+                      "flashstationBuild": [{
+                        "id": "canary-202609",
+                        "releaseCandidateName": "ZP11.260821.010",
+                        "buildId": "16290768",
+                        "releaseTrackName": "Android Canary",
+                        "previewMetadata": {"releaseTrackName": "  "}
+                      }]
+                    }
+                    """.trimIndent()
+                } else {
+                    pages[url] ?: error("Unexpected URL: $url")
+                }
+            }
+
+        val result = AutoIdentityManager.fetchLatest(fetcher)
+
         assertEquals("CANARY", result.release)
     }
 

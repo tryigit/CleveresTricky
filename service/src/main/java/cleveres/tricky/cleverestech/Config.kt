@@ -2105,7 +2105,12 @@ object Config {
                 APP_CONFIG_FILE -> updateAppConfigs(f)
                 PRIVACY_SEED_FILE -> refreshPrivacySeed()
                 CUSTOM_TEMPLATES_FILE -> updateCustomTemplates(f)
-                TEMPLATES_JSON_FILE -> { DeviceTemplateManager.initialize(root); updateCustomTemplates(File(root, CUSTOM_TEMPLATES_FILE)) }
+                TEMPLATES_JSON_FILE -> {
+                    DeviceTemplateManager.initialize(root)
+                    if (updateCustomTemplates(File(root, CUSTOM_TEMPLATES_FILE)).isSuccess) {
+                        WebServer.refreshSelectedTemplateIdentity(root)
+                    }
+                }
                 SPOOF_ENABLED_FILE -> { updateSpoofEnabled(f); updateRandomOnBoot(File(root, RANDOM_ON_BOOT_FILE)) }
                 BUILD_IDENTITY_FILE -> updateBuildIdentity(f)
                 GLOBAL_MODE_FILE -> { updateGlobalMode(f); updateTargetPackages(File(root, TARGET_FILE)) }

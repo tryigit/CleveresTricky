@@ -1,5 +1,6 @@
 package cleveres.tricky.cleverestech
 
+import android.os.FileObserver
 import cleveres.tricky.cleverestech.util.RandomUtils
 import cleveres.tricky.cleverestech.util.SecureFile
 import cleveres.tricky.cleverestech.util.SecureFileOperations
@@ -377,6 +378,40 @@ class WebServerIdentityTest {
     }
 
     @Test
+    fun `template save and observer refresh selected managed identity without changing user lines`() {
+        val spoofFile =
+            File(configDir, "spoof_build_vars").apply {
+                writeText("# Keep this line\nSERIAL=KEEP_ME\n")
+            }
+        Config.updateBuildVars(spoofFile).getOrThrow()
+
+        assertEquals(200, postSave("templates.json", customTemplate("Selected Model", "BUILD/1")).first)
+        assertEquals(200, postIdentity(JSONObject().put("template", "selectedtemplate")).first)
+
+        assertEquals(200, postSave("templates.json", customTemplate("Saved Model", "BUILD/2")).first)
+        val saved = spoofFile.readText()
+        assertTrue(saved.contains("# Keep this line"))
+        assertTrue(saved.contains("SERIAL=KEEP_ME"))
+        assertTrue(saved.contains("MODEL=Saved Model"))
+        assertTrue(saved.contains("FINGERPRINT=google/custom/custom:15/BUILD/2:user/release-keys"))
+        assertFalse(saved.contains("MODEL=Selected Model"))
+        assertEquals("Saved Model", Config.getBuildVar("MODEL"))
+        assertEquals(1, saved.lineSequence().count { it == "# BEGIN CLEVERESTRICKY BUILD IDENTITY" })
+
+        File(configDir, "templates.json").writeText(customTemplate("Observed Model", "BUILD/3"))
+        Config.ConfigObserver.onEvent(FileObserver.CLOSE_WRITE, "templates.json")
+
+        val observed = spoofFile.readText()
+        assertTrue(observed.contains("# Keep this line"))
+        assertTrue(observed.contains("SERIAL=KEEP_ME"))
+        assertTrue(observed.contains("MODEL=Observed Model"))
+        assertTrue(observed.contains("FINGERPRINT=google/custom/custom:15/BUILD/3:user/release-keys"))
+        assertFalse(observed.contains("MODEL=Saved Model"))
+        assertEquals("Observed Model", Config.getBuildVar("MODEL"))
+        assertEquals(1, observed.lineSequence().count { it == "# BEGIN CLEVERESTRICKY BUILD IDENTITY" })
+    }
+
+    @Test
     fun `templates_json file endpoint returns valid JSON array when file does not exist on disk`() {
         val file = File(configDir, "templates.json")
         file.delete()
@@ -396,6 +431,26 @@ class WebServerIdentityTest {
         val encContent = URLEncoder.encode(content, StandardCharsets.UTF_8.name())
         return request("POST", "/api/save", "filename=$encFilename&content=$encContent")
     }
+
+    private fun customTemplate(
+        model: String,
+        build: String,
+    ): String =
+        """
+        [{
+          "id":"selectedtemplate",
+          "manufacturer":"Google",
+          "model":"$model",
+          "fingerprint":"google/custom/custom:15/$build:user/release-keys",
+          "brand":"google",
+          "product":"custom",
+          "device":"custom",
+          "release":"15",
+          "buildId":"BUILD",
+          "incremental":"1",
+          "securityPatch":"2026-09-05"
+        }]
+        """.trimIndent()
 
     private fun postIdentity(json: JSONObject): Pair<Int, String> {
         val encoded = URLEncoder.encode(json.toString(), StandardCharsets.UTF_8.name())

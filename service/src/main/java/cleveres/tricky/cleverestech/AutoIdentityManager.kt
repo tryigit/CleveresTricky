@@ -210,14 +210,17 @@ object AutoIdentityManager {
 
         for (cand in orderedCandidates) {
             val product = URLEncoder.encode(cand.product, StandardCharsets.UTF_8.name())
-            val buildsJson =
-                runCatching {
-                    fetcher.get(
-                        "$FLASH_BUILDS?product=$product&key=$key",
-                        mapOf("Referer" to FLASH_TOOL),
+            val canary =
+                try {
+                    findLatestCanary(
+                        fetcher.get(
+                            "$FLASH_BUILDS?product=$product&key=$key",
+                            mapOf("Referer" to FLASH_TOOL),
+                        ),
                     )
-                }.getOrNull() ?: continue
-            val canary = findLatestCanary(buildsJson)
+                } catch (_: IOException) {
+                    continue
+                }
             if (canary != null) {
                 foundCandidate = cand
                 foundCanary = canary
@@ -232,8 +235,12 @@ object AutoIdentityManager {
         if (buildId.isEmpty() || incremental.isEmpty()) throw IOException("Pixel canary build metadata is incomplete")
 
         val preview = canary.optJSONObject("previewMetadata")
-        val track = (preview?.optString("releaseTrackVersionName") ?: canary.optString("releaseTrackVersionName")).trim()
-        val releaseTrackName = (preview?.optString("releaseTrackName") ?: canary.optString("releaseTrackName")).trim()
+        val track =
+            preview?.optString("releaseTrackVersionName")?.trim()?.takeIf(String::isNotEmpty)
+                ?: canary.optString("releaseTrackVersionName").trim()
+        val releaseTrackName =
+            preview?.optString("releaseTrackName")?.trim()?.takeIf(String::isNotEmpty)
+                ?: canary.optString("releaseTrackName").trim()
         val numericRelease = Regex("""\b(\d{1,2})(?:\.\d+)?\b""").find(track)?.groupValues?.get(1)
         val release =
             numericRelease ?: if (
