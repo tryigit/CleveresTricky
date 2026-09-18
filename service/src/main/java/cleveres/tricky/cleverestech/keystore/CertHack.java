@@ -33,6 +33,7 @@ import cleveres.tricky.cleverestech.CertificateBackend;
 import cleveres.tricky.cleverestech.Config;
 import cleveres.tricky.cleverestech.KeyboxActivation;
 import cleveres.tricky.cleverestech.KeyboxLoader;
+import cleveres.tricky.cleverestech.KeyboxPriorityOrder;
 import cleveres.tricky.cleverestech.Logger;
 import cleveres.tricky.cleverestech.ManagedAttestKeyRegistry;
 import cleveres.tricky.cleverestech.ManagedAttestKeyRehydrator;
@@ -1480,6 +1481,7 @@ public final class CertHack {
                 return caList;
             }
 
+            list = KeyboxPriorityOrder.filterTopPriorityTier(list);
             KeyBox keybox = list.get(cacheKey.indexForPool(list.size()));
             PreparedKeyBox prepared = currentState.preparedKeyboxes.get(keybox);
             if (prepared == null) throw new UnsupportedOperationException("Keybox metadata is unavailable");
@@ -1721,6 +1723,7 @@ public final class CertHack {
                 return caList;
             }
 
+            list = KeyboxPriorityOrder.filterTopPriorityTier(list);
             KeyBox keybox = list.get(cacheKey.indexForPool(list.size()));
             PreparedKeyBox prepared = currentState.preparedKeyboxes.get(keybox);
             if (prepared == null) throw new UnsupportedOperationException("Keybox metadata is unavailable");
@@ -1895,6 +1898,7 @@ public final class CertHack {
         if (list == null || list.isEmpty()) {
             return null;
         }
+        list = KeyboxPriorityOrder.filterTopPriorityTier(list);
         KeyBox keybox = list.get(cacheKey.indexForPool(list.size()));
         return currentState.preparedKeyboxes.get(keybox);
     }

@@ -383,8 +383,12 @@
         .ct-status-valid { background: rgba(48, 209, 88, 0.16); color: #30d158; border: 1px solid rgba(48, 209, 88, 0.35); }
         .ct-status-invalid { background: rgba(255, 69, 58, 0.16); color: #ff453a; border: 1px solid rgba(255, 69, 58, 0.35); }
         .ct-status-error { background: rgba(255, 69, 58, 0.16); color: #ff453a; border: 1px solid rgba(255, 69, 58, 0.35); }
-        .ct-status-expired { background: rgba(255, 69, 58, 0.16); color: #ff453a; border: 1px solid rgba(255, 69, 58, 0.35); }
-        .ct-badge-expired { background: rgba(255, 69, 58, 0.16); color: #ff453a; border: 1px solid rgba(255, 69, 58, 0.35); }
+        .ct-status-expired { background: rgba(255, 149, 0, 0.16); color: #ff9f0a; border: 1px solid rgba(255, 149, 0, 0.35); }
+        .ct-status-revoked { background: rgba(255, 69, 58, 0.16); color: #ff453a; border: 1px solid rgba(255, 69, 58, 0.35); }
+        .ct-badge-expired { background: rgba(255, 149, 0, 0.16); color: #ff9f0a; border: 1px solid rgba(255, 149, 0, 0.35); }
+        .ct-badge-revoked { background: rgba(255, 69, 58, 0.16); color: #ff453a; border: 1px solid rgba(255, 69, 58, 0.35); }
+        .ct-badge-valid { background: rgba(48, 209, 88, 0.16); color: #30d158; border: 1px solid rgba(48, 209, 88, 0.35); }
+        .ct-badge-invalid { background: rgba(255, 69, 58, 0.16); color: #ff453a; border: 1px solid rgba(255, 69, 58, 0.35); }
         .ct-status-unknown { background: rgba(142, 142, 147, 0.16); color: #8e8e93; border: 1px solid rgba(142, 142, 147, 0.35); }
         .ct-keybox-meta, .ct-verification-meta { display: flex; flex-direction: column; gap: 3px; min-width: 0; margin-top: 6px; }
         .ct-keybox-meta-row, .ct-verification-meta .ct-keybox-meta-row { display: flex; align-items: baseline; gap: 8px; min-width: 0; max-width: 100%; }
@@ -793,6 +797,23 @@
 </div>
 <div class="search-container"><input type="search" id="keyboxFilter" placeholder="Filter keyboxes by name..." oninput="renderKeyboxes()" aria-label="Filter keyboxes" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"><button onclick="document.getElementById('keyboxFilter').value=''; renderKeyboxes(); document.getElementById('keyboxFilter').focus();" class="clear-btn" id="clearKeyboxFilterBtn" aria-label="Clear filter">&times;</button></div>
 <div id="storedKeyboxesList" style="max-height: 200px; overflow-y: auto;"></div>
+        </div>
+        <div class="panel" id="ct_keybox_priority_panel">
+<div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
+    <h3 data-i18n="priority_order_title">Keybox Priority Order</h3>
+    <div style="display:flex; gap:8px; align-items:center;">
+        <select id="ct_keybox_priority_mode" style="padding:4px 8px; font-size:0.85em;">
+            <option value="default" data-i18n="priority_mode_default">Default (Random in Tier)</option>
+            <option value="custom" data-i18n="priority_mode_custom">Custom Ordering</option>
+        </select>
+    </div>
+</div>
+<p style="font-size:0.85em; color:var(--text-muted); margin-bottom:12px;" data-i18n="priority_order_desc">Configure selection preference by security level and validity state. The first non-empty tier is selected.</p>
+<div id="ct_keybox_priority_list" style="display:none; flex-direction:column; gap:6px; margin-bottom:12px;"></div>
+<div id="ct_keybox_priority_actions" style="display:none; gap:10px;">
+    <button type="button" id="ct_keybox_priority_save" class="primary" style="flex:1;" data-i18n="save_priority_order">Save Priority Order</button>
+    <button type="button" id="ct_keybox_priority_reset" style="flex:1;" data-i18n="reset_to_default">Reset to Default</button>
+</div>
         </div>
         <div class="panel">
 <h3>Verification</h3>
@@ -2110,7 +2131,7 @@ try {
 }
         }
 
-        const WEB_UI_SETTINGS = ['spoof_enabled', 'spoof_build_identity', 'global_mode', 'auto_keybox_check', 'random_on_boot', 'spoof_region_cn', 'telephony', 'drm_passthrough'];
+        const WEB_UI_SETTINGS = ['spoof_enabled', 'spoof_build_identity', 'global_mode', 'auto_keybox_check', 'random_on_boot', 'spoof_region_cn', 'telephony', 'drm_passthrough', 'block_invalid_keyboxes'];
 
         function syncSettingControls(setting, enabled, disabled = false) {
 document.querySelectorAll('[data-setting="' + setting + '"]').forEach(control => {
@@ -2801,7 +2822,7 @@ try {
 const configResponse = await fetchAuth('/api/config');
 if (!configResponse.ok) throw new Error(await configResponse.text());
 const current = await configResponse.json();
-for (const setting of ['global_mode','auto_keybox_check','drm_passthrough','spoof_enabled','spoof_build_identity','random_on_boot','spoof_region_cn','telephony']) {
+for (const setting of ['global_mode','auto_keybox_check','drm_passthrough','spoof_enabled','spoof_build_identity','random_on_boot','spoof_region_cn','telephony','block_invalid_keyboxes']) {
     if (typeof current[setting] !== 'boolean') continue;
     const body = new URLSearchParams();
     body.set('setting', setting);
@@ -3136,6 +3157,7 @@ const features = [
     { id: 'telephony_runtime', name: 'Telephony Runtime', activity: data.spoof_enabled && data.telephony ? (telephonyRunning ? 'Registered and Binder alive' : 'Enabled but not operational') : 'Disabled', scope: 'Phone subscription Binder lifecycle', desc: 'Identity-only Binder path; it is parked while Identity Engine is off.' },
     { id: 'global_mode', name: 'Global Mode', activity: 'UID decision only', scope: 'Resolved application UIDs', desc: 'Targets every eligible app while protecting system and RKP infrastructure UIDs.' },
     { id: 'auto_keybox_check', name: 'Automatic Keybox Check', activity: data.auto_keybox_check ? 'Scheduled background check' : 'Worker stopped', scope: 'Authorized key material', desc: 'Core keybox maintenance; independent from Identity Engine.' },
+    { id: 'block_invalid_keyboxes', name: 'Block Invalid Keyboxes', activity: data.block_invalid_keyboxes ? 'Invalid keys blocked' : 'Expired/revoked permitted (failures blocked)', scope: 'Keybox selection pool', desc: 'Excludes invalid, expired, and revoked keyboxes from active selection pool. Verification failures are always excluded.' },
     { id: 'random_on_boot', name: 'Identity Refresh on Boot', activity: 'Boot only', scope: 'Persisted identity fields', desc: 'Refreshes configured attestation and app-visible telephony identifiers.' },
     { id: 'telephony', name: 'Telephony Interception', activity: 'Matching Binder calls only', scope: 'Permission-approved app APIs', desc: 'Overrides configured dual-SIM values without changing modem or carrier identity.' },
     { id: 'rkp_protection', name: 'RKP Protection', status: 'Always on', activity: 'Protected infrastructure + unified key path', scope: 'RKP callers and targeted KeyMint replies', desc: 'RKP infrastructure UIDs always stay on Android. Targeted generateKey and getKeyEntry responses share one certificate-compatibility path to avoid split attestation leaves.' },

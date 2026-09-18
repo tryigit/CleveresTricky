@@ -43,6 +43,18 @@
             'col_status': 'Status',
             'col_runtime': 'Runtime path',
             'col_scope': 'Scope',
+            'priority_order_title': 'Keybox Priority Order',
+            'priority_mode_default': 'Default (Random in Tier)',
+            'priority_mode_custom': 'Custom Ordering',
+            'priority_order_desc': 'Configure selection preference by security level and validity state. The first non-empty tier is selected.',
+            'save_priority_order': 'Save Priority Order',
+            'priority_order_saved': 'Priority order saved',
+            'reset_to_default': 'Reset to Default',
+            'block_invalid_keyboxes': 'Block Invalid Keyboxes',
+            'valid': 'Valid',
+            'invalid_expired': 'Invalid - Expired',
+            'invalid_revoked': 'Invalid - Revoked',
+            'invalid_verification_failed': 'Invalid - Verification Failed',
         },
         tr: {
             'Identity Controls': 'Kimlik Denetimleri', 'Enable only the identity paths you need. Disabled paths do not start optional interceptors.': 'Yalnızca ihtiyacınız olan kimlik yollarını etkinleştirin. Devre dışı yollar isteğe bağlı yakalayıcıları başlatmaz.', 'Identity is currently disabled. Enable only the identity paths you need below.': 'Kimlik şu anda devre dışı. Aşağıdan yalnızca ihtiyacınız olan kimlik yollarını etkinleştirin.', 'Random': 'Rastgele', 'Identity value randomized': 'Kimlik değeri rastgeleleştirildi',
@@ -859,7 +871,28 @@
         'Expires': 'Son geçerlilik',
         'Expired': 'Süresi geçmiş',
         'EXPIRED': 'SÜRESİ GEÇMİŞ',
-        'Expired Keybox': 'Süresi Geçmiş Keybox'
+        'Expired Keybox': 'Süresi Geçmiş Keybox',
+        'Block Invalid Keyboxes': 'Geçersiz Keyboxları Engelle',
+        'Excludes invalid, expired, and revoked keyboxes from the active selection pool. Verification failures are always excluded.': 'Geçersiz, süresi geçmiş ve iptal edilmiş keyboxları etkin seçim havuzundan çıkarır. Doğrulama başarısızlıkları her zaman engellenir.',
+        'When enabled, only valid keyboxes are selected. When disabled, expired and revoked keyboxes can participate in selection, but structurally invalid keyboxes remain blocked.': 'Etkinleştirildiğinde yalnızca geçerli keyboxlar seçilir. Devre dışı bırakıldığında süresi geçmiş ve iptal edilmiş keyboxlar seçime katılabilir ancak yapısal olarak geçersiz keyboxlar engellenmeye devam eder.',
+        'Estimated impact: CPU negligible during keybox selection; RAM negligible.': 'Tahmini etki: Keybox seçimi sırasında CPU ihmal edilebilir; RAM ihmal edilebilir.',
+        'Keybox Priority Order': 'Keybox Öncelik Sıralaması',
+        'Default (Random in Tier)': 'Varsayılan (Aşama İçi Rastgele)',
+        'Custom Ordering': 'Özel Sıralama',
+        'Configure selection preference by security level and validity state. The first non-empty tier is selected.': 'Güvenlik düzeyi ve geçerlilik durumuna göre seçim önceliğini yapılandırın. Boş olmayan ilk aşama seçilir.',
+        'Save Priority Order': 'Öncelik Sırasını Kaydet',
+        'Reset to Default': 'Varsayılana Sıfırla',
+        'Priority order saved': 'Öncelik sırası kaydedildi',
+        'priority_order_title': 'Keybox Öncelik Sıralaması',
+        'priority_mode_default': 'Varsayılan (Aşama İçi Rastgele)',
+        'priority_mode_custom': 'Özel Sıralama',
+        'priority_order_desc': 'Güvenlik düzeyi ve geçerlilik durumuna göre seçim önceliğini yapılandırın. Boş olmayan ilk aşama seçilir.',
+        'save_priority_order': 'Öncelik Sırasını Kaydet',
+        'reset_to_default': 'Varsayılana Sıfırla',
+        'Valid': 'Geçerli',
+        'Invalid - Expired': 'Geçersiz - Süresi Geçmiş',
+        'Invalid - Revoked': 'Geçersiz - İptal Edilmiş',
+        'Invalid - Verification Failed': 'Geçersiz - Doğrulama Başarısız'
     });
 
     // Complete catalogs share one source key per row to keep all built-in
@@ -1325,6 +1358,26 @@
         ["Expired", "已过期", "Vencido", "Abgelaufen", "Истек", "Kedaluwarsa", "समाप्त", "منتهي الصلاحية"],
         ["EXPIRED", "已过期", "VENCIDO", "ABGELAUFEN", "ИСТЕК", "KEDALUWARSA", "समाप्त", "منتهي الصلاحية"],
         ["Expired Keybox", "已过期的密钥盒", "Keybox vencida", "Abgelaufene Keybox", "Истекший keybox", "Keybox Kedaluwarsa", "समाप्त Keybox", "Keybox منتهي الصلاحية"],
+        ["Block Invalid Keyboxes", "阻止无效密钥盒", "Bloquear keyboxes inválidas", "Ungültige Keyboxen blockieren", "Блокировать недействительные Keybox", "Blokir Keybox Tidak Valid", "अमान्य Keyboxes ब्लॉक करें", "حظر Keybox غير الصالحة"],
+        ["Excludes invalid, expired, and revoked keyboxes from the active selection pool. Verification failures are always excluded.", "从活动选择池中排除无效、已过期和已吊销的密钥盒。验证失败项始终被排除。", "Excluye las keyboxes inválidas, vencidas y revocadas del grupo de selección activa. Los errores de verificación siempre se excluyen.", "Schließt ungültige, abgelaufene und widerrufene Keyboxen aus dem aktiven Pool aus. Fehlgeschlagene Überprüfungen werden immer ausgeschlossen.", "Исключает недействительные, истекшие и отозванные keybox из активного пула выбора. Ошибки проверки исключаются всегда.", "Mengecualikan keybox tidak valid, kedaluwarsa, dan dicabut dari pool pemilihan aktif. Kegagalan verifikasi selalu dikecualikan.", "सक्रिय चयन पूल से अमान्य, समाप्त और निरस्त Keybox को बाहर रखता है। सत्यापन विफलताएं हमेशा बाहर रखी जाती हैं।", "استبعاد Keybox غير الصالحة ومنتهية الصلاحية والملغاة من مجموعة الاختيار النشطة. يتم دائمًا استبعاد حالات فشل التحقق."],
+        ["When enabled, only valid keyboxes are selected. When disabled, expired and revoked keyboxes can participate in selection, but structurally invalid keyboxes remain blocked.", "启用后，仅选择有效密钥盒。禁用后，已过期和已吊销的密钥盒可参与选择，但结构无效的密钥盒仍会被阻止。", "Cuando está habilitado, solo se seleccionan keyboxes válidas. Cuando está deshabilitado, las keyboxes vencidas y revocadas pueden participar en la selección, pero las keyboxes estructuralmente inválidas permanecen bloqueadas.", "Wenn aktiviert, werden nur gültige Keyboxen ausgewählt. Wenn deaktiviert, können abgelaufene und widerrufene Keyboxen an der Auswahl teilnehmen, strukturell ungültige Keyboxen bleiben jedoch blockiert.", "Если включено, выбираются только действительные keybox. Если отключено, истекшие и отозванные keybox могут участвовать в выборе, но структурно недействительные keybox остаются заблокированными.", "Saat diaktifkan, hanya keybox valid yang dipilih. Saat dinonaktifkan, keybox kedaluwarsa dan dicabut dapat berpartisipasi dalam pemilihan, tetapi keybox yang tidak valid secara struktural tetap diblokir.", "सक्षम होने पर, केवल मान्य Keybox चुने जाते हैं। अक्षम होने पर, समाप्त और निरस्त Keybox चयन में भाग ले सकते हैं, लेकिन संरचनात्मक रूप से अमान्य Keybox ब्लॉक रहते हैं।", "عند التمكين، يتم تحديد Keybox الصالحة فقط. عند التعطيل، يمكن أن تشارك Keybox منتهية الصلاحية والملغاة في التحديد، ولكن تظل Keybox غير الصالحة من الناحية الهيكلية محظورة."],
+        ["Estimated impact: CPU negligible during keybox selection; RAM negligible.", "预计影响：密钥盒选择期间 CPU 极低可忽略；RAM 极低可忽略。", "Impacto estimado: CPU insignificante durante la selección de keybox; RAM insignificante.", "Geschätzte Auswirkung: CPU bei Keybox-Auswahl vernachlässigbar; RAM vernachlässigbar.", "Ориентировочное влияние: нагрузка на ЦП при выборе keybox незначительна; память незначительна.", "Perkiraan dampak: CPU dapat diabaikan selama pemilihan keybox; RAM dapat diabaikan.", "अनुमानित प्रभाव: Keybox चयन के दौरान CPU नगण्य; RAM नगण्य।", "التأثير التقديري: استخدام المعالج لا يذكر أثناء تحديد Keybox؛ الذاكرة لا تذكر."],
+        ["Keybox Priority Order", "密钥盒优先级排序", "Orden de prioridad de Keybox", "Keybox-Prioritätsreihenfolge", "Приоритет Keybox", "Urutan Prioritas Keybox", "Keybox प्राथमिकता क्रम", "ترتيب أولوية Keybox"],
+        ["Default (Random in Tier)", "默认（同层级内随机）", "Predeterminado (Aleatorio en el nivel)", "Standard (Zufällig innerhalb der Stufe)", "По умолчанию (Случайно в уровне)", "Default (Acak dalam Tingkat)", "डिफ़ॉल्ट (श्रेणी में यादृच्छिक)", "افتراضي (عشوائي ضمن الفئة)"],
+        ["Custom Ordering", "自定义排序", "Orden personalizado", "Benutzerdefinierte Reihenfolge", "Пользовательский порядок", "Urutan Kustom", "कस्टम क्रम", "ترتيب مخصص"],
+        ["Configure selection preference by security level and validity state. The first non-empty tier is selected.", "根据安全级别和有效性状态配置选择偏好。选择第一个非空层级。", "Configure la preferencia de selección por nivel de seguridad y estado de validez. Se selecciona el primer nivel no vacío.", "Auswahlpräferenz nach Sicherheitsstufe und Gültigkeitsstatus konfigurieren. Die erste nicht leere Stufe wird ausgewählt.", "Настройка приоритета выбора по уровню безопасности и статусу действия. Выбирается первый непустой уровень.", "Konfigurasikan preferensi pemilihan berdasarkan tingkat keamanan dan status validitas. Tingkat non-kosong pertama dipilih.", "सुरक्षा स्तर और वैधता स्थिति के अनुसार चयन प्राथमिकता कॉन्फ़िगर करें। पहला गैर-खाली स्तर चुना जाता है।", "تكوين تفضيل التحديد حسب مستوى الأمان وحالة الصلاحية. يتم تحديد أول فئة غير فارغة."],
+        ["Save Priority Order", "保存优先级排序", "Guardar orden de prioridad", "Prioritätsreihenfolge speichern", "Сохранить приоритет", "Simpan Urutan Prioritas", "प्राथमिकता क्रम सहेजें", "حفظ ترتيب الأولوية"],
+        ["Reset to Default", "恢复默认", "Restablecer a predeterminado", "Auf Standard zurücksetzen", "Сбросить по умолчанию", "Reset ke Default", "डिफ़ॉल्ट पर रीसेट करें", "إعادة التعيين إلى الافتراضي"],
+        ["Priority order saved", "优先级排序已保存", "Orden de prioridad guardado", "Prioritätsreihenfolge gespeichert", "Приоритет сохранен", "Urutan prioritas disimpan", "प्राथमिकता क्रम सहेजा गया", "تم حفظ ترتيب الأولوية"],
+        ["priority_order_title", "密钥盒优先级排序", "Orden de prioridad de Keybox", "Keybox-Prioritätsreihenfolge", "Приоритет Keybox", "Urutan Prioritas Keybox", "Keybox प्राथमिकता क्रम", "ترتيب أولوية Keybox"],
+        ["priority_mode_default", "默认（同层级内随机）", "Predeterminado (Aleatorio en el nivel)", "Standard (Zufällig innerhalb der Stufe)", "По умолчанию (Случайно в уровне)", "Default (Acak dalam Tingkat)", "डिफ़ॉल्ट (श्रेणी में यादृच्छिक)", "افتراضي (عشوائي ضمن الفئة)"],
+        ["priority_mode_custom", "自定义排序", "Orden personalizado", "Benutzerdefinierte Reihenfolge", "Пользовательский порядок", "Urutan Kustom", "कस्टम क्रम", "ترتيب مخصص"],
+        ["priority_order_desc", "根据安全级别和有效性状态配置选择偏好。选择第一个非空层级。", "Configure la preferencia de selección por nivel de seguridad y estado de validez. Se selecciona el primer nivel no vacío.", "Auswahlpräferenz nach Sicherheitsstufe und Gültigkeitsstatus konfigurieren. Die erste nicht leere Stufe wird ausgewählt.", "Настройка приоритета выбора по уровню безопасности и статусу действия. Выбирается первый непустой уровень.", "Konfigurasikan preferensi pemilihan berdasarkan tingkat keamanan dan status validitas. Tingkat non-kosong pertama dipilih.", "सुरक्षा स्तर और वैधता स्थिति के अनुसार चयन प्राथमिकता कॉन्फ़िगर करें। पहला गैर-खाली स्तर चुना जाता है।", "تكوين تفضيل التحديد حسب مستوى الأمان وحالة الصلاحية. يتم تحديد أول فئة غير فارغة."],
+        ["save_priority_order", "保存优先级排序", "Guardar orden de prioridad", "Prioritätsreihenfolge speichern", "Сохранить приоритет", "Simpan Urutan Prioritas", "प्राथमिकता क्रम सहेजें", "حفظ ترتيب الأولوية"],
+        ["reset_to_default", "恢复默认", "Restablecer a predeterminado", "Auf Standard zurücksetzen", "Сбросить по умолчанию", "Reset ke Default", "डिफ़ॉल्ट पर रीसेट करें", "إعادة التعيين إلى الافتراضي"],
+        ["Invalid - Expired", "无效 - 已过期", "Inválido - Vencido", "Ungültig - Abgelaufen", "Недействителен - Истек", "Tidak Valid - Kedaluwarsa", "अमान्य - समाप्त", "غير صالح - منتهي الصلاحية"],
+        ["Invalid - Revoked", "无效 - 已吊销", "Inválido - Revocado", "Ungültig - Widerrufen", "Недействителен - Отозван", "Tidak Valid - Dicabut", "अमान्य - निरस्त", "غير صالح - ملغى"],
+        ["Invalid - Verification Failed", "无效 - 验证失败", "Inválido - Error de verificación", "Ungültig - Überprüfung fehlgeschlagen", "Недействителен - Сбой проверки", "Tidak Valid - Verifikasi Gagal", "अमान्य - सत्यापन विफल", "غير صالح - فشل التحقق"],
     ];
 
     for (const row of COMPLETE_CATALOG_ROWS) {
@@ -3194,7 +3247,11 @@
             search: 'Search', clear: 'Clear', verifySearchPlaceholder: 'Search verification results...', verifying: 'Verifying...',
             noVerify: 'No keyboxes to verify', noVerifyMatch: 'No verification results match your search.', loading: 'Loading...',
             noStored: 'No keyboxes stored.', noStoredMatch: 'No keyboxes match your filter.', delete: 'Delete',
-            status_valid: 'Valid', status_invalid: 'Invalid', status_error: 'Error', status_unknown: 'Unknown', active_keybox: 'Active Keybox', expires: 'Expires', status_expired: 'Expired', filename: 'Filename', details: 'Details'
+            status_valid: 'Valid', status_invalid: 'Invalid', status_error: 'Error', status_unknown: 'Unknown', active_keybox: 'Active Keybox', expires: 'Expires', status_expired: 'Expired', filename: 'Filename', details: 'Details',
+            valid: 'Valid', invalid_expired: 'Invalid - Expired', invalid_revoked: 'Invalid - Revoked', invalid_verification_failed: 'Invalid - Verification Failed',
+            priority_order_title: 'Keybox Priority Order', priority_mode_default: 'Default (Random in Tier)', priority_mode_custom: 'Custom Ordering',
+            priority_order_desc: 'Configure selection preference by security level and validity state. The first non-empty tier is selected.',
+            save_priority_order: 'Save Priority Order', priority_order_saved: 'Priority order saved', reset_to_default: 'Reset to Default'
         },
         tr: {
             selected: 'seçili', deleteSelected: 'Seçilileri sil', previous: 'Önceki', next: 'Sonraki', page: 'Sayfa {page} / {pages}',
@@ -3204,7 +3261,11 @@
             search: 'Ara', clear: 'Temizle', verifySearchPlaceholder: 'Doğrulama sonuçlarında ara...', verifying: 'Doğrulanıyor...',
             noVerify: 'Doğrulanacak keybox yok', noVerifyMatch: 'Aramanızla eşleşen doğrulama sonucu yok.', loading: 'Yükleniyor...',
             noStored: 'Kayıtlı keybox yok.', noStoredMatch: 'Filtrenizle eşleşen keybox yok.', delete: 'Sil',
-            status_valid: 'Geçerli', status_invalid: 'Geçersiz', status_error: 'Hata', status_unknown: 'Bilinmiyor', active_keybox: 'Etkin keybox', expires: 'Son geçerlilik', status_expired: 'Süresi geçmiş', filename: 'Dosya adı', details: 'Ayrıntılar'
+            status_valid: 'Geçerli', status_invalid: 'Geçersiz', status_error: 'Hata', status_unknown: 'Bilinmiyor', active_keybox: 'Etkin keybox', expires: 'Son geçerlilik', status_expired: 'Süresi geçmiş', filename: 'Dosya adı', details: 'Ayrıntılar',
+            valid: 'Geçerli', invalid_expired: 'Geçersiz - Süresi Geçmiş', invalid_revoked: 'Geçersiz - İptal Edilmiş', invalid_verification_failed: 'Geçersiz - Doğrulama Başarısız',
+            priority_order_title: 'Keybox Öncelik Sıralaması', priority_mode_default: 'Varsayılan (Aşama İçi Rastgele)', priority_mode_custom: 'Özel Sıralama',
+            priority_order_desc: 'Güvenlik düzeyi ve geçerlilik durumuna göre seçim önceliğini yapılandırın. Boş olmayan ilk aşama seçilir.',
+            save_priority_order: 'Öncelik Sırasını Kaydet', priority_order_saved: 'Öncelik sırası kaydedildi', reset_to_default: 'Varsayılana Sıfırla'
         },
         'zh-CN': {
             selected: '已选择', deleteSelected: '删除所选', previous: '上一页', next: '下一页', page: '第 {page} / {pages} 页',
@@ -3214,7 +3275,11 @@
             search: '搜索', clear: '清除', verifySearchPlaceholder: '搜索验证结果...', verifying: '正在验证...',
             noVerify: '没有可验证的 Keybox', noVerifyMatch: '没有符合搜索条件的验证结果。', loading: '正在加载...',
             noStored: '没有已存储的 Keybox。', noStoredMatch: '没有符合筛选条件的 Keybox。', delete: '删除',
-            status_valid: '有效', status_invalid: '无效', status_error: '错误', status_unknown: '未知', active_keybox: '活动密钥盒', expires: '有效期至', status_expired: '已过期', filename: '文件名', details: '详细信息'
+            status_valid: '有效', status_invalid: '无效', status_error: '错误', status_unknown: '未知', active_keybox: '活动密钥盒', expires: '有效期至', status_expired: '已过期', filename: '文件名', details: '详细信息',
+            valid: '有效', invalid_expired: '无效 - 已过期', invalid_revoked: '无效 - 已吊销', invalid_verification_failed: '无效 - 验证失败',
+            priority_order_title: '密钥盒优先级排序', priority_mode_default: '默认（同层级内随机）', priority_mode_custom: '自定义排序',
+            priority_order_desc: '根据安全级别和有效性状态配置选择偏好。选择第一个非空层级。',
+            save_priority_order: '保存优先级排序', priority_order_saved: '优先级排序已保存', reset_to_default: '恢复默认'
         },
         es: {
             selected: 'seleccionados', deleteSelected: 'Eliminar seleccionados', previous: 'Anterior', next: 'Siguiente', page: 'Página {page} / {pages}',
@@ -3224,7 +3289,11 @@
             search: 'Buscar', clear: 'Limpiar', verifySearchPlaceholder: 'Buscar resultados de verificación...', verifying: 'Verificando...',
             noVerify: 'No hay keyboxes para verificar', noVerifyMatch: 'Ningún resultado de verificación coincide con la búsqueda.', loading: 'Cargando...',
             noStored: 'No hay keyboxes guardadas.', noStoredMatch: 'Ninguna keybox coincide con el filtro.', delete: 'Eliminar',
-            status_valid: 'Válido', status_invalid: 'Inválido', status_error: 'Error', status_unknown: 'Desconocido', active_keybox: 'Keybox activa', expires: 'Vence', status_expired: 'Vencido', filename: 'Nombre del archivo', details: 'Detalles'
+            status_valid: 'Válido', status_invalid: 'Inválido', status_error: 'Error', status_unknown: 'Desconocido', active_keybox: 'Keybox activa', expires: 'Vence', status_expired: 'Vencido', filename: 'Nombre del archivo', details: 'Detalles',
+            valid: 'Válido', invalid_expired: 'Inválido - Vencido', invalid_revoked: 'Inválido - Revocado', invalid_verification_failed: 'Inválido - Error de verificación',
+            priority_order_title: 'Orden de prioridad de Keybox', priority_mode_default: 'Predeterminado (Aleatorio en el nivel)', priority_mode_custom: 'Orden personalizado',
+            priority_order_desc: 'Configure la preferencia de selección por nivel de seguridad y estado de validez. Se selecciona el primer nivel no vacío.',
+            save_priority_order: 'Guardar orden de prioridad', priority_order_saved: 'Orden de prioridad guardado', reset_to_default: 'Restablecer a predeterminado'
         },
         de: {
             selected: 'ausgewählt', deleteSelected: 'Auswahl löschen', previous: 'Zurück', next: 'Weiter', page: 'Seite {page} / {pages}',
@@ -3234,7 +3303,11 @@
             search: 'Suchen', clear: 'Leeren', verifySearchPlaceholder: 'Prüfergebnisse durchsuchen...', verifying: 'Prüfung läuft...',
             noVerify: 'Keine Keyboxen zum Prüfen', noVerifyMatch: 'Keine Prüfergebnisse entsprechen der Suche.', loading: 'Wird geladen...',
             noStored: 'Keine Keyboxen gespeichert.', noStoredMatch: 'Keine Keybox entspricht dem Filter.', delete: 'Löschen',
-            status_valid: 'Gültig', status_invalid: 'Ungültig', status_error: 'Fehler', status_unknown: 'Unbekannt', active_keybox: 'Aktive Keybox', expires: 'Gültig bis', status_expired: 'Abgelaufen', filename: 'Dateiname', details: 'Details'
+            status_valid: 'Gültig', status_invalid: 'Ungültig', status_error: 'Fehler', status_unknown: 'Unbekannt', active_keybox: 'Aktive Keybox', expires: 'Gültig bis', status_expired: 'Abgelaufen', filename: 'Dateiname', details: 'Details',
+            valid: 'Gültig', invalid_expired: 'Ungültig - Abgelaufen', invalid_revoked: 'Ungültig - Widerrufen', invalid_verification_failed: 'Ungültig - Überprüfung fehlgeschlagen',
+            priority_order_title: 'Keybox-Prioritätsreihenfolge', priority_mode_default: 'Standard (Zufällig innerhalb der Stufe)', priority_mode_custom: 'Benutzerdefinierte Reihenfolge',
+            priority_order_desc: 'Auswahlpräferenz nach Sicherheitsstufe und Gültigkeitsstatus konfigurieren. Die erste nicht leere Stufe wird ausgewählt.',
+            save_priority_order: 'Prioritätsreihenfolge speichern', priority_order_saved: 'Prioritätsreihenfolge gespeichert', reset_to_default: 'Auf Standard zurücksetzen'
         },
         ru: {
             selected: 'выбрано', deleteSelected: 'Удалить выбранные', previous: 'Назад', next: 'Далее', page: 'Страница {page} / {pages}',
@@ -3244,7 +3317,11 @@
             search: 'Поиск', clear: 'Очистить', verifySearchPlaceholder: 'Поиск по результатам проверки...', verifying: 'Проверка...',
             noVerify: 'Нет keybox для проверки', noVerifyMatch: 'Нет результатов проверки, соответствующих поиску.', loading: 'Загрузка...',
             noStored: 'Нет сохраненных keybox.', noStoredMatch: 'Нет keybox, соответствующих фильтру.', delete: 'Удалить',
-            status_valid: 'Действителен', status_invalid: 'Недействителен', status_error: 'Ошибка', status_unknown: 'Неизвестно', active_keybox: 'Активный keybox', expires: 'Истекает', status_expired: 'Истек', filename: 'Имя файла', details: 'Подробности'
+            status_valid: 'Действителен', status_invalid: 'Недействителен', status_error: 'Ошибка', status_unknown: 'Неизвестно', active_keybox: 'Активный keybox', expires: 'Истекает', status_expired: 'Истек', filename: 'Имя файла', details: 'Подробности',
+            valid: 'Действителен', invalid_expired: 'Недействителен - Истек', invalid_revoked: 'Недействителен - Отозван', invalid_verification_failed: 'Недействителен - Сбой проверки',
+            priority_order_title: 'Приоритет Keybox', priority_mode_default: 'По умолчанию (Случайно в уровне)', priority_mode_custom: 'Пользовательский порядок',
+            priority_order_desc: 'Настройка приоритета выбора по уровню безопасности и статусу действия. Выбирается первый непустой уровень.',
+            save_priority_order: 'Сохранить приоритет', priority_order_saved: 'Приоритет сохранен', reset_to_default: 'Сбросить по умолчанию'
         },
         id: {
             selected: 'dipilih', deleteSelected: 'Hapus pilihan', previous: 'Sebelumnya', next: 'Berikutnya', page: 'Halaman {page} / {pages}',
@@ -3254,7 +3331,11 @@
             search: 'Cari', clear: 'Bersihkan', verifySearchPlaceholder: 'Cari hasil verifikasi...', verifying: 'Memverifikasi...',
             noVerify: 'Tidak ada keybox untuk diverifikasi', noVerifyMatch: 'Tidak ada hasil verifikasi yang cocok dengan pencarian.', loading: 'Memuat...',
             noStored: 'Tidak ada keybox tersimpan.', noStoredMatch: 'Tidak ada keybox yang cocok dengan filter.', delete: 'Hapus',
-            status_valid: 'Valid', status_invalid: 'Tidak Valid', status_error: 'Kesalahan', status_unknown: 'Tidak Diketahui', active_keybox: 'Keybox aktif', expires: 'Kedaluwarsa', status_expired: 'Kedaluwarsa', filename: 'Nama file', details: 'Detail'
+            status_valid: 'Valid', status_invalid: 'Tidak Valid', status_error: 'Kesalahan', status_unknown: 'Tidak Diketahui', active_keybox: 'Keybox aktif', expires: 'Kedaluwarsa', status_expired: 'Kedaluwarsa', filename: 'Nama file', details: 'Detail',
+            valid: 'Valid', invalid_expired: 'Tidak Valid - Kedaluwarsa', invalid_revoked: 'Tidak Valid - Dicabut', invalid_verification_failed: 'Tidak Valid - Verifikasi Gagal',
+            priority_order_title: 'Urutan Prioritas Keybox', priority_mode_default: 'Default (Acak dalam Tingkat)', priority_mode_custom: 'Urutan Kustom',
+            priority_order_desc: 'Konfigurasikan preferensi pemilihan berdasarkan tingkat keamanan dan status validitas. Tingkat non-kosong pertama dipilih.',
+            save_priority_order: 'Simpan Urutan Prioritas', priority_order_saved: 'Urutan prioritas disimpan', reset_to_default: 'Reset ke Default'
         },
         hi: {
             selected: 'चयनित', deleteSelected: 'चयनित हटाएँ', previous: 'पिछला', next: 'अगला', page: 'पृष्ठ {page} / {pages}',
@@ -3264,7 +3345,11 @@
             search: 'खोजें', clear: 'साफ़ करें', verifySearchPlaceholder: 'सत्यापन परिणाम खोजें...', verifying: 'सत्यापन हो रहा है...',
             noVerify: 'सत्यापित करने के लिए Keybox नहीं', noVerifyMatch: 'खोज से मेल खाता सत्यापन परिणाम नहीं है।', loading: 'लोड हो रहा है...',
             noStored: 'कोई सहेजा Keybox नहीं।', noStoredMatch: 'फ़िल्टर से मेल खाता Keybox नहीं है।', delete: 'हटाएँ',
-            status_valid: 'मान्य', status_invalid: 'अमान्य', status_error: 'त्रुटि', status_unknown: 'अज्ञात', active_keybox: 'सक्रिय Keybox', expires: 'समाप्ति', status_expired: 'समाप्त', filename: 'फ़ाइल का नाम', details: 'विवरण'
+            status_valid: 'मान्य', status_invalid: 'अमान्य', status_error: 'त्रुटि', status_unknown: 'अज्ञात', active_keybox: 'सक्रिय Keybox', expires: 'समाप्ति', status_expired: 'समाप्त', filename: 'फ़ाइल का नाम', details: 'विवरण',
+            valid: 'मान्य', invalid_expired: 'अमान्य - समाप्त', invalid_revoked: 'अमान्य - निरस्त', invalid_verification_failed: 'अमान्य - सत्यापन विफल',
+            priority_order_title: 'Keybox प्राथमिकता क्रम', priority_mode_default: 'डिफ़ॉल्ट (श्रेणी में यादृच्छिक)', priority_mode_custom: 'कस्टम क्रम',
+            priority_order_desc: 'सुरक्षा स्तर और वैधता स्थिति के अनुसार चयन प्राथमिकता कॉन्फ़िगर करें। पहला गैर-खाली स्तर चुना जाता है।',
+            save_priority_order: 'प्राथमिकता क्रम सहेजें', priority_order_saved: 'प्राथमिकता क्रम सहेजा गया', reset_to_default: 'डिफ़ॉल्ट पर रीसेट करें'
         },
         ar: {
             selected: 'محدد', deleteSelected: 'حذف المحدد', previous: 'السابق', next: 'التالي', page: 'الصفحة {page} / {pages}',
@@ -3274,7 +3359,11 @@
             search: 'بحث', clear: 'مسح', verifySearchPlaceholder: 'البحث في نتائج التحقق...', verifying: 'جارٍ التحقق...',
             noVerify: 'لا توجد Keybox للتحقق', noVerifyMatch: 'لا توجد نتائج تحقق تطابق البحث.', loading: 'جارٍ التحميل...',
             noStored: 'لا توجد Keybox محفوظة.', noStoredMatch: 'لا توجد Keybox تطابق الفلتر.', delete: 'حذف',
-            status_valid: 'صالح', status_invalid: 'غير صالح', status_error: 'خطأ', status_unknown: 'غير معروف', active_keybox: 'Keybox نشط', expires: 'تاريخ الانتهاء', status_expired: 'منتهي الصلاحية', filename: 'اسم الملف', details: 'التفاصيل'
+            status_valid: 'صالح', status_invalid: 'غير صالح', status_error: 'خطأ', status_unknown: 'غير معروف', active_keybox: 'Keybox نشط', expires: 'تاريخ الانتهاء', status_expired: 'منتهي الصلاحية', filename: 'اسم الملف', details: 'التفاصيل',
+            valid: 'صالح', invalid_expired: 'غير صالح - منتهي الصلاحية', invalid_revoked: 'غير صالح - ملغى', invalid_verification_failed: 'غير صالح - فشل التحقق',
+            priority_order_title: 'ترتيب أولوية Keybox', priority_mode_default: 'افتراضي (عشوائي ضمن الفئة)', priority_mode_custom: 'ترتيب مخصص',
+            priority_order_desc: 'تكوين تفضيل التحديد حسب مستوى الأمان وحالة الصلاحية. يتم تحديد أول فئة غير فارغة.',
+            save_priority_order: 'حفظ ترتيب الأولوية', priority_order_saved: 'تم حفظ ترتيب الأولوية', reset_to_default: 'إعادة التعيين إلى الافتراضي'
         }
     };
 
@@ -3663,7 +3752,28 @@
                 ecBadge.textContent = 'ECDSA';
                 name.append(ecBadge);
             }
-            if (isKeyboxExpired(item.not_after)) {
+            if (item.validity_state) {
+                const badge = document.createElement('span');
+                if (item.validity_state === 'INVALID') {
+                    if (item.invalid_reason === 'EXPIRED') {
+                        badge.className = 'ct-badge ct-status-badge ct-badge-expired ct-status-expired';
+                        badge.textContent = t('invalid_expired');
+                    } else if (item.invalid_reason === 'REVOKED') {
+                        badge.className = 'ct-badge ct-status-badge ct-badge-revoked ct-status-revoked';
+                        badge.textContent = t('invalid_revoked');
+                    } else if (item.invalid_reason === 'VERIFICATION_FAILED') {
+                        badge.className = 'ct-badge ct-status-badge ct-badge-invalid ct-status-invalid';
+                        badge.textContent = t('invalid_verification_failed');
+                    } else {
+                        badge.className = 'ct-badge ct-status-badge ct-badge-invalid ct-status-invalid';
+                        badge.textContent = t('status_invalid');
+                    }
+                } else {
+                    badge.className = 'ct-badge ct-status-badge ct-badge-valid ct-status-valid';
+                    badge.textContent = t('valid');
+                }
+                name.append(badge);
+            } else if (isKeyboxExpired(item.not_after)) {
                 const expBadge = document.createElement('span');
                 expBadge.className = 'ct-badge ct-status-badge ct-badge-expired ct-status-expired';
                 expBadge.textContent = t('status_expired');
@@ -3734,7 +3844,9 @@
                     is_rkp: Boolean(item?.is_rkp || item?.security_level === 'RKP'),
                     has_rsa: Boolean(item?.has_rsa),
                     has_ec: Boolean(item?.has_ec || item?.has_ecdsa),
-                    algorithms: Array.isArray(item?.algorithms) ? item.algorithms.slice(0, 16) : []
+                    algorithms: Array.isArray(item?.algorithms) ? item.algorithms.slice(0, 16) : [],
+                    validity_state: item?.validity_state ? String(item.validity_state).slice(0, 32) : undefined,
+                    invalid_reason: item?.invalid_reason ? String(item.invalid_reason).slice(0, 64) : undefined
                 })).filter(item => item.id && item.filename && item.scope)
                 : [];
             const ids = new Set(inventory.map(item => item.id));
@@ -3974,7 +4086,18 @@
             const expired = isKeyboxExpired(item.not_after);
             let statusKey = 'status_unknown';
             let statusClass = 'ct-status-unknown';
-            if (expired) {
+            if (item.validity_state === 'INVALID' && item.invalid_reason) {
+                if (item.invalid_reason === 'EXPIRED') {
+                    statusKey = 'invalid_expired';
+                    statusClass = 'ct-status-expired ct-badge-expired';
+                } else if (item.invalid_reason === 'REVOKED') {
+                    statusKey = 'invalid_revoked';
+                    statusClass = 'ct-status-revoked ct-badge-revoked';
+                } else if (item.invalid_reason === 'VERIFICATION_FAILED') {
+                    statusKey = 'invalid_verification_failed';
+                    statusClass = 'ct-status-invalid ct-badge-invalid';
+                }
+            } else if (expired) {
                 statusKey = 'status_expired';
                 statusClass = 'ct-status-expired';
             } else if (upperStatus === 'VALID') {
@@ -4064,6 +4187,8 @@
                 ? data.slice(0, 4096).map(item => ({
                     filename: String(item?.filename ?? '').slice(0, 256),
                     status: String(item?.status ?? 'UNKNOWN').slice(0, 128),
+                    validity_state: item?.validity_state ? String(item.validity_state).slice(0, 32) : undefined,
+                    invalid_reason: item?.invalid_reason ? String(item.invalid_reason).slice(0, 64) : undefined,
                     certificate_serial: String(item?.certificate_serial ?? '').slice(0, 256),
                     not_after: String(item?.not_after ?? '').slice(0, 64),
                     security_level: item?.security_level === 'StrongBox' ? 'StrongBox' : (item?.security_level === 'RKP' ? 'RKP' : (item?.security_level === 'TEE' ? 'TEE' : 'Unknown')),
@@ -4091,6 +4216,170 @@
         if (verificationController) verificationController.abort();
     }
 
+    const DEFAULT_PRIORITY_CATEGORIES = [
+        'VALID_RKP',
+        'VALID_STRONGBOX',
+        'VALID_TEE',
+        'VALID_UNKNOWN',
+        'INVALID_EXPIRED_RKP',
+        'INVALID_EXPIRED_STRONGBOX',
+        'INVALID_EXPIRED_TEE',
+        'INVALID_EXPIRED_UNKNOWN',
+        'INVALID_REVOKED_RKP',
+        'INVALID_REVOKED_STRONGBOX',
+        'INVALID_REVOKED_TEE',
+        'INVALID_REVOKED_UNKNOWN',
+        'INVALID_VERIFICATION_FAILED_RKP',
+        'INVALID_VERIFICATION_FAILED_STRONGBOX',
+        'INVALID_VERIFICATION_FAILED_TEE',
+        'INVALID_VERIFICATION_FAILED_UNKNOWN'
+    ];
+
+    let currentPriorityMode = 'default';
+    let currentPriorityOrder = [...DEFAULT_PRIORITY_CATEGORIES];
+
+    function formatCategoryLabel(cat) {
+        const parts = cat.split('_');
+        const level = parts[parts.length - 1] === 'STRONGBOX' ? 'StrongBox' : (parts[parts.length - 1] === 'UNKNOWN' ? (t('status_unknown') || 'Unknown') : parts[parts.length - 1]);
+        if (cat.startsWith('VALID_')) {
+            return (t('valid') || 'Valid') + ' — ' + level;
+        }
+        if (cat.startsWith('INVALID_EXPIRED_')) {
+            return (t('invalid_expired') || 'Invalid - Expired') + ' — ' + level;
+        }
+        if (cat.startsWith('INVALID_REVOKED_')) {
+            return (t('invalid_revoked') || 'Invalid - Revoked') + ' — ' + level;
+        }
+        if (cat.startsWith('INVALID_VERIFICATION_FAILED_')) {
+            return (t('invalid_verification_failed') || 'Invalid - Verification Failed') + ' — ' + level;
+        }
+        return cat;
+    }
+
+    function renderPriorityOrder() {
+        const modeSelect = document.getElementById('ct_keybox_priority_mode');
+        const list = document.getElementById('ct_keybox_priority_list');
+        const actions = document.getElementById('ct_keybox_priority_actions');
+        if (!modeSelect || !list || !actions) return;
+
+        modeSelect.value = currentPriorityMode;
+        if (currentPriorityMode === 'custom') {
+            list.style.display = 'flex';
+            actions.style.display = 'flex';
+        } else {
+            list.style.display = 'none';
+            actions.style.display = 'none';
+        }
+
+        list.innerHTML = '';
+        currentPriorityOrder.forEach((cat, index) => {
+            const item = document.createElement('div');
+            item.className = 'row';
+            item.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg-card, rgba(255,255,255,0.03));gap:8px;';
+
+            const left = document.createElement('div');
+            left.style.cssText = 'display:flex;align-items:center;gap:10px;min-width:0;flex:1;';
+
+            const num = document.createElement('span');
+            num.style.cssText = 'font-size:0.8em;color:var(--text-muted);font-weight:600;min-width:20px;';
+            num.textContent = (index + 1) + '.';
+
+            const label = document.createElement('span');
+            label.style.cssText = 'font-size:0.85em;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+            label.textContent = formatCategoryLabel(cat);
+
+            left.append(num, label);
+
+            const btnGroup = document.createElement('div');
+            btnGroup.style.cssText = 'display:flex;gap:4px;flex:0 0 auto;';
+
+            const upBtn = document.createElement('button');
+            upBtn.type = 'button';
+            upBtn.innerHTML = '&uarr;';
+            upBtn.setAttribute('aria-label', 'Move ' + cat + ' up');
+            upBtn.style.cssText = 'padding:4px 8px;font-size:0.85em;line-height:1;margin:0;';
+            upBtn.disabled = index === 0;
+            upBtn.onclick = () => {
+                if (index > 0) {
+                    const temp = currentPriorityOrder[index];
+                    currentPriorityOrder[index] = currentPriorityOrder[index - 1];
+                    currentPriorityOrder[index - 1] = temp;
+                    renderPriorityOrder();
+                }
+            };
+
+            const downBtn = document.createElement('button');
+            downBtn.type = 'button';
+            downBtn.innerHTML = '&darr;';
+            downBtn.setAttribute('aria-label', 'Move ' + cat + ' down');
+            downBtn.style.cssText = 'padding:4px 8px;font-size:0.85em;line-height:1;margin:0;';
+            downBtn.disabled = index === currentPriorityOrder.length - 1;
+            downBtn.onclick = () => {
+                if (index < currentPriorityOrder.length - 1) {
+                    const temp = currentPriorityOrder[index];
+                    currentPriorityOrder[index] = currentPriorityOrder[index + 1];
+                    currentPriorityOrder[index + 1] = temp;
+                    renderPriorityOrder();
+                }
+            };
+
+            btnGroup.append(upBtn, downBtn);
+            item.append(left, btnGroup);
+            list.append(item);
+        });
+    }
+
+    async function loadPriorityOrder(options = {}) {
+        if (typeof global.fetchAuth !== 'function' || (options.signal && options.signal.aborted)) return;
+        try {
+            const res = await global.fetchAuth('/api/keybox_priority_order', { signal: options.signal });
+            if (!res.ok) return;
+            const data = await res.json();
+            if (options.signal && options.signal.aborted) return;
+            currentPriorityMode = data.mode === 'custom' ? 'custom' : 'default';
+            if (Array.isArray(data.customOrder) && data.customOrder.length === DEFAULT_PRIORITY_CATEGORIES.length) {
+                currentPriorityOrder = [...data.customOrder];
+            } else {
+                currentPriorityOrder = [...DEFAULT_PRIORITY_CATEGORIES];
+            }
+            renderPriorityOrder();
+        } catch (_err) {
+            // Ignore fetch errors during abort / offline
+        }
+    }
+
+    async function savePriorityOrder() {
+        if (typeof global.fetchAuth !== 'function') return;
+        const payload = {
+            mode: currentPriorityMode,
+            customOrder: currentPriorityOrder
+        };
+        try {
+            const body = new URLSearchParams();
+            body.set('data', JSON.stringify(payload));
+            const res = await global.fetchAuth('/api/keybox_priority_order', {
+                method: 'POST',
+                body,
+                idempotent: true
+            });
+            if (!res.ok) throw new Error(await res.text());
+            if (typeof global.notify === 'function') {
+                global.notify(t('priority_order_saved') || 'Priority order saved', 'success');
+            }
+        } catch (err) {
+            if (typeof global.notify === 'function') {
+                global.notify(err.message, 'error');
+            }
+        }
+    }
+
+    async function resetPriorityOrder() {
+        currentPriorityOrder = [...DEFAULT_PRIORITY_CATEGORIES];
+        currentPriorityMode = 'default';
+        await savePriorityOrder();
+        renderPriorityOrder();
+    }
+
     function scheduleInstallRetry() {
         if (installRetryTimer !== null || installAttempts >= MAX_INSTALL_ATTEMPTS) return;
         installAttempts += 1;
@@ -4113,16 +4402,45 @@
         global.loadKeyboxes = async function (options = {}) {
             const value = await originalLoad.apply(this, arguments);
             if (options.signal && options.signal.aborted) return value;
-            await refreshInventory(options);
+            await Promise.all([
+                refreshInventory(options),
+                loadPriorityOrder(options)
+            ]);
             return value;
         };
         global.verifyKeyboxes = verify;
         global.cancelKeyboxVerification = cancelVerification;
+        global.renderPriorityOrder = renderPriorityOrder;
+        global.loadPriorityOrder = loadPriorityOrder;
+        global.savePriorityOrder = savePriorityOrder;
         const filter = document.getElementById('keyboxFilter');
         if (filter) filter.addEventListener('input', () => { page = 1; render(); });
+        const modeSelect = document.getElementById('ct_keybox_priority_mode');
+        if (modeSelect) {
+            modeSelect.addEventListener('change', () => {
+                currentPriorityMode = modeSelect.value;
+                if (currentPriorityMode === 'default') {
+                    savePriorityOrder();
+                }
+                renderPriorityOrder();
+            });
+        }
+        const saveBtn = document.getElementById('ct_keybox_priority_save');
+        if (saveBtn) {
+            saveBtn.addEventListener('click', () => {
+                savePriorityOrder();
+            });
+        }
+        const resetBtn = document.getElementById('ct_keybox_priority_reset');
+        if (resetBtn) {
+            resetBtn.addEventListener('click', () => {
+                resetPriorityOrder();
+            });
+        }
         ensureControls();
         ensureVerificationControls();
         refreshInventory();
+        loadPriorityOrder();
         statusLabel();
         const status = document.getElementById('keyboxStatus');
         if (status && typeof global.MutationObserver === 'function') {

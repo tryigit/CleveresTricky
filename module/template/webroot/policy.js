@@ -30,6 +30,7 @@ const IMPACTS = {
   'Global Keybox Mode': 'Estimated impact: CPU very low per UID decision; RAM low with a bounded UID cache.',
   'Global Identity Mode': 'Estimated impact: CPU low at boot/reboot only; RAM negligible.',
   'Automatic Keybox Check': 'Estimated impact: CPU/network low during scheduled verification; RAM low and temporary.',
+  'Block Invalid Keyboxes': 'Estimated impact: CPU negligible during keybox selection; RAM negligible.',
   'Identity Refresh on Boot': 'Estimated impact: CPU low at boot only; RAM negligible after initialization.',
   'Telephony Interception': 'Estimated impact: CPU low per matching Binder call; RAM low.',
   'RKP Protection': 'Estimated impact: CPU negligible on protected infrastructure paths; RAM negligible.',
@@ -521,6 +522,7 @@ function isAutoPatch() {
 function buildFeatureCenterMarkup(prefix) {
   const globalKeyboxOn = Boolean(legacyConfig && legacyConfig.global_mode);
   const keyboxOn = Boolean(legacyConfig && legacyConfig.auto_keybox_check);
+  const blockInvalidOn = Boolean(legacyConfig ? legacyConfig.block_invalid_keyboxes : (policyState ? policyState.blockInvalidKeyboxes : true));
   const drmOn = Boolean(legacyConfig && legacyConfig.drm_passthrough);
   const secPatchOn = Boolean(policyState && policyState.features && policyState.features.securityPatch);
   const identityCards = identityFeatureCardsMarkup(`${prefix}_identity`);
@@ -534,6 +536,7 @@ function buildFeatureCenterMarkup(prefix) {
     ${cardMarkup(`${prefix}_sec_patch`,'Security Patch','Controls system, vendor, and boot security patch levels independently from Identity properties.',secPatchOn,secPatchHelp + secPatchChildren)}
     ${identityCards}
     ${cardMarkup(`${prefix}_keybox`,'Auto Keybox Check','Checks configured keyboxes against the module revocation source when enabled.',keyboxOn,helpMarkup('Optional network-backed keybox hygiene; manual management remains available.'))}
+    ${cardMarkup(`${prefix}_block_invalid`,'Block Invalid Keyboxes','Excludes invalid, expired, and revoked keyboxes from the active selection pool. Verification failures are always excluded.',blockInvalidOn,helpMarkup('When enabled, only valid keyboxes are selected. When disabled, expired and revoked keyboxes can participate in selection, but structurally invalid keyboxes remain blocked.'))}
     ${cardMarkup(`${prefix}_drm_passthrough`,'DRM App Passthrough',"Keeps packages from drm_packages.txt on Android's genuine Keystore path. This does not fake a DRM security level.",drmOn,drmHelp + drmChildren)}
     <div class="ct-feature-card"><strong>Keybox / TEE path</strong><p>Keyboxes are selected per profile or from the stored pool. Stored XML/CBOX sources are reloaded without requiring an environment reset.</p>${helpMarkup('The core Keystore hook remains separate from Identity. Certificate chains are cached to avoid repeated expensive work.')}<button type="button" data-open-tab="keys" style="width:100%;margin-top:10px">Open keyboxes</button></div>
   </div>`;
@@ -629,6 +632,7 @@ function bindFeatureCenter(panel, prefix) {
   const secPatchToggle = panel.querySelector(`#${prefix}_sec_patch`);
   const secPatchChildren = panel.querySelector(`#${prefix}_sec_patch_children`);
   const keyboxToggle = panel.querySelector(`#${prefix}_keybox`);
+  const blockInvalidToggle = panel.querySelector(`#${prefix}_block_invalid`);
   const drmToggle = panel.querySelector(`#${prefix}_drm_passthrough`);
   const drmChildren = panel.querySelector(`#${prefix}_drm_children`);
   if (globalToggle) globalToggle.onchange = () => setLegacyToggle('global_mode',globalToggle.checked);
@@ -637,6 +641,7 @@ function bindFeatureCenter(panel, prefix) {
     savePolicy(next => { next.features.securityPatch = secPatchToggle.checked; }, secPatchToggle.checked ? 'Security Patch enabled' : 'Security Patch disabled');
   };
   if (keyboxToggle) keyboxToggle.onchange = () => setLegacyToggle('auto_keybox_check',keyboxToggle.checked);
+  if (blockInvalidToggle) blockInvalidToggle.onchange = () => setLegacyToggle('block_invalid_keyboxes',blockInvalidToggle.checked);
   if (drmToggle) drmToggle.onchange = () => {
     if (drmChildren) drmChildren.hidden = !drmToggle.checked;
     setLegacyToggle('drm_passthrough',drmToggle.checked);

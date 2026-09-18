@@ -358,6 +358,8 @@ class WebUiFeatureMatrixInstrumentationTest {
                 FeatureCase("GET", "/api/config"),
                 FeatureCase("GET", "/api/keyboxes"),
                 FeatureCase("GET", "/api/keybox_inventory"),
+                FeatureCase("GET", "/api/keybox_priority_order"),
+                FeatureCase("POST", "/api/keybox_priority_order", mapOf("data" to "{\"mode\":\"default\"}")),
                 FeatureCase("GET", "/api/cbox_status"),
                 FeatureCase("POST", "/api/unlock_cbox"),
                 FeatureCase("GET", "/api/servers"),

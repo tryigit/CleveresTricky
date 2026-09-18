@@ -161,6 +161,8 @@ object PolicyState {
         val wildcardAssignments: List<Assignment>,
         val generation: Long,
         val recovery: String,
+        val blockInvalidKeyboxes: Boolean = true,
+        val keyboxPriorityPreference: KeyboxPriorityPreference = KeyboxPriorityPreference.DEFAULT,
     ) {
         fun toJson(): JSONObject {
             val profilesJson = JSONArray()
@@ -171,6 +173,8 @@ object PolicyState {
                 .put("securityPatch", patch.toJson())
                 .put("profiles", profilesJson)
                 .put("activeProfile", activeProfile ?: JSONObject.NULL)
+                .put("blockInvalidKeyboxes", blockInvalidKeyboxes)
+                .put("keyboxPriorityOrder", keyboxPriorityPreference.toJson())
         }
     }
 
@@ -275,6 +279,36 @@ object PolicyState {
             }
         }
 
+    val blockInvalidKeyboxes: Boolean
+        get() = snapshot.blockInvalidKeyboxes
+
+    val keyboxPriorityPreference: KeyboxPriorityPreference
+        get() = snapshot.keyboxPriorityPreference
+
+    @Synchronized
+    fun setKeyboxPriorityPreference(preference: KeyboxPriorityPreference): Result<JSONObject> =
+        runCatching {
+            val current = ensureExplicitSnapshot()
+            val updated = current.copy(
+                keyboxPriorityPreference = preference,
+                generation = generationCounter.incrementAndGet(),
+            )
+            persistAndPublish(updated)
+            stateJson()
+        }
+
+    @Synchronized
+    fun setBlockInvalidKeyboxes(enabled: Boolean): Result<JSONObject> =
+        runCatching {
+            val current = ensureExplicitSnapshot()
+            val updated = current.copy(
+                blockInvalidKeyboxes = enabled,
+                generation = generationCounter.incrementAndGet(),
+            )
+            persistAndPublish(updated)
+            stateJson()
+        }
+
     @Synchronized
     fun onLegacySettingsChanged() {
         if (!initialized || snapshot.explicit) return
@@ -321,8 +355,29 @@ object PolicyState {
     ): Snapshot {
         require(text.utf8ByteLength() in 1..MAX_STATE_BYTES) { "Policy state has an invalid size" }
         val rootObject = JSONObject(text)
-        requireOnlyKeys(rootObject, setOf("version", "features", "securityPatch", "profiles", "activeProfile"))
+        requireOnlyKeys(
+            rootObject,
+            setOf(
+                "version",
+                "features",
+                "securityPatch",
+                "profiles",
+                "activeProfile",
+                "blockInvalidKeyboxes",
+                "keyboxPriorityOrder",
+            ),
+        )
         require(rootObject.getInt("version") == SCHEMA_VERSION) { "Unsupported policy schema version" }
+        val blockInvalidKeyboxes = if (rootObject.has("blockInvalidKeyboxes")) {
+            rootObject.getBoolean("blockInvalidKeyboxes")
+        } else {
+            true
+        }
+        val priorityPreference = if (rootObject.has("keyboxPriorityOrder")) {
+            KeyboxPriorityPreference.fromJson(rootObject.optJSONObject("keyboxPriorityOrder"))
+        } else {
+            KeyboxPriorityPreference.DEFAULT
+        }
         val features = parseFeatureSet(rootObject.getJSONObject("features"))
         val patch = parsePatchSet(rootObject.getJSONObject("securityPatch"))
         val profilesArray = rootObject.optJSONArray("profiles") ?: JSONArray()
@@ -364,6 +419,8 @@ object PolicyState {
             wildcardAssignments = wildcardAssignments,
             generation = generationCounter.incrementAndGet(),
             recovery = recovery,
+            blockInvalidKeyboxes = blockInvalidKeyboxes,
+            keyboxPriorityPreference = priorityPreference,
         )
     }
 

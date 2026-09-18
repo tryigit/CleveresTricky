@@ -250,6 +250,7 @@ class WebUiFeatureFamiliesInstrumentationTest {
                 "camera_visibility",
                 "drm_passthrough",
                 "global_identity_mode",
+                "block_invalid_keyboxes",
             )
 
         private val PROFILE_MARKERS =
@@ -262,14 +263,16 @@ class WebUiFeatureFamiliesInstrumentationTest {
                     "random_on_boot",
                     "telephony",
                     "global_identity_mode",
+                    "block_invalid_keyboxes",
                 ),
                 "daily" to setOf(
                     "spoof_enabled",
                     "auto_keybox_check",
                     "drm_passthrough",
+                    "block_invalid_keyboxes",
                 ),
                 "minimal" to setOf("drm_passthrough"),
-                "default" to setOf("global_mode", "auto_keybox_check"),
+                "default" to setOf("global_mode", "auto_keybox_check", "block_invalid_keyboxes"),
             )
 
         private val RANDOM_IDENTITY_SELECTORS =

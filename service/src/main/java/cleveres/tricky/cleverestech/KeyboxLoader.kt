@@ -57,7 +57,16 @@ internal object KeyboxLoader {
                 withProvenance(xml, filename, authenticatedRkpProvenance)
             } else {
                 val document = NativeBackend.parseKeybox(xml)
-                if (document == null) emptyList() else KeyboxJcaAdapter.materialize(document, filename, authenticatedRkpProvenance)
+                if (document == null) {
+                    emptyList()
+                } else {
+                    KeyboxJcaAdapter.materialize(
+                        document,
+                        filename,
+                        authenticatedRkpProvenance,
+                        tolerateExpiry = true,
+                    )
+                }
             }
         } catch (error: RustBackendUnavailableException) {
             backendOutageObserved.set(true)
@@ -86,7 +95,12 @@ internal object KeyboxLoader {
                 val isRkp = RkpProvenanceStore.isRkp(storageId.ifEmpty { filename })
                 ParsedFile(
                     snapshotSha256 = document.snapshotSha256,
-                    keyboxes = KeyboxJcaAdapter.materialize(document, storageId.ifEmpty { filename }, isRkp),
+                    keyboxes = KeyboxJcaAdapter.materialize(
+                        document,
+                        storageId.ifEmpty { filename },
+                        isRkp,
+                        tolerateExpiry = true,
+                    ),
                 )
             }
         } catch (error: RustBackendUnavailableException) {

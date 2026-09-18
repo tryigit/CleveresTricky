@@ -176,7 +176,7 @@ done
 
 for config_file in spoof_build_vars security_patch.txt target.txt identity_target.txt drm_packages.txt boot_props_mode \
   spoof_enabled spoof_switch_initialized spoof_build_identity global_mode global_identity_mode tee_broken_mode \
-  auto_keybox_check random_on_boot rkp_passthrough drm_passthrough hide_sensitive_props \
+  auto_keybox_check block_invalid_keyboxes random_on_boot rkp_passthrough drm_passthrough hide_sensitive_props \
   spoof_region_cn telephony privacy_seed boot_key boot_hash app_config templates.json custom_templates module_hash \
   servers.json keybox.xml lang.json spoof_build_vars.next apply_profile policy_state_v2.json \
   policy_state_v2.last_good.json debug_logging settings_schema_v3 attestation_status_cache.json; do
@@ -231,6 +231,8 @@ if [ ! -e "$CONFIG_DIR/spoof_switch_initialized" ]; then
     || abort "! Could not enable Global Mode"
   [ -e "$CONFIG_DIR/auto_keybox_check" ] || : > "$CONFIG_DIR/auto_keybox_check" \
     || abort "! Could not enable automatic keybox checking"
+  [ -e "$CONFIG_DIR/block_invalid_keyboxes" ] || : > "$CONFIG_DIR/block_invalid_keyboxes" \
+    || abort "! Could not enable blocking invalid keyboxes"
   if [ ! -e "$CONFIG_DIR/policy_state_v2.json" ]; then
     extract "$ZIPFILE" 'policy_state_v2.json' "$TMPDIR"
     mv "$TMPDIR/policy_state_v2.json" "$CONFIG_DIR/policy_state_v2.json" \
@@ -250,6 +252,8 @@ chmod 600 "$CONFIG_DIR/spoof_switch_initialized" || abort "! Could not secure mi
   || abort "! Could not secure Global Mode switch"
 [ ! -e "$CONFIG_DIR/auto_keybox_check" ] || chmod 600 "$CONFIG_DIR/auto_keybox_check" \
   || abort "! Could not secure automatic keybox checking"
+[ ! -e "$CONFIG_DIR/block_invalid_keyboxes" ] || chmod 600 "$CONFIG_DIR/block_invalid_keyboxes" \
+  || abort "! Could not secure blocking invalid keyboxes switch"
 [ ! -e "$CONFIG_DIR/policy_state_v2.json" ] || chmod 600 "$CONFIG_DIR/policy_state_v2.json" \
   || abort "! Could not secure default policy state"
 [ ! -e "$CONFIG_DIR/spoof_enabled" ] || chmod 600 "$CONFIG_DIR/spoof_enabled" \
@@ -305,7 +309,7 @@ if [ ! -f "$CONFIG_DIR/boot_props_mode" ]; then
 fi
 chmod 600 "$CONFIG_DIR/boot_props_mode" || abort "! Could not secure boot_props_mode"
 
-for optional_flag in auto_keybox_check drm_passthrough hide_sensitive_props debug_logging; do
+for optional_flag in auto_keybox_check block_invalid_keyboxes drm_passthrough hide_sensitive_props debug_logging; do
   [ ! -e "$CONFIG_DIR/$optional_flag" ] || chmod 600 "$CONFIG_DIR/$optional_flag" \
     || abort "! Could not secure $optional_flag"
 done
@@ -320,6 +324,8 @@ chown 0:0 "$CONFIG_DIR/spoof_build_vars" "$CONFIG_DIR/security_patch.txt" \
   || abort "! Could not set Global Identity Mode switch ownership"
 [ ! -e "$CONFIG_DIR/auto_keybox_check" ] || chown 0:0 "$CONFIG_DIR/auto_keybox_check" \
   || abort "! Could not set keybox revocation switch ownership"
+[ ! -e "$CONFIG_DIR/block_invalid_keyboxes" ] || chown 0:0 "$CONFIG_DIR/block_invalid_keyboxes" \
+  || abort "! Could not set block invalid keyboxes switch ownership"
 [ ! -e "$CONFIG_DIR/policy_state_v2.json" ] || chown 0:0 "$CONFIG_DIR/policy_state_v2.json" \
   || abort "! Could not set policy state ownership"
 [ ! -e "$CONFIG_DIR/spoof_enabled" ] || chown 0:0 "$CONFIG_DIR/spoof_enabled" \

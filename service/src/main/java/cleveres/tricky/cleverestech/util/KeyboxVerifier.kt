@@ -42,6 +42,8 @@ object KeyboxVerifier {
         val hasRsa: Boolean = false,
         val hasEc: Boolean = false,
         val notAfter: String? = null,
+        val validityState: ValidityState = ValidityState.VALID,
+        val invalidReason: InvalidReason? = null,
     )
 
     enum class Status {
@@ -49,6 +51,46 @@ object KeyboxVerifier {
         REVOKED,
         INVALID,
         ERROR,
+    }
+
+    enum class ValidityState {
+        VALID,
+        INVALID,
+    }
+
+    enum class InvalidReason {
+        VERIFICATION_FAILED,
+        EXPIRED,
+        REVOKED,
+    }
+
+    fun resolveValidity(
+        status: Status,
+        notAfter: String?,
+    ): Pair<ValidityState, InvalidReason?> {
+        return when (status) {
+            Status.VALID -> ValidityState.VALID to null
+            Status.REVOKED -> ValidityState.INVALID to InvalidReason.REVOKED
+            Status.INVALID -> {
+                if (notAfter != null && isExpired(notAfter)) {
+                    ValidityState.INVALID to InvalidReason.EXPIRED
+                } else {
+                    ValidityState.INVALID to InvalidReason.VERIFICATION_FAILED
+                }
+            }
+            Status.ERROR -> ValidityState.VALID to null
+        }
+    }
+
+    internal fun isExpired(notAfter: String): Boolean {
+        return try {
+            val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.ROOT)
+            sdf.timeZone = TimeZone.getTimeZone("UTC")
+            val expiryDate = sdf.parse(notAfter) ?: return false
+            expiryDate.before(java.util.Date())
+        } catch (_: Exception) {
+            false
+        }
     }
 
     internal sealed interface RevocationSource {
@@ -559,7 +601,15 @@ object KeyboxVerifier {
         var trackedNotAfter: String? = null
         return try {
             if (!isSafeKeyboxFile(file)) {
-                return Result(file, file.name, Status.ERROR, "Unsafe or oversized keybox file", storageId = storageId)
+                return Result(
+                    file,
+                    file.name,
+                    Status.ERROR,
+                    "Unsafe or oversized keybox file",
+                    storageId = storageId,
+                    validityState = ValidityState.INVALID,
+                    invalidReason = InvalidReason.VERIFICATION_FAILED,
+                )
             }
             val parsed = KeyboxLoader.parseFileSnapshot(scope, filename, storageId)
             val snapshotSha256 = parsed.snapshotSha256?.takeIf(FULL_SHA256_PATTERN::matches)
@@ -604,6 +654,8 @@ object KeyboxVerifier {
                     isRkp = isRkp,
                     hasRsa = hasRsa,
                     hasEc = hasEc,
+                    validityState = ValidityState.INVALID,
+                    invalidReason = InvalidReason.VERIFICATION_FAILED,
                 )
             }
             val deviceSerial = keyboxes.asSequence().mapNotNull(CertHack::getDeviceCertificateSerial).firstOrNull()
@@ -662,9 +714,12 @@ object KeyboxVerifier {
                             hasRsa = hasRsa,
                             hasEc = hasEc,
                             notAfter = deviceNotAfter,
+                            validityState = ValidityState.INVALID,
+                            invalidReason = InvalidReason.REVOKED,
                         )
                     }
                     Status.INVALID -> {
+                        val (state, reason) = resolveValidity(Status.INVALID, deviceNotAfter)
                         return Result(
                             file,
                             file.name,
@@ -678,6 +733,8 @@ object KeyboxVerifier {
                             hasRsa = hasRsa,
                             hasEc = hasEc,
                             notAfter = deviceNotAfter,
+                            validityState = state,
+                            invalidReason = reason,
                         )
                     }
                     Status.ERROR -> {

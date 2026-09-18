@@ -1,14 +1,13 @@
 package cleveres.tricky.cleverestech.util
 
 import cleveres.tricky.cleverestech.Config
+import cleveres.tricky.cleverestech.KeyboxValidityTracker
 import cleveres.tricky.cleverestech.Logger
 import cleveres.tricky.cleverestech.ManagedFileCoordinator
 import cleveres.tricky.cleverestech.StoredKeyboxInventory
 import java.io.File
-import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.LinkOption
-import java.nio.file.StandardCopyOption
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.ScheduledThreadPoolExecutor
@@ -17,8 +16,9 @@ import java.util.concurrent.TimeUnit
 
 object KeyboxAutoCleaner {
     internal data class CleanupResult(
-        val moved: Int,
+        val detected: Int,
         val cancelled: Boolean,
+        val moved: Int = 0,
     )
 
     private val executorLock = Any()
@@ -86,18 +86,18 @@ object KeyboxAutoCleaner {
             applyVerifiedResults(configDir, results, ::isEnabledNow) {
                 Config.updateKeyBoxesSync()
             }
-        if (!cleanup.cancelled && cleanup.moved > 0) notifyUser(cleanup.moved)
+        if (!cleanup.cancelled && cleanup.detected > 0) notifyUser(cleanup.detected)
         if (cleanup.cancelled) {
             Logger.i("AutoCleaner: Check stopped because automatic cleanup was disabled")
         } else {
-            Logger.i("AutoCleaner: Finished check. Revoked/Invalid files moved: ${cleanup.moved}")
+            Logger.i("AutoCleaner: Finished check. Revoked/Invalid files detected: ${cleanup.detected}")
         }
     }
 
     /**
      * Rebinds every path to the exact descriptor-backed snapshot that produced its verification
-     * result. The shared monitor prevents managed writers from replacing that path between the
-     * final digest comparison, quarantine move, and runtime refresh.
+     * result. Updates KeyboxValidityTracker so invalid entries are tracked in-place rather than
+     * quarantined.
      */
     internal fun applyVerifiedResults(
         configDir: File,
@@ -106,9 +106,7 @@ object KeyboxAutoCleaner {
         refresh: () -> Unit,
     ): CleanupResult =
         synchronized(ManagedFileCoordinator.monitor) {
-            val revokedDir = File(File(configDir, "keyboxes"), "revoked")
-            SecureFile.mkdirs(revokedDir, 448)
-            var moved = 0
+            var detected = 0
             var cancelled = false
 
             for (result in results) {
@@ -140,31 +138,16 @@ object KeyboxAutoCleaner {
                         Logger.w("AutoCleaner: Skipping replaced keybox source ${result.storageId}")
                         continue
                     }
-                    val initialTarget = File(revokedDir, result.filename)
-                    val target =
-                        if (initialTarget.exists()) {
-                            File(revokedDir, "${result.filename}.${System.currentTimeMillis()}.revoked")
-                        } else {
-                            initialTarget
-                        }
-                    try {
-                        Files.move(
-                            source.file.toPath(),
-                            target.toPath(),
-                            StandardCopyOption.ATOMIC_MOVE,
-                        )
-                    } catch (_: AtomicMoveNotSupportedException) {
-                        Files.move(source.file.toPath(), target.toPath())
-                    }
-                    moved++
-                    Logger.i("AutoCleaner: Keybox ${result.filename} is ${result.status}. Moved to revoked.")
+                    detected++
+                    Logger.i("AutoCleaner: Keybox ${result.filename} is ${result.status}. Retained with state metadata.")
                 } catch (error: Exception) {
-                    Logger.e("AutoCleaner: Failed to move ${result.filename}", error)
+                    Logger.e("AutoCleaner: Failed to inspect ${result.filename}", error)
                 }
             }
 
+            KeyboxValidityTracker.update(results)
             refresh()
-            CleanupResult(moved, cancelled)
+            CleanupResult(detected, cancelled, moved = 0)
         }
 
     private fun sha256Hex(file: File): String {

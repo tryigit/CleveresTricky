@@ -23,6 +23,8 @@ for (const component of ['system', 'vendor', 'boot']) {
 }
 assert.deepStrictEqual(policy.profiles, []);
 assert.strictEqual(policy.activeProfile, null);
+assert.strictEqual(policy.blockInvalidKeyboxes, true);
+assert.deepStrictEqual(policy.keyboxPriorityOrder, { mode: 'default' });
 
 const installer = fs.readFileSync(path.join(templateRoot, 'customize.sh'), 'utf8');
 const start = installer.indexOf('# Fresh installs use the recommended minimal default:');
@@ -31,6 +33,7 @@ assert.ok(start >= 0 && end > start, 'recommended default installer block must e
 const defaultsBlock = installer.slice(start, end);
 assert.match(defaultsBlock, /CONFIG_DIR\/global_mode/);
 assert.match(defaultsBlock, /CONFIG_DIR\/auto_keybox_check/);
+assert.match(defaultsBlock, /CONFIG_DIR\/block_invalid_keyboxes/);
 assert.match(defaultsBlock, /policy_state_v2\.json/);
 assert.match(defaultsBlock, /recommended_defaults_pending/);
 assert.doesNotMatch(defaultsBlock, /: > "\$CONFIG_DIR\/spoof_enabled"/);

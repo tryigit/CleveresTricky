@@ -185,6 +185,17 @@ object Config {
     val isAutoKeyboxCheckEnabled: Boolean
         get() = isRegularFlagFile(File(root, AUTO_KEYBOX_CHECK_FILE))
 
+    val isBlockInvalidKeyboxesEnabled: Boolean
+        get() {
+            val file = File(root, BLOCK_INVALID_KEYBOXES_FILE)
+            if (isRegularFlagFile(file)) return true
+            if (java.nio.file.Files.exists(file.toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS)) return false
+            return PolicyState.blockInvalidKeyboxes
+        }
+
+    val keyboxPriorityPreference: KeyboxPriorityPreference
+        get() = PolicyState.keyboxPriorityPreference
+
     private class DrmState(
         val packages: PackageTrie<Boolean>,
     ) {
@@ -643,40 +654,76 @@ object Config {
                     if (allKeyboxes.isEmpty()) {
                         Logger.w("updateKeyBoxes: no keyboxes found in configDir (${root.absolutePath}) or external sources")
                         emptyList()
-                    } else if (!enforceRevocationCheck) {
-                        Logger.i(
-                            "Auto keybox check is disabled; admitting ${allKeyboxes.size} keybox(es) without revocation check",
-                        )
-                        allKeyboxes.toList()
                     } else {
-                        val revocation = revocationProvider()
-                        if (revocation == null) {
-                            Logger.i(
-                                "Revocation list is temporarily unavailable; admitting ${allKeyboxes.size} keybox(es) until check completes",
-                            )
-                            allKeyboxes.toList()
-                        } else {
-                            val statuses =
-                                allKeyboxes.map { keybox ->
-                                    if (CertHack.isRkpKeybox(keybox)) KeyboxVerifier.Status.VALID else verifier(keybox, revocation)
-                                }
-                            val invalidEntries = allKeyboxes.zip(statuses).filter { it.second != KeyboxVerifier.Status.VALID }
-                            if (invalidEntries.isEmpty()) {
-                                allKeyboxes.toList()
-                            } else {
-                                for ((keybox, status) in invalidEntries) {
-                                    val serial =
-                                        keybox.certificates()?.firstOrNull()?.let {
-                                            (it as? java.security.cert.X509Certificate)?.serialNumber?.toString(16)
-                                        } ?: "unknown"
-                                    Logger.e("Keybox entry rejected: file=${keybox.filename()}, serial=$serial, status=$status")
-                                }
-                                Logger.e(
-                                    "Keybox pool rejected: ${invalidEntries.size}/${allKeyboxes.size} entry(ies) invalid or revoked. " +
-                                        "If you wish to use revoked keyboxes, disable 'Automatic Keybox Check' in Settings.",
-                                )
-                                emptyList()
+                        val revocation = if (enforceRevocationCheck) revocationProvider() else null
+                        val blockInvalid = isBlockInvalidKeyboxesEnabled
+                        val results = mutableListOf<KeyboxVerifier.Result>()
+                        val eligibleKeyboxes = mutableListOf<CertHack.KeyBox>()
+
+                        for (keybox in allKeyboxes) {
+                            val isRkp = CertHack.isRkpKeybox(keybox)
+                            val status = when {
+                                isRkp -> KeyboxVerifier.Status.VALID
+                                !enforceRevocationCheck -> KeyboxVerifier.Status.VALID
+                                revocation == null -> KeyboxVerifier.Status.VALID
+                                else -> verifier(keybox, revocation)
                             }
+                            val notAfter = CertHack.getDeviceCertificateNotAfter(listOf(keybox))
+                            val (validity, reason) = KeyboxVerifier.resolveValidity(status, notAfter)
+
+                            val isEligible = when {
+                                validity == KeyboxVerifier.ValidityState.VALID -> true
+                                !blockInvalid -> reason != KeyboxVerifier.InvalidReason.VERIFICATION_FAILED
+                                else -> false
+                            }
+
+                            if (isEligible) {
+                                eligibleKeyboxes.add(keybox)
+                            } else {
+                                val serial = keybox.certificates()?.firstOrNull()?.let {
+                                    (it as? java.security.cert.X509Certificate)?.serialNumber?.toString(16)
+                                } ?: "unknown"
+                                Logger.w("Keybox entry excluded by policy: file=${keybox.filename()}, serial=$serial, validity=$validity, reason=$reason")
+                            }
+
+                            val serial = keybox.certificates()?.firstOrNull()?.let {
+                                (it as? java.security.cert.X509Certificate)?.serialNumber?.toString(16)
+                            }
+                            results.add(
+                                KeyboxVerifier.Result(
+                                    file = File(keybox.filename()),
+                                    filename = keybox.filename(),
+                                    status = status,
+                                    details = if (validity == KeyboxVerifier.ValidityState.VALID) "Active keybox" else "Invalid keybox ($reason)",
+                                    storageId = keybox.filename(),
+                                    certificateSerial = serial,
+                                    notAfter = notAfter,
+                                    validityState = validity,
+                                    invalidReason = reason,
+                                ),
+                            )
+                        }
+
+                        KeyboxValidityTracker.update(results)
+
+                        val preference = keyboxPriorityPreference
+                        if (preference.mode == KeyboxPriorityPreference.Mode.CUSTOM && preference.customOrder.isNotEmpty()) {
+                            val rankMap = preference.effectiveOrder().mapIndexed { index, cat -> cat to index }.toMap()
+                            eligibleKeyboxes.sortedBy { box ->
+                                val entry = KeyboxValidityTracker.getState(box.filename())
+                                val validity = entry?.validityState ?: KeyboxVerifier.ValidityState.VALID
+                                val reason = entry?.invalidReason
+                                val level = when {
+                                    CertHack.isRkpKeybox(box) -> "RKP"
+                                    CertHack.classifyKeyboxSecurityLevel(box) == CertHack.KeyboxSecurityLevel.STRONGBOX -> "StrongBox"
+                                    CertHack.classifyKeyboxSecurityLevel(box) == CertHack.KeyboxSecurityLevel.TEE -> "TEE"
+                                    else -> "Unknown"
+                                }
+                                val category = KeyboxPriorityCategory.fromValidityAndLevel(validity, reason, level)
+                                rankMap[category] ?: Int.MAX_VALUE
+                            }
+                        } else {
+                            eligibleKeyboxes
                         }
                     }
 
@@ -827,6 +874,9 @@ object Config {
             }
             AUTO_KEYBOX_CHECK_FILE -> {
                 KeyboxAutoCleaner.setEnabled(file != null)
+                updateKeyBoxes()
+            }
+            BLOCK_INVALID_KEYBOXES_FILE -> {
                 updateKeyBoxes()
             }
         }
@@ -1776,6 +1826,7 @@ object Config {
     private const val TEMPLATES_JSON_FILE = "templates.json"
     private const val RANDOM_ON_BOOT_FILE = "random_on_boot"
     private const val AUTO_KEYBOX_CHECK_FILE = "auto_keybox_check"
+    private const val BLOCK_INVALID_KEYBOXES_FILE = "block_invalid_keyboxes"
     private const val APPLY_PROFILE_FILE = "apply_profile"
     private const val RECOMMENDED_DEFAULTS_PENDING_FILE = "recommended_defaults_pending"
     private const val MAX_DRM_PACKAGES_BYTES = 64L * 1024
@@ -1976,6 +2027,7 @@ object Config {
                 SecureFile.touch(File(root, RANDOM_ON_BOOT_FILE), 384)
                 SecureFile.touch(File(root, SPOOF_BUILD_VARS_FILE), 384)
                 SecureFile.touch(File(root, AUTO_KEYBOX_CHECK_FILE), 384)
+                SecureFile.touch(File(root, BLOCK_INVALID_KEYBOXES_FILE), 384)
                 SecureFile.touch(File(root, TELEPHONY_FILE), 384)
             }
             "daily" -> {
@@ -1984,17 +2036,19 @@ object Config {
                     BootLogic.FILE_SPOOF_CN, TELEPHONY_FILE, BUILD_IDENTITY_FILE)
                 SecureFile.touch(File(root, SPOOF_BUILD_VARS_FILE), 384)
                 SecureFile.touch(File(root, AUTO_KEYBOX_CHECK_FILE), 384)
+                SecureFile.touch(File(root, BLOCK_INVALID_KEYBOXES_FILE), 384)
                 SecureFile.touch(File(root, DRM_PASSTHROUGH_FILE), 384)
             }
             "minimal" -> {
                 removeConfigFiles(SPOOF_ENABLED_FILE, BUILD_IDENTITY_FILE, GLOBAL_MODE_FILE, GLOBAL_IDENTITY_MODE_FILE, TEE_BROKEN_MODE_FILE,
                     RANDOM_ON_BOOT_FILE, BootLogic.FILE_HIDE_PROPS, BootLogic.FILE_SPOOF_CN, AUTO_KEYBOX_CHECK_FILE,
-                    TELEPHONY_FILE)
+                    BLOCK_INVALID_KEYBOXES_FILE, TELEPHONY_FILE)
                 SecureFile.touch(File(root, DRM_PASSTHROUGH_FILE), 384)
             }
             "default" -> {
                 SecureFile.touch(File(root, GLOBAL_MODE_FILE), 384)
                 SecureFile.touch(File(root, AUTO_KEYBOX_CHECK_FILE), 384)
+                SecureFile.touch(File(root, BLOCK_INVALID_KEYBOXES_FILE), 384)
                 removeConfigFiles(SPOOF_ENABLED_FILE, BUILD_IDENTITY_FILE, GLOBAL_IDENTITY_MODE_FILE, TEE_BROKEN_MODE_FILE, RANDOM_ON_BOOT_FILE,
                     BootLogic.FILE_HIDE_PROPS, BootLogic.FILE_SPOOF_CN, TELEPHONY_FILE, RKP_PASSTHROUGH_FILE, DRM_PASSTHROUGH_FILE)
                 resetTargetFilesToDefaults()
@@ -2121,6 +2175,9 @@ object Config {
                 MODULE_HASH_FILE -> updateModuleHash(f)
                 AUTO_KEYBOX_CHECK_FILE -> {
                     KeyboxAutoCleaner.setEnabled(isRegularFlagFile(f))
+                    updateKeyBoxes()
+                }
+                BLOCK_INVALID_KEYBOXES_FILE -> {
                     updateKeyBoxes()
                 }
                 APPLY_PROFILE_FILE -> applyProfileFromFile(f)

@@ -185,7 +185,7 @@ object CboxManager {
                 return false
             }
 
-            val parsed = KeyboxJcaAdapter.materialize(payload.document, filename)
+            val parsed = KeyboxJcaAdapter.materialize(payload.document, filename, tolerateExpiry = true)
             val verified =
                 if (Config.isAutoKeyboxCheckEnabled) {
                     val crl = KeyboxVerifier.fetchCrl() ?: return false
@@ -307,7 +307,7 @@ object CboxManager {
             val payload = FusedCboxBackend.recover(cboxSnapshot, credentials.recoveryKey, credentials.publicKey)
                 ?: return null
             if (credentials.publicKey == null && payload.hasSignature) return null
-            val parsed = KeyboxJcaAdapter.materialize(payload.document, file.name)
+            val parsed = KeyboxJcaAdapter.materialize(payload.document, file.name, tolerateExpiry = true)
             val verified =
                 if (enforceRevocationCheck && crl != null) {
                     val validOnly = parsed.filter { KeyboxVerifier.verifyKeybox(it, crl) == KeyboxVerifier.Status.VALID }

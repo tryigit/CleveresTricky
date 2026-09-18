@@ -809,7 +809,7 @@ object ServerManager {
             Logger.e("CBOX signature verification failed closed: $filename")
             return emptyList()
         }
-        return KeyboxJcaAdapter.materialize(payload.document, filename)
+        return KeyboxJcaAdapter.materialize(payload.document, filename, tolerateExpiry = true)
     }
 
     private fun cacheXml(

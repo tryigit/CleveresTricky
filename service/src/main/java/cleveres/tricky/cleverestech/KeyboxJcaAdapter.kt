@@ -4,6 +4,7 @@ import cleveres.tricky.cleverestech.keystore.CertHack
 import java.io.ByteArrayInputStream
 import java.security.KeyPair
 import java.security.cert.Certificate
+import java.security.cert.CertificateExpiredException
 import java.security.cert.CertificateFactory
 import java.security.cert.X509Certificate
 
@@ -13,15 +14,17 @@ import java.security.cert.X509Certificate
  * key ID, algorithm metadata and public X.509 certificates.
  */
 internal object KeyboxJcaAdapter {
+    @JvmOverloads
     fun materialize(
         document: KeyboxWire.Document,
         filename: String,
         authenticatedRkpProvenance: Boolean = false,
+        tolerateExpiry: Boolean = false,
     ): List<CertHack.KeyBox> {
         if (filename.isEmpty() || document.keys.isEmpty()) return emptyList()
         val parsed = ArrayList<CertHack.KeyBox>(document.keys.size)
         for (raw in document.keys) {
-            val keybox = materializeKey(raw, filename, authenticatedRkpProvenance)
+            val keybox = materializeKey(raw, filename, authenticatedRkpProvenance, tolerateExpiry)
             if (keybox != null) {
                 parsed += keybox
             }
@@ -33,6 +36,7 @@ internal object KeyboxJcaAdapter {
         raw: KeyboxWire.RawKey,
         filename: String,
         authenticatedRkpProvenance: Boolean = false,
+        tolerateExpiry: Boolean = false,
     ): CertHack.KeyBox? =
         try {
             val certificates = parseCertificates(raw.certificatesDer) ?: return null
@@ -40,7 +44,7 @@ internal object KeyboxJcaAdapter {
             val publicAlgorithm = normalizeAlgorithm(leaf.publicKey.algorithm) ?: return null
             val declaredAlgorithm = normalizeAlgorithm(raw.algorithm) ?: return null
             if (publicAlgorithm != declaredAlgorithm) return null
-            if (!validChain(certificates)) return null
+            if (!validChain(certificates, tolerateExpiry)) return null
 
             val handle = BackendKeyHandle(publicAlgorithm, raw.keyId)
             val isRkp = authenticatedRkpProvenance ||
@@ -62,11 +66,18 @@ internal object KeyboxJcaAdapter {
         return certificates
     }
 
-    private fun validChain(certificates: List<Certificate>): Boolean {
+    private fun validChain(certificates: List<Certificate>): Boolean =
+        validChain(certificates, tolerateExpiry = false)
+
+    private fun validChain(certificates: List<Certificate>, tolerateExpiry: Boolean): Boolean {
         for (index in certificates.indices) {
             val certificate = certificates[index] as? X509Certificate ?: return false
             try {
-                certificate.checkValidity()
+                try {
+                    certificate.checkValidity()
+                } catch (e: CertificateExpiredException) {
+                    if (!tolerateExpiry) return false
+                }
                 if (index + 1 < certificates.size) {
                     certificate.verify(certificates[index + 1].publicKey)
                 }

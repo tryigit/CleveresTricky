@@ -15,5 +15,9 @@
     "boot": { "mode": "automatic" }
   },
   "profiles": [],
-  "activeProfile": null
+  "activeProfile": null,
+  "blockInvalidKeyboxes": true,
+  "keyboxPriorityOrder": {
+    "mode": "default"
+  }
 }

@@ -1,0 +1,135 @@
+package cleveres.tricky.cleverestech
+
+import cleveres.tricky.cleverestech.util.KeyboxVerifier
+import java.io.File
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+
+class KeyboxValidityTrackerTest {
+
+    @Before
+    @After
+    fun tearDown() {
+        KeyboxValidityTracker.clear()
+    }
+
+    @Test
+    fun `unknown keybox is eligible regardless of block setting`() {
+        assertTrue(KeyboxValidityTracker.isEligible("unknown.xml", blockInvalid = true))
+        assertTrue(KeyboxValidityTracker.isEligible("unknown.xml", blockInvalid = false))
+    }
+
+    @Test
+    fun `valid keybox is eligible regardless of block setting`() {
+        val result = createResult(
+            filename = "valid.xml",
+            status = KeyboxVerifier.Status.VALID,
+            validityState = KeyboxVerifier.ValidityState.VALID,
+            invalidReason = null,
+        )
+        KeyboxValidityTracker.update(listOf(result))
+
+        assertTrue(KeyboxValidityTracker.isEligible("valid.xml", blockInvalid = true))
+        assertTrue(KeyboxValidityTracker.isEligible("valid.xml", blockInvalid = false))
+    }
+
+    @Test
+    fun `expired keybox is blocked when block is true and eligible when block is false`() {
+        val result = createResult(
+            filename = "expired.xml",
+            status = KeyboxVerifier.Status.INVALID,
+            validityState = KeyboxVerifier.ValidityState.INVALID,
+            invalidReason = KeyboxVerifier.InvalidReason.EXPIRED,
+        )
+        KeyboxValidityTracker.update(listOf(result))
+
+        assertFalse(KeyboxValidityTracker.isEligible("expired.xml", blockInvalid = true))
+        assertTrue(KeyboxValidityTracker.isEligible("expired.xml", blockInvalid = false))
+    }
+
+    @Test
+    fun `revoked keybox is blocked when block is true and eligible when block is false`() {
+        val result = createResult(
+            filename = "revoked.xml",
+            status = KeyboxVerifier.Status.REVOKED,
+            validityState = KeyboxVerifier.ValidityState.INVALID,
+            invalidReason = KeyboxVerifier.InvalidReason.REVOKED,
+        )
+        KeyboxValidityTracker.update(listOf(result))
+
+        assertFalse(KeyboxValidityTracker.isEligible("revoked.xml", blockInvalid = true))
+        assertTrue(KeyboxValidityTracker.isEligible("revoked.xml", blockInvalid = false))
+    }
+
+    @Test
+    fun `verification failed keybox is blocked regardless of block setting`() {
+        val result = createResult(
+            filename = "corrupt.xml",
+            status = KeyboxVerifier.Status.INVALID,
+            validityState = KeyboxVerifier.ValidityState.INVALID,
+            invalidReason = KeyboxVerifier.InvalidReason.VERIFICATION_FAILED,
+        )
+        KeyboxValidityTracker.update(listOf(result))
+
+        assertFalse(KeyboxValidityTracker.isEligible("corrupt.xml", blockInvalid = true))
+        assertFalse(KeyboxValidityTracker.isEligible("corrupt.xml", blockInvalid = false))
+    }
+
+    @Test
+    fun `transient error results are skipped during tracker update`() {
+        val validResult = createResult(
+            filename = "test.xml",
+            status = KeyboxVerifier.Status.VALID,
+            validityState = KeyboxVerifier.ValidityState.VALID,
+            invalidReason = null,
+        )
+        val errorResult = createResult(
+            filename = "test.xml",
+            status = KeyboxVerifier.Status.ERROR,
+            validityState = KeyboxVerifier.ValidityState.VALID,
+            invalidReason = null,
+        )
+
+        KeyboxValidityTracker.update(listOf(validResult))
+        assertEquals(KeyboxVerifier.ValidityState.VALID, KeyboxValidityTracker.getState("test.xml")?.validityState)
+
+        KeyboxValidityTracker.update(listOf(errorResult))
+        assertNull(KeyboxValidityTracker.getState("test.xml"))
+    }
+
+    @Test
+    fun `clear empties the tracker snapshot`() {
+        val result = createResult(
+            filename = "sample.xml",
+            status = KeyboxVerifier.Status.VALID,
+            validityState = KeyboxVerifier.ValidityState.VALID,
+            invalidReason = null,
+        )
+        KeyboxValidityTracker.update(listOf(result))
+        assertFalse(KeyboxValidityTracker.snapshot().isEmpty())
+
+        KeyboxValidityTracker.clear()
+        assertTrue(KeyboxValidityTracker.snapshot().isEmpty())
+    }
+
+    private fun createResult(
+        filename: String,
+        status: KeyboxVerifier.Status,
+        validityState: KeyboxVerifier.ValidityState,
+        invalidReason: KeyboxVerifier.InvalidReason?,
+    ): KeyboxVerifier.Result =
+        KeyboxVerifier.Result(
+            file = File(filename),
+            filename = filename,
+            status = status,
+            details = "test",
+            storageId = filename,
+            validityState = validityState,
+            invalidReason = invalidReason,
+        )
+}

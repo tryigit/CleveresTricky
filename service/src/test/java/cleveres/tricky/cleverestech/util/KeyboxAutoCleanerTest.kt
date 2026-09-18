@@ -1,5 +1,6 @@
 package cleveres.tricky.cleverestech.util
 
+import cleveres.tricky.cleverestech.KeyboxValidityTracker
 import cleveres.tricky.cleverestech.ManagedFileCoordinator
 import cleveres.tricky.cleverestech.WebServer
 import java.io.File
@@ -57,6 +58,7 @@ class KeyboxAutoCleanerTest {
                 refreshes++
             }
 
+        assertEquals(0, cleanup.detected)
         assertEquals(0, cleanup.moved)
         assertFalse(cleanup.cancelled)
         assertEquals(1, refreshes)
@@ -65,25 +67,28 @@ class KeyboxAutoCleanerTest {
     }
 
     @Test
-    fun `matching verified snapshot is quarantined before refresh`() {
+    fun `matching verified snapshot is retained in place and updates tracker`() {
         val root = temp.newFolder("matching")
         val source = File(File(root, "keyboxes").apply { mkdirs() }, "candidate.xml")
         val verified = "verified-revoked-snapshot".toByteArray()
         source.writeBytes(verified)
         val result = revokedResult(source, sha256Hex(verified))
-        var sourceExistedDuringRefresh = true
+        var sourceExistedDuringRefresh = false
 
         val cleanup =
             KeyboxAutoCleaner.applyVerifiedResults(root, listOf(result), { true }) {
                 sourceExistedDuringRefresh = source.exists()
             }
 
-        val quarantined = File(File(root, "keyboxes/revoked"), source.name)
-        assertEquals(1, cleanup.moved)
+        assertEquals(1, cleanup.detected)
+        assertEquals(0, cleanup.moved)
         assertFalse(cleanup.cancelled)
-        assertFalse(sourceExistedDuringRefresh)
-        assertFalse(source.exists())
-        assertTrue(quarantined.readBytes().contentEquals(verified))
+        assertTrue(sourceExistedDuringRefresh)
+        assertTrue(source.exists())
+        assertTrue(source.readBytes().contentEquals(verified))
+        val entry = KeyboxValidityTracker.getState(result.storageId)
+        assertEquals(KeyboxVerifier.ValidityState.INVALID, entry?.validityState)
+        assertEquals(KeyboxVerifier.InvalidReason.REVOKED, entry?.invalidReason)
     }
 
     @Test
