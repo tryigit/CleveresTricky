@@ -12,6 +12,7 @@ import org.junit.rules.TemporaryFolder
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
 class WebServerPostTest {
@@ -25,6 +26,7 @@ class WebServerPostTest {
     @Before
     fun setUp() {
         configDir = tempFolder.newFolder("config")
+        PolicyState.setRootForTesting(configDir)
 
         originalSecureFileImpl = SecureFile.impl
         SecureFile.impl =
@@ -61,6 +63,7 @@ class WebServerPostTest {
     fun tearDown() {
         SecureFile.impl = originalSecureFileImpl
         server.stop()
+        PolicyState.resetForTesting()
     }
 
     @Test
@@ -96,6 +99,24 @@ class WebServerPostTest {
         val savedFile = File(configDir, "target.txt")
         assertTrue("File should exist", savedFile.exists())
         assertEquals("File content mismatch", "BODY_CONTENT", savedFile.readText())
+    }
+
+    @Test
+    fun `keybox priority order parses authenticated form body`() {
+        val priorityUrl = URL("http://localhost:${server.listeningPort}/api/keybox_priority_order?token=${server.token}")
+        val customOrder = KeyboxPriorityCategory.DEFAULT_ORDER.reversed().map { it.name }
+        val payload = org.json.JSONObject()
+            .put("mode", "custom")
+            .put("customOrder", org.json.JSONArray(customOrder))
+            .toString()
+        val conn = priorityUrl.openConnection() as HttpURLConnection
+        conn.requestMethod = "POST"
+        conn.doOutput = true
+        conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+        val postData = "data=${URLEncoder.encode(payload, StandardCharsets.UTF_8)}"
+        conn.outputStream.use { it.write(postData.toByteArray(StandardCharsets.UTF_8)) }
+
+        assertEquals(200, conn.responseCode)
     }
 
     @Test

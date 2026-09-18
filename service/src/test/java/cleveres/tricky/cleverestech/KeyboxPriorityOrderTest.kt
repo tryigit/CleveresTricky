@@ -78,11 +78,7 @@ class KeyboxPriorityOrderTest {
 
     @Test
     fun `custom preference serialization roundtrip`() {
-        val customOrder = listOf(
-            KeyboxPriorityCategory.VALID_TEE,
-            KeyboxPriorityCategory.VALID_STRONGBOX,
-            KeyboxPriorityCategory.VALID_RKP,
-        )
+        val customOrder = KeyboxPriorityCategory.DEFAULT_ORDER.reversed()
         val pref = KeyboxPriorityPreference(KeyboxPriorityPreference.Mode.CUSTOM, customOrder)
         val json = pref.toJson()
         assertEquals("custom", json.getString("mode"))
@@ -93,14 +89,37 @@ class KeyboxPriorityOrderTest {
     }
 
     @Test
-    fun `custom preference falls back to default on invalid or duplicate categories`() {
+    fun `custom preference falls back to default on incomplete order`() {
+        val incompleteJson = JSONObject().apply {
+            put("mode", "custom")
+            put("customOrder", JSONArray(KeyboxPriorityCategory.DEFAULT_ORDER.dropLast(1).map { it.name }))
+        }
+        val restored = KeyboxPriorityPreference.fromJson(incompleteJson)
+        assertEquals(KeyboxPriorityPreference.DEFAULT, restored)
+    }
+
+    @Test
+    fun `custom preference falls back to default on unknown category`() {
+        val unknownOrder = KeyboxPriorityCategory.DEFAULT_ORDER.map { it.name }.toMutableList()
+        unknownOrder[unknownOrder.lastIndex] = "VALID_FUTURE_CATEGORY"
+        val unknownJson = JSONObject().apply {
+            put("mode", "custom")
+            put("customOrder", JSONArray(unknownOrder))
+        }
+        val restored = KeyboxPriorityPreference.fromJson(unknownJson)
+        assertEquals(KeyboxPriorityPreference.DEFAULT, restored)
+    }
+
+    @Test
+    fun `custom preference falls back to default on duplicate category`() {
+        val duplicateOrder = KeyboxPriorityCategory.DEFAULT_ORDER.map { it.name }.toMutableList()
+        duplicateOrder[duplicateOrder.lastIndex] = duplicateOrder.first()
         val duplicateJson = JSONObject().apply {
             put("mode", "custom")
-            put("customOrder", JSONArray(listOf("VALID_RKP", "VALID_RKP")))
+            put("customOrder", JSONArray(duplicateOrder))
         }
         val restored = KeyboxPriorityPreference.fromJson(duplicateJson)
-        assertEquals(KeyboxPriorityPreference.Mode.DEFAULT, restored.mode)
-        assertEquals(KeyboxPriorityCategory.DEFAULT_ORDER, restored.effectiveOrder())
+        assertEquals(KeyboxPriorityPreference.DEFAULT, restored)
     }
 
     @Test

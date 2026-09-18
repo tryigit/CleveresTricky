@@ -13,6 +13,7 @@ import org.mockito.Mockito
 import java.io.File
 import java.io.IOException
 import java.security.cert.X509Certificate
+import java.util.Date
 import cleveres.tricky.cleverestech.util.KeyboxVerifier.RevocationSource
 
 class KeyboxVerifierCheckFileTest {
@@ -172,6 +173,33 @@ class KeyboxVerifierCheckFileTest {
 
         assertEquals(KeyboxVerifier.Status.VALID, result.status)
         assertEquals("Active keybox", result.details)
+    }
+
+    @Test
+    fun `checkFile marks an expired certificate invalid after successful verification`() {
+        tempFile.writeText("content")
+        val mockCert = Mockito.mock(X509Certificate::class.java)
+        Mockito.`when`(mockCert.serialNumber).thenReturn(java.math.BigInteger.ONE)
+        Mockito.`when`(mockCert.notAfter).thenReturn(Date(0))
+        val mockPublicKey = Mockito.mock(java.security.PublicKey::class.java)
+        Mockito.`when`(mockPublicKey.encoded).thenReturn(ByteArray(0))
+        Mockito.`when`(mockCert.publicKey).thenReturn(mockPublicKey)
+        val mockKeyBox = Mockito.mock(CertHack.KeyBox::class.java)
+        Mockito.`when`(mockKeyBox.certificates()).thenReturn(listOf(mockCert))
+        KeyboxLoader.fileParserOverride = { _, _ ->
+            KeyboxLoader.ParsedFile(snapshotSha256 = null, keyboxes = listOf(mockKeyBox))
+        }
+
+        val result = KeyboxVerifier.checkFile(
+            tempFile,
+            KeyboxLoader.FileScope.CONFIG_ROOT,
+            tempFile.name,
+            "storage123",
+        ) { RevocationSource.Legacy(emptySet()) }
+
+        assertEquals(KeyboxVerifier.Status.VALID, result.status)
+        assertEquals(KeyboxVerifier.ValidityState.INVALID, result.validityState)
+        assertEquals(KeyboxVerifier.InvalidReason.EXPIRED, result.invalidReason)
     }
 
     @Test

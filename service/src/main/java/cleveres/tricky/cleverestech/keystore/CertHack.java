@@ -1446,7 +1446,8 @@ public final class CertHack {
             List<KeyBox> list;
             var appConfig = Config.INSTANCE.getAppConfig(uid);
             if (appConfig != null && appConfig.getKeyboxFilename() != null) {
-                List<KeyBox> candidates = currentState.keyboxFiles.get(appConfig.getKeyboxFilename());
+                List<KeyBox> candidates = KeyboxPriorityOrder.filterEligibleCandidates(
+                        currentState.keyboxFiles.get(appConfig.getKeyboxFilename()));
                 List<KeyBox> matchingLevel = filterKeyboxesBySecurityLevel(candidates, isStrongbox);
                 if (!matchingLevel.isEmpty()) {
                     candidates = matchingLevel;
@@ -1459,23 +1460,7 @@ public final class CertHack {
                 }
                 list = selectKeyboxPool(candidates, KeyProperties.KEY_ALGORITHM_EC);
             } else {
-                if (isStrongbox) {
-                    if (!currentState.globalStrongBoxEc.isEmpty()) {
-                        list = currentState.globalStrongBoxEc;
-                    } else if (!currentState.globalStrongBoxRsa.isEmpty()) {
-                        list = currentState.globalStrongBoxRsa;
-                    } else if (!currentState.globalTeeEc.isEmpty()) {
-                        list = currentState.globalTeeEc;
-                    } else {
-                        list = currentState.globalTeeRsa;
-                    }
-                } else {
-                    if (!currentState.globalTeeEc.isEmpty()) {
-                        list = currentState.globalTeeEc;
-                    } else {
-                        list = currentState.globalTeeRsa;
-                    }
-                }
+                list = selectGlobalKeyboxPool(currentState, isStrongbox);
             }
             if (list.isEmpty()) {
                 return caList;
@@ -1689,7 +1674,8 @@ public final class CertHack {
             List<KeyBox> list;
             var appConfig = Config.INSTANCE.getAppConfig(uid);
             if (appConfig != null && appConfig.getKeyboxFilename() != null) {
-                List<KeyBox> candidates = currentState.keyboxFiles.get(appConfig.getKeyboxFilename());
+                List<KeyBox> candidates = KeyboxPriorityOrder.filterEligibleCandidates(
+                        currentState.keyboxFiles.get(appConfig.getKeyboxFilename()));
                 List<KeyBox> matchingLevel = filterKeyboxesBySecurityLevel(candidates, isStrongbox);
                 if (!matchingLevel.isEmpty()) {
                     candidates = matchingLevel;
@@ -1700,23 +1686,7 @@ public final class CertHack {
                 }
                 list = selectKeyboxPool(candidates, KeyProperties.KEY_ALGORITHM_EC);
             } else {
-                if (isStrongbox) {
-                    if (!currentState.globalStrongBoxEc.isEmpty()) {
-                        list = currentState.globalStrongBoxEc;
-                    } else if (!currentState.globalStrongBoxRsa.isEmpty()) {
-                        list = currentState.globalStrongBoxRsa;
-                    } else if (!currentState.globalTeeEc.isEmpty()) {
-                        list = currentState.globalTeeEc;
-                    } else {
-                        list = currentState.globalTeeRsa;
-                    }
-                } else {
-                    if (!currentState.globalTeeEc.isEmpty()) {
-                        list = currentState.globalTeeEc;
-                    } else {
-                        list = currentState.globalTeeRsa;
-                    }
-                }
+                list = selectGlobalKeyboxPool(currentState, isStrongbox);
             }
             if (list.isEmpty()) {
                 noteAttestFailure(uid, 6);
@@ -1866,7 +1836,8 @@ public final class CertHack {
         List<KeyBox> list;
         var appConfig = Config.INSTANCE.getAppConfig(uid);
         if (appConfig != null && appConfig.getKeyboxFilename() != null) {
-            List<KeyBox> candidates = currentState.keyboxFiles.get(appConfig.getKeyboxFilename());
+            List<KeyBox> candidates = KeyboxPriorityOrder.filterEligibleCandidates(
+                    currentState.keyboxFiles.get(appConfig.getKeyboxFilename()));
             List<KeyBox> matchingLevel = filterKeyboxesBySecurityLevel(candidates, isStrongbox);
             if (!matchingLevel.isEmpty()) {
                 candidates = matchingLevel;
@@ -1877,23 +1848,7 @@ public final class CertHack {
             }
             list = selectKeyboxPool(candidates, KeyProperties.KEY_ALGORITHM_EC);
         } else {
-            if (isStrongbox) {
-                if (!currentState.globalStrongBoxEc.isEmpty()) {
-                    list = currentState.globalStrongBoxEc;
-                } else if (!currentState.globalStrongBoxRsa.isEmpty()) {
-                    list = currentState.globalStrongBoxRsa;
-                } else if (!currentState.globalTeeEc.isEmpty()) {
-                    list = currentState.globalTeeEc;
-                } else {
-                    list = currentState.globalTeeRsa;
-                }
-            } else {
-                if (!currentState.globalTeeEc.isEmpty()) {
-                    list = currentState.globalTeeEc;
-                } else {
-                    list = currentState.globalTeeRsa;
-                }
-            }
+            list = selectGlobalKeyboxPool(currentState, isStrongbox);
         }
         if (list == null || list.isEmpty()) {
             return null;
@@ -2387,6 +2342,19 @@ public final class CertHack {
         if ("SHA256withECDSA".equals(signatureAlgorithm)) return 1;
         if ("SHA256withRSA".equals(signatureAlgorithm)) return 2;
         return 0;
+    }
+
+    private static List<KeyBox> selectGlobalKeyboxPool(State currentState, boolean strongBox) {
+        List<KeyBox> strongBoxEc = KeyboxPriorityOrder.filterEligibleCandidates(currentState.globalStrongBoxEc);
+        List<KeyBox> strongBoxRsa = KeyboxPriorityOrder.filterEligibleCandidates(currentState.globalStrongBoxRsa);
+        List<KeyBox> teeEc = KeyboxPriorityOrder.filterEligibleCandidates(currentState.globalTeeEc);
+        List<KeyBox> teeRsa = KeyboxPriorityOrder.filterEligibleCandidates(currentState.globalTeeRsa);
+        if (strongBox) {
+            if (!strongBoxEc.isEmpty()) return strongBoxEc;
+            if (!strongBoxRsa.isEmpty()) return strongBoxRsa;
+        }
+        if (!teeEc.isEmpty()) return teeEc;
+        return teeRsa;
     }
 
     private static List<KeyBox> selectKeyboxPool(List<KeyBox> candidates, String preferredAlgorithm) {

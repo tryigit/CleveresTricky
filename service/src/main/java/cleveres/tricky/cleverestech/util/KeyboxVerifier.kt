@@ -68,16 +68,13 @@ object KeyboxVerifier {
         status: Status,
         notAfter: String?,
     ): Pair<ValidityState, InvalidReason?> {
+        if (notAfter != null && isExpired(notAfter)) {
+            return ValidityState.INVALID to InvalidReason.EXPIRED
+        }
         return when (status) {
             Status.VALID -> ValidityState.VALID to null
             Status.REVOKED -> ValidityState.INVALID to InvalidReason.REVOKED
-            Status.INVALID -> {
-                if (notAfter != null && isExpired(notAfter)) {
-                    ValidityState.INVALID to InvalidReason.EXPIRED
-                } else {
-                    ValidityState.INVALID to InvalidReason.VERIFICATION_FAILED
-                }
-            }
+            Status.INVALID -> ValidityState.INVALID to InvalidReason.VERIFICATION_FAILED
             Status.ERROR -> ValidityState.VALID to null
         }
     }
@@ -757,6 +754,7 @@ object KeyboxVerifier {
                     Status.VALID -> Unit
                 }
             }
+            val (state, reason) = resolveValidity(Status.VALID, deviceNotAfter)
             Result(
                 file,
                 file.name,
@@ -770,6 +768,8 @@ object KeyboxVerifier {
                 hasRsa = hasRsa,
                 hasEc = hasEc,
                 notAfter = deviceNotAfter,
+                validityState = state,
+                invalidReason = reason,
             )
         } catch (_: RustBackendUnavailableException) {
             Result(

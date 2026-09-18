@@ -14,15 +14,18 @@ internal object KeyboxValidityTracker {
     )
 
     fun update(results: List<KeyboxVerifier.Result>) {
-        val newMap = buildMap {
-            for (result in results) {
-                val key = result.storageId.ifEmpty { result.filename }
-                if (result.status == KeyboxVerifier.Status.ERROR) continue
-                put(key, Entry(result.validityState, result.invalidReason))
-            }
-        }
         synchronized(lock) {
-            stateMap = newMap
+            val previousMap = stateMap
+            stateMap = buildMap {
+                for (result in results) {
+                    val key = result.storageId.ifEmpty { result.filename }
+                    if (result.status == KeyboxVerifier.Status.ERROR) {
+                        previousMap[key]?.let { put(key, it) }
+                    } else {
+                        put(key, Entry(result.validityState, result.invalidReason))
+                    }
+                }
+            }
         }
     }
 

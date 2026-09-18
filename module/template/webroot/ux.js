@@ -4238,6 +4238,13 @@
     let currentPriorityMode = 'default';
     let currentPriorityOrder = [...DEFAULT_PRIORITY_CATEGORIES];
 
+    function isValidPriorityOrder(order) {
+        return Array.isArray(order) &&
+            order.length === DEFAULT_PRIORITY_CATEGORIES.length &&
+            new Set(order).size === DEFAULT_PRIORITY_CATEGORIES.length &&
+            order.every(category => DEFAULT_PRIORITY_CATEGORIES.includes(category));
+    }
+
     function formatCategoryLabel(cat) {
         const parts = cat.split('_');
         const level = parts[parts.length - 1] === 'STRONGBOX' ? 'StrongBox' : (parts[parts.length - 1] === 'UNKNOWN' ? (t('status_unknown') || 'Unknown') : parts[parts.length - 1]);
@@ -4336,10 +4343,11 @@
             if (!res.ok) return;
             const data = await res.json();
             if (options.signal && options.signal.aborted) return;
-            currentPriorityMode = data.mode === 'custom' ? 'custom' : 'default';
-            if (Array.isArray(data.customOrder) && data.customOrder.length === DEFAULT_PRIORITY_CATEGORIES.length) {
+            if (data.mode === 'custom' && isValidPriorityOrder(data.customOrder)) {
+                currentPriorityMode = 'custom';
                 currentPriorityOrder = [...data.customOrder];
             } else {
+                currentPriorityMode = 'default';
                 currentPriorityOrder = [...DEFAULT_PRIORITY_CATEGORIES];
             }
             renderPriorityOrder();

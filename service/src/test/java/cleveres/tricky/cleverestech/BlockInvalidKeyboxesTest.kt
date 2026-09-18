@@ -1,5 +1,6 @@
 package cleveres.tricky.cleverestech
 
+import cleveres.tricky.cleverestech.keystore.CertHack
 import cleveres.tricky.cleverestech.util.KeyboxVerifier
 import java.io.File
 import java.nio.file.Files
@@ -9,6 +10,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import org.mockito.Mockito
 
 class BlockInvalidKeyboxesTest {
     private lateinit var root: File
@@ -32,6 +34,7 @@ class BlockInvalidKeyboxesTest {
 
     @Test
     fun `block invalid keyboxes is enabled when flag file exists`() {
+        PolicyState.setBlockInvalidKeyboxes(false).getOrThrow()
         assertFalse(Config.isBlockInvalidKeyboxesEnabled)
 
         File(root, "block_invalid_keyboxes").createNewFile()
@@ -125,4 +128,55 @@ class BlockInvalidKeyboxesTest {
         // Verification failed is ALWAYS excluded:
         assertFalse(KeyboxValidityTracker.isEligible("failed.xml", blockInvalid = false))
     }
+
+    @Test
+    fun `selection filters invalid candidates in default and custom modes`() {
+        val validBox = Mockito.mock(CertHack.KeyBox::class.java)
+        val expiredBox = Mockito.mock(CertHack.KeyBox::class.java)
+        val revokedBox = Mockito.mock(CertHack.KeyBox::class.java)
+        Mockito.`when`(validBox.filename()).thenReturn("valid.xml")
+        Mockito.`when`(expiredBox.filename()).thenReturn("expired.xml")
+        Mockito.`when`(revokedBox.filename()).thenReturn("revoked.xml")
+        val candidates = listOf(validBox, expiredBox, revokedBox)
+        KeyboxValidityTracker.update(
+            listOf(
+                result("valid.xml", KeyboxVerifier.ValidityState.VALID, null),
+                result("expired.xml", KeyboxVerifier.ValidityState.INVALID, KeyboxVerifier.InvalidReason.EXPIRED),
+                result("revoked.xml", KeyboxVerifier.ValidityState.INVALID, KeyboxVerifier.InvalidReason.REVOKED),
+            ),
+        )
+
+        PolicyState.setBlockInvalidKeyboxes(false).getOrThrow()
+        assertEquals(candidates, KeyboxPriorityOrder.filterTopPriorityTier(candidates))
+
+        File(root, "block_invalid_keyboxes").createNewFile()
+        assertEquals(listOf(validBox), KeyboxPriorityOrder.filterTopPriorityTier(candidates))
+
+        val customPreference = KeyboxPriorityPreference(
+            KeyboxPriorityPreference.Mode.CUSTOM,
+            KeyboxPriorityCategory.DEFAULT_ORDER.reversed(),
+        )
+        PolicyState.setKeyboxPriorityPreference(customPreference).getOrThrow()
+        assertEquals(listOf(validBox), KeyboxPriorityOrder.filterTopPriorityTier(candidates))
+    }
+
+    private fun result(
+        filename: String,
+        validityState: KeyboxVerifier.ValidityState,
+        invalidReason: KeyboxVerifier.InvalidReason?,
+    ) = KeyboxVerifier.Result(
+        file = File(root, filename),
+        filename = filename,
+        status = if (invalidReason == KeyboxVerifier.InvalidReason.REVOKED) {
+            KeyboxVerifier.Status.REVOKED
+        } else if (validityState == KeyboxVerifier.ValidityState.VALID) {
+            KeyboxVerifier.Status.VALID
+        } else {
+            KeyboxVerifier.Status.INVALID
+        },
+        details = "test",
+        storageId = filename,
+        validityState = validityState,
+        invalidReason = invalidReason,
+    )
 }

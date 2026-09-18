@@ -81,25 +81,33 @@ class KeyboxValidityTrackerTest {
     }
 
     @Test
-    fun `transient error results are skipped during tracker update`() {
-        val validResult = createResult(
-            filename = "test.xml",
-            status = KeyboxVerifier.Status.VALID,
-            validityState = KeyboxVerifier.ValidityState.VALID,
-            invalidReason = null,
+    fun `transient error retains revoked state while absent keyboxes are removed`() {
+        val revokedResult = createResult(
+            filename = "revoked.xml",
+            status = KeyboxVerifier.Status.REVOKED,
+            validityState = KeyboxVerifier.ValidityState.INVALID,
+            invalidReason = KeyboxVerifier.InvalidReason.REVOKED,
         )
         val errorResult = createResult(
-            filename = "test.xml",
+            filename = "revoked.xml",
             status = KeyboxVerifier.Status.ERROR,
             validityState = KeyboxVerifier.ValidityState.VALID,
             invalidReason = null,
         )
+        val absentResult = createResult(
+            filename = "absent.xml",
+            status = KeyboxVerifier.Status.INVALID,
+            validityState = KeyboxVerifier.ValidityState.INVALID,
+            invalidReason = KeyboxVerifier.InvalidReason.EXPIRED,
+        )
 
-        KeyboxValidityTracker.update(listOf(validResult))
-        assertEquals(KeyboxVerifier.ValidityState.VALID, KeyboxValidityTracker.getState("test.xml")?.validityState)
-
+        KeyboxValidityTracker.update(listOf(revokedResult, absentResult))
         KeyboxValidityTracker.update(listOf(errorResult))
-        assertNull(KeyboxValidityTracker.getState("test.xml"))
+
+        val retained = KeyboxValidityTracker.getState("revoked.xml")
+        assertEquals(KeyboxVerifier.ValidityState.INVALID, retained?.validityState)
+        assertEquals(KeyboxVerifier.InvalidReason.REVOKED, retained?.invalidReason)
+        assertNull(KeyboxValidityTracker.getState("absent.xml"))
     }
 
     @Test

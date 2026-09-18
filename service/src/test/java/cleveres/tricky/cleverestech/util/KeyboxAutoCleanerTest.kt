@@ -115,6 +115,8 @@ class KeyboxAutoCleanerTest {
             details = "revoked",
             storageId = "keyboxes:${source.name}",
             snapshotSha256 = digest,
+            validityState = KeyboxVerifier.ValidityState.INVALID,
+            invalidReason = KeyboxVerifier.InvalidReason.REVOKED,
         )
 
     private fun sha256Hex(bytes: ByteArray): String =

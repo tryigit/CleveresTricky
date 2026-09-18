@@ -66,10 +66,12 @@ const elements = {
 };
 
 const posts = [];
+const priorityResponse = { mode: 'default' };
 const context = {
   console,
   URLSearchParams,
   JSON,
+  priorityResponse,
   Date: { parse: Date.parse, now: () => Date.now() },
   locale() { return 'en'; },
   VALUE_POPUP_COPY: { en: { title: 'Details', copy: 'Copy', copied: 'Copied', close: 'Close', hold: 'Hold to view and copy' } },
@@ -90,7 +92,7 @@ const context = {
     }
     return Promise.resolve({
       ok: true,
-      json: () => Promise.resolve({ mode: 'default' })
+      json: () => Promise.resolve(context.priorityResponse)
     });
   },
   notify() {},
@@ -143,11 +145,13 @@ vm.runInContext(`
 
   ${priorityCode}
   this.renderPriorityOrder = renderPriorityOrder;
+  this.loadPriorityOrder = loadPriorityOrder;
   this.savePriorityOrder = savePriorityOrder;
   this.resetPriorityOrder = resetPriorityOrder;
   this.getCurrentOrder = () => currentPriorityOrder;
   this.getPriorityMode = () => currentPriorityMode;
   this.setPriorityMode = m => { currentPriorityMode = m; };
+  this.setPriorityResponse = value => { priorityResponse = value; };
 `, context);
 
 // Test 1: Validity badges for stored keyboxes
@@ -262,7 +266,27 @@ assert.equal(context.getCurrentOrder()[1], initialSecond);
   assert.equal(data.customOrder.length, 16);
   assert.equal(data.customOrder[0], 'VALID_RKP');
 
-  // Test 8: Reset priority order resets to default
+  // Test 8: A complete permutation is accepted from the backend
+  const reversedOrder = [...context.getCurrentOrder()].reverse();
+  context.setPriorityResponse({ mode: 'custom', customOrder: reversedOrder });
+  await context.loadPriorityOrder();
+  assert.equal(context.getPriorityMode(), 'custom');
+  assert.deepEqual(Array.from(context.getCurrentOrder()), reversedOrder);
+
+  // Test 9: Incomplete, duplicate, and unknown orders force default mode
+  const invalidOrders = [
+    reversedOrder.slice(1),
+    [...reversedOrder.slice(0, -1), reversedOrder[0]],
+    [...reversedOrder.slice(0, -1), 'VALID_FUTURE_CATEGORY']
+  ];
+  for (const customOrder of invalidOrders) {
+    context.setPriorityResponse({ mode: 'custom', customOrder });
+    await context.loadPriorityOrder();
+    assert.equal(context.getPriorityMode(), 'default');
+    assert.deepEqual(Array.from(context.getCurrentOrder()), Array.from(reversedOrder).reverse());
+  }
+
+  // Test 10: Reset priority order resets to default
   await context.resetPriorityOrder();
   assert.equal(context.getPriorityMode(), 'default');
   assert.equal(context.getCurrentOrder()[0], 'VALID_RKP');

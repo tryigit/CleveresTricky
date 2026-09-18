@@ -1629,6 +1629,12 @@ class WebServer(
         }
 
         if (uri == "/api/keybox_priority_order" && method == Method.POST) {
+            val body = HashMap<String, String>()
+            try {
+                session.parseBody(body)
+            } catch (_: Exception) {
+                return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Failed to parse body")
+            }
             val raw = getParam(session, "data")
                 ?: return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Missing data")
             return try {
@@ -1889,6 +1895,7 @@ class WebServer(
                     val results = crlFetcher?.let { KeyboxVerifier.verifyLegacy(configDir, it) }
                         ?: KeyboxVerifier.verify(configDir)
                     KeyboxValidityTracker.update(results)
+                    Config.updateKeyBoxes()
                     val json = createKeyboxVerificationJson(results)
                     return secureResponse(Response.Status.OK, "application/json", json)
                 }

@@ -91,18 +91,23 @@ data class KeyboxPriorityPreference(
                     else -> Mode.DEFAULT
                 }
                 val orderArray = json.optJSONArray("customOrder")
-                val customOrder = if (orderArray != null && mode == Mode.CUSTOM) {
+                val customOrder = if (mode == Mode.CUSTOM) {
+                    if (orderArray == null || orderArray.length() != KeyboxPriorityCategory.DEFAULT_ORDER.size) {
+                        Logger.w("Invalid custom priority order: incomplete; falling back to default")
+                        return DEFAULT
+                    }
                     val parsed = mutableListOf<KeyboxPriorityCategory>()
                     for (i in 0 until orderArray.length()) {
-                        val name = orderArray.optString(i) ?: continue
+                        val name = orderArray.optString(i)
                         try {
                             parsed.add(KeyboxPriorityCategory.valueOf(name))
                         } catch (_: IllegalArgumentException) {
-                            // Skip unknown categories for forward compatibility
+                            Logger.w("Invalid custom priority order: unknown category; falling back to default")
+                            return DEFAULT
                         }
                     }
-                    if (parsed.isEmpty() || parsed.toSet().size != parsed.size) {
-                        Logger.w("Invalid custom priority order: duplicates or empty; falling back to default")
+                    if (parsed.toSet() != KeyboxPriorityCategory.DEFAULT_ORDER.toSet()) {
+                        Logger.w("Invalid custom priority order: duplicate or missing category; falling back to default")
                         return DEFAULT
                     }
                     parsed.toList()
@@ -145,13 +150,23 @@ object KeyboxPriorityOrder {
     }
 
     @JvmStatic
+    fun filterEligibleCandidates(candidates: List<CertHack.KeyBox>?): List<CertHack.KeyBox> {
+        if (candidates.isNullOrEmpty()) return emptyList()
+        val blockInvalid = Config.isBlockInvalidKeyboxesEnabled
+        return candidates.filter { box ->
+            KeyboxValidityTracker.isEligible(box.filename, blockInvalid)
+        }
+    }
+
+    @JvmStatic
     fun filterTopPriorityTier(candidates: List<CertHack.KeyBox>): List<CertHack.KeyBox> {
-        if (candidates.size <= 1) return candidates
+        val eligibleCandidates = filterEligibleCandidates(candidates)
+        if (eligibleCandidates.size <= 1) return eligibleCandidates
         val preference = Config.keyboxPriorityPreference
         if (preference.mode != KeyboxPriorityPreference.Mode.CUSTOM || preference.customOrder.isEmpty()) {
-            return candidates
+            return eligibleCandidates
         }
-        return filterTopPriorityTier(candidates, preference.effectiveOrder()) { box ->
+        return filterTopPriorityTier(eligibleCandidates, preference.effectiveOrder()) { box ->
             val entry = KeyboxValidityTracker.getState(box.filename)
             val validity = entry?.validityState ?: KeyboxVerifier.ValidityState.VALID
             val reason = entry?.invalidReason
