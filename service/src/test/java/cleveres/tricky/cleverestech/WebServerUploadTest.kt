@@ -191,6 +191,32 @@ class WebServerUploadTest {
     }
 
     @Test
+    fun `multipart uploads deduplicate an existing filename instead of overwriting`() {
+        val validXml = TestKeyboxFixtures.validEcKeyboxXml
+        val originalRoot = Config.getConfigRoot()
+        try {
+            Config.setRootForTesting(configDir)
+            ManagedKeyboxParserOracle.install()
+            KeyboxLoader.activeSetOverride = { true }
+            File(configDir, "auto_keybox_check").createNewFile()
+
+            assertEquals(200, uploadMultipartKeybox("device.xml", validXml.toByteArray()))
+            val originalText = File(configDir, "keyboxes/device.xml").readText()
+
+            assertEquals(200, uploadMultipartKeybox("device.xml", validXml.toByteArray()))
+            assertTrue(File(configDir, "keyboxes/device2.xml").isFile)
+            assertEquals(
+                "the first upload must survive a second upload with the same name",
+                originalText,
+                File(configDir, "keyboxes/device.xml").readText(),
+            )
+        } finally {
+            KeyboxLoader.activeSetOverride = null
+            Config.setRootForTesting(originalRoot)
+        }
+    }
+
+    @Test
     fun `repeated uploads of the same keybox filename are deduplicated instead of overwritten`() {
         val validXml = TestKeyboxFixtures.validEcKeyboxXml
         val originalRoot = Config.getConfigRoot()

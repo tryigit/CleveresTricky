@@ -1702,7 +1702,12 @@ class WebServer(
                     synchronized(fileLock) {
                         val keyboxDir = File(configDir, "keyboxes")
                         SecureFile.mkdirs(keyboxDir, 448)
-                        val dest = getSafeFile(keyboxDir, storedName)
+                        // Multipart uploads share the pasted-text invariant: an
+                        // existing keybox must never be overwritten, so the
+                        // final stored name is deduplicated before any write,
+                        // provenance, or response binding.
+                        val finalName = deduplicateKeyboxFilename(keyboxDir, storedName)
+                        val dest = getSafeFile(keyboxDir, finalName)
                         if (dest == null) {
                             return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid upload path")
                         }
@@ -1716,13 +1721,13 @@ class WebServer(
                             val normalizedBytes =
                                 normalizeKeyboxXmlContent(bytes.toString(Charsets.UTF_8)).toByteArray(Charsets.UTF_8)
                             try {
-                                val (validation, isRkp) = validateUploadedKeyboxXml(normalizedBytes, storedName, authenticatedRkp)
+                                val (validation, isRkp) = validateUploadedKeyboxXml(normalizedBytes, finalName, authenticatedRkp)
                                 keyboxValidationError(validation)?.let { return it }
                                 SecureFile.writeBytes(dest, normalizedBytes)
                                 if (isRkp) {
-                                    RkpProvenanceStore.recordRkp(storedName, configDir)
+                                    RkpProvenanceStore.recordRkp(finalName, configDir)
                                 } else {
-                                    RkpProvenanceStore.removeRkp(storedName, configDir)
+                                    RkpProvenanceStore.removeRkp(finalName, configDir)
                                 }
                             } finally {
                                 normalizedBytes.fill(0)
@@ -1734,7 +1739,7 @@ class WebServer(
                         val count = CertHack.getKeyboxSourceCount()
                         val response = JSONObject()
                         response.put("status", "ok")
-                        response.put("filename", storedName)
+                        response.put("filename", finalName)
                         response.put("keybox_count", count)
                         return secureResponse(Response.Status.OK, "application/json", response.toString())
                     }
