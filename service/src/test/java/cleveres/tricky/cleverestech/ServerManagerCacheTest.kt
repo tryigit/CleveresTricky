@@ -241,6 +241,10 @@ class ServerManagerCacheTest {
                 "https://169.254.10.20/x",
                 "https://224.0.0.1/x",
                 "https://0.0.0.0/x",
+                "https://127.0.0.1./x",
+                "https://2130706433/x",
+                "https://0x7f000001/x",
+                "https://017700000001/x",
             )
         ) {
             assertThrows(IllegalArgumentException::class.java) {

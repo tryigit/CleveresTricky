@@ -423,10 +423,32 @@ object ServerManager {
         if (host.equals("localhost", ignoreCase = true) || host.equals("localhost.", ignoreCase = true)) {
             throw IllegalArgumentException("Server URL must not target a non-routable host")
         }
+        // A trailing dot is legal FQDN syntax; strip it before literal analysis
+        // so "127.0.0.1." cannot dodge the checks below.
+        val bare = host.removeSuffix(".")
+        // All-digit hosts never resolve via DNS (they are always numeric IP
+        // literals, possibly octal), so a leading zero can only be obfuscation.
+        if (bare.length > 1 && bare.startsWith('0') && bare.all { it.isDigit() }) {
+            throw IllegalArgumentException("Server URL must not target a non-routable host")
+        }
+        // Single-number IPv4 forms (decimal "2130706433", hex "0x7f000001") never
+        // reach getByName here to avoid DNS stalls; evaluate them arithmetically.
+        val numericValue =
+            when {
+                bare.matches(Regex("[0-9]+")) -> bare.toLongOrNull()?.takeIf { it in 0..0xFFFFFFFFL }
+                bare.matches(Regex("(?i)0x[0-9a-f]+")) -> bare.substring(2).toLongOrNull(16)?.takeIf { it in 0..0xFFFFFFFFL }
+                else -> null
+            }
+        if (numericValue != null) {
+            require(numericValue != 0L && numericValue ushr 24 != 127L) {
+                "Server URL must not target a non-routable host"
+            }
+            return
+        }
         val isIpLiteral =
-            host.contains(':') || host.matches(Regex("\\d{1,3}(\\.\\d{1,3}){3}"))
+            bare.contains(':') || bare.matches(Regex("\\d{1,3}(\\.\\d{1,3}){3}"))
         if (!isIpLiteral) return
-        val address = runCatching { InetAddress.getByName(host) }.getOrNull() ?: return
+        val address = runCatching { InetAddress.getByName(bare) }.getOrNull() ?: return
         // IPv4-mapped IPv6 loopback (::ffff:127.0.0.1 in any spelling) is not
         // reported as loopback on every platform, so match the bytes directly.
         val raw = address.address
