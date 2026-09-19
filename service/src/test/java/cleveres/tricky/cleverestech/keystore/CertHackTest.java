@@ -213,6 +213,31 @@ public class CertHackTest {
     }
 
     @Test
+    public void testPriorityLevelForPrefersRkpOverSecurityLevel() {
+        assertEquals("RKP", CertHack.priorityLevelFor(true, CertHack.KeyboxSecurityLevel.TEE));
+        assertEquals("RKP", CertHack.priorityLevelFor(true, CertHack.KeyboxSecurityLevel.STRONGBOX));
+        assertEquals("RKP", CertHack.priorityLevelFor(true, CertHack.KeyboxSecurityLevel.UNKNOWN));
+        assertEquals("StrongBox", CertHack.priorityLevelFor(false, CertHack.KeyboxSecurityLevel.STRONGBOX));
+        assertEquals("TEE", CertHack.priorityLevelFor(false, CertHack.KeyboxSecurityLevel.TEE));
+        assertEquals("Unknown", CertHack.priorityLevelFor(false, CertHack.KeyboxSecurityLevel.UNKNOWN));
+    }
+
+    @Test
+    public void testCachedPriorityLevelFallsBackToLiveComputationOutsidePublishedState() throws Exception {
+        java.security.KeyPair keyPair = org.mockito.Mockito.mock(java.security.KeyPair.class);
+        java.security.cert.CertificateFactory cf = java.security.cert.CertificateFactory.getInstance("X.509");
+        java.security.cert.X509Certificate fixtureCert = (java.security.cert.X509Certificate)
+                cf.generateCertificate(new java.io.ByteArrayInputStream(TEST_CERT.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        // Fresh boxes are never in the published snapshot, so the accessor computes live
+        // with identical semantics instead of repeating crypto on every hot-path call.
+        CertHack.KeyBox rkpBox = new CertHack.KeyBox(keyPair, List.of(fixtureCert), "uncached_rkp.xml", true);
+        assertEquals("RKP", CertHack.cachedPriorityLevel(rkpBox));
+        CertHack.KeyBox plainBox = new CertHack.KeyBox(keyPair, List.of(fixtureCert), "uncached_plain.xml");
+        assertEquals("TEE", CertHack.cachedPriorityLevel(plainBox));
+        assertEquals("Unknown", CertHack.cachedPriorityLevel(null));
+    }
+
+    @Test
     public void testFilterKeyboxesBySecurityLevelDoesNotFallback() {
         java.security.KeyPair keyPair = org.mockito.Mockito.mock(java.security.KeyPair.class);
         java.security.cert.X509Certificate strongboxCert = org.mockito.Mockito.mock(java.security.cert.X509Certificate.class);

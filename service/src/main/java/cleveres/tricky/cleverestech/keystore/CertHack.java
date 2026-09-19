@@ -350,6 +350,7 @@ public final class CertHack {
         final Map<String, List<KeyBox>> keyboxFiles;
         final Map<KeyBox, PreparedKeyBox> preparedKeyboxes;
         final Map<KeyBox, KeyboxSecurityLevel> keyboxClassifications;
+        final Map<KeyBox, String> priorityLevels;
         final Set<KeyBox> strongBoxKeyboxes;
         final Set<KeyBox> teeKeyboxes;
         final Map<String, String> securityLevelByIdentifier;
@@ -399,15 +400,20 @@ public final class CertHack {
                 }
             }
 
+            Map<KeyBox, String> priLevels = new IdentityHashMap<>();
             for (Map.Entry<String, List<KeyBox>> entry : this.keyboxFiles.entrySet()) {
                 boolean fileHasStrongBox = false;
                 boolean fileHasTee = false;
                 boolean fileHasRkp = false;
                 for (KeyBox box : entry.getValue()) {
-                    if (isRkpKeybox(box)) {
+                    boolean rkp = isRkpKeybox(box);
+                    if (rkp) {
                         fileHasRkp = true;
                     }
                     KeyboxSecurityLevel level = classifications.getOrDefault(box, KeyboxSecurityLevel.UNKNOWN);
+                    if (!priLevels.containsKey(box)) {
+                        priLevels.put(box, priorityLevelFor(rkp, level));
+                    }
                     if (level == KeyboxSecurityLevel.STRONGBOX) {
                         fileHasStrongBox = true;
                     } else if (level == KeyboxSecurityLevel.TEE) {
@@ -421,6 +427,7 @@ public final class CertHack {
             this.securityLevelByIdentifier = Map.copyOf(secLevelById);
             this.strongBoxKeyboxes = Collections.unmodifiableSet(sbKeyboxes);
             this.teeKeyboxes = Collections.unmodifiableSet(tKeyboxes);
+            this.priorityLevels = Collections.unmodifiableMap(priLevels);
 
             List<KeyBox> teeEc = new ArrayList<>();
             List<KeyBox> teeRsa = new ArrayList<>();
@@ -2357,6 +2364,32 @@ public final class CertHack {
         if ("SHA256withECDSA".equals(signatureAlgorithm)) return 1;
         if ("SHA256withRSA".equals(signatureAlgorithm)) return 2;
         return 0;
+    }
+
+    /**
+     * Priority level label for a keybox. Pure function of the RKP verdict and the
+     * classified security level; the per-publish snapshot in {@link State} stores
+     * the result so hot selection paths never repeat PKIX validation or native
+     * attestation inspection per call.
+     */
+    static String priorityLevelFor(boolean isRkp, KeyboxSecurityLevel level) {
+        if (isRkp) return "RKP";
+        if (level == KeyboxSecurityLevel.STRONGBOX) return "StrongBox";
+        if (level == KeyboxSecurityLevel.TEE) return "TEE";
+        return "Unknown";
+    }
+
+    /**
+     * Publish-cached priority level for selection hot paths. Boxes served from the
+     * current snapshot hit the map (no crypto per call); anything else falls back
+     * to live computation with identical semantics.
+     */
+    static String cachedPriorityLevel(KeyBox box) {
+        if (box == null) return "Unknown";
+        State currentState = state;
+        String cached = currentState.priorityLevels.get(box);
+        if (cached != null) return cached;
+        return priorityLevelFor(isRkpKeybox(box), classifyKeyboxSecurityLevel(box));
     }
 
     private static List<KeyBox> selectGlobalKeyboxPool(State currentState, boolean strongBox) {

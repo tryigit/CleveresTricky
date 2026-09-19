@@ -167,15 +167,11 @@ object KeyboxPriorityOrder {
             return eligibleCandidates
         }
         return filterTopPriorityTier(eligibleCandidates, preference.effectiveOrder()) { box ->
-            val entry = KeyboxValidityTracker.getState(box.filename)
+            val entry = KeyboxValidityTracker.getState(box.filename())
             val validity = entry?.validityState ?: KeyboxVerifier.ValidityState.VALID
             val reason = entry?.invalidReason
-            val level = when {
-                CertHack.isRkpKeybox(box) -> "RKP"
-                CertHack.classifyKeyboxSecurityLevel(box) == CertHack.KeyboxSecurityLevel.STRONGBOX -> "StrongBox"
-                CertHack.classifyKeyboxSecurityLevel(box) == CertHack.KeyboxSecurityLevel.TEE -> "TEE"
-                else -> "Unknown"
-            }
+            // Publish-cached level: no PKIX validation or native inspection per call.
+            val level = CertHack.cachedPriorityLevel(box)
             KeyboxPriorityCategory.fromValidityAndLevel(validity, reason, level)
         }
     }

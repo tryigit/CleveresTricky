@@ -711,12 +711,8 @@ object Config {
                                 val entry = KeyboxValidityTracker.getState(box.filename())
                                 val validity = entry?.validityState ?: KeyboxVerifier.ValidityState.VALID
                                 val reason = entry?.invalidReason
-                                val level = when {
-                                    CertHack.isRkpKeybox(box) -> "RKP"
-                                    CertHack.classifyKeyboxSecurityLevel(box) == CertHack.KeyboxSecurityLevel.STRONGBOX -> "StrongBox"
-                                    CertHack.classifyKeyboxSecurityLevel(box) == CertHack.KeyboxSecurityLevel.TEE -> "TEE"
-                                    else -> "Unknown"
-                                }
+                                // Publish-cached level: no PKIX validation or native inspection per box.
+                                val level = CertHack.cachedPriorityLevel(box)
                                 val category = KeyboxPriorityCategory.fromValidityAndLevel(validity, reason, level)
                                 rankMap[category] ?: Int.MAX_VALUE
                             }

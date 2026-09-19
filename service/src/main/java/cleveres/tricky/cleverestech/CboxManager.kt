@@ -189,12 +189,23 @@ object CboxManager {
             val verified =
                 if (Config.isAutoKeyboxCheckEnabled) {
                     val crl = KeyboxVerifier.fetchCrl() ?: return false
-                    val validOnly = parsed.filter { KeyboxVerifier.verifyKeybox(it, crl) == KeyboxVerifier.Status.VALID }
-                    if (validOnly.isEmpty() || validOnly.size != parsed.size) {
-                        Logger.e("CBOX contains an invalid or revoked keybox: $filename")
+                    // Retained entries are still filtered per keybox by the config
+                    // refresh path: structurally invalid content stays locked while
+                    // expired/revoked content unlocks when blocking is off.
+                    val blockInvalid = Config.isBlockInvalidKeyboxesEnabled
+                    val retained =
+                        parsed.filterNot {
+                            KeyboxVerifier.isBlockedByPolicy(
+                                KeyboxVerifier.verifyKeybox(it, crl),
+                                CertHack.getDeviceCertificateNotAfter(it),
+                                blockInvalid,
+                            )
+                        }
+                    if (retained.isEmpty() || retained.size != parsed.size) {
+                        Logger.e("CBOX contains a policy-blocking keybox: $filename")
                         return false
                     }
-                    validOnly
+                    retained
                 } else {
                     if (parsed.isEmpty()) return false
                     parsed
@@ -310,9 +321,19 @@ object CboxManager {
             val parsed = KeyboxJcaAdapter.materialize(payload.document, file.name, tolerateExpiry = true)
             val verified =
                 if (enforceRevocationCheck && crl != null) {
-                    val validOnly = parsed.filter { KeyboxVerifier.verifyKeybox(it, crl) == KeyboxVerifier.Status.VALID }
-                    if (validOnly.isEmpty() || validOnly.size != parsed.size) return null
-                    validOnly
+                    // Same policy gate as unlock: only policy-blocking entries
+                    // invalidate the recovery cache.
+                    val blockInvalid = Config.isBlockInvalidKeyboxesEnabled
+                    val retained =
+                        parsed.filterNot {
+                            KeyboxVerifier.isBlockedByPolicy(
+                                KeyboxVerifier.verifyKeybox(it, crl),
+                                CertHack.getDeviceCertificateNotAfter(it),
+                                blockInvalid,
+                            )
+                        }
+                    if (retained.isEmpty() || retained.size != parsed.size) return null
+                    retained
                 } else {
                     if (parsed.isEmpty()) return null
                     parsed
