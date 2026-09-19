@@ -16,7 +16,7 @@ import java.util.TimeZone
 
 class KeyboxVerifierTest {
     @Test
-    fun `earliest certificate expiry is used instead of certificate #3 only`() {
+    fun `earliest certificate expiry spans the whole chain instead of a single depth`() {
         val formatter = SimpleDateFormat("yyyy-MM-dd HH:mm").apply {
             timeZone = TimeZone.getTimeZone("UTC")
         }

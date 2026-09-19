@@ -12,6 +12,16 @@ Files in the protected keybox directory are discovered as a bounded set. Applica
 
 Files obtained from an explicitly configured secure source are treated as untrusted input until the same verification process completes. Server metadata, refresh intervals, and authentication settings are validated before use.
 
+## Pool control
+
+Every stored keybox can be disabled from the WebUI without deleting it. A disabled keybox stays in the list with a Disable badge, leaves the active pool immediately, and is skipped by selection. Deleting the file clears its stored state.
+
+The opt-out list lives in a plain-text `disabled_keyboxes` file inside the configuration directory, one `scope:filename` identifier per line (`keyboxes:keybox2.xml`, `root:keybox.xml`). Because the state is a file, it survives module updates and can be maintained by hand or through Magisk tooling. Removing the file re-enables every keybox.
+
+## Naming on upload
+
+Pasted or dropped keyboxes are stored as `keybox.xml`. When that name already exists, the manager automatically picks the next free name (`keybox2.xml`, `keybox3.xml`, and so on), so an existing keybox is never silently replaced. The assigned name is returned to the WebUI, and RKP provenance is bound to the final stored name.
+
 ## Verification
 
 The verifier confirms that every private key matches its leaf certificate. It checks supported algorithms, certificate chain relationships, certificate dates, duplicate or ambiguous material, and revocation information.

@@ -94,7 +94,9 @@ class WebServerKeyboxUXTest {
         )
         assertTrue("Stored list must use source-aware inventory", html.contains("/api/keybox_inventory"))
         assertTrue("Stored list must support bulk deletion", html.contains("/api/delete_keyboxes"))
+        assertTrue("Stored list must expose the disable toggle", html.contains("/api/toggle_keybox_disabled"))
+        assertTrue("Stored list must render the disabled state", html.contains("t('disabled')"))
         assertTrue("Stored list must page five entries at a time", html.contains("const PAGE_SIZE = 5;"))
-        assertTrue("Verification must display certificate #3 serial", html.contains("Certificate #3 serial"))
+        assertTrue("Verification must display device certificate serial", html.contains("Device certificate serial"))
     }
 }

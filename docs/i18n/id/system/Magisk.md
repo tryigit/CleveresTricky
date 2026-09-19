@@ -71,6 +71,8 @@ Semua file pengaturan dan kebijakan berada di direktori `/data/adb/cleverestrick
 
 * **`keybox.xml`**: Letakkan file XML keybox atestasi perangkat keras langsung di `/data/adb/cleverestricky/keybox.xml`. Pastikan hak akses dibatasi (`chmod 600`).
 * **`keyboxes/`**: Direktori untuk menyimpan beberapa file keybox.
+* **Unggahan tidak pernah menimpa:** Keybox yang dijatuhkan atau ditempel disimpan sebagai `keybox.xml`; jika nama itu sudah terpakai, nama kosong berikutnya (`keybox2.xml`, `keybox3.xml`, ...) dipakai otomatis.
+* **`disabled_keyboxes`**: Daftar pengecualian kumpulan. Setiap baris berisi pengenal `lingkup:nama file` (`keyboxes:keybox2.xml`, `root:keybox.xml`) yang cocok dengan nama yang ditampilkan di panel Keybox WebUI. Keybox yang terdaftar tetap terlihat dan dapat dikelola, tetapi tidak pernah dimuat ke kumpulan atestasi. Tombol Nonaktifkan dan Aktifkan di WebUI membaca dan menulis file ini, sehingga dapat juga dikelola secara manual.
 
 ---
 

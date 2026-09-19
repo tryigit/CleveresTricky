@@ -119,6 +119,56 @@ private fun isValidKeyboxFilename(s: String): Boolean {
 }
 
 /**
+ * Returns a unique filename in [directory] by appending an incrementing numeric
+ * suffix before the extension when the original already exists.
+ * `keybox.xml` -> `keybox2.xml` -> `keybox3.xml` -> ...
+ * Returns the original [name] unchanged when it does not yet exist.
+ */
+private fun deduplicateKeyboxFilename(directory: File, name: String): String {
+    val dot = name.lastIndexOf('.')
+    if (dot < 0) return name
+    val base = name.substring(0, dot)
+    val ext = name.substring(dot)
+    if (!File(directory, name).exists()) return name
+    for (i in 2..999) {
+        val candidate = "$base$i$ext"
+        if (isValidKeyboxFilename(candidate) && !File(directory, candidate).exists()) return candidate
+    }
+    return name
+}
+
+private const val DISABLED_KEYBOXES_FILENAME = "disabled_keyboxes"
+
+/**
+ * Reads the set of disabled keybox identifiers from the config directory.
+ * Each line in the file is one `scope:filename` identifier.
+ */
+internal fun readDisabledKeyboxes(configDir: File): Set<String> {
+    val file = File(configDir, DISABLED_KEYBOXES_FILENAME)
+    if (!Files.isRegularFile(file.toPath(), LinkOption.NOFOLLOW_LINKS)) return emptySet()
+    return try {
+        file.readLines(Charsets.UTF_8)
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .toSet()
+    } catch (_: Exception) {
+        emptySet()
+    }
+}
+
+/**
+ * Writes the set of disabled keybox identifiers to the config directory.
+ */
+internal fun writeDisabledKeyboxes(configDir: File, disabled: Set<String>) {
+    val file = File(configDir, DISABLED_KEYBOXES_FILENAME)
+    if (disabled.isEmpty()) {
+        file.delete()
+        return
+    }
+    SecureFile.writeText(file, disabled.joinToString("\n") + "\n")
+}
+
+/**
  * Validates that a key=value pair has valid characters in the key portion and is properly formatted.
  */
 private fun isValidKeyValue(s: String): Boolean {
@@ -639,6 +689,7 @@ class WebServer(
 
     private fun keyboxInventoryJson(): String {
         val array = JSONArray()
+        val disabledSet = readDisabledKeyboxes(configDir)
         StoredKeyboxInventory.list(configDir).forEach { source ->
             val targetId = source.id.ifEmpty { source.filename }
             var certSerial = CertHack.getDeviceCertificateSerial(targetId) ?: ""
@@ -734,7 +785,8 @@ class WebServer(
                     .put("has_rsa", hasRsa)
                     .put("has_ec", hasEc)
                     .put("validity_state", validityState)
-                    .put("invalid_reason", invalidReason ?: JSONObject.NULL),
+                    .put("invalid_reason", invalidReason ?: JSONObject.NULL)
+                    .put("disabled", source.id in disabledSet),
             )
         }
         return array.toString()
@@ -1621,7 +1673,7 @@ class WebServer(
                 }
             val content = rawContent?.let(::normalizeKeyboxXmlContent)
             val filename = getParam(session, "filename")
-                ?: (if (content != null && (content.contains("droid ca", ignoreCase = true) || content.contains("rkp", ignoreCase = true) || content.contains("remote provisioning", ignoreCase = true) || content.contains("key provisioning", ignoreCase = true))) "rkp.xml" else null)
+                ?: (if (content != null && (content.contains("droid ca", ignoreCase = true) || content.contains("rkp", ignoreCase = true) || content.contains("remote provisioning", ignoreCase = true) || content.contains("key provisioning", ignoreCase = true))) "keybox.xml" else null)
             val authenticatedRkp = isRkpUploadHint(session, map)
             val tmpFilePath = map["file"]
             if (tmpFilePath != null) {
@@ -1704,16 +1756,17 @@ class WebServer(
                     keyboxValidationError(validation)?.let { return it }
                     val keyboxDir = File(configDir, "keyboxes")
                     SecureFile.mkdirs(keyboxDir, 448)
-                    val file = getSafeFile(keyboxDir, storedName)
+                    val finalName = deduplicateKeyboxFilename(keyboxDir, storedName)
+                    val file = getSafeFile(keyboxDir, finalName)
                     if (file == null) {
                         return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Path traversal attempt detected")
                     }
                     try {
                         SecureFile.writeText(file, content)
                         if (isRkp) {
-                            RkpProvenanceStore.recordRkp(storedName, configDir)
+                            RkpProvenanceStore.recordRkp(finalName, configDir)
                         } else {
-                            RkpProvenanceStore.removeRkp(storedName, configDir)
+                            RkpProvenanceStore.removeRkp(finalName, configDir)
                         }
                         if (!updateKeyboxesFromConfiguredRevocationSource()) {
                             return keyboxActivationFailureResponse()
@@ -1721,7 +1774,7 @@ class WebServer(
                         val count = CertHack.getKeyboxSourceCount()
                         val response = JSONObject()
                         response.put("status", "ok")
-                        response.put("filename", storedName)
+                        response.put("filename", finalName)
                         response.put("keybox_count", count)
                         return secureResponse(Response.Status.OK, "application/json", response.toString())
                     } catch (e: Exception) {
@@ -1747,6 +1800,8 @@ class WebServer(
                 val source = StoredKeyboxInventory.resolve(configDir, scope, filename)
                     ?: return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid keybox source")
                 if (source.file.delete()) {
+                    val disabledAfterDelete = readDisabledKeyboxes(configDir).toMutableSet()
+                    if (disabledAfterDelete.remove(source.id)) writeDisabledKeyboxes(configDir, disabledAfterDelete)
                     RkpProvenanceStore.removeRkp(source.filename, configDir)
                     if (source.isCbox) {
                         Files.deleteIfExists(File(source.file.parentFile, "${source.filename}.cache").toPath())
@@ -1779,6 +1834,8 @@ class WebServer(
                 var deleted = 0
                 var failed = 0
                 var cboxChanged = false
+                var disabledPruned = false
+                val disabledAfterDelete = readDisabledKeyboxes(configDir).toMutableSet()
                 for (index in 0 until items.length()) {
                     val item = items.optJSONObject(index)
                     val filename = item?.optString("filename").orEmpty()
@@ -1790,11 +1847,13 @@ class WebServer(
                     }
                     deleted++
                     RkpProvenanceStore.removeRkp(source.filename, configDir)
+                    if (disabledAfterDelete.remove(source.id)) disabledPruned = true
                     if (source.isCbox) {
                         Files.deleteIfExists(File(source.file.parentFile, "${source.filename}.cache").toPath())
                         cboxChanged = true
                     }
                 }
+                if (disabledPruned) writeDisabledKeyboxes(configDir, disabledAfterDelete)
                 if (cboxChanged) CboxManager.refresh()
                 if (!updateKeyboxesFromConfiguredRevocationSource()) return@synchronized keyboxActivationFailureResponse()
                 secureResponse(
@@ -1806,6 +1865,53 @@ class WebServer(
                 Logger.e("Failed to bulk-delete keyboxes", error)
                 secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid keybox selection")
             }
+        }
+    }
+    if (uri == "/api/toggle_keybox_disabled" && method == Method.POST) {
+        val map = HashMap<String, String>()
+        try {
+            session.parseBody(map)
+        } catch (error: Exception) {
+            return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Failed to parse body")
+        }
+        val filename = getParam(session, "filename")
+            ?: return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Missing filename")
+        val scope = getParam(session, "scope") ?: "keyboxes"
+        val disableRaw = getParam(session, "disabled") ?: "true"
+        val disable = disableRaw == "true" || disableRaw == "1"
+        return synchronized(fileLock) {
+            val source = StoredKeyboxInventory.resolve(configDir, scope, filename)
+                ?: return@synchronized secureResponse(
+                    Response.Status.BAD_REQUEST,
+                    "text/plain",
+                    "Invalid keybox source",
+                )
+            val current = readDisabledKeyboxes(configDir).toMutableSet()
+            val previous = current.toSet()
+            if (disable) {
+                current.add(source.id)
+            } else {
+                current.remove(source.id)
+            }
+            writeDisabledKeyboxes(configDir, current)
+            if (!updateKeyboxesFromConfiguredRevocationSource()) {
+                // Activation failed: restore the previous opt-out list so the
+                // on-disk pool state never disagrees with the running pool.
+                runCatching { writeDisabledKeyboxes(configDir, previous) }
+                    .onFailure { Logger.w("Failed to roll back disabled keybox state: ${it.message}") }
+                return@synchronized keyboxActivationFailureResponse()
+            }
+            val count = CertHack.getKeyboxSourceCount()
+            secureResponse(
+                Response.Status.OK,
+                "application/json",
+                JSONObject()
+                    .put("status", "ok")
+                    .put("disabled", disable)
+                    .put("filename", filename)
+                    .put("keybox_count", count)
+                    .toString(),
+            )
         }
     }
 
@@ -3790,8 +3896,12 @@ class WebServer(
                 }.getOrNull() ?: return
             val stagedKeyboxes = staged.keys.filter(::isBackupKeyboxEntry)
             if (stagedKeyboxes.isEmpty()) return
+            // A backup can stage both "keybox.xml" and "keyboxes/keybox.xml",
+            // which share one normalized identifier. Keep every path so a
+            // collision is dropped instead of verifying one file and vouching
+            // for the other.
             val stagedByNormalized =
-                stagedKeyboxes.associateBy { RkpProvenanceStore.normalizeIdentifier(it.substringAfterLast('/')) }
+                stagedKeyboxes.groupBy { RkpProvenanceStore.normalizeIdentifier(it.substringAfterLast('/')) }
             val kept = JSONArray()
             var dropped = 0
             for (entry in entries) {
@@ -3801,11 +3911,17 @@ class WebServer(
                     dropped++
                     continue
                 }
-                val stagedKey = stagedByNormalized[normalized]
-                if (stagedKey == null) {
+                val stagedKeys = stagedByNormalized[normalized]
+                if (stagedKeys == null) {
                     kept.put(entry)
                     continue
                 }
+                if (stagedKeys.size != 1) {
+                    dropped++
+                    Logger.w("Dropping ambiguous RKP provenance binding from restore: $normalized")
+                    continue
+                }
+                val stagedKey = stagedKeys.single()
                 var verifies = false
                 if (!stagedKey.endsWith(".cbox", ignoreCase = true)) {
                     val copy = staged.getValue(stagedKey).copyOf()

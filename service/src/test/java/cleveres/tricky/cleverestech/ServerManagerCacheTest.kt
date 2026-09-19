@@ -15,9 +15,14 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.ByteArrayOutputStream
 import java.io.InputStreamReader
+import java.net.InetAddress
+import java.net.InetSocketAddress
+import java.net.ServerSocket
+import java.net.Socket
 import java.nio.charset.StandardCharsets
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
+import javax.net.ssl.SSLSocketFactory
 
 class ServerManagerCacheTest {
     @After
@@ -247,6 +252,11 @@ class ServerManagerCacheTest {
                 "https://2130706433/x",
                 "https://0x7f000001/x",
                 "https://017700000001/x",
+                // Single-number forms of link-local, multicast and 0/8 hosts.
+                "https://2851995649/x",
+                "https://0xA9FE0001/x",
+                "https://3758096385/x",
+                "https://1/x",
             )
         ) {
             assertThrows(IllegalArgumentException::class.java) {
@@ -267,6 +277,8 @@ class ServerManagerCacheTest {
                 "::1",
                 "::",
                 "0.0.0.0",
+                "0.0.0.1",
+                "0.255.255.255",
                 "169.254.10.20",
                 "fe80::1",
                 "224.0.0.1",

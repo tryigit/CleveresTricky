@@ -272,6 +272,8 @@ public class CertHackTest {
 
         CertHack.KeyBox rootKeybox = new CertHack.KeyBox(keyPair, List.of(strongboxCert), "root:keybox.xml");
         CertHack.KeyBox managedKeybox = new CertHack.KeyBox(keyPair, List.of(teeCert), "keyboxes:keybox.xml");
+        org.mockito.Mockito.when(strongboxCert.getSerialNumber()).thenReturn(java.math.BigInteger.ONE);
+        org.mockito.Mockito.when(teeCert.getSerialNumber()).thenReturn(java.math.BigInteger.TWO);
 
         Map<String, List<CertHack.KeyBox>> keyboxes = new HashMap<>();
         keyboxes.put("EC", List.of(rootKeybox, managedKeybox));
@@ -296,6 +298,10 @@ public class CertHackTest {
             assertEquals("StrongBox", CertHack.getKeyboxSecurityLevel("keybox.xml"));
             assertEquals("Unknown", CertHack.getKeyboxSecurityLevel("custom:keybox.xml"));
             assertNull(CertHack.getDeviceCertificateSerial("custom:keybox.xml"));
+            // Same Google root signs both test boxes, so each identifier must
+            // expose its own leaf certificate serial instead of one shared root.
+            assertEquals("1", CertHack.getDeviceCertificateSerial("root:keybox.xml"));
+            assertEquals("2", CertHack.getDeviceCertificateSerial("keyboxes:keybox.xml"));
             assertTrue(CertHack.isStrongBoxKeybox(rootKeybox));
             assertFalse(CertHack.isStrongBoxKeybox(managedKeybox));
         } finally {

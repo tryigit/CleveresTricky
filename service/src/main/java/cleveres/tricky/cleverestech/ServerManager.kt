@@ -15,6 +15,7 @@ import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.IOException
 import java.net.InetAddress
+import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.URI
 import java.net.URL
@@ -26,9 +27,11 @@ import java.security.cert.X509Certificate
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
+import java.util.concurrent.ThreadFactory
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.net.ssl.HttpsURLConnection
+import javax.net.ssl.SSLSocketFactory
 
 object ServerManager {
     data class ServerConfig(
@@ -78,14 +81,21 @@ object ServerManager {
         }
 
     /**
-     * Bounded DNS workers for fetch-time hostname resolution. Daemon threads
-     * reaped after 60 idle seconds; a stuck lookup can only strand a daemon
-     * thread, never the fetch itself, and fetches are infrequent.
+     * Bounded DNS workers for fetch-time hostname resolution. At most two
+     * daemon workers ever exist: interrupting a stuck
+     * [InetAddress.getAllByName] is not guaranteed, so an unbounded pool would
+     * strand one thread per timed-out lookup. Lookups beyond two concurrent
+     * fetches queue behind the workers. A fixed pool is required here: a
+     * cached pool only reaps idle workers, so a stuck lookup would otherwise
+     * pin one worker forever.
      */
     private val dnsExecutor =
-        Executors.newCachedThreadPool { runnable ->
-            Thread(runnable, "cleverestricky-server-dns").apply { isDaemon = true }
-        }
+        Executors.newFixedThreadPool(
+            2,
+            ThreadFactory { runnable ->
+                Thread(runnable, "cleverestricky-server-dns").apply { isDaemon = true }
+            },
+        )
 
     fun initialize() =
         KeyboxActivation.coordinateRefresh {
@@ -458,6 +468,9 @@ object ServerManager {
             val b0 = raw[0].toInt() and 0xff
             val b1 = raw[1].toInt() and 0xff
             val b2 = raw[2].toInt() and 0xff
+            // "This host on this network" covers the whole 0.0.0.0/8 range,
+            // not just the unspecified address itself.
+            if (b0 == 0) return false
             // Shared CGNAT space, IETF protocol assignments, documentation and
             // benchmarking ranges, and reserved/broadcast space.
             if (b0 == 100 && b1 in 64..127) return false
@@ -490,7 +503,8 @@ object ServerManager {
             throw IllegalArgumentException("Server URL must not target a non-routable host")
         }
         // Single-number IPv4 forms (decimal "2130706433", hex "0x7f000001") never
-        // reach getByName here to avoid DNS stalls; evaluate them arithmetically.
+        // reach getByName here to avoid DNS stalls; decode the bytes and run
+        // them through the same shared policy as every other literal.
         val numericValue =
             when {
                 bare.matches(Regex("[0-9]+")) -> bare.toLongOrNull()?.takeIf { it in 0..0xFFFFFFFFL }
@@ -498,7 +512,14 @@ object ServerManager {
                 else -> null
             }
         if (numericValue != null) {
-            require(numericValue != 0L && numericValue ushr 24 != 127L) {
+            val raw =
+                byteArrayOf(
+                    (numericValue ushr 24).toByte(),
+                    (numericValue ushr 16).toByte(),
+                    (numericValue ushr 8).toByte(),
+                    numericValue.toByte(),
+                )
+            require(isPublicDestination(InetAddress.getByAddress(raw))) {
                 "Server URL must not target a non-routable host"
             }
             return
@@ -556,7 +577,11 @@ object ServerManager {
      * keeping the original hostname for SNI and certificate verification. This
      * closes the resolve-then-connect TOCTOU (including DNS rebinding): bytes
      * can only flow to the address the policy approved. Proxy tunnels arrive
-     * already connected and pass through untouched.
+     * already connected and pass through untouched: the proxy owns that leg and
+     * resolves the CONNECT target itself, which is accepted because the proxy
+     * is trusted network configuration rather than attacker input. TLS is still
+     * layered with the expected hostname, so the session cannot be redirected
+     * to a different identity.
      */
     internal class PinnedTlsSocketFactory(
         private val delegate: SSLSocketFactory,

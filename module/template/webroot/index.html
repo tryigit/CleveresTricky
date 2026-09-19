@@ -2092,7 +2092,7 @@ const filenameEl = document.getElementById('kbFilenameInput');
 let filenameInput = filenameEl ? filenameEl.value.trim() : '';
 if (filenameInput) filenameInput = transliterateTurkish(filenameInput);
 let isRkp = (/droid\s*ca|rkp|remote\s*provisioning|key\s*provisioning/i.test(content) || /rkp/i.test(filenameInput));
-let filename = filenameInput || (isRkp ? 'rkp.xml' : 'keybox.xml');
+let filename = filenameInput || 'keybox.xml';
 if (!filename.toLowerCase().endsWith('.xml')) filename += '.xml';
 
 notify('Saving...', 'working');

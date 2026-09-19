@@ -77,7 +77,8 @@ const context = {
   updateControls() {},
   ensureVerificationControls() {},
   updateVerificationPager() {},
-  deleteOne() {}
+  deleteOne() {},
+  toggleDisabled() {}
 };
 context.window = context;
 context.global = context;
@@ -88,6 +89,7 @@ vm.runInContext(`
   let loading = false;
   let inventory = [];
   let selected = new Set();
+  const togglingIds = new Set();
   function filtered() { return inventory; }
   ${expiredImplementation}
   this.isKeyboxExpired = isKeyboxExpired;
@@ -435,5 +437,35 @@ assert.equal(storedFilename.attributes.role, 'button');
 assert.equal(storedFilename.attributes['aria-haspopup'], 'dialog');
 const storedScope = list.children[0].children[1].children[1].children[0].children[1];
 assert.equal(storedScope.attributes.role, 'button');
+
+// Test 18: Disabled keybox renders the disabled badge, dims the row, and shows an Enable action
+context.setInventory([
+  { id: 'keyboxes:off.xml', filename: 'off.xml', scope: 'managed', certificate_serial: '999', security_level: 'TEE', disabled: true }
+]);
+list.children = [];
+context.renderKeyboxes();
+assert.equal(list.children.length, 1);
+const disRow = list.children[0];
+assert.ok(disRow.style.cssText.includes('opacity:0.55'), 'disabled keybox row must be visually dimmed');
+const disName = disRow.children[1].children[0];
+assert.equal(disName.children[1].className, 'ct-badge ct-badge-invalid', 'disabled keybox must render the disabled badge first');
+assert.equal(disName.children[1].textContent, 'disabled');
+assert.equal(disName.children[2].className, 'ct-badge ct-badge-tee', 'security badge still follows the disabled badge');
+assert.equal(disRow.children.length, 4, 'row must contain checkbox, body, toggle and delete actions');
+assert.equal(disRow.children[2].textContent, 'enable', 'disabled keybox must offer the Enable action');
+assert.equal(disRow.children[3].textContent, 'delete', 'disabled keybox must keep the Delete action');
+
+// Test 18b: Enabled keybox offers the Disable action without dimming
+context.setInventory([
+  { id: 'keyboxes:on.xml', filename: 'on.xml', scope: 'managed', certificate_serial: '', security_level: '', disabled: false }
+]);
+list.children = [];
+context.renderKeyboxes();
+assert.equal(list.children.length, 1);
+const enRow = list.children[0];
+assert.ok(!enRow.style.cssText.includes('opacity'), 'enabled keybox row must not be dimmed');
+assert.equal(enRow.children[1].children[0].children.length, 1, 'enabled plain keybox must not render a disabled badge');
+assert.equal(enRow.children[2].textContent, 'disable', 'enabled keybox must offer the Disable action');
+assert.equal(enRow.children[3].textContent, 'delete');
 
 console.log('Keybox security and algorithm badge rendering regression checks passed');

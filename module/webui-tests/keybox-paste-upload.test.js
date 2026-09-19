@@ -102,7 +102,7 @@ async function runTest() {
     assert.equal(fetchAuthCalls[0].options.body.get('filename'), 'keybox.xml', 'Must default to keybox.xml when filename empty');
   }
 
-  // Test 4: Empty filename defaults to rkp.xml for RKP content
+  // Test 4: Empty filename defaults to keybox.xml even for RKP content (server deduplicates collisions)
   {
     const ctx = createTestContext();
     elements.kbContent.value = '<Keybox><CertificateChain>...droid ca...</CertificateChain></Keybox>';
@@ -112,7 +112,7 @@ async function runTest() {
 
     await ctx.savePastedKeybox();
     assert.equal(fetchAuthCalls.length, 1);
-    assert.equal(fetchAuthCalls[0].options.body.get('filename'), 'rkp.xml', 'Must default to rkp.xml when RKP detected');
+    assert.equal(fetchAuthCalls[0].options.body.get('filename'), 'keybox.xml', 'Must default to keybox.xml when RKP detected');
     assert.equal(fetchAuthCalls[0].options.body.get('rkp_hint'), 'true', 'Must include rkp_hint');
   }
 

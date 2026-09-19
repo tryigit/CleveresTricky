@@ -22,6 +22,14 @@ internal object CrlBackend {
     @Volatile
     private var activeCrl = ActiveCrl(0L, null)
 
+    /**
+     * Serialized across all callers: the network path refreshes without
+     * holding the caller's cache lock while other paths hold it, so two
+     * overlapping refreshes could otherwise publish in reverse generation
+     * order and leave a stale handle active. The transact-plus-publish
+     * section takes no other lock, so this cannot invert any lock ordering.
+     */
+    @Synchronized
     fun refresh(crl: ByteArray): CrlWire.Handle? {
         refreshOverride?.let { return it(crl) }
         val payloadLength = CrlWire.refreshLength(crl.size) ?: return null

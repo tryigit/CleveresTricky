@@ -19,7 +19,7 @@ class KeyboxCertificateIdentityTest {
     }
 
     @Test
-    fun `three real certificate PEM blocks expose certificate three serial`() {
+    fun `single leaf certificate provides a distinguishing identity`() {
         val root = locateRoot()
         val fixture = File(root, "service/src/test/resources/keybox/valid_ec.xml").readText()
         val beginMarker = "-----BEGIN CERTIFICATE-----"
@@ -28,9 +28,9 @@ class KeyboxCertificateIdentityTest {
         val end = fixture.indexOf(endMarker, begin) + endMarker.length
         require(begin >= 0 && end >= endMarker.length)
         val pem = fixture.substring(begin, end)
-        val xml = "<CertificateChain><Certificate>$pem</Certificate><Certificate>$pem</Certificate><Certificate>$pem</Certificate></CertificateChain>".toByteArray()
+        val xml = "<CertificateChain><Certificate>$pem</Certificate></CertificateChain>".toByteArray()
         try {
-            val serial = KeyboxCertificateIdentity.thirdCertificateSerial(xml)
+            val serial = KeyboxCertificateIdentity.leafCertificateSerial(xml)
             assertNotNull(serial)
             assertTrue(requireNotNull(serial).matches(Regex("[0-9A-F]+")))
         } finally {

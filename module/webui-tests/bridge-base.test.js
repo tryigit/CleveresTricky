@@ -332,7 +332,7 @@ async function main() {
     assert.strictEqual(normalizeUiMessage(oversized), 'HTTP 500 Server Error: response body is too large to display');
     assert.ok(indexSource.includes('text.textContent = normalizeUiMessage(msg);'));
     assert.ok(indexSource.includes('<script src="bridge.js?revision=15"></script>'));
-    assert.match(bridgeSource, /ux\.js\?revision=9/);
+    assert.match(bridgeSource, /ux\.js\?revision=10/);
     assert.ok(!bridgeSource.includes('ux.js?revision=3'), 'Bridge must not request the retired cached UX loader');
 
     const uploadFunctionStart = indexSource.indexOf('async function loadFileContent');

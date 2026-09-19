@@ -71,6 +71,8 @@ Todos los archivos de configuración residen en `/data/adb/cleverestricky/`.
 
 * **`keybox.xml`**: Coloque el archivo XML de keybox directamente en `/data/adb/cleverestricky/keybox.xml`. Asegúrese de restringir los permisos (`chmod 600`).
 * **`keyboxes/`**: Directorio para almacenar múltiples archivos de keybox.
+* **Las cargas nunca sobrescriben:** Una keybox soltada o pegada se guarda como `keybox.xml`; si ese nombre ya está ocupado, se usa automáticamente el siguiente nombre libre (`keybox2.xml`, `keybox3.xml`, ...).
+* **`disabled_keyboxes`**: Lista de exclusión del grupo. Cada línea contiene un identificador `ámbito:nombre de archivo` (`keyboxes:keybox2.xml`, `root:keybox.xml`) que coincide con los nombres mostrados en el panel Keybox de la WebUI. Las keyboxes listadas siguen visibles y gestionables, pero nunca se cargan en el grupo de atestación. Los botones Desactivar y Activar de la WebUI leen y escriben este archivo, por lo que también puede mantenerse a mano.
 
 ---
 
