@@ -195,10 +195,14 @@ object CboxManager {
                     val blockInvalid = Config.isBlockInvalidKeyboxesEnabled
                     val retained =
                         parsed.filterNot {
+                            val previouslyValid =
+                                KeyboxValidityTracker.getState(it.filename())?.validityState ==
+                                    KeyboxVerifier.ValidityState.VALID
                             KeyboxVerifier.isBlockedByPolicy(
                                 KeyboxVerifier.verifyKeybox(it, crl),
                                 CertHack.getDeviceCertificateNotAfter(it),
                                 blockInvalid,
+                                previouslyValid,
                             )
                         }
                     if (retained.isEmpty() || retained.size != parsed.size) {
@@ -326,10 +330,14 @@ object CboxManager {
                     val blockInvalid = Config.isBlockInvalidKeyboxesEnabled
                     val retained =
                         parsed.filterNot {
+                            val previouslyValid =
+                                KeyboxValidityTracker.getState(it.filename())?.validityState ==
+                                    KeyboxVerifier.ValidityState.VALID
                             KeyboxVerifier.isBlockedByPolicy(
                                 KeyboxVerifier.verifyKeybox(it, crl),
                                 CertHack.getDeviceCertificateNotAfter(it),
                                 blockInvalid,
+                                previouslyValid,
                             )
                         }
                     if (retained.isEmpty() || retained.size != parsed.size) return null

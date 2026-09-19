@@ -1472,8 +1472,14 @@ public final class CertHack {
                         KeyboxPriorityOrder.filterTopPriorityTier(candidates),
                         KeyProperties.KEY_ALGORITHM_EC);
             } else {
-                list = KeyboxPriorityOrder.filterTopPriorityTier(
-                        selectGlobalKeyboxPool(currentState, isStrongbox));
+                // The EC preference applies inside the top tier as well, so a mixed
+                // custom tier still prefers EC exactly like the per-file path. In
+                // default mode the tier filter is a pass-through over a
+                // single-algorithm pool and selection is unchanged.
+                list = selectKeyboxPool(
+                        KeyboxPriorityOrder.filterTopPriorityTier(
+                                selectGlobalKeyboxPool(currentState, isStrongbox)),
+                        KeyProperties.KEY_ALGORITHM_EC);
             }
             if (list.isEmpty()) {
                 return caList;
@@ -1703,8 +1709,14 @@ public final class CertHack {
                         KeyboxPriorityOrder.filterTopPriorityTier(candidates),
                         KeyProperties.KEY_ALGORITHM_EC);
             } else {
-                list = KeyboxPriorityOrder.filterTopPriorityTier(
-                        selectGlobalKeyboxPool(currentState, isStrongbox));
+                // The EC preference applies inside the top tier as well, so a mixed
+                // custom tier still prefers EC exactly like the per-file path. In
+                // default mode the tier filter is a pass-through over a
+                // single-algorithm pool and selection is unchanged.
+                list = selectKeyboxPool(
+                        KeyboxPriorityOrder.filterTopPriorityTier(
+                                selectGlobalKeyboxPool(currentState, isStrongbox)),
+                        KeyProperties.KEY_ALGORITHM_EC);
             }
             if (list.isEmpty()) {
                 noteAttestFailure(uid, 6);
@@ -1870,8 +1882,14 @@ public final class CertHack {
                     KeyboxPriorityOrder.filterTopPriorityTier(candidates),
                     KeyProperties.KEY_ALGORITHM_EC);
         } else {
-            list = KeyboxPriorityOrder.filterTopPriorityTier(
-                    selectGlobalKeyboxPool(currentState, isStrongbox));
+            // The EC preference applies inside the top tier as well, so a mixed
+            // custom tier still prefers EC exactly like the per-file path. In
+            // default mode the tier filter is a pass-through over a
+            // single-algorithm pool and selection is unchanged.
+            list = selectKeyboxPool(
+                    KeyboxPriorityOrder.filterTopPriorityTier(
+                            selectGlobalKeyboxPool(currentState, isStrongbox)),
+                    KeyProperties.KEY_ALGORITHM_EC);
         }
         if (list == null || list.isEmpty()) {
             return null;

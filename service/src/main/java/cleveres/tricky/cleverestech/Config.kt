@@ -672,8 +672,14 @@ object Config {
                             val (validity, reason) = KeyboxVerifier.resolveValidity(status, notAfter)
 
                             // Status is already forced to VALID for RKP above, so expiry
-                            // still applies to RKP boxes exactly as before.
-                            val isEligible = !KeyboxVerifier.isBlockedByPolicy(status, notAfter, blockInvalid)
+                            // still applies to RKP boxes exactly as before. The tracker
+                            // still holds the previous cycle here, so a failed check
+                            // only keeps serving previously valid boxes.
+                            val previouslyValid =
+                                KeyboxValidityTracker.getState(keybox.filename())?.validityState ==
+                                    KeyboxVerifier.ValidityState.VALID
+                            val isEligible =
+                                !KeyboxVerifier.isBlockedByPolicy(status, notAfter, blockInvalid, previouslyValid)
 
                             if (isEligible) {
                                 eligibleKeyboxes.add(keybox)

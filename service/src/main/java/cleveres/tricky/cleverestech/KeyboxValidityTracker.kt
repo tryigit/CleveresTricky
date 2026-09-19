@@ -22,12 +22,34 @@ internal object KeyboxValidityTracker {
                     if (result.status == KeyboxVerifier.Status.ERROR) {
                         previousMap[key]?.let { put(key, it) }
                     } else {
-                        put(key, Entry(result.validityState, result.invalidReason))
+                        val entry = Entry(result.validityState, result.invalidReason)
+                        val existing = get(key)
+                        put(key, if (existing == null) entry else worseOf(existing, entry))
                     }
                 }
             }
         }
     }
+
+    // Fail closed when several keyboxes share one tracker key (e.g. multiple keys
+    // in a single file): a valid entry must never overwrite a worse verdict, so a
+    // revoked keybox can never inherit a clean state from its file sibling.
+    private fun worseOf(
+        first: Entry,
+        second: Entry,
+    ): Entry {
+        if (first.validityState == KeyboxVerifier.ValidityState.VALID) return second
+        if (second.validityState == KeyboxVerifier.ValidityState.VALID) return first
+        return if (severity(first.invalidReason) >= severity(second.invalidReason)) first else second
+    }
+
+    private fun severity(reason: KeyboxVerifier.InvalidReason?): Int =
+        when (reason) {
+            KeyboxVerifier.InvalidReason.VERIFICATION_FAILED -> 3
+            KeyboxVerifier.InvalidReason.REVOKED -> 2
+            KeyboxVerifier.InvalidReason.EXPIRED -> 1
+            null -> 0
+        }
 
     fun getState(storageId: String): Entry? {
         return stateMap[storageId]

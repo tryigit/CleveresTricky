@@ -508,4 +508,27 @@ class KeyboxVerifierCheckFileTest {
             KeyboxVerifier.isBlockedByPolicy(KeyboxVerifier.Status.VALID, "2126-07-08 19:46", blockInvalid = true),
         )
     }
+
+    @Test
+    fun `policy keeps serving previously valid keyboxes through failed checks but fails closed without history`() {
+        assertFalse(
+            KeyboxVerifier.isBlockedByPolicy(
+                KeyboxVerifier.Status.ERROR,
+                "2126-07-08 19:46",
+                blockInvalid = true,
+                previouslyValid = true,
+            ),
+        )
+        assertTrue(
+            KeyboxVerifier.isBlockedByPolicy(
+                KeyboxVerifier.Status.ERROR,
+                "2126-07-08 19:46",
+                blockInvalid = false,
+                previouslyValid = false,
+            ),
+        )
+        assertTrue(
+            KeyboxVerifier.isBlockedByPolicy(KeyboxVerifier.Status.ERROR, "2126-07-08 19:46", blockInvalid = true),
+        )
+    }
 }

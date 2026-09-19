@@ -105,12 +105,19 @@ object KeyboxVerifier {
      * Status-based form of [isEligible] for call sites that verify first and
      * resolve validity inline. Callers force RKP status to VALID before this
      * point, so expiry still applies to RKP boxes exactly as before.
+     *
+     * A failed check proves nothing about the keybox: boxes that were valid
+     * the last time verification succeeded keep serving through transient
+     * backend faults, while boxes with no verified history fail closed
+     * instead of being admitted blind.
      */
     fun isBlockedByPolicy(
         status: Status,
         notAfter: String?,
         blockInvalid: Boolean,
+        previouslyValid: Boolean = false,
     ): Boolean {
+        if (status == Status.ERROR) return !previouslyValid
         val (validityState, invalidReason) = resolveValidity(status, notAfter)
         return !isEligible(validityState, invalidReason, blockInvalid)
     }

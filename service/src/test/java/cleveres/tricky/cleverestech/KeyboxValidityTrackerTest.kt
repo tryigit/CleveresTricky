@@ -111,6 +111,41 @@ class KeyboxValidityTrackerTest {
     }
 
     @Test
+    fun `shared tracker key keeps the worst verdict instead of last write wins`() {
+        val valid = createResult(
+            filename = "multi.xml",
+            status = KeyboxVerifier.Status.VALID,
+            validityState = KeyboxVerifier.ValidityState.VALID,
+            invalidReason = null,
+        )
+        val revoked = createResult(
+            filename = "multi.xml",
+            status = KeyboxVerifier.Status.REVOKED,
+            validityState = KeyboxVerifier.ValidityState.INVALID,
+            invalidReason = KeyboxVerifier.InvalidReason.REVOKED,
+        )
+        val failed = createResult(
+            filename = "multi.xml",
+            status = KeyboxVerifier.Status.INVALID,
+            validityState = KeyboxVerifier.ValidityState.INVALID,
+            invalidReason = KeyboxVerifier.InvalidReason.VERIFICATION_FAILED,
+        )
+
+        KeyboxValidityTracker.update(listOf(valid, revoked))
+        assertEquals(KeyboxVerifier.InvalidReason.REVOKED, KeyboxValidityTracker.getState("multi.xml")?.invalidReason)
+
+        KeyboxValidityTracker.update(listOf(revoked, valid))
+        assertEquals(KeyboxVerifier.InvalidReason.REVOKED, KeyboxValidityTracker.getState("multi.xml")?.invalidReason)
+
+        KeyboxValidityTracker.update(listOf(revoked, failed))
+        assertEquals(
+            KeyboxVerifier.InvalidReason.VERIFICATION_FAILED,
+            KeyboxValidityTracker.getState("multi.xml")?.invalidReason,
+        )
+        assertFalse(KeyboxValidityTracker.isEligible("multi.xml", blockInvalid = false))
+    }
+
+    @Test
     fun `clear empties the tracker snapshot`() {
         val result = createResult(
             filename = "sample.xml",
