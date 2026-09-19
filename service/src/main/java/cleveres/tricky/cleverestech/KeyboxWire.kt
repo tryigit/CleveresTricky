@@ -158,6 +158,10 @@ internal object KeyboxWire {
     private const val MAX_CERTIFICATE_DER_BYTES = 256 * 1024
     internal const val MAX_XML_BYTES = 10 * 1024 * 1024
     private const val MAX_TOTAL_KEYS = MAX_KEYBOXES_PER_FILE * MAX_KEYS_PER_KEYBOX
+
+    // Upper bound for per-block verification during XML sanitization: well above
+    // any legitimate document so hostile inputs cannot force unbounded work.
+    internal const val MAX_SANITIZE_KEY_BLOCKS = MAX_TOTAL_KEYS * 2
     private const val MAX_TOTAL_CERTIFICATES = MAX_TOTAL_KEYS * MAX_CERTIFICATES_PER_CHAIN
     private const val FIXED_HEADER_BYTES = 5 + SNAPSHOT_SHA256_BYTES
     private const val KEY_HEADER_BYTES = 2 + KEY_ID_BYTES

@@ -97,6 +97,7 @@ require('./ux-install-retry.test.js');
 require('./telegram-localization.test.js');
 require('./keys-request-owner.test.js');
 require('./keybox-inventory-request-owner.test.js');
+require('./keybox-disable-toggle.test.js');
 require('./apps-editor-request-owner.test.js');
 require('./policy-inspection-request-owner.test.js');
 require('./policy-write-serialization.test.js');

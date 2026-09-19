@@ -499,37 +499,44 @@ fn handle_request(opcode: u16, mut request: Vec<u8>) -> Result<Vec<u8>, &'static
         OP_CHILD_KEY_REWRITE => certificate_wire::rewrite_child_key_and_encode(request),
         OP_ATTEST_KEY_CLEAR => {
             if request.len() != ATTEST_KEY_CLEAR_REQUEST_BYTES || request[0] != 1 {
+                request.zeroize();
                 return Err("invalid attest key clear request");
             }
             attest_key_store::clear();
+            request.zeroize();
             Ok(vec![0])
         }
         OP_ATTEST_KEY_TOUCH => {
             if request.len() != ATTEST_KEY_TOUCH_REQUEST_BYTES
                 || request[0] != certificate_wire::REWRITE_WIRE_VERSION
             {
+                request.zeroize();
                 return Err("invalid attest key touch request");
             }
             let calling_uid = u32::from_be_bytes(request[1..5].try_into().unwrap());
             let key_id: [u8; 32] = request[5..37].try_into().unwrap();
             let touched = attest_key_store::touch_attest_key(calling_uid, &key_id);
+            request.zeroize();
             Ok(vec![if touched { 1 } else { 0 }])
         }
         OP_ATTEST_KEY_REMOVE => {
             if request.len() != ATTEST_KEY_REMOVE_REQUEST_BYTES
                 || request[0] != certificate_wire::REWRITE_WIRE_VERSION
             {
+                request.zeroize();
                 return Err("invalid attest key remove request");
             }
             let calling_uid = u32::from_be_bytes(request[1..5].try_into().unwrap());
             let key_id: [u8; 32] = request[5..37].try_into().unwrap();
             let removed = attest_key_store::remove_attest_key(calling_uid, &key_id);
+            request.zeroize();
             Ok(vec![if removed { 1 } else { 0 }])
         }
         OP_ATTEST_KEY_ALIAS => {
             if request.len() != ATTEST_KEY_ALIAS_REQUEST_BYTES
                 || request[0] != certificate_wire::REWRITE_WIRE_VERSION
             {
+                request.zeroize();
                 return Err("invalid attest key alias request");
             }
             let calling_uid = u32::from_be_bytes(request[1..5].try_into().unwrap());
@@ -537,6 +544,7 @@ fn handle_request(opcode: u16, mut request: Vec<u8>) -> Result<Vec<u8>, &'static
             let alias_key_id: [u8; 32] = request[37..69].try_into().unwrap();
             let aliased =
                 attest_key_store::alias_attest_key(calling_uid, &primary_key_id, alias_key_id);
+            request.zeroize();
             Ok(vec![if aliased { 1 } else { 0 }])
         }
         OP_CRL_CHECK_BATCH => crl_wire::handle(request),

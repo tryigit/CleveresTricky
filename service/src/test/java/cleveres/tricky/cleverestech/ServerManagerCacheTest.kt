@@ -7,14 +7,22 @@ import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.ByteArrayOutputStream
 import java.io.InputStreamReader
+import java.net.InetAddress
+import java.net.InetSocketAddress
+import java.net.ServerSocket
+import java.net.Socket
 import java.nio.charset.StandardCharsets
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
+import javax.net.ssl.SSLSocketFactory
 
 class ServerManagerCacheTest {
     @After
@@ -210,6 +218,274 @@ class ServerManagerCacheTest {
             assertEquals(1, rkpCount)
         } finally {
             ManagedKeyboxParserOracle.reset()
+        }
+    }
+
+    @Test
+    fun `server url validation rejects non-routable hosts without DNS`() {
+        fun configWith(url: String) =
+            ServerManager.ServerConfig(
+                id = "ssrf-test",
+                name = "SSRF Test",
+                url = url,
+                priority = 0,
+                enabled = true,
+                authType = "NONE",
+                authData = JSONObject(),
+                autoRefresh = false,
+                refreshIntervalHours = 24,
+                contentPublicKey = null,
+            )
+        for (bad in
+            listOf(
+                "https://127.0.0.1/keyboxes.zip",
+                "https://127.1.2.3:8443/x",
+                "https://localhost/keyboxes.zip",
+                "https://LOCALHOST/keyboxes.zip",
+                "https://[::1]/x",
+                "https://[::]/x",
+                "https://[::ffff:127.0.0.1]/x",
+                "https://169.254.10.20/x",
+                "https://224.0.0.1/x",
+                "https://0.0.0.0/x",
+                "https://127.0.0.1./x",
+                "https://2130706433/x",
+                "https://0x7f000001/x",
+                "https://017700000001/x",
+                // Single-number forms of link-local, multicast and 0/8 hosts.
+                "https://2851995649/x",
+                "https://0xA9FE0001/x",
+                "https://3758096385/x",
+                "https://1/x",
+            )
+        ) {
+            assertThrows(IllegalArgumentException::class.java) {
+                ServerManager.validateServer(configWith(bad))
+            }
+        }
+        // Ordinary public hosts stay accepted; private LAN ranges are non-public.
+        ServerManager.validateServer(configWith("https://example.com/keyboxes.zip"))
+        ServerManager.validateServer(configWith("https://134744072/keyboxes.zip"))
+        ServerManager.validateServer(configWith("https://0x08080808/keyboxes.zip"))
+        assertThrows(IllegalArgumentException::class.java) {
+            ServerManager.validateServer(configWith("https://192.168.1.10/keyboxes.zip"))
+        }
+    }
+
+    @Test
+    fun `destination policy blocks special registries and allows public addresses`() {
+        fun address(literal: String) = java.net.InetAddress.getByName(literal)
+        for (blocked in
+            listOf(
+                "127.0.0.1",
+                "::1",
+                "::",
+                "0.0.0.0",
+                "0.0.0.1",
+                "0.255.255.255",
+                "169.254.10.20",
+                "fe80::1",
+                "224.0.0.1",
+                "ff02::1",
+                "10.1.2.3",
+                "172.16.0.1",
+                "172.31.255.255",
+                "192.168.1.10",
+                "fec0::1",
+                "fc00::1",
+                "fd12:3456::1",
+                "::ffff:127.0.0.1",
+                "100.64.0.1",
+                "100.127.255.255",
+                "192.0.0.170",
+                "192.0.0.255",
+                "192.0.2.1",
+                "198.51.100.2",
+                "203.0.113.3",
+                "198.18.0.1",
+                "198.19.255.255",
+                "240.0.0.1",
+                "255.255.255.255",
+            )
+        ) {
+            assertFalse(
+                "non-public destination must be blocked: $blocked",
+                ServerManager.isPublicDestination(address(blocked)),
+            )
+        }
+        for (allowed in
+            listOf(
+                "8.8.8.8",
+                "1.1.1.1",
+                "9.9.9.9",
+                "172.32.0.1",
+                "100.63.255.255",
+                "100.128.0.0",
+                "192.0.1.1",
+                "198.20.0.1",
+                "2001:4860:4860::8888",
+                "64:ff9b::808:808",
+            )
+        ) {
+            assertTrue(
+                "public destination must be allowed: $allowed",
+                ServerManager.isPublicDestination(address(allowed)),
+            )
+        }
+    }
+
+    @Test
+    fun `hostname resolution evaluates every address and requires a public one`() {
+        fun resolved(vararg literals: String) = literals.map { java.net.InetAddress.getByName(it) }
+        assertThrows(java.io.IOException::class.java) {
+            ServerManager.resolvePublicAddress("rebound.example") { emptyList() }
+        }
+        assertThrows(java.io.IOException::class.java) {
+            ServerManager.resolvePublicAddress("blocked.example") {
+                resolved("127.0.0.1", "10.0.0.1")
+            }
+        }
+        assertThrows(java.io.IOException::class.java) {
+            ServerManager.resolvePublicAddress("failed.example") {
+                throw IllegalStateException("resolver failed")
+            }
+        }
+        val picked =
+            ServerManager.resolvePublicAddress("mixed.example") {
+                resolved("127.0.0.1", "8.8.8.8", "10.0.0.1")
+            }
+        assertEquals("8.8.8.8", picked.hostAddress)
+        assertEquals(
+            "8.8.8.8",
+            ServerManager.resolvePublicAddress("single.example") { resolved("8.8.8.8") }.hostAddress,
+        )
+    }
+
+    @Test
+    fun `redirect responses are rejected instead of followed`() {
+        for (code in listOf(300, 301, 302, 303, 307, 308)) {
+            val status = ServerManager.redirectRejectedStatus(code)
+            assertTrue(status != null && status.startsWith("REDIRECT_REJECTED"))
+        }
+        assertTrue(ServerManager.redirectRejectedStatus(200) == null)
+        assertTrue(ServerManager.redirectRejectedStatus(404) == null)
+        assertTrue(ServerManager.redirectRejectedStatus(500) == null)
+    }
+
+    @Test
+    fun `pinned factory routes TCP to the vetted address while keeping the hostname`() {
+        val loopback = java.net.InetAddress.getByName("127.0.0.1")
+        val server = java.net.ServerSocket(0, 1, loopback)
+        try {
+            val seenHost = ArrayList<String?>()
+            val delegate =
+                object : javax.net.ssl.SSLSocketFactory() {
+                    override fun createSocket(s: java.net.Socket?, host: String?, port: Int, autoClose: Boolean): java.net.Socket {
+                        seenHost.add(host)
+                        return s!!
+                    }
+
+                    override fun createSocket(host: String?, port: Int): java.net.Socket =
+                        throw UnsupportedOperationException()
+
+                    override fun createSocket(
+                        host: String?,
+                        port: Int,
+                        localHost: java.net.InetAddress?,
+                        localPort: Int,
+                    ): java.net.Socket = throw UnsupportedOperationException()
+
+                    override fun createSocket(): java.net.Socket = throw UnsupportedOperationException()
+
+                    override fun createSocket(address: java.net.InetAddress?, port: Int): java.net.Socket =
+                        throw UnsupportedOperationException()
+
+                    override fun createSocket(
+                        address: java.net.InetAddress?,
+                        port: Int,
+                        localAddress: java.net.InetAddress?,
+                        localPort: Int,
+                    ): java.net.Socket = throw UnsupportedOperationException()
+
+                    override fun getDefaultCipherSuites(): Array<String> = emptyArray()
+
+                    override fun getSupportedCipherSuites(): Array<String> = emptyArray()
+                }
+            val factory = ServerManager.PinnedTlsSocketFactory(delegate, "example.com", loopback, 5000)
+            val accepted = ArrayList<java.net.Socket>()
+            val acceptor =
+                Thread {
+                    try {
+                        accepted.add(server.accept())
+                    } catch (_: Exception) {
+                    }
+                }.apply { isDaemon = true; start() }
+            val out = factory.createSocket(null, "example.com", server.localPort, true)
+            try {
+                acceptor.join(5000)
+                assertEquals(1, accepted.size)
+                assertEquals(listOf("example.com"), seenHost)
+            } finally {
+                runCatching { out.close() }
+                accepted.forEach { runCatching { it.close() } }
+            }
+        } finally {
+            server.close()
+        }
+    }
+
+    @Test
+    fun `pinned factory passes already-connected proxy sockets straight through`() {
+        val loopback = java.net.InetAddress.getByName("127.0.0.1")
+        val server = java.net.ServerSocket(0, 1, loopback)
+        try {
+            val tunneled = java.net.Socket()
+            tunneled.connect(java.net.InetSocketAddress(loopback, server.localPort), 5000)
+            try {
+                var delegateCalls = 0
+                val delegate =
+                    object : javax.net.ssl.SSLSocketFactory() {
+                        override fun createSocket(s: java.net.Socket?, host: String?, port: Int, autoClose: Boolean): java.net.Socket {
+                            delegateCalls++
+                            return s!!
+                        }
+
+                        override fun createSocket(host: String?, port: Int): java.net.Socket =
+                            throw UnsupportedOperationException()
+
+                        override fun createSocket(
+                            host: String?,
+                            port: Int,
+                            localHost: java.net.InetAddress?,
+                            localPort: Int,
+                        ): java.net.Socket = throw UnsupportedOperationException()
+
+                        override fun createSocket(): java.net.Socket = throw UnsupportedOperationException()
+
+                        override fun createSocket(address: java.net.InetAddress?, port: Int): java.net.Socket =
+                            throw UnsupportedOperationException()
+
+                        override fun createSocket(
+                            address: java.net.InetAddress?,
+                            port: Int,
+                            localAddress: java.net.InetAddress?,
+                            localPort: Int,
+                        ): java.net.Socket = throw UnsupportedOperationException()
+
+                        override fun getDefaultCipherSuites(): Array<String> = emptyArray()
+
+                        override fun getSupportedCipherSuites(): Array<String> = emptyArray()
+                    }
+                // Pinned to an unreachable address on purpose: passthrough must not dial it.
+                val unreachable = java.net.InetAddress.getByName("203.0.113.3")
+                val factory = ServerManager.PinnedTlsSocketFactory(delegate, "example.com", unreachable, 5000)
+                assertSame(tunneled, factory.createSocket(tunneled, "example.com", 9999, true))
+                assertEquals(1, delegateCalls)
+            } finally {
+                runCatching { tunneled.close() }
+            }
+        } finally {
+            server.close()
         }
     }
 

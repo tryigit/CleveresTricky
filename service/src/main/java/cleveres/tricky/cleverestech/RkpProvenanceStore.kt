@@ -2,12 +2,14 @@ package cleveres.tricky.cleverestech
 
 import cleveres.tricky.cleverestech.keystore.CertHack
 import cleveres.tricky.cleverestech.util.SecureFile
+import cleveres.tricky.cleverestech.util.readUtf8FileSnapshotBounded
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.LinkOption
+import java.text.Normalizer
 import java.security.cert.CertPathValidator
 import java.security.cert.Certificate
 import java.security.cert.CertificateFactory
@@ -25,6 +27,7 @@ object RkpProvenanceStore {
     const val PROVENANCE_FILE_NAME = "rkp_provenance.json"
     private const val MAX_ENTRIES = 256
     private const val MAX_FILE_SIZE = 64 * 1024L
+    private const val MAX_IDENTIFIER_LENGTH = 128
     private val lock = Any()
 
     private val GOOGLE_KEY_ATTESTATION_ROOT_PEM =
@@ -92,8 +95,16 @@ object RkpProvenanceStore {
     fun getAllowedTrustAnchors(): List<X509Certificate> =
         defaultTrustedRoots + testTrustedAnchors
 
-    fun normalizeIdentifier(identifier: String): String =
-        identifier.substringAfterLast(':').substringAfterLast('/').substringAfterLast('\\').trim()
+    fun normalizeIdentifier(identifier: String): String {
+        val stripped = identifier.substringAfterLast(':').substringAfterLast('/').substringAfterLast('\\').trim()
+        if (stripped.isEmpty() || stripped.length > MAX_IDENTIFIER_LENGTH) return ""
+        // Canonicalize Unicode so visually identical names cannot become distinct
+        // provenance keys. Case is intentionally preserved: on case-sensitive
+        // filesystems upper and lower case names are different files.
+        val canonical = Normalizer.normalize(stripped, Normalizer.Form.NFC)
+        if (canonical.isEmpty() || canonical.length > MAX_IDENTIFIER_LENGTH) return ""
+        return canonical
+    }
 
     fun isRkp(
         identifier: String,
@@ -203,18 +214,17 @@ object RkpProvenanceStore {
         if (!Files.isRegularFile(file.toPath(), LinkOption.NOFOLLOW_LINKS)) {
             return emptySet()
         }
-        if (file.length() > MAX_FILE_SIZE) {
-            return emptySet()
-        }
         return try {
-            val content = file.readText(Charsets.UTF_8)
+            // Single snapshot read: the size pre-check alone cannot bind a
+            // concurrently growing or swapped file.
+            val content = readUtf8FileSnapshotBounded(file, 0, MAX_FILE_SIZE)
             val json = JSONObject(content)
             val array = json.optJSONArray("rkp_keyboxes") ?: return emptySet()
             val result = HashSet<String>(array.length())
             for (i in 0 until array.length()) {
-                val name = array.optString(i)
-                if (name.isNotBlank()) {
-                    result.add(normalizeIdentifier(name))
+                val normalized = normalizeIdentifier(array.optString(i))
+                if (normalized.isNotBlank()) {
+                    result.add(normalized)
                 }
             }
             result
@@ -227,6 +237,7 @@ object RkpProvenanceStore {
         baseDir: File,
         entries: Set<String>,
     ) {
+        require(entries.size <= MAX_ENTRIES) { "Too many RKP provenance entries" }
         val file = File(baseDir, PROVENANCE_FILE_NAME)
         if (entries.isEmpty()) {
             if (file.exists()) file.delete()
@@ -234,7 +245,7 @@ object RkpProvenanceStore {
         }
         val json = JSONObject()
         val array = JSONArray()
-        entries.sorted().take(MAX_ENTRIES).forEach { array.put(it) }
+        entries.sorted().forEach { array.put(it) }
         json.put("rkp_keyboxes", array)
         SecureFile.writeText(file, json.toString(2))
     }

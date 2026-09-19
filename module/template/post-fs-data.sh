@@ -299,7 +299,7 @@ apply_optional_identity_properties() {
         continue
       fi
       for candidate in "$module_root"/*; do
-        if [ ! -d "$candidate" ] || [ -L "$candidate" ] || [ -f "$candidate/disable" ]; then
+        if [ ! -d "$candidate" ] || [ -L "$candidate" ] || { [ ! -L "$candidate/disable" ] && [ -f "$candidate/disable" ]; }; then
           continue
         fi
         module_id=${candidate##*/}

@@ -13,6 +13,10 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayInputStream
 import java.io.File
+import java.io.IOException
+import java.net.InetAddress
+import java.net.InetSocketAddress
+import java.net.Socket
 import java.net.URI
 import java.net.URL
 import java.nio.charset.StandardCharsets
@@ -23,11 +27,15 @@ import java.security.cert.X509Certificate
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
+import java.util.concurrent.ThreadFactory
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.net.ssl.HttpsURLConnection
+import javax.net.ssl.SSLSocketFactory
 
 object ServerManager {
+    const val SERVERS_FILE_NAME = "servers.json"
+
     data class ServerConfig(
         val id: String,
         val name: String,
@@ -63,7 +71,7 @@ object ServerManager {
     private var stateGeneration = 0L
     private val ioLock = Any()
     private val fetchLocks = Array(FETCH_LOCK_STRIPES) { Any() }
-    private val serverFile get() = File(Config.keyboxDirectory.parentFile, "servers.json")
+    private val serverFile get() = File(Config.keyboxDirectory.parentFile, SERVERS_FILE_NAME)
     private val validServerId = Regex("[A-Za-z0-9_-]{1,64}")
     private val validHeaderName = Regex("[!#$%&'*+.^_`|~0-9A-Za-z-]{1,128}")
     private val supportedAuthTypes = setOf("NONE", "BEARER", "BASIC", "API_KEY", "CUSTOM")
@@ -73,6 +81,23 @@ object ServerManager {
         Executors.newSingleThreadScheduledExecutor { runnable ->
             Thread(runnable, "cleverestricky-server-refresh").apply { isDaemon = true }
         }
+
+    /**
+     * Bounded DNS workers for fetch-time hostname resolution. At most two
+     * daemon workers ever exist: interrupting a stuck
+     * [InetAddress.getAllByName] is not guaranteed, so an unbounded pool would
+     * strand one thread per timed-out lookup. Lookups beyond two concurrent
+     * fetches queue behind the workers. A fixed pool is required here: a
+     * cached pool only reaps idle workers, so a stuck lookup would otherwise
+     * pin one worker forever.
+     */
+    private val dnsExecutor =
+        Executors.newFixedThreadPool(
+            2,
+            ThreadFactory { runnable ->
+                Thread(runnable, "cleverestricky-server-dns").apply { isDaemon = true }
+            },
+        )
 
     fun initialize() =
         KeyboxActivation.coordinateRefresh {
@@ -408,8 +433,239 @@ object ServerManager {
                 uri.fragment == null,
         ) { "Server URL must be an absolute HTTPS URL without credentials or a fragment" }
         require(uri.port == -1 || uri.port in 1..65535) { "Invalid server port" }
+        rejectNonRoutableServerHost(uri.host)
         return uri.toURL()
     }
+
+    /**
+     * True when every destination use of this address stays on the public
+     * internet. Single shared policy for literal hosts (checked without DNS)
+     * and resolved hostnames (every returned address is evaluated).
+     *
+     * [InetAddress.isSiteLocalAddress] covers RFC1918 plus deprecated fec0::/10
+     * but NOT modern ULA fc00::/7, so that range is matched explicitly, along
+     * with the other non-public special registries below. NAT64
+     * (64:ff9b::/96) is deliberately allowed: blocking it would break servers
+     * behind DNS64 on IPv6-only mobile networks.
+     */
+    internal fun isPublicDestination(address: InetAddress): Boolean {
+        if (address.isLoopbackAddress || address.isLinkLocalAddress ||
+            address.isMulticastAddress || address.isAnyLocalAddress
+        ) {
+            return false
+        }
+        val raw = address.address
+        if (raw.size == 16) {
+            // IPv6 ULA fc00::/7.
+            if (raw[0].toInt() and 0xfe == 0xfc) return false
+            // IPv4-mapped IPv6 loopback (::ffff:127.0.0.1 in any spelling) is not
+            // reported as loopback on every platform, so match the bytes directly.
+            if (raw.take(10).all { it == 0.toByte() } &&
+                raw[10] == 0xff.toByte() && raw[11] == 0xff.toByte() && raw[12] == 127.toByte()
+            ) {
+                return false
+            }
+        }
+        if (raw.size == 4) {
+            val b0 = raw[0].toInt() and 0xff
+            val b1 = raw[1].toInt() and 0xff
+            val b2 = raw[2].toInt() and 0xff
+            // "This host on this network" covers the whole 0.0.0.0/8 range,
+            // not just the unspecified address itself.
+            if (b0 == 0) return false
+            // Shared CGNAT space, IETF protocol assignments, documentation and
+            // benchmarking ranges, and reserved/broadcast space.
+            if (b0 == 100 && b1 in 64..127) return false
+            if (b0 == 192 && b1 == 0 && b2 == 0) return false
+            if (b0 == 192 && b1 == 0 && b2 == 2) return false
+            if (b0 == 198 && b1 == 51 && b2 == 100) return false
+            if (b0 == 203 && b1 == 0 && b2 == 113) return false
+            if (b0 == 198 && b1 in 18..19) return false
+            if (b0 >= 240) return false
+        }
+        return !address.isSiteLocalAddress
+    }
+
+    /**
+     * Rejects non-public IP literals plus localhost without any DNS lookup, so
+     * this stays safe on boot, load, and fetch paths. Hostnames are resolved
+     * and pinned at fetch time instead (no stalls here). Private LAN ranges
+     * (RFC1918) are non-public destinations and are rejected like the other
+     * special registries.
+     */
+    private fun rejectNonRoutableServerHost(host: String) {
+        if (host.equals("localhost", ignoreCase = true) || host.equals("localhost.", ignoreCase = true)) {
+            throw IllegalArgumentException("Server URL must not target a non-routable host")
+        }
+        // A trailing dot is legal FQDN syntax; strip it before literal analysis
+        // so "127.0.0.1." cannot dodge the checks below.
+        val bare = host.removeSuffix(".")
+        // All-digit hosts never resolve via DNS (they are always numeric IP
+        // literals, possibly octal), so a leading zero can only be obfuscation.
+        if (bare.length > 1 && bare.startsWith('0') && bare.all { it.isDigit() }) {
+            throw IllegalArgumentException("Server URL must not target a non-routable host")
+        }
+        // Single-number IPv4 forms (decimal "2130706433", hex "0x7f000001") never
+        // reach getByName here to avoid DNS stalls; decode the bytes and run
+        // them through the same shared policy as every other literal.
+        val numericValue =
+            when {
+                bare.matches(Regex("[0-9]+")) -> bare.toLongOrNull()?.takeIf { it in 0..0xFFFFFFFFL }
+                bare.matches(Regex("(?i)0x[0-9a-f]+")) -> bare.substring(2).toLongOrNull(16)?.takeIf { it in 0..0xFFFFFFFFL }
+                else -> null
+            }
+        if (numericValue != null) {
+            val raw =
+                byteArrayOf(
+                    (numericValue ushr 24).toByte(),
+                    (numericValue ushr 16).toByte(),
+                    (numericValue ushr 8).toByte(),
+                    numericValue.toByte(),
+                )
+            require(isPublicDestination(InetAddress.getByAddress(raw))) {
+                "Server URL must not target a non-routable host"
+            }
+            return
+        }
+        if (!isNumericHost(host)) return
+        val address = runCatching { InetAddress.getByName(host) }.getOrNull() ?: return
+        require(isPublicDestination(address)) { "Server URL must not target a non-routable host" }
+    }
+
+    /** True for IP literals of any spelling, without ever touching DNS. */
+    private fun isNumericHost(host: String): Boolean {
+        val bare = host.removeSuffix(".")
+        if (bare.contains(':')) return true
+        if (bare.matches(Regex("[0-9]+")) || bare.matches(Regex("(?i)0x[0-9a-f]+"))) return true
+        return bare.matches(Regex("\\d{1,3}(\\.\\d{1,3}){3}"))
+    }
+
+    /**
+     * Resolves a hostname to the first public destination, evaluating EVERY
+     * returned address against the SSRF policy. IP literals never reach the
+     * resolver here: they are fully vetted by [rejectNonRoutableServerHost].
+     * Throws when nothing resolves or no address is public.
+     */
+    internal fun resolvePublicAddress(
+        host: String,
+        lookup: (String) -> List<InetAddress> = ::boundedSystemLookup,
+    ): InetAddress {
+        val addresses =
+            runCatching { lookup(host) }.getOrNull().orEmpty()
+                .takeIf { it.isNotEmpty() }
+                ?: throw IOException("Server hostname resolution failed")
+        return addresses.firstOrNull(::isPublicDestination)
+            ?: throw IOException("Server hostname has no public destination")
+    }
+
+    /**
+     * Bounded hostname resolution for fetch paths. [InetAddress.getAllByName]
+     * honors no timeout, so it runs on a daemon worker reaped after
+     * [DNS_TIMEOUT_MS]; scheduler and manual fetches stay bounded while boot
+     * (which never resolves) is unaffected.
+     */
+    private fun boundedSystemLookup(host: String): List<InetAddress> {
+        val future = dnsExecutor.submit<List<InetAddress>> { InetAddress.getAllByName(host).toList() }
+        try {
+            return future.get(DNS_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+        } catch (error: Exception) {
+            future.cancel(true)
+            if (error is InterruptedException) Thread.currentThread().interrupt()
+            throw IOException("Server hostname resolution failed", error)
+        }
+    }
+
+    /**
+     * TLS socket factory that pins the TCP connection to a vetted address while
+     * keeping the original hostname for SNI and certificate verification. This
+     * closes the resolve-then-connect TOCTOU (including DNS rebinding): bytes
+     * can only flow to the address the policy approved. Proxy tunnels arrive
+     * already connected and pass through untouched: the proxy owns that leg and
+     * resolves the CONNECT target itself, which is accepted because the proxy
+     * is trusted network configuration rather than attacker input. TLS is still
+     * layered with the expected hostname, so the session cannot be redirected
+     * to a different identity.
+     */
+    internal class PinnedTlsSocketFactory(
+        private val delegate: SSLSocketFactory,
+        private val expectedHost: String,
+        private val pinnedAddress: InetAddress?,
+        private val connectTimeoutMs: Int,
+    ) : SSLSocketFactory() {
+        override fun createSocket(s: Socket?, host: String?, port: Int, autoClose: Boolean): Socket {
+            if (s != null && s.isConnected) return delegate.createSocket(s, host, port, autoClose)
+            val raw = connectRaw(port, localBind = null)
+            return try {
+                delegate.createSocket(raw, expectedHost, port, autoClose)
+            } catch (error: Throwable) {
+                runCatching { raw.close() }
+                throw error
+            }
+        }
+
+        override fun createSocket(host: String?, port: Int): Socket =
+            createSocket(null, host, port, true)
+
+        override fun createSocket(
+            host: String?,
+            port: Int,
+            localHost: InetAddress?,
+            localPort: Int,
+        ): Socket {
+            val raw = Socket()
+            try {
+                if (localHost != null) raw.bind(InetSocketAddress(localHost, localPort))
+                val address = pinnedAddress ?: ServerManager.resolvePublicAddress(host ?: expectedHost)
+                raw.connect(InetSocketAddress(address, port), connectTimeoutMs)
+            } catch (error: Throwable) {
+                runCatching { raw.close() }
+                throw error
+            }
+            return try {
+                delegate.createSocket(raw, expectedHost, port, true)
+            } catch (error: Throwable) {
+                runCatching { raw.close() }
+                throw error
+            }
+        }
+
+        override fun createSocket(): Socket = delegate.createSocket()
+
+        override fun createSocket(address: InetAddress?, port: Int): Socket =
+            delegate.createSocket(address, port)
+
+        override fun createSocket(
+            address: InetAddress?,
+            port: Int,
+            localAddress: InetAddress?,
+            localPort: Int,
+        ): Socket = delegate.createSocket(address, port, localAddress, localPort)
+
+        override fun getDefaultCipherSuites(): Array<String> = delegate.defaultCipherSuites
+
+        override fun getSupportedCipherSuites(): Array<String> = delegate.supportedCipherSuites
+
+        private fun connectRaw(port: Int, localBind: InetSocketAddress?): Socket {
+            val raw = Socket()
+            try {
+                localBind?.let { raw.bind(it) }
+                val address = pinnedAddress ?: ServerManager.resolvePublicAddress(expectedHost)
+                raw.connect(InetSocketAddress(address, port), connectTimeoutMs)
+                return raw
+            } catch (error: Throwable) {
+                runCatching { raw.close() }
+                throw error
+            }
+        }
+    }
+
+    /** Explicit redirect rejection status; redirects are never followed. */
+    internal fun redirectRejectedStatus(responseCode: Int): String? =
+        if (responseCode in 300..399) {
+            "REDIRECT_REJECTED: Remote Server redirect responses are not followed."
+        } else {
+            null
+        }
 
     private fun requireSafeHeader(
         name: String,
@@ -611,9 +867,22 @@ object ServerManager {
         var conn: HttpsURLConnection? = null
         try {
             validateServer(snapshot)
-            conn = validatedServerUrl(snapshot.url).openConnection() as HttpsURLConnection
-            conn.connectTimeout = 15000
-            conn.readTimeout = 30000
+            val url = validatedServerUrl(snapshot.url)
+            // Hostnames resolve to a vetted address here and the TLS layer below
+            // is pinned to it; literals were already vetted without DNS.
+            val pinnedAddress =
+                if (isNumericHost(url.host)) {
+                    null
+                } else {
+                    resolvePublicAddress(url.host)
+                }
+            conn = url.openConnection() as HttpsURLConnection
+            if (pinnedAddress != null) {
+                conn.sslSocketFactory =
+                    PinnedTlsSocketFactory(conn.sslSocketFactory, url.host, pinnedAddress, CONNECT_TIMEOUT_MS)
+            }
+            conn.connectTimeout = CONNECT_TIMEOUT_MS
+            conn.readTimeout = READ_TIMEOUT_MS
             conn.requestMethod = "GET"
             conn.instanceFollowRedirects = false
             conn.setRequestProperty("Accept-Encoding", "identity")
@@ -658,6 +927,9 @@ object ServerManager {
             }
 
             val responseCode = conn.responseCode
+            redirectRejectedStatus(responseCode)?.let { redirectStatus ->
+                return commitFetchFailure(context, redirectStatus)
+            }
             if (responseCode != 200) {
                 return commitFetchFailure(
                     context,
@@ -1043,10 +1315,93 @@ object ServerManager {
         }
     }
 
+    /**
+     * Exports the remote server configuration for an encrypted backup archive.
+     * The payload stays encrypted exactly as persisted on disk, so credentials
+     * never enter the backup as plaintext. Returns null only when no
+     * configuration exists or the file cannot be read; size bounds are
+     * enforced by the caller so an oversized configuration fails the backup
+     * instead of being silently omitted.
+     */
+    fun exportServersForBackup(): ByteArray? {
+        val file = serverFile
+        val path = file.toPath()
+        if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) return null
+        return try {
+            readFileSnapshotBounded(file, 1, MAX_SERVERS_FILE_BYTES)
+        } catch (e: Exception) {
+            Logger.e("Failed to read server configuration for backup", e)
+            null
+        }
+    }
+
+    /**
+     * Validates and stages a restored server configuration. The payload must be
+     * a device-encrypted blob that decrypts on this device and passes the same
+     * structural and URL policy as live configuration. Returns null when the
+     * payload is not restorable, in which case the restore must fail closed
+     * instead of writing unusable bytes.
+     */
+    fun validateRestoredServers(bytes: ByteArray): ByteArray? {
+        if (bytes.isEmpty() || bytes.size > MAX_SERVERS_FILE_BYTES) return null
+        // Legacy plaintext arrays are still read by loadServers, so a restored
+        // archive may carry one. Encrypted blobs must decrypt on this device.
+        val wasPlaintext = bytes.firstOrNull() == '['.code.toByte()
+        val plaintext = if (wasPlaintext) bytes else DeviceKeyManager.decrypt(bytes) ?: return null
+        return try {
+            if (plaintext.size > MAX_CONFIG_BYTES) return null
+            val json = JSONArray(String(plaintext, StandardCharsets.UTF_8))
+            require(json.length() <= MAX_SERVERS) { "Too many server configurations" }
+            for (i in 0 until json.length()) {
+                validateServer(parseServer(json.getJSONObject(i)))
+            }
+            bytes
+        } catch (e: Exception) {
+            Logger.e("Refusing unrestorable server configuration from backup", e)
+            null
+        } finally {
+            if (!wasPlaintext) plaintext.fill(0)
+        }
+    }
+
+    /**
+     * Removes every configured remote server plus its disposable caches. The
+     * in-memory state is cleared and cache files are deleted directly, without
+     * persisting any intermediate configuration: the reset must complete even
+     * when the device encryption key is unavailable. The caller removes the
+     * servers.json file itself after this returns.
+     */
+    fun clearAllServers() {
+        synchronized(this) {
+            serversList.clear()
+            serversMap.clear()
+            serverKeyboxes.clear()
+            stateGeneration++
+        }
+        val configDir = Config.keyboxDirectory.parentFile ?: return
+        configDir.listFiles()?.forEach { file ->
+            val name = file.name
+            if (!name.startsWith("server_cache_") || !name.endsWith(".enc")) return@forEach
+            deleteCacheFile(file, "reset")
+        }
+    }
+
     private const val FETCH_LOCK_STRIPES = 16
+    private const val DNS_TIMEOUT_MS = 10_000L
+    private const val CONNECT_TIMEOUT_MS = 15_000
+    private const val READ_TIMEOUT_MS = 30_000
     private const val MAX_SERVERS = 64
     private const val MAX_REMOTE_KEYBOXES = 64
     private const val MAX_CONFIG_BYTES = 2L * 1024 * 1024
+
+    /**
+     * servers.json stores a device-encrypted blob whose plaintext stays within
+     * [MAX_CONFIG_BYTES]; AES-GCM adds one IV-length byte, a 12-byte IV and a
+     * 16-byte tag, so the persisted file may exceed the plaintext bound by 29
+     * bytes. Backup export, archive entry limits, and restore must all accept
+     * this same bound or a validly saved configuration becomes unrestorable.
+     */
+    internal const val MAX_SERVERS_FILE_BYTES = MAX_CONFIG_BYTES + 29L
     private const val MAX_CACHE_BYTES = 16L * 1024 * 1024
     private const val MAX_HEADER_VALUE_CHARS = 8192
     private const val MAX_BASIC_CREDENTIAL_UTF16_UNITS = 1024

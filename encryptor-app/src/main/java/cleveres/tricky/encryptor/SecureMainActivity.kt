@@ -479,7 +479,7 @@ private fun CreateScreen(
                                         displayName = selectedName,
                                         validateXml = NativeCrypto::validateKeyboxXml,
                                     ) { displayName, bytes ->
-                                        val certificateSerial = KeyboxCertificateIdentity.thirdCertificateSerial(bytes)
+                                        val certificateSerial = KeyboxCertificateIdentity.leafCertificateSerial(bytes)
                                         encryptOne(allocator.allocate(displayName, certificateSerial), bytes)
                                     }
                                 } catch (error: IOException) {

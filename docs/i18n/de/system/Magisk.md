@@ -71,6 +71,8 @@ Alle Einstellungs- und Richtliniendateien befinden sich im Verzeichnis `/data/ad
 
 * **`keybox.xml`**: Legen Sie Ihre gültige Keybox-XML-Datei direkt unter `/data/adb/cleverestricky/keybox.xml` ab. Achten Sie auf geschützte Berechtigungen (`chmod 600`).
 * **`keyboxes/`**: Verzeichnis zum Speichern mehrerer Keybox-Dateien.
+* **Uploads überschreiben nie:** Eine abgelegte oder eingefügte Keybox wird unter dem angegebenen Namen gespeichert, oder als `keybox.xml`, wenn kein Name angegeben wurde; ist dieser Name bereits belegt, wird automatisch der nächste freie Name (`keybox2.xml`, `keybox3.xml`, ...) verwendet.
+* **`disabled_keyboxes`**: Ausschlussliste für den Pool. Jede Zeile enthält einen `Bereich:Dateiname`-Bezeichner (`keyboxes:keybox2.xml`, `root:keybox.xml`), der mit den im Keybox-Bereich der WebUI angezeigten Dateinamen übereinstimmt. Aufgelistete Keyboxen bleiben sichtbar und verwaltbar, werden aber nie in den Attestierungs-Pool geladen. Die Schaltflächen Deaktivieren und Aktivieren der WebUI lesen und schreiben diese Datei, sodass sie auch manuell gepflegt werden kann.
 
 ---
 

@@ -1,6 +1,6 @@
 // Additional GPLv3 section 7(b) attribution term for tryigit-owned material: see ../../NOTICE.
 use cleverestricky_crl_core::{CrlIndex, MAX_CRL_BYTES, MAX_SERIAL_BYTES, MAX_SPKI_BYTES};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 use zeroize::Zeroize;
 
 const WIRE_VERSION: u8 = 2;
@@ -16,7 +16,7 @@ pub const MAX_RESPONSE_BYTES: usize = QUERY_RESPONSE_PREFIX_BYTES + MAX_QUERY_CO
 
 struct Snapshot {
     generation: u64,
-    index: CrlIndex,
+    index: Arc<CrlIndex>,
 }
 
 static STORE: OnceLock<Mutex<Option<Snapshot>>> = OnceLock::new();
@@ -57,7 +57,10 @@ fn refresh(request: &[u8]) -> Result<Vec<u8>, &'static str> {
     let generation = guard
         .as_ref()
         .map_or(1, |snapshot| snapshot.generation.saturating_add(1).max(1));
-    *guard = Some(Snapshot { generation, index });
+    *guard = Some(Snapshot {
+        generation,
+        index: Arc::new(index),
+    });
 
     let mut response = Vec::with_capacity(REFRESH_RESPONSE_BYTES);
     response.push(WIRE_VERSION);
@@ -79,10 +82,17 @@ fn query(request: &[u8]) -> Result<Vec<u8>, &'static str> {
         return Err("CRL query request exceeds configured bound");
     }
 
-    let store = STORE.get_or_init(|| Mutex::new(None));
-    let guard = store.lock().map_err(|_| "CRL store lock poisoned")?;
-    let snapshot = guard.as_ref().ok_or("CRL index is not initialized")?;
-    if snapshot.generation != generation {
+    // Clone the immutable index under the lock, then answer from the snapshot:
+    // per-entry hashing must not block concurrent refreshes.
+    let (snapshot_generation, index) = {
+        let store = STORE.get_or_init(|| Mutex::new(None));
+        let guard = store.lock().map_err(|_| "CRL store lock poisoned")?;
+        match guard.as_ref() {
+            Some(snapshot) => (snapshot.generation, Arc::clone(&snapshot.index)),
+            None => return Err("CRL index is not initialized"),
+        }
+    };
+    if snapshot_generation != generation {
         return Err("CRL generation is stale");
     }
 
@@ -112,8 +122,7 @@ fn query(request: &[u8]) -> Result<Vec<u8>, &'static str> {
         }
         let serial = cursor.read_bytes(serial_len)?;
         let spki = cursor.read_bytes(spki_len)?;
-        if snapshot
-            .index
+        if index
             .is_revoked(serial, spki)
             .map_err(|_| "CRL query rejected")?
         {

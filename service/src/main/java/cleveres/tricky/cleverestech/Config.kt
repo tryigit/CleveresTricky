@@ -1829,6 +1829,7 @@ object Config {
     private const val BLOCK_INVALID_KEYBOXES_FILE = "block_invalid_keyboxes"
     private const val APPLY_PROFILE_FILE = "apply_profile"
     private const val RECOMMENDED_DEFAULTS_PENDING_FILE = "recommended_defaults_pending"
+    private const val SERVERS_FILE = ServerManager.SERVERS_FILE_NAME
     private const val MAX_DRM_PACKAGES_BYTES = 64L * 1024
     private const val MAX_DRM_PACKAGE_RULES = 256
     private const val MAX_TARGET_FILE_BYTES = 1024L * 1024
@@ -2052,6 +2053,12 @@ object Config {
                 removeConfigFiles(SPOOF_ENABLED_FILE, BUILD_IDENTITY_FILE, GLOBAL_IDENTITY_MODE_FILE, TEE_BROKEN_MODE_FILE, RANDOM_ON_BOOT_FILE,
                     BootLogic.FILE_HIDE_PROPS, BootLogic.FILE_SPOOF_CN, TELEPHONY_FILE, RKP_PASSTHROUGH_FILE, DRM_PASSTHROUGH_FILE)
                 resetTargetFilesToDefaults()
+                // Restoring the default environment also clears configured remote
+                // servers and their cached content. In-memory state plus caches
+                // are cleared first, then the servers.json file itself, so the
+                // reset completes without the device encryption key.
+                ServerManager.clearAllServers()
+                removeConfigFiles(SERVERS_FILE)
             }
         }
         updateSpoofEnabled(File(root, SPOOF_ENABLED_FILE))

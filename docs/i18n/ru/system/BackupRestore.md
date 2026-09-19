@@ -4,4 +4,4 @@
 
 Переносит config и authorized key material в authenticated encrypted archive. Export требует пароль минимум 12 символов и allowlist файлов, отклоняя symlink/unknown path/excessive size.
 
-Import принимает только encrypted CTSB и ограничивает upload, entries, keyboxes и expanded size. Traversal, duplicates, directories, symlink target, malformed settings и invalid keybox отклоняются до записи. Policy v2 публикуется единым validated snapshot.
+Import принимает только encrypted CTSB и ограничивает upload, entries, keyboxes и expanded size. Traversal, duplicates, directories, symlink target, malformed settings и invalid keybox отклоняются до записи. Policy v2 публикуется единым validated snapshot. Настройки удалённых серверов также включаются в зашифрованном виде, привязанном к устройству; они восстанавливаются только при успешной расшифровке и проверке на том же устройстве, а при отсутствии записи существующие настройки серверов сохраняются. Применение профиля Default удаляет все удалённые серверы и кэшированное содержимое keybox.

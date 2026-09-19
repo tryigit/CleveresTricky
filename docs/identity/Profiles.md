@@ -30,7 +30,7 @@ Older configurations can still contain the legacy certificate safe mode flag and
 
 The service accepts a bounded validated profile request, updates protected configuration flags, reloads policy, and removes the request. Unknown names are rejected.
 
-Applying custom profiles does not replace keyboxes, application lists, templates, or user backups. Applying the Default profile preset or selecting the WebUI environment reset synchronously restores `target.txt`, `identity_target.txt`, `drm_packages.txt`, `boot_props_mode`, and `security_patch.txt` to their clean package defaults. Reboot after a profile changes early boot identity behavior.
+Applying custom profiles does not replace keyboxes, application lists, templates, or user backups. Applying the Default profile preset or selecting the WebUI environment reset synchronously restores `target.txt`, `identity_target.txt`, `drm_packages.txt`, `boot_props_mode`, and `security_patch.txt` to their clean package defaults, and removes every configured Remote Server together with its cached keybox content. Reboot after a profile changes early boot identity behavior.
 
 [Return to the project overview](../README.md)
 

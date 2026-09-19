@@ -112,7 +112,7 @@ const completeSurfaces = [
     'CleveresTech Community',
     'Join our Telegram group for mutual help, testing, discussion, and development of CleveresTricky.',
     'Restore Defaults',
-    'Restores module settings using the built-in default profile. Stored keyboxes and encrypted backups are not deleted.'
+    'Restores module settings using the built-in default profile and removes configured remote servers. Stored keyboxes and encrypted backups are not deleted.'
 ];
 
 assert.match(uxSource, /card\.setAttribute\('aria-label', tr\('CleveresTech Telegram community'\)\)/, 'Telegram card aria-label must use the localization owner');

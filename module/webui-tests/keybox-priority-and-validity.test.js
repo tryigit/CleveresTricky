@@ -112,7 +112,8 @@ const context = {
   updateControls() {},
   ensureVerificationControls() {},
   updateVerificationPager() {},
-  deleteOne() {}
+  deleteOne() {},
+  toggleDisabled() {}
 };
 context.window = context;
 context.global = context;
@@ -141,6 +142,7 @@ vm.runInContext(`
   let loading = false;
   let inventory = [];
   let selected = new Set();
+  const togglingIds = new Set();
   function filtered() { return inventory; }
   ${expiredCode}
   ${renderCode}

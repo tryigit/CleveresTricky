@@ -793,7 +793,7 @@ function installConfigurationActions() {
   const note = document.createElement('div');
   note.className = 'scope-note';
   note.style.marginTop = '12px';
-  note.textContent = 'Restores module settings using the built-in default profile. Stored keyboxes and encrypted backups are not deleted.';
+  note.textContent = 'Restores module settings using the built-in default profile and removes configured remote servers. Stored keyboxes and encrypted backups are not deleted.';
   const button = document.createElement('button');
   button.id = 'ct_restore_defaults';
   button.type = 'button';

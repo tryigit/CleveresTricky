@@ -50,7 +50,8 @@ internal object StoredKeyboxInventory {
     }
 
     fun runtimeXmlSources(configDir: File): List<Source> {
-        val xmlSources = list(configDir).filter { it.isXml }
+        val disabled = readDisabledKeyboxes(configDir)
+        val xmlSources = list(configDir).filter { it.isXml && it.id !in disabled }
         require(xmlSources.size <= MAX_ACTIVE_XML_SOURCES) { "Too many keybox XML files" }
         return xmlSources.filter { it.file.length() in 1..MAX_XML_BYTES }
     }

@@ -191,6 +191,162 @@ class WebServerUploadTest {
     }
 
     @Test
+    fun `multipart uploads deduplicate an existing filename instead of overwriting`() {
+        val validXml = TestKeyboxFixtures.validEcKeyboxXml
+        val originalRoot = Config.getConfigRoot()
+        try {
+            Config.setRootForTesting(configDir)
+            ManagedKeyboxParserOracle.install()
+            KeyboxLoader.activeSetOverride = { true }
+            File(configDir, "auto_keybox_check").createNewFile()
+
+            assertEquals(200, uploadMultipartKeybox("device.xml", validXml.toByteArray()))
+            val originalText = File(configDir, "keyboxes/device.xml").readText()
+
+            assertEquals(200, uploadMultipartKeybox("device.xml", validXml.toByteArray()))
+            assertTrue(File(configDir, "keyboxes/device2.xml").isFile)
+            assertEquals(
+                "the first upload must survive a second upload with the same name",
+                originalText,
+                File(configDir, "keyboxes/device.xml").readText(),
+            )
+        } finally {
+            KeyboxLoader.activeSetOverride = null
+            Config.setRootForTesting(originalRoot)
+        }
+    }
+
+    @Test
+    fun `repeated uploads of the same keybox filename are deduplicated instead of overwritten`() {
+        val validXml = TestKeyboxFixtures.validEcKeyboxXml
+        val originalRoot = Config.getConfigRoot()
+        try {
+            Config.setRootForTesting(configDir)
+            ManagedKeyboxParserOracle.install()
+            KeyboxLoader.activeSetOverride = { true }
+            File(configDir, "auto_keybox_check").createNewFile()
+
+            val (firstCode, firstBody) = uploadKeyboxResponse("keybox.xml", validXml)
+            assertEquals(200, firstCode)
+            assertEquals("keybox.xml", JSONObject(firstBody).getString("filename"))
+
+            val (secondCode, secondBody) = uploadKeyboxResponse("keybox.xml", validXml)
+            assertEquals(200, secondCode)
+            assertEquals("keybox2.xml", JSONObject(secondBody).getString("filename"))
+
+            val (thirdCode, thirdBody) = uploadKeyboxResponse("keybox.xml", validXml)
+            assertEquals(200, thirdCode)
+            assertEquals("keybox3.xml", JSONObject(thirdBody).getString("filename"))
+
+            assertTrue(File(configDir, "keyboxes/keybox.xml").isFile)
+            assertTrue(File(configDir, "keyboxes/keybox2.xml").isFile)
+            assertTrue(File(configDir, "keyboxes/keybox3.xml").isFile)
+        } finally {
+            KeyboxLoader.activeSetOverride = null
+            Config.setRootForTesting(originalRoot)
+        }
+    }
+
+    @Test
+    fun `toggle keybox disabled excludes it from runtime and delete prunes the marker`() {
+        val validXml = TestKeyboxFixtures.validEcKeyboxXml
+        val originalRoot = Config.getConfigRoot()
+        try {
+            Config.setRootForTesting(configDir)
+            ManagedKeyboxParserOracle.install()
+            KeyboxLoader.activeSetOverride = { true }
+            File(configDir, "auto_keybox_check").createNewFile()
+            assertEquals(200, uploadKeybox("toggleable.xml", validXml))
+
+            val toggle = { filename: String, disabled: String ->
+                val url =
+                    URL(
+                        "http://localhost:${server.listeningPort}/api/toggle_keybox_disabled?token=${server.token}" +
+                            "&filename=$filename&scope=keyboxes&disabled=$disabled",
+                    )
+                val conn = url.openConnection() as HttpURLConnection
+                conn.requestMethod = "POST"
+                conn.setFixedLengthStreamingMode(0)
+                conn.doOutput = true
+                conn.outputStream.use { }
+                val code = conn.responseCode
+                val stream = if (code >= 400) conn.errorStream else conn.inputStream
+                val body = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+                conn.disconnect()
+                code to body
+            }
+
+            val (disableCode, disableBody) = toggle("toggleable.xml", "true")
+            assertEquals(200, disableCode)
+            assertTrue(JSONObject(disableBody).getBoolean("disabled"))
+            assertTrue(File(configDir, "disabled_keyboxes").readText().contains("keyboxes:toggleable.xml"))
+            assertTrue(
+                StoredKeyboxInventory.runtimeXmlSources(configDir).none { it.filename == "toggleable.xml" },
+            )
+
+            // The inventory endpoint still reports the disabled entry for the UI.
+            val inventoryUrl = URL("http://localhost:${server.listeningPort}/api/keybox_inventory?token=${server.token}")
+            val inventoryConn = inventoryUrl.openConnection() as HttpURLConnection
+            val inventoryText = inventoryConn.inputStream.bufferedReader().use { it.readText() }
+            inventoryConn.disconnect()
+            val inventory = org.json.JSONArray(inventoryText)
+            var disabledEntry: JSONObject? = null
+            for (index in 0 until inventory.length()) {
+                val entry = inventory.getJSONObject(index)
+                if (entry.getString("filename") == "toggleable.xml") disabledEntry = entry
+            }
+            assertEquals(true, disabledEntry?.getBoolean("disabled"))
+
+            val (enableCode, enableBody) = toggle("toggleable.xml", "false")
+            assertEquals(200, enableCode)
+            assertFalse(JSONObject(enableBody).getBoolean("disabled"))
+            assertFalse(File(configDir, "disabled_keyboxes").exists())
+            assertTrue(
+                StoredKeyboxInventory.runtimeXmlSources(configDir).any { it.filename == "toggleable.xml" },
+            )
+
+            // Unknown filenames must not create disabled markers.
+            val (missingCode, _) = toggle("missing.xml", "true")
+            assertEquals(HttpURLConnection.HTTP_BAD_REQUEST, missingCode)
+            assertFalse(File(configDir, "disabled_keyboxes").exists())
+
+            // A failed pool activation must roll the opt-out list back so disk
+            // state never disagrees with the running pool.
+            KeyboxLoader.activeSetOverride = { false }
+            BackendRecovery.recoveryOverride = { false }
+            val (activationFailureCode, _) = toggle("toggleable.xml", "true")
+            assertEquals(HttpURLConnection.HTTP_UNAVAILABLE, activationFailureCode)
+            assertFalse(
+                "a failed activation must not leave a committed disabled marker",
+                File(configDir, "disabled_keyboxes").exists(),
+            )
+            KeyboxLoader.activeSetOverride = { true }
+            BackendRecovery.recoveryOverride = null
+
+            // Re-disable, then delete: the marker must be pruned with the file.
+            assertEquals(200, toggle("toggleable.xml", "true").first)
+            val deleteUrl =
+                URL(
+                    "http://localhost:${server.listeningPort}/api/delete_keybox?token=${server.token}" +
+                        "&filename=toggleable.xml&scope=keyboxes",
+                )
+            val deleteConn = deleteUrl.openConnection() as HttpURLConnection
+            deleteConn.requestMethod = "POST"
+            deleteConn.setFixedLengthStreamingMode(0)
+            deleteConn.doOutput = true
+            deleteConn.outputStream.use { }
+            assertEquals(200, deleteConn.responseCode)
+            deleteConn.disconnect()
+            assertFalse(File(configDir, "keyboxes/toggleable.xml").exists())
+            assertFalse(File(configDir, "disabled_keyboxes").exists())
+        } finally {
+            KeyboxLoader.activeSetOverride = null
+            BackendRecovery.recoveryOverride = null
+            Config.setRootForTesting(originalRoot)
+        }
+    }
+
+    @Test
     fun testValidUploadDoesNotReportSuccessWhenBackendActivationFails() {
         KeyboxLoader.activeSetOverride = { true }
         assertEquals(200, uploadKeybox("active.xml", TestKeyboxFixtures.validEcKeyboxXml))
@@ -359,8 +515,14 @@ ${TestKeyboxFixtures.certificate.prependIndent("                    ")}
     }
 
     @Test
-    fun testUploadRkpKeyboxWithoutFilenameDefaultsToRkpXml() {
-        val rawRkpXml = """
+    fun testUploadRkpKeyboxWithoutFilenameDefaultsToKeyboxXml() {
+        val originalRoot = Config.getConfigRoot()
+        try {
+            Config.setRootForTesting(configDir)
+            RkpProvenanceStore.addTrustedAnchorForTesting(TestKeyboxFixtures.rkpRootCert)
+            ManagedKeyboxParserOracle.install()
+            File(configDir, "auto_keybox_check").createNewFile()
+            val rawRkpXml = """
             <Keybox>
               <Key algorithm="ecdsa">
                 <PrivateKey>
@@ -377,8 +539,23 @@ ${TestKeyboxFixtures.certificate.prependIndent("                    ")}
 
         val (responseCode, _) = uploadKeyboxPost(mapOf("content" to "<!-- rkp -->\n$rawRkpXml"))
         assertEquals(200, responseCode)
-        val file = File(configDir, "keyboxes/rkp.xml")
+        // A filename-less paste upload is stored under the shared keybox.xml fallback.
+        val file = File(configDir, "keyboxes/keybox.xml")
         assertTrue(file.isFile)
+        // The result is stable: a second filename-less paste does not overwrite the first.
+        val (secondCode, secondBody) = uploadKeyboxPost(mapOf("content" to "<!-- rkp -->\n$rawRkpXml"))
+        assertEquals(200, secondCode)
+        assertEquals("keybox2.xml", JSONObject(secondBody).getString("filename"))
+        // An unauthenticated RKP hint must not grant provenance: the WebUI did not
+        // authenticate the claim, so the judgment stays unverified until a real
+        // RKP check records it.
+        assertFalse(RkpProvenanceStore.isRkp("keybox.xml", configDir))
+        assertFalse(RkpProvenanceStore.isRkp("keybox2.xml", configDir))
+        } finally {
+            Config.setRootForTesting(originalRoot)
+            RkpProvenanceStore.resetForTesting(configDir)
+            ManagedKeyboxParserOracle.install()
+        }
     }
 
     @Test

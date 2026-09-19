@@ -71,6 +71,8 @@ KernelSU 和 APatch 在其管理器应用内内置了模块 WebUI 扩展环境�
 
 * **`keybox.xml`**: 将有效的硬件 attestation 密钥箱 XML 直接放入 `/data/adb/cleverestricky/keybox.xml`。请确保文件权限受到严格保护（`chmod 600`）。
 * **`keyboxes/`**: 用于存放多个 keybox 文件的子目录。
+* **上传不会覆盖文件：** 拖放或粘贴的 Keybox 按提供的名称保存，未提供名称时保存为 `keybox.xml`；若该名称已被占用，则自动使用下一个可用名称（`keybox2.xml`、`keybox3.xml`……）。
+* **`disabled_keyboxes`**：池停用列表。每行包含一个 `作用域:文件名` 标识符（`keyboxes:keybox2.xml`、`root:keybox.xml`），与 WebUI Keybox 面板中显示的已存文件名一致。列出的 Keybox 仍然可见且可管理，但绝不会加载到证明池中。WebUI 的禁用与启用按钮会读写此文件，因此也可手动维护。
 
 ---
 

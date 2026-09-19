@@ -38,7 +38,7 @@ class MobileSecurityContractTest {
         assertTrue(activity.contains("readOnly = true"))
         assertTrue(activity.contains("MobileCrypto.encryptAndSaveStreaming"))
         assertTrue(activity.contains("VaultStore.newBatchNameAllocator"))
-            assertTrue(activity.contains("KeyboxCertificateIdentity.thirdCertificateSerial"))
+        assertTrue(activity.contains("KeyboxCertificateIdentity.leafCertificateSerial"))
             assertTrue(activity.contains("VaultStore.exportZip"))
             assertTrue(activity.contains("R.string.delete_selected"))
         assertTrue(activity.contains(".imePadding()"))

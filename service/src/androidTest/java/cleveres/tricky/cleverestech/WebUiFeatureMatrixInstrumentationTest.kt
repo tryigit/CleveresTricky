@@ -381,6 +381,7 @@ class WebUiFeatureMatrixInstrumentationTest {
                 FeatureCase("POST", "/api/upload_keybox"),
                 FeatureCase("POST", "/api/delete_keybox"),
                 FeatureCase("POST", "/api/delete_keyboxes"),
+                FeatureCase("POST", "/api/toggle_keybox_disabled", mapOf("filename" to "matrix_missing.xml")),
                 FeatureCase("POST", "/api/verify_keyboxes"),
                 FeatureCase("POST", "/api/apply_profile"),
                 FeatureCase("POST", "/api/toggle"),

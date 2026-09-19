@@ -806,7 +806,7 @@
     Object.assign(TRANSLATIONS.tr, {
         'Restore Defaults': 'Varsayılanlara Dön',
         'Restore module settings to defaults?': 'Modül ayarları varsayılanlara döndürülsün mü?',
-        'Restores module settings using the built-in default profile. Stored keyboxes and encrypted backups are not deleted.': 'Yerleşik varsayılan profil ile modül ayarlarını geri yükler. Kayıtlı keyboxlar ve şifreli yedekler silinmez.',
+        'Restores module settings using the built-in default profile and removes configured remote servers. Stored keyboxes and encrypted backups are not deleted.': 'Yerleşik varsayılan profil ile modül ayarlarını geri yükler ve yapılandırılmış uzak sunucuları kaldırır. Kayıtlı keyboxlar ve şifreli yedekler silinmez.',
         'Default settings restored': 'Varsayılan ayarlar geri yüklendi',
         'Could not restore defaults': 'Varsayılanlar geri yüklenemedi'
     });
@@ -1298,7 +1298,7 @@
         ["Policy file is too large", "策略文件过大", "El archivo de política es demasiado grande", "Richtliniendatei ist zu groß", "Файл политики слишком велик", "File kebijakan terlalu besar", "नीति फ़ाइल बहुत बड़ी है", "ملف السياسة كبير جدا"],
         ["Restore Defaults", "恢复默认设置", "Restaurar valores predeterminados", "Standardeinstellungen wiederherstellen", "Восстановить настройки по умолчанию", "Pulihkan Default", "डिफ़ॉल्ट बहाल करें", "استعادة الإعدادات الافتراضية"],
         ["Restore module settings to defaults?", "将模块设置恢复为默认值？", "¿Restaurar la configuración del módulo a los valores predeterminados?", "Moduleinstellungen auf Standardwerte zurücksetzen?", "Восстановить настройки модуля по умолчанию?", "Pulihkan pengaturan modul ke default?", "मॉड्यूल सेटिंग्स को डिफ़ॉल्ट पर बहाल करें?", "هل تريد استعادة إعدادات الوحدة إلى القيم الافتراضية؟"],
-        ["Restores module settings using the built-in default profile. Stored keyboxes and encrypted backups are not deleted.", "使用内置默认配置恢复模块设置。已保存的密钥盒和加密备份不会被删除。", "Restaura la configuración del módulo con el perfil predeterminado integrado. No elimina keyboxes guardados ni copias cifradas.", "Stellt Moduleinstellungen mit dem integrierten Standardprofil wieder her. Gespeicherte Keyboxen und verschlüsselte Backups werden nicht gelöscht.", "Восстанавливает настройки модуля встроенным профилем по умолчанию. Сохранённые keybox и зашифрованные резервные копии не удаляются.", "Memulihkan pengaturan modul memakai profil default bawaan. Keybox tersimpan dan cadangan terenkripsi tidak dihapus.", "अंतर्निहित डिफ़ॉल्ट प्रोफ़ाइल से मॉड्यूल सेटिंग्स बहाल करता है। सहेजे गए keybox और एन्क्रिप्टेड बैकअप हटाए नहीं जाते।", "يستعيد إعدادات الوحدة باستخدام الملف الافتراضي المدمج. لا يتم حذف صناديق المفاتيح المحفوظة أو النسخ الاحتياطية المشفرة."],
+        ["Restores module settings using the built-in default profile and removes configured remote servers. Stored keyboxes and encrypted backups are not deleted.", "使用内置默认配置恢复模块设置并移除已配置的远程服务器。已保存的密钥盒和加密备份不会被删除。", "Restaura la configuración del módulo con el perfil predeterminado integrado y elimina los servidores remotos configurados. No elimina keyboxes guardados ni copias cifradas.", "Stellt Moduleinstellungen mit dem integrierten Standardprofil wieder her und entfernt konfigurierte Remote-Server. Gespeicherte Keyboxen und verschlüsselte Backups werden nicht gelöscht.", "Восстанавливает настройки модуля встроенным профилем по умолчанию и удаляет настроенные удалённые серверы. Сохранённые keybox и зашифрованные резервные копии не удаляются.", "Memulihkan pengaturan modul memakai profil default bawaan dan menghapus server jarak jauh yang dikonfigurasi. Keybox tersimpan dan cadangan terenkripsi tidak dihapus.", "अंतर्निहित डिफ़ॉल्ट प्रोफ़ाइल से मॉड्यूल सेटिंग्स बहाल करता है और कॉन्फ़िगर किए गए रिमोट सर्वर हटाता है। सहेजे गए keybox और एन्क्रिप्टेड बैकअप हटाए नहीं जाते।", "يستعيد إعدادات الوحدة باستخدام الملف الافتراضي المدمج ويحذف الخوادم البعيدة المُهيأة. لا يتم حذف صناديق المفاتيح المحفوظة أو النسخ الاحتياطية المشفرة."],
         ["Default settings restored", "已恢复默认设置", "Valores predeterminados restaurados", "Standardeinstellungen wiederhergestellt", "Настройки по умолчанию восстановлены", "Pengaturan default dipulihkan", "डिफ़ॉल्ट सेटिंग्स बहाल की गईं", "تمت استعادة الإعدادات الافتراضية"],
         ["Could not restore defaults", "无法恢复默认设置", "No se pudieron restaurar los valores predeterminados", "Standardeinstellungen konnten nicht wiederhergestellt werden", "Не удалось восстановить настройки по умолчанию", "Tidak dapat memulihkan default", "डिफ़ॉल्ट बहाल नहीं किए जा सके", "تعذر استعادة الإعدادات الافتراضية"],
         ["Custom Templates", "自定义模板", "Plantillas personalizadas", "Benutzerdefinierte Vorlagen", "Пользовательские шаблоны", "Template Kustom", "कस्टम टेम्पलेट", "قوالب مخصصة"],
@@ -1879,10 +1879,10 @@
             #ct_debug_panel .row > input[type="checkbox"] { flex: 0 0 48px !important; width: 48px !important; min-width: 48px !important; max-width: 48px !important; height: 28px !important; min-height: 28px !important; max-height: 28px !important; margin: 0 !important; }
             #ct_diagnostics_panel .row, #ct_drm_dashboard_panel .row { margin-bottom: 0; }
             #ct_diagnostics_copy { display: inline-flex !important; align-items: center !important; justify-content: center !important; text-align: center !important; white-space: nowrap !important; box-sizing: border-box !important; }
-            #storedKeyboxesList .ct-keybox-item, #storedKeyboxesList .row { display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important; align-items: center !important; justify-content: space-between !important; gap: 12px !important; width: 100% !important; box-sizing: border-box !important; }
+            #storedKeyboxesList .ct-keybox-item, #storedKeyboxesList .row { display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important; align-items: center !important; justify-content: space-between !important; gap: 8px !important; width: 100% !important; box-sizing: border-box !important; }
             #storedKeyboxesList .ct-keybox-item > input[type="checkbox"], #storedKeyboxesList .row > input[type="checkbox"] { flex: 0 0 20px !important; width: 20px !important; height: 20px !important; margin: 0 !important; }
             #storedKeyboxesList .ct-keybox-item > div, #storedKeyboxesList .row > div { flex: 1 1 auto !important; min-width: 0 !important; }
-            #storedKeyboxesList .ct-keybox-item > button, #storedKeyboxesList .row > button { flex: 0 0 auto !important; width: auto !important; min-width: 0 !important; max-width: max-content !important; margin: 0 !important; white-space: nowrap !important; }
+            #storedKeyboxesList .ct-keybox-item > button, #storedKeyboxesList .row > button { flex: 0 1 auto !important; width: auto !important; min-width: 0 !important; max-width: min(40%, max-content) !important; margin: 0 !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; }
             #ct_effective_apps_host > .panel { margin-top: 0; }
             #ct_effective_apps_host { margin-top: 20px; }
             #cleveresCommunityCard { box-sizing: border-box; margin: 20px 0 24px !important; width: 100%; }
@@ -3253,12 +3253,13 @@
     const COPY = {
         en: {
             selected: 'selected', deleteSelected: 'Delete selected', previous: 'Previous', next: 'Next', page: 'Page {page} / {pages}',
-            root: 'Module root', managed: 'Managed folder', cert: 'Certificate #3 serial', certMissing: 'Certificate #3 serial unavailable',
+            root: 'Module root', managed: 'Managed folder', cert: 'Device certificate serial', certMissing: 'Device certificate serial unavailable',
             deleteConfirm: 'Delete this stored keybox?', bulkConfirm: 'Delete {count} selected keyboxes?', bulkDone: 'Deleted {count} keyboxes',
             keyboxesLoaded: '{count} Keyboxes Loaded', selectFiltered: 'Select filtered', clearFiltered: 'Clear filtered selection',
             search: 'Search', clear: 'Clear', verifySearchPlaceholder: 'Search verification results...', verifying: 'Verifying...',
             noVerify: 'No keyboxes to verify', noVerifyMatch: 'No verification results match your search.', loading: 'Loading...',
             noStored: 'No keyboxes stored.', noStoredMatch: 'No keyboxes match your filter.', delete: 'Delete',
+            disable: 'Disable', enable: 'Enable', disabled: 'Disabled', toggling: 'Updating...',
             status_valid: 'Valid', status_invalid: 'Invalid', status_error: 'Error', status_unknown: 'Unknown', active_keybox: 'Active Keybox', expires: 'Expires', status_expired: 'Expired', filename: 'Filename', details: 'Details',
             valid: 'Valid', invalid_expired: 'Invalid - Expired', invalid_revoked: 'Invalid - Revoked', invalid_verification_failed: 'Invalid - Verification Failed',
             priority_order_title: 'Keybox Priority Order', priority_mode_default: 'Default (Random in Tier)', priority_mode_custom: 'Custom Ordering', priority_mode_default_short: 'Default', priority_mode_custom_short: 'Custom',
@@ -3267,12 +3268,13 @@
         },
         tr: {
             selected: 'seçili', deleteSelected: 'Seçilileri sil', previous: 'Önceki', next: 'Sonraki', page: 'Sayfa {page} / {pages}',
-            root: 'Modül kökü', managed: 'Yönetilen klasör', cert: '3. sertifika seri no', certMissing: '3. sertifika seri no yok',
+            root: 'Modül kökü', managed: 'Yönetilen klasör', cert: 'Cihaz sertifikası seri no', certMissing: 'Cihaz sertifikası seri no yok',
             deleteConfirm: 'Bu kayıtlı keybox silinsin mi?', bulkConfirm: 'Seçili {count} keybox silinsin mi?', bulkDone: '{count} keybox silindi',
             keyboxesLoaded: '{count} Keybox Yüklendi', selectFiltered: 'Filtrelenenleri seç', clearFiltered: 'Filtre seçimini temizle',
             search: 'Ara', clear: 'Temizle', verifySearchPlaceholder: 'Doğrulama sonuçlarında ara...', verifying: 'Doğrulanıyor...',
             noVerify: 'Doğrulanacak keybox yok', noVerifyMatch: 'Aramanızla eşleşen doğrulama sonucu yok.', loading: 'Yükleniyor...',
             noStored: 'Kayıtlı keybox yok.', noStoredMatch: 'Filtrenizle eşleşen keybox yok.', delete: 'Sil',
+            disable: 'Devre dışı bırak', enable: 'Etkinleştir', disabled: 'Devre dışı', toggling: 'Güncelleniyor...',
             status_valid: 'Geçerli', status_invalid: 'Geçersiz', status_error: 'Hata', status_unknown: 'Bilinmiyor', active_keybox: 'Etkin keybox', expires: 'Son geçerlilik', status_expired: 'Süresi geçmiş', filename: 'Dosya adı', details: 'Ayrıntılar',
             valid: 'Geçerli', invalid_expired: 'Geçersiz - Süresi Geçmiş', invalid_revoked: 'Geçersiz - İptal Edilmiş', invalid_verification_failed: 'Geçersiz - Doğrulama Başarısız',
             priority_order_title: 'Keybox Öncelik Sıralaması', priority_mode_default: 'Varsayılan (Aşama İçi Rastgele)', priority_mode_custom: 'Özel Sıralama', priority_mode_default_short: 'Varsayılan', priority_mode_custom_short: 'Özel',
@@ -3281,12 +3283,13 @@
         },
         'zh-CN': {
             selected: '已选择', deleteSelected: '删除所选', previous: '上一页', next: '下一页', page: '第 {page} / {pages} 页',
-            root: '模块根目录', managed: '受管目录', cert: '第 3 个证书序列号', certMissing: '无第 3 个证书序列号',
+            root: '模块根目录', managed: '受管目录', cert: '设备证书序列号', certMissing: '无设备证书序列号',
             deleteConfirm: '删除此已存储密钥盒？', bulkConfirm: '删除选中的 {count} 个密钥盒？', bulkDone: '已删除 {count} 个密钥盒',
             keyboxesLoaded: '已加载 {count} 个 Keybox', selectFiltered: '选择筛选结果', clearFiltered: '清除筛选选择',
             search: '搜索', clear: '清除', verifySearchPlaceholder: '搜索验证结果...', verifying: '正在验证...',
             noVerify: '没有可验证的 Keybox', noVerifyMatch: '没有符合搜索条件的验证结果。', loading: '正在加载...',
             noStored: '没有已存储的 Keybox。', noStoredMatch: '没有符合筛选条件的 Keybox。', delete: '删除',
+            disable: '禁用', enable: '启用', disabled: '已禁用', toggling: '正在更新...',
             status_valid: '有效', status_invalid: '无效', status_error: '错误', status_unknown: '未知', active_keybox: '活动密钥盒', expires: '有效期至', status_expired: '已过期', filename: '文件名', details: '详细信息',
             valid: '有效', invalid_expired: '无效 - 已过期', invalid_revoked: '无效 - 已吊销', invalid_verification_failed: '无效 - 验证失败',
             priority_order_title: '密钥盒优先级排序', priority_mode_default: '默认（同层级内随机）', priority_mode_custom: '自定义排序', priority_mode_default_short: '默认', priority_mode_custom_short: '自定义',
@@ -3295,12 +3298,13 @@
         },
         es: {
             selected: 'seleccionados', deleteSelected: 'Eliminar seleccionados', previous: 'Anterior', next: 'Siguiente', page: 'Página {page} / {pages}',
-            root: 'Raíz del módulo', managed: 'Carpeta administrada', cert: 'Serie del certificado n.º 3', certMissing: 'Serie del certificado n.º 3 no disponible',
+            root: 'Raíz del módulo', managed: 'Carpeta administrada', cert: 'Serie del certificado del dispositivo', certMissing: 'Serie del certificado del dispositivo no disponible',
             deleteConfirm: '¿Eliminar esta keybox guardada?', bulkConfirm: '¿Eliminar {count} keyboxes seleccionadas?', bulkDone: 'Se eliminaron {count} keyboxes',
             keyboxesLoaded: '{count} Keyboxes cargadas', selectFiltered: 'Seleccionar filtradas', clearFiltered: 'Limpiar selección filtrada',
             search: 'Buscar', clear: 'Limpiar', verifySearchPlaceholder: 'Buscar resultados de verificación...', verifying: 'Verificando...',
             noVerify: 'No hay keyboxes para verificar', noVerifyMatch: 'Ningún resultado de verificación coincide con la búsqueda.', loading: 'Cargando...',
             noStored: 'No hay keyboxes guardadas.', noStoredMatch: 'Ninguna keybox coincide con el filtro.', delete: 'Eliminar',
+            disable: 'Desactivar', enable: 'Activar', disabled: 'Desactivada', toggling: 'Actualizando...',
             status_valid: 'Válido', status_invalid: 'Inválido', status_error: 'Error', status_unknown: 'Desconocido', active_keybox: 'Keybox activa', expires: 'Vence', status_expired: 'Vencido', filename: 'Nombre del archivo', details: 'Detalles',
             valid: 'Válido', invalid_expired: 'Inválido - Vencido', invalid_revoked: 'Inválido - Revocado', invalid_verification_failed: 'Inválido - Error de verificación',
             priority_order_title: 'Orden de prioridad de Keybox', priority_mode_default: 'Predeterminado (Aleatorio en el nivel)', priority_mode_custom: 'Orden personalizado', priority_mode_default_short: 'Predeterminado', priority_mode_custom_short: 'Personalizado',
@@ -3309,12 +3313,13 @@
         },
         de: {
             selected: 'ausgewählt', deleteSelected: 'Auswahl löschen', previous: 'Zurück', next: 'Weiter', page: 'Seite {page} / {pages}',
-            root: 'Modulstamm', managed: 'Verwalteter Ordner', cert: 'Seriennummer Zertifikat Nr. 3', certMissing: 'Seriennummer Zertifikat Nr. 3 nicht verfügbar',
+            root: 'Modulstamm', managed: 'Verwalteter Ordner', cert: 'Seriennummer Gerätezertifikat', certMissing: 'Seriennummer Gerätezertifikat nicht verfügbar',
             deleteConfirm: 'Diese gespeicherte Keybox löschen?', bulkConfirm: '{count} ausgewählte Keyboxen löschen?', bulkDone: '{count} Keyboxen gelöscht',
             keyboxesLoaded: '{count} Keyboxen geladen', selectFiltered: 'Gefilterte auswählen', clearFiltered: 'Gefilterte Auswahl löschen',
             search: 'Suchen', clear: 'Leeren', verifySearchPlaceholder: 'Prüfergebnisse durchsuchen...', verifying: 'Prüfung läuft...',
             noVerify: 'Keine Keyboxen zum Prüfen', noVerifyMatch: 'Keine Prüfergebnisse entsprechen der Suche.', loading: 'Wird geladen...',
             noStored: 'Keine Keyboxen gespeichert.', noStoredMatch: 'Keine Keybox entspricht dem Filter.', delete: 'Löschen',
+            disable: 'Deaktivieren', enable: 'Aktivieren', disabled: 'Deaktiviert', toggling: 'Wird aktualisiert...',
             status_valid: 'Gültig', status_invalid: 'Ungültig', status_error: 'Fehler', status_unknown: 'Unbekannt', active_keybox: 'Aktive Keybox', expires: 'Gültig bis', status_expired: 'Abgelaufen', filename: 'Dateiname', details: 'Details',
             valid: 'Gültig', invalid_expired: 'Ungültig - Abgelaufen', invalid_revoked: 'Ungültig - Widerrufen', invalid_verification_failed: 'Ungültig - Überprüfung fehlgeschlagen',
             priority_order_title: 'Keybox-Prioritätsreihenfolge', priority_mode_default: 'Standard (Zufällig innerhalb der Stufe)', priority_mode_custom: 'Benutzerdefinierte Reihenfolge', priority_mode_default_short: 'Standard', priority_mode_custom_short: 'Benutzerdefiniert',
@@ -3323,12 +3328,13 @@
         },
         ru: {
             selected: 'выбрано', deleteSelected: 'Удалить выбранные', previous: 'Назад', next: 'Далее', page: 'Страница {page} / {pages}',
-            root: 'Корень модуля', managed: 'Управляемая папка', cert: 'Серийный номер сертификата №3', certMissing: 'Серийный номер сертификата №3 недоступен',
+            root: 'Корень модуля', managed: 'Управляемая папка', cert: 'Серийный номер сертификата устройства', certMissing: 'Серийный номер сертификата устройства недоступен',
             deleteConfirm: 'Удалить этот сохраненный keybox?', bulkConfirm: 'Удалить выбранные keybox: {count}?', bulkDone: 'Удалено keybox: {count}',
             keyboxesLoaded: 'Загружено Keybox: {count}', selectFiltered: 'Выбрать отфильтрованные', clearFiltered: 'Очистить выбор фильтра',
             search: 'Поиск', clear: 'Очистить', verifySearchPlaceholder: 'Поиск по результатам проверки...', verifying: 'Проверка...',
             noVerify: 'Нет keybox для проверки', noVerifyMatch: 'Нет результатов проверки, соответствующих поиску.', loading: 'Загрузка...',
             noStored: 'Нет сохраненных keybox.', noStoredMatch: 'Нет keybox, соответствующих фильтру.', delete: 'Удалить',
+            disable: 'Отключить', enable: 'Включить', disabled: 'Отключён', toggling: 'Обновление...',
             status_valid: 'Действителен', status_invalid: 'Недействителен', status_error: 'Ошибка', status_unknown: 'Неизвестно', active_keybox: 'Активный keybox', expires: 'Истекает', status_expired: 'Истек', filename: 'Имя файла', details: 'Подробности',
             valid: 'Действителен', invalid_expired: 'Недействителен - Истек', invalid_revoked: 'Недействителен - Отозван', invalid_verification_failed: 'Недействителен - Сбой проверки',
             priority_order_title: 'Приоритет Keybox', priority_mode_default: 'По умолчанию (Случайно в уровне)', priority_mode_custom: 'Пользовательский порядок', priority_mode_default_short: 'По умолчанию', priority_mode_custom_short: 'Пользовательский',
@@ -3337,12 +3343,13 @@
         },
         id: {
             selected: 'dipilih', deleteSelected: 'Hapus pilihan', previous: 'Sebelumnya', next: 'Berikutnya', page: 'Halaman {page} / {pages}',
-            root: 'Root modul', managed: 'Folder terkelola', cert: 'Serial sertifikat #3', certMissing: 'Serial sertifikat #3 tidak tersedia',
+            root: 'Root modul', managed: 'Folder terkelola', cert: 'Serial sertifikat perangkat', certMissing: 'Serial sertifikat perangkat tidak tersedia',
             deleteConfirm: 'Hapus keybox tersimpan ini?', bulkConfirm: 'Hapus {count} keybox terpilih?', bulkDone: '{count} keybox dihapus',
             keyboxesLoaded: '{count} Keybox dimuat', selectFiltered: 'Pilih yang difilter', clearFiltered: 'Hapus pilihan filter',
             search: 'Cari', clear: 'Bersihkan', verifySearchPlaceholder: 'Cari hasil verifikasi...', verifying: 'Memverifikasi...',
             noVerify: 'Tidak ada keybox untuk diverifikasi', noVerifyMatch: 'Tidak ada hasil verifikasi yang cocok dengan pencarian.', loading: 'Memuat...',
             noStored: 'Tidak ada keybox tersimpan.', noStoredMatch: 'Tidak ada keybox yang cocok dengan filter.', delete: 'Hapus',
+            disable: 'Nonaktifkan', enable: 'Aktifkan', disabled: 'Nonaktif', toggling: 'Memperbarui...',
             status_valid: 'Valid', status_invalid: 'Tidak Valid', status_error: 'Kesalahan', status_unknown: 'Tidak Diketahui', active_keybox: 'Keybox aktif', expires: 'Kedaluwarsa', status_expired: 'Kedaluwarsa', filename: 'Nama file', details: 'Detail',
             valid: 'Valid', invalid_expired: 'Tidak Valid - Kedaluwarsa', invalid_revoked: 'Tidak Valid - Dicabut', invalid_verification_failed: 'Tidak Valid - Verifikasi Gagal',
             priority_order_title: 'Urutan Prioritas Keybox', priority_mode_default: 'Default (Acak dalam Tingkat)', priority_mode_custom: 'Urutan Kustom', priority_mode_default_short: 'Default', priority_mode_custom_short: 'Kustom',
@@ -3351,12 +3358,13 @@
         },
         hi: {
             selected: 'चयनित', deleteSelected: 'चयनित हटाएँ', previous: 'पिछला', next: 'अगला', page: 'पृष्ठ {page} / {pages}',
-            root: 'मॉड्यूल रूट', managed: 'प्रबंधित फ़ोल्डर', cert: 'सर्टिफिकेट #3 सीरियल', certMissing: 'सर्टिफिकेट #3 सीरियल उपलब्ध नहीं',
+            root: 'मॉड्यूल रूट', managed: 'प्रबंधित फ़ोल्डर', cert: 'डिवाइस सर्टिफिकेट सीरियल', certMissing: 'डिवाइस सर्टिफिकेट सीरियल उपलब्ध नहीं',
             deleteConfirm: 'यह सहेजा Keybox हटाएँ?', bulkConfirm: 'चयनित {count} Keybox हटाएँ?', bulkDone: '{count} Keybox हटाए गए',
             keyboxesLoaded: '{count} Keybox लोड हुए', selectFiltered: 'फ़िल्टर किए चुनें', clearFiltered: 'फ़िल्टर चयन साफ़ करें',
             search: 'खोजें', clear: 'साफ़ करें', verifySearchPlaceholder: 'सत्यापन परिणाम खोजें...', verifying: 'सत्यापन हो रहा है...',
             noVerify: 'सत्यापित करने के लिए Keybox नहीं', noVerifyMatch: 'खोज से मेल खाता सत्यापन परिणाम नहीं है।', loading: 'लोड हो रहा है...',
             noStored: 'कोई सहेजा Keybox नहीं।', noStoredMatch: 'फ़िल्टर से मेल खाता Keybox नहीं है।', delete: 'हटाएँ',
+            disable: 'अक्षम करें', enable: 'सक्षम करें', disabled: 'अक्षम', toggling: 'अपडेट हो रहा है...',
             status_valid: 'मान्य', status_invalid: 'अमान्य', status_error: 'त्रुटि', status_unknown: 'अज्ञात', active_keybox: 'सक्रिय Keybox', expires: 'समाप्ति', status_expired: 'समाप्त', filename: 'फ़ाइल का नाम', details: 'विवरण',
             valid: 'मान्य', invalid_expired: 'अमान्य - समाप्त', invalid_revoked: 'अमान्य - निरस्त', invalid_verification_failed: 'अमान्य - सत्यापन विफल',
             priority_order_title: 'Keybox प्राथमिकता क्रम', priority_mode_default: 'डिफ़ॉल्ट (श्रेणी में यादृच्छिक)', priority_mode_custom: 'कस्टम क्रम', priority_mode_default_short: 'डिफ़ॉल्ट', priority_mode_custom_short: 'कस्टम',
@@ -3365,12 +3373,13 @@
         },
         ar: {
             selected: 'محدد', deleteSelected: 'حذف المحدد', previous: 'السابق', next: 'التالي', page: 'الصفحة {page} / {pages}',
-            root: 'جذر الوحدة', managed: 'المجلد المدار', cert: 'الرقم التسلسلي للشهادة 3', certMissing: 'الرقم التسلسلي للشهادة 3 غير متاح',
+            root: 'جذر الوحدة', managed: 'المجلد المدار', cert: 'الرقم التسلسلي لشهادة الجهاز', certMissing: 'الرقم التسلسلي لشهادة الجهاز غير متاح',
             deleteConfirm: 'حذف Keybox المحفوظ هذا؟', bulkConfirm: 'حذف {count} من Keybox المحددة؟', bulkDone: 'تم حذف {count} من Keybox',
             keyboxesLoaded: 'تم تحميل {count} Keybox', selectFiltered: 'تحديد النتائج المفلترة', clearFiltered: 'مسح تحديد الفلتر',
             search: 'بحث', clear: 'مسح', verifySearchPlaceholder: 'البحث في نتائج التحقق...', verifying: 'جارٍ التحقق...',
             noVerify: 'لا توجد Keybox للتحقق', noVerifyMatch: 'لا توجد نتائج تحقق تطابق البحث.', loading: 'جارٍ التحميل...',
             noStored: 'لا توجد Keybox محفوظة.', noStoredMatch: 'لا توجد Keybox تطابق الفلتر.', delete: 'حذف',
+            disable: 'تعطيل', enable: 'تفعيل', disabled: 'معطل', toggling: 'جارٍ التحديث...',
             status_valid: 'صالح', status_invalid: 'غير صالح', status_error: 'خطأ', status_unknown: 'غير معروف', active_keybox: 'Keybox نشط', expires: 'تاريخ الانتهاء', status_expired: 'منتهي الصلاحية', filename: 'اسم الملف', details: 'التفاصيل',
             valid: 'صالح', invalid_expired: 'غير صالح - منتهي الصلاحية', invalid_revoked: 'غير صالح - ملغى', invalid_verification_failed: 'غير صالح - فشل التحقق',
             priority_order_title: 'ترتيب أولوية Keybox', priority_mode_default: 'افتراضي (عشوائي ضمن الفئة)', priority_mode_custom: 'ترتيب مخصص', priority_mode_default_short: 'افتراضي', priority_mode_custom_short: 'مخصص',
@@ -3393,6 +3402,7 @@
     const deletingIds = new Set();
     let bulkDeleteBusy = false;
     let keyboxMutationQueue = Promise.resolve();
+    const togglingIds = new Set();
     let installAttempts = 0;
     let installRetryTimer = null;
 
@@ -3706,7 +3716,7 @@
         items.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).forEach(item => {
             const row = document.createElement('div');
             row.className = 'ct-keybox-item row';
-            row.style.cssText = 'padding:10px;border-bottom:1px solid var(--border);display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:12px;width:100%;box-sizing:border-box;flex-wrap:nowrap;';
+            row.style.cssText = 'padding:10px;border-bottom:1px solid var(--border);display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:8px;width:100%;box-sizing:border-box;flex-wrap:nowrap;' + (item.disabled ? 'opacity:0.55;' : '');
             const box = document.createElement('input');
             box.type = 'checkbox';
             box.checked = selected.has(item.id);
@@ -3730,6 +3740,12 @@
             attachKeyboxLongPress(nameText, t('filename'), item.filename);
             name.append(nameText);
 
+            if (item.disabled) {
+                const disabledBadge = document.createElement('span');
+                disabledBadge.className = 'ct-badge ct-badge-invalid';
+                disabledBadge.textContent = t('disabled');
+                name.append(disabledBadge);
+            }
             if (item.security_level === 'StrongBox') {
                 const badge = document.createElement('span');
                 badge.className = 'ct-badge ct-badge-strongbox';
@@ -3810,13 +3826,21 @@
             if (item.not_after) appendKeyboxValue(meta, t('expires'), item.not_after);
             body.append(name, meta);
 
+            const toggle = document.createElement('button');
+            toggle.type = 'button';
+            toggle.className = item.disabled ? '' : 'secondary';
+            toggle.style.cssText = 'padding:8px 10px;font-size:.82em;min-height:36px;flex:0 0 auto;width:auto;margin:0;white-space:nowrap;';
+            toggle.textContent = item.disabled ? t('enable') : t('disable');
+            toggle.setAttribute('aria-label', (item.disabled ? t('enable') : t('disable')) + ' ' + item.filename);
+            toggle.disabled = togglingIds.has(item.id);
+            toggle.addEventListener('click', () => toggleDisabled(item));
             const remove = document.createElement('button');
             remove.type = 'button';
             remove.className = 'danger';
-            remove.style.cssText = 'padding:8px 12px;font-size:.82em;flex:0 0 auto;width:auto;margin:0;white-space:nowrap;';
+            remove.style.cssText = 'padding:8px 10px;font-size:.82em;min-height:36px;flex:0 0 auto;width:auto;margin:0;white-space:nowrap;';
             remove.textContent = t('delete');
             remove.addEventListener('click', () => deleteOne(item));
-            row.append(box, body, remove);
+            row.append(box, body, toggle, remove);
             list.appendChild(row);
         });
         updateControls(pages);
@@ -3858,7 +3882,8 @@
                     has_ec: Boolean(item?.has_ec || item?.has_ecdsa),
                     algorithms: Array.isArray(item?.algorithms) ? item.algorithms.slice(0, 16) : [],
                     validity_state: item?.validity_state ? String(item.validity_state).slice(0, 32) : undefined,
-                    invalid_reason: item?.invalid_reason ? String(item.invalid_reason).slice(0, 64) : undefined
+                    invalid_reason: item?.invalid_reason ? String(item.invalid_reason).slice(0, 64) : undefined,
+                    disabled: item?.disabled === true
                 })).filter(item => item.id && item.filename && item.scope)
                 : [];
             const ids = new Set(inventory.map(item => item.id));
@@ -3905,6 +3930,35 @@
                 if (typeof global.notify === 'function') global.notify('Error: ' + (error.message || error), 'error');
             } finally {
                 deletingIds.delete(item.id);
+                render();
+            }
+        });
+    }
+
+    async function toggleDisabled(item) {
+        if (!item || !item.id || togglingIds.has(item.id)) return;
+        const target = item.disabled !== true;
+        togglingIds.add(item.id);
+        render();
+        return enqueueKeyboxMutation(async () => {
+            try {
+                const scope = normalizeKeyboxScope(item.scope);
+                if (!scope) return;
+                const body = new URLSearchParams();
+                body.set('filename', item.filename);
+                body.set('scope', scope);
+                body.set('disabled', target ? 'true' : 'false');
+                if (typeof global.notify === 'function') global.notify(t('toggling'), 'working');
+                const response = await global.fetchAuth('/api/toggle_keybox_disabled', { method: 'POST', body, idempotent: true });
+                if (!response.ok) {
+                    if (typeof global.notify === 'function') global.notify('Error: ' + await response.text(), 'error');
+                    return;
+                }
+                await refreshInventory();
+            } catch (error) {
+                if (typeof global.notify === 'function') global.notify('Error: ' + (error.message || error), 'error');
+            } finally {
+                togglingIds.delete(item.id);
                 render();
             }
         });

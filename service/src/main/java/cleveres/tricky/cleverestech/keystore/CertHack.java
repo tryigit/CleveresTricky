@@ -996,8 +996,12 @@ public final class CertHack {
     }
 
     public static String getDeviceCertificateSerial(KeyBox keybox) {
-        if (keybox == null || keybox.certificates().size() < 3) return null;
-        Certificate certificate = keybox.certificates().get(2);
+        if (keybox == null || keybox.certificates().isEmpty()) return null;
+        // Certificate chains are ordered leaf-first: index 0 is the device
+        // attestation certificate. Reading any fixed deeper index would show
+        // the same shared Google intermediate or root on every keybox instead
+        // of the per-device identity.
+        Certificate certificate = keybox.certificates().get(0);
         if (!(certificate instanceof X509Certificate x509)) return null;
         return x509.getSerialNumber().toString(16).toUpperCase(Locale.ROOT);
     }

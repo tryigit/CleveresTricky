@@ -794,7 +794,10 @@ object CertificateBackend {
     private const val KEY_ID_BYTES = 16
     private const val ATTEST_DESCRIPTOR_KEY_ID_BYTES = 32
     private const val MAX_CERTIFICATE_DER_BYTES = 256 * 1024
-    private const val MAX_REWRITTEN_LEAF_BYTES = 64 * 1024
+    // Must match the backend MAX_REWRITE_RESPONSE_BYTES (256 KiB): a genuine
+    // rewritten leaf larger than this was previously nulled after a successful
+    // backend rewrite, surfacing success as a transport failure.
+    private const val MAX_REWRITTEN_LEAF_BYTES = MAX_CERTIFICATE_DER_BYTES
     private const val MAX_ATTESTATION_ID_BYTES = 4 * 1024
     private const val MAX_MODULE_HASH_BYTES = 1024
     private const val MAX_ID_OVERRIDES = 9

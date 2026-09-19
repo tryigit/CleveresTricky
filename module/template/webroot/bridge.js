@@ -1415,7 +1415,7 @@ ${nativeSuccessMarker}\
         if (!document || !document.head || !document.createElement || document.getElementById('ct_ux_script')) return;
         const script = document.createElement('script');
         script.id = 'ct_ux_script';
-        script.src = 'ux.js?revision=9';
+        script.src = 'ux.js?revision=10';
         script.defer = true;
         script.onload = () => global.setTimeout(installNativeFilePickerCompatibility, 0);
         document.head.appendChild(script);

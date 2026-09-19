@@ -11,12 +11,25 @@ internal object CrlBackend {
     @VisibleForTesting
     internal var queryOverride: ((Long, List<CrlWire.Query>) -> CrlWire.Result?)? = null
 
-    @Volatile
-    private var activeGeneration = 0L
+    private data class ActiveCrl(
+        val generation: Long,
+        val identity: NativeBackend.BackendIdentity?,
+    )
 
+    // Generation and backend identity publish and read as one snapshot: two
+    // independent volatiles allowed a refresh race to pair a new generation
+    // with the previous epoch and report spurious stale generations.
     @Volatile
-    private var activeIdentity: NativeBackend.BackendIdentity? = null
+    private var activeCrl = ActiveCrl(0L, null)
 
+    /**
+     * Serialized across all callers: the network path refreshes without
+     * holding the caller's cache lock while other paths hold it, so two
+     * overlapping refreshes could otherwise publish in reverse generation
+     * order and leave a stale handle active. The transact-plus-publish
+     * section takes no other lock, so this cannot invert any lock ordering.
+     */
+    @Synchronized
     fun refresh(crl: ByteArray): CrlWire.Handle? {
         refreshOverride?.let { return it(crl) }
         val payloadLength = CrlWire.refreshLength(crl.size) ?: return null
@@ -32,8 +45,7 @@ internal object CrlBackend {
         val handle =
             CrlWire.decodeRefresh(response)
                 ?: throw RustBackendUnavailableException(IOException("Invalid CRL refresh response"))
-        activeGeneration = handle.generation
-        activeIdentity = NativeBackend.currentBackendIdentity()
+        activeCrl = ActiveCrl(handle.generation, NativeBackend.currentBackendIdentity())
         return handle
     }
 
@@ -42,8 +54,9 @@ internal object CrlBackend {
         queries: List<CrlWire.Query>,
     ): CrlWire.Result? {
         queryOverride?.let { return it(generation, queries) }
-        val identity = activeIdentity
-        if (generation != activeGeneration || identity == null || !NativeBackend.isCurrentBackendIdentity(identity)) {
+        val snapshot = activeCrl
+        val identity = snapshot.identity
+        if (generation != snapshot.generation || identity == null || !NativeBackend.isCurrentBackendIdentity(identity)) {
             throw RustBackendStateException(BackendStatus.STALE_GENERATION)
         }
         val payloadLength = CrlWire.queryLength(queries) ?: return null
@@ -64,8 +77,7 @@ internal object CrlBackend {
     internal fun resetForTesting() {
         refreshOverride = null
         queryOverride = null
-        activeGeneration = 0
-        activeIdentity = null
+        activeCrl = ActiveCrl(0L, null)
     }
 
     private const val OP_CRL = 27

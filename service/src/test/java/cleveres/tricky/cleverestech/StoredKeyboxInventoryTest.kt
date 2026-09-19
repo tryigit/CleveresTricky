@@ -1,6 +1,7 @@
 package cleveres.tricky.cleverestech
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -68,5 +69,55 @@ class StoredKeyboxInventoryTest {
         }
 
         assertThrows(IOException::class.java) { StoredKeyboxInventory.list(root) }
+    }
+
+    @Test
+    fun `disabled keyboxes are excluded from runtime sources but remain listed`() {
+        val root = temp.newFolder("disabled")
+        val managed = File(root, "keyboxes").also { assertTrue(it.mkdirs()) }
+        File(managed, "active.xml").writeText("a")
+        File(managed, "off.xml").writeText("d")
+        File(root, "root.xml").writeText("r")
+
+        assertEquals(3, StoredKeyboxInventory.runtimeXmlSources(root).size)
+
+        File(root, "disabled_keyboxes").writeText("keyboxes:off.xml\n")
+        assertEquals(
+            listOf("keyboxes:active.xml", "root:root.xml"),
+            StoredKeyboxInventory.runtimeXmlSources(root).map { it.id }.sorted(),
+        )
+        assertEquals(3, StoredKeyboxInventory.list(root).size)
+
+        File(root, "disabled_keyboxes").writeText("keyboxes:off.xml\nroot:root.xml\n")
+        assertEquals(
+            listOf("keyboxes:active.xml"),
+            StoredKeyboxInventory.runtimeXmlSources(root).map { it.id },
+        )
+
+        File(root, "disabled_keyboxes").delete()
+        assertEquals(3, StoredKeyboxInventory.runtimeXmlSources(root).size)
+    }
+
+    @Test
+    fun `disabled set survives blank lines and does not fail closed on unreadable file`() {
+        val root = temp.newFolder("disabled-parse")
+        File(root, "a.xml").writeText("a")
+        val disabled = File(root, "disabled_keyboxes")
+        disabled.writeText("\n  \nroot:a.xml\n\n")
+        assertEquals(emptyList<String>(), StoredKeyboxInventory.runtimeXmlSources(root).map { it.id })
+    }
+
+    @Test
+    fun `disabled sources do not consume the active XML limit`() {
+        val root = temp.newFolder("disabled-boundary")
+        repeat(StoredKeyboxInventory.MAX_ACTIVE_XML_SOURCES + 1) { index ->
+            File(root, "keybox-$index.xml").writeText("keybox")
+        }
+        File(root, "disabled_keyboxes").writeText("root:keybox-0.xml\n")
+
+        val active = StoredKeyboxInventory.runtimeXmlSources(root)
+
+        assertEquals(StoredKeyboxInventory.MAX_ACTIVE_XML_SOURCES, active.size)
+        assertFalse(active.any { it.id == "root:keybox-0.xml" })
     }
 }
