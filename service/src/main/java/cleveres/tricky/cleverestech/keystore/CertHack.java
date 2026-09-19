@@ -2372,7 +2372,7 @@ public final class CertHack {
      * the result so hot selection paths never repeat PKIX validation or native
      * attestation inspection per call.
      */
-    static String priorityLevelFor(boolean isRkp, KeyboxSecurityLevel level) {
+    public static String priorityLevelFor(boolean isRkp, KeyboxSecurityLevel level) {
         if (isRkp) return "RKP";
         if (level == KeyboxSecurityLevel.STRONGBOX) return "StrongBox";
         if (level == KeyboxSecurityLevel.TEE) return "TEE";
@@ -2384,7 +2384,7 @@ public final class CertHack {
      * current snapshot hit the map (no crypto per call); anything else falls back
      * to live computation with identical semantics.
      */
-    static String cachedPriorityLevel(KeyBox box) {
+    public static String cachedPriorityLevel(KeyBox box) {
         if (box == null) return "Unknown";
         State currentState = state;
         String cached = currentState.priorityLevels.get(box);

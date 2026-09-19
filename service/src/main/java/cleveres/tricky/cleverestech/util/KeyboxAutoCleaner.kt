@@ -176,7 +176,7 @@ object KeyboxAutoCleaner {
                 "-t",
                 "CleveresTricky",
                 "Keybox Revoked Alert",
-                "$count keybox(es) were revoked or invalid and have been disabled. Check WebUI.",
+                "$count keybox(es) are invalid, expired, or revoked. Check WebUI.",
             )
         val nullDevice = File("/dev/null")
         val process =
