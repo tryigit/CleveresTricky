@@ -755,13 +755,20 @@ class WebServer(
         val keyRegex = Regex("(?is)<Key(?:\\s+[^>]*)?>.*?</Key>")
         val keyboxRegex = Regex("(?is)<Keybox(?:\\s+[^>]*)?>.*?</Keybox>")
         val nonElementContentRegex = Regex("(?s)<!--.*?-->|<!\\[CDATA\\[.*?]]>|<\\?.*?\\?>")
-        val matches = keyRegex.findAll(xml).toList()
-        if (matches.size <= 1) return xml
+        // Lazily bounded scan: cap per-block backend verification well above the
+        // legitimate key count and skip sanitization entirely past the cap. The
+        // downstream validator still parses the whole document fail-closed.
+        val candidates = ArrayList<MatchResult>()
+        for (match in keyRegex.findAll(xml)) {
+            if (candidates.size >= KeyboxWire.MAX_SANITIZE_KEY_BLOCKS) return xml
+            candidates.add(match)
+        }
+        if (candidates.size <= 1) return xml
 
         val validKeys = ArrayList<MatchResult>()
         val invalidKeys = ArrayList<MatchResult>()
 
-        for (match in matches) {
+        for (match in candidates) {
             val singleKeyXml =
                 "<?xml version=\"1.0\"?>\n<AndroidAttestation>\n    <NumberOfKeyboxes>1</NumberOfKeyboxes>\n    <Keybox DeviceID=\"sanitization-check\">\n        ${match.value}\n    </Keybox>\n</AndroidAttestation>"
             val isValid =
@@ -779,10 +786,18 @@ class WebServer(
         }
 
         if (invalidKeys.isNotEmpty() && validKeys.isNotEmpty()) {
-            var sanitized = xml
-            for (invalid in invalidKeys) {
-                sanitized = sanitized.replace(invalid.value, "")
+            // Single-pass range removal: the old repeated replace() was quadratic
+            // and could over-remove duplicate substrings outside matched ranges.
+            val ranges = invalidKeys.map { it.range }.sortedBy { it.first }
+            val removed = StringBuilder(xml.length)
+            var position = 0
+            for (range in ranges) {
+                if (range.first < position) continue
+                removed.append(xml, position, range.first)
+                position = range.last + 1
             }
+            removed.append(xml, position, xml.length)
+            var sanitized = removed.toString()
             sanitized =
                 keyboxRegex.replace(sanitized) { keybox ->
                     if (keyRegex.containsMatchIn(keybox.value.replace(nonElementContentRegex, ""))) keybox.value else ""
@@ -1590,14 +1605,17 @@ class WebServer(
             }
             val rawContent = getParam(session, "content")
                 ?: map["content"]?.let { path ->
-                    val f = File(path)
-                    if (Files.isRegularFile(f.toPath(), LinkOption.NOFOLLOW_LINKS) && f.length() in 1..MAX_KEYBOX_XML_UPLOAD_SIZE) {
-                        try {
-                            f.readText(Charsets.UTF_8)
-                        } catch (_: Exception) {
-                            null
+                    try {
+                        val f = File(path)
+                        if (!Files.isRegularFile(f.toPath(), LinkOption.NOFOLLOW_LINKS) ||
+                            f.length() !in 1..MAX_KEYBOX_XML_UPLOAD_SIZE
+                        ) {
+                            return@let null
                         }
-                    } else {
+                        // Bounded snapshot read: the size pre-check alone cannot
+                        // bind a concurrently growing or swapped temp file.
+                        readFileBytesLimited(f, MAX_KEYBOX_XML_UPLOAD_SIZE.toInt()).toString(Charsets.UTF_8)
+                    } catch (_: Exception) {
                         null
                     }
                 }
@@ -2421,6 +2439,11 @@ class WebServer(
             val filename = getParam(session, "filename")
             val content = getParam(session, "content")
             if (filename != null && filename in EDITABLE_CONFIG_FILES && content != null) {
+                // Enforce the size bound before parsing: validateContent runs full
+                // JSON/line validation that saveFile would reject afterwards anyway.
+                if (content.utf8ByteLength() > MAX_CONFIG_FILE_SIZE) {
+                    return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid content")
+                }
                 if (validateContent(filename, content)) {
                     if (saveFile(filename, content)) {
                         if (filename == "templates.json") {
@@ -3193,6 +3216,8 @@ class WebServer(
             content: String,
         ): Boolean {
             if (filename in WEB_UI_SETTINGS) return content.isEmpty()
+            // Legacy empty-marker flag retained for backup compatibility.
+            if (filename == "rkp_passthrough") return content.isEmpty()
             // Basic validation based on known file types
             if (filename == PolicyState.STATE_FILE) {
                 return PolicyState.validateStateJson(content, validateReferences = false).isSuccess
@@ -3582,6 +3607,7 @@ class WebServer(
                     }
                 }
                 if (staged.isEmpty()) throw IOException("Backup is empty")
+                sanitizeRestoredRkpProvenance(staged)
 
                 val destinations =
                     staged.keys.associateWith { name ->
@@ -3738,6 +3764,76 @@ class WebServer(
             } finally {
                 buffer.fill(0)
                 output.wipe()
+            }
+        }
+
+        /**
+         * Re-binds restored RKP provenance to certificates that actually verify.
+         * The provenance file is only a cache of verified judgments: a crafted
+         * backup could otherwise name any staged keybox and hand it the
+         * revocation bypass plus RKP UI. Entries that reference staged keyboxes
+         * are kept only when their parsed certificates verify as RKP; encrypted
+         * entries cannot be re-verified here and are dropped (the inventory
+         * re-derives genuine bindings from decrypted certificates afterwards).
+         * Entries pointing outside this backup describe device state this
+         * restore does not touch and are preserved.
+         */
+        private fun sanitizeRestoredRkpProvenance(staged: MutableMap<String, ByteArray>) {
+            val provenanceName = RkpProvenanceStore.PROVENANCE_FILE_NAME
+            val raw = staged[provenanceName] ?: return
+            val entries =
+                runCatching {
+                    val array =
+                        JSONObject(raw.toString(Charsets.UTF_8)).optJSONArray("rkp_keyboxes")
+                            ?: return
+                    List(array.length(), array::optString)
+                }.getOrNull() ?: return
+            val stagedKeyboxes = staged.keys.filter(::isBackupKeyboxEntry)
+            if (stagedKeyboxes.isEmpty()) return
+            val stagedByNormalized =
+                stagedKeyboxes.associateBy { RkpProvenanceStore.normalizeIdentifier(it.substringAfterLast('/')) }
+            val kept = JSONArray()
+            var dropped = 0
+            for (entry in entries) {
+                if (entry.isBlank()) continue
+                val normalized = RkpProvenanceStore.normalizeIdentifier(entry)
+                if (normalized.isEmpty()) {
+                    dropped++
+                    continue
+                }
+                val stagedKey = stagedByNormalized[normalized]
+                if (stagedKey == null) {
+                    kept.put(entry)
+                    continue
+                }
+                var verifies = false
+                if (!stagedKey.endsWith(".cbox", ignoreCase = true)) {
+                    val copy = staged.getValue(stagedKey).copyOf()
+                    try {
+                        verifies =
+                            KeyboxLoader.parse(copy, stagedKey).any {
+                                RkpProvenanceStore.hasVerifiedRkpCertificates(it.certificates())
+                            }
+                    } catch (_: Exception) {
+                        verifies = false
+                    } finally {
+                        copy.fill(0)
+                    }
+                }
+                if (verifies) {
+                    kept.put(entry)
+                } else {
+                    dropped++
+                    Logger.w("Dropping unverifiable RKP provenance binding from restore: $normalized")
+                }
+            }
+            if (dropped == 0) return
+            val previous = staged.getValue(provenanceName)
+            try {
+                staged[provenanceName] =
+                    JSONObject().put("rkp_keyboxes", kept).toString().toByteArray(Charsets.UTF_8)
+            } finally {
+                previous.fill(0)
             }
         }
 

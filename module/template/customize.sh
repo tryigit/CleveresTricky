@@ -103,7 +103,7 @@ if [ -L "$MODPATH/webroot" ] || { [ -e "$MODPATH/webroot" ] && [ ! -d "$MODPATH/
   abort "! Existing native WebUI path is unsafe"
 fi
 if [ -d "$MODPATH/webroot" ]; then
-  rm -rf "$MODPATH/webroot" || abort "! Could not replace the native WebUI"
+  rm -rf "${MODPATH:?}/webroot" || abort "! Could not replace the native WebUI"
 fi
 extract "$ZIPFILE" 'webroot/index.html' "$MODPATH"
 extract "$ZIPFILE" 'webroot/bridge.js'  "$MODPATH"
@@ -197,6 +197,14 @@ if [ -e "$CONFIG_DIR/keyboxes" ] || [ -L "$CONFIG_DIR/keyboxes" ]; then
   chmod 700 "$CONFIG_DIR/keyboxes" || abort "! Could not secure keybox directory"
   chown 0:0 "$CONFIG_DIR/keyboxes" || abort "! Could not set keybox directory ownership"
 fi
+
+# Marker files below are created with truncating writes, so a planted symlink must
+# abort the install instead of redirecting a root write outside the config dir.
+for marker_file in settings_schema_v3 global_mode auto_keybox_check block_invalid_keyboxes recommended_defaults_pending spoof_switch_initialized; do
+  if [ -L "$CONFIG_DIR/$marker_file" ]; then
+    abort "! Refusing symlinked configuration marker: $marker_file"
+  fi
+done
 
 # Schema v3 retires the historical RKP user switch. RKP infrastructure UIDs are
 # protected by the runtime unconditionally, so retaining this file only creates

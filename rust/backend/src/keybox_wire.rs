@@ -206,6 +206,11 @@ fn validate_wire_fields(
     if keybox_count == 0 || keybox_count > u8::MAX as usize || keybox_count != declared_keyboxes {
         return Err("keybox count exceeds wire bound");
     }
+    // Store bounds apply on top of the wire-prefix bounds below: production input
+    // is store-bounded, so these tripwires only fire for future unbounded callers.
+    if keys.len() > key_store::MAX_STORED_KEYS {
+        return Err("key count exceeds store bound");
+    }
     if keys.len() < keybox_count || keys.len() > u16::MAX as usize {
         return Err("key count exceeds wire bound");
     }
@@ -219,12 +224,10 @@ fn validate_wire_fields(
         if key.certificates_der.is_empty() || key.certificates_der.len() > u8::MAX as usize {
             return Err("certificate count exceeds wire bound");
         }
-        if key
-            .certificates_der
-            .iter()
-            .any(|certificate| certificate.is_empty() || certificate.len() > u32::MAX as usize)
-        {
-            return Err("certificate exceeds wire bound");
+        if key.certificates_der.iter().any(|certificate| {
+            certificate.is_empty() || certificate.len() > key_store::MAX_CERTIFICATE_DER_BYTES
+        }) {
+            return Err("certificate exceeds store bound");
         }
     }
     Ok(())

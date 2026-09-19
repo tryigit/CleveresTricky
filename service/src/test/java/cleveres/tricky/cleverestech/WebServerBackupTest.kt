@@ -7,6 +7,7 @@ import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -241,6 +242,56 @@ class WebServerBackupTest {
         val restored = File(configDir, RkpProvenanceStore.PROVENANCE_FILE_NAME)
         assertTrue(restored.exists())
         assertEquals(provenanceContent, restored.readText())
+    }
+
+    @Test
+    fun testRestoreDropsUnverifiableRkpProvenanceBindings() {
+        RkpProvenanceStore.addTrustedAnchorForTesting(TestKeyboxFixtures.rkpRootCert)
+        try {
+            val kbDir = File(configDir, "keyboxes").apply { mkdirs() }
+            File(kbDir, "evil.xml").writeText(TestKeyboxFixtures.validEcKeyboxXml)
+            File(kbDir, "good.xml").writeText(TestKeyboxFixtures.validRkpKeyboxXml)
+            File(configDir, RkpProvenanceStore.PROVENANCE_FILE_NAME).writeText(
+                """{"rkp_keyboxes":["evil.xml","good.xml","ghost.xml"]}""",
+            )
+            File(configDir, "target.txt").writeText("com.example.app")
+
+            val zipBytes = WebServer.createBackupZip(configDir)
+            configDir.deleteRecursively()
+            configDir.mkdirs()
+            WebServer.restoreBackupZip(configDir, ByteArrayInputStream(zipBytes))
+
+            // Content restores untouched; only the trust binding is sanitized.
+            assertTrue(File(configDir, "keyboxes/evil.xml").isFile)
+            assertTrue(File(configDir, "keyboxes/good.xml").isFile)
+            assertFalse(
+                "poisoned binding must not survive restore",
+                RkpProvenanceStore.isRkp("evil.xml", configDir),
+            )
+            assertTrue(
+                "genuine binding must survive restore",
+                RkpProvenanceStore.isRkp("good.xml", configDir),
+            )
+            assertTrue(
+                "entries outside this backup describe untouched device state",
+                RkpProvenanceStore.isRkp("ghost.xml", configDir),
+            )
+        } finally {
+            RkpProvenanceStore.resetForTesting(configDir)
+        }
+    }
+
+    @Test
+    fun testRkpProvenanceRecordFailsClosedPastEntryLimit() {
+        try {
+            repeat(256) { index -> RkpProvenanceStore.recordRkp("kb$index.xml", configDir) }
+            assertThrows(IllegalArgumentException::class.java) {
+                RkpProvenanceStore.recordRkp("kb256.xml", configDir)
+            }
+            assertFalse(RkpProvenanceStore.isRkp("kb256.xml", configDir))
+        } finally {
+            RkpProvenanceStore.resetForTesting(configDir)
+        }
     }
 
     @Test

@@ -8,6 +8,7 @@ import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.ByteArrayOutputStream
@@ -211,6 +212,43 @@ class ServerManagerCacheTest {
         } finally {
             ManagedKeyboxParserOracle.reset()
         }
+    }
+
+    @Test
+    fun `server url validation rejects non-routable hosts without DNS`() {
+        fun configWith(url: String) =
+            ServerManager.ServerConfig(
+                id = "ssrf-test",
+                name = "SSRF Test",
+                url = url,
+                priority = 0,
+                enabled = true,
+                authType = "NONE",
+                authData = JSONObject(),
+                autoRefresh = false,
+                refreshIntervalHours = 24,
+                contentPublicKey = null,
+            )
+        for (bad in
+            listOf(
+                "https://127.0.0.1/keyboxes.zip",
+                "https://127.1.2.3:8443/x",
+                "https://localhost/keyboxes.zip",
+                "https://LOCALHOST/keyboxes.zip",
+                "https://[::1]/x",
+                "https://[::]/x",
+                "https://169.254.10.20/x",
+                "https://224.0.0.1/x",
+                "https://0.0.0.0/x",
+            )
+        ) {
+            assertThrows(IllegalArgumentException::class.java) {
+                ServerManager.validateServer(configWith(bad))
+            }
+        }
+        // Ordinary public hosts and private LAN servers stay accepted.
+        ServerManager.validateServer(configWith("https://example.com/keyboxes.zip"))
+        ServerManager.validateServer(configWith("https://192.168.1.10/keyboxes.zip"))
     }
 
     private fun serverConfig(contentPublicKey: String? = null) =

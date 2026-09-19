@@ -1,9 +1,9 @@
 // Additional GPLv3 section 7(b) attribution term for tryigit-owned material: see ../../NOTICE.
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine as _;
+pub(crate) use cleverestricky_certificate_core::MAX_CERTIFICATE_DER_BYTES;
 use cleverestricky_certificate_core::{
     derive_ec_p256_keypair, GeneratedEcKeypair, PreparedIssuer, SigningAlgorithm,
-    MAX_CERTIFICATE_DER_BYTES,
 };
 use cleverestricky_keybox_core::{normalize_private_key_pkcs8, public_key_spki_from_pkcs8};
 use cleverestricky_xml_core::{KeyboxDocument, MAX_KEYBOXES_PER_FILE, MAX_KEYS_PER_KEYBOX};

@@ -230,6 +230,8 @@ object PolicyState {
             wildcardAssignments = emptyList(),
             generation = generationCounter.incrementAndGet(),
             recovery = "bootstrap",
+            blockInvalidKeyboxes = true,
+            keyboxPriorityPreference = KeyboxPriorityPreference.DEFAULT,
         )
 
     @Volatile
@@ -642,6 +644,10 @@ object PolicyState {
             wildcardAssignments = emptyList(),
             generation = generationCounter.incrementAndGet(),
             recovery = recovery,
+            // Explicit fail-closed defaults: legacy snapshots predate these
+            // settings and must not silently follow a future default change.
+            blockInvalidKeyboxes = true,
+            keyboxPriorityPreference = KeyboxPriorityPreference.DEFAULT,
         )
     }
 
@@ -1282,6 +1288,9 @@ object PolicyState {
             wildcardAssignments = emptyList(),
             generation = generationCounter.incrementAndGet(),
             recovery = "configured",
+            // Promotion must preserve keybox policy instead of resetting it.
+            blockInvalidKeyboxes = current.blockInvalidKeyboxes,
+            keyboxPriorityPreference = current.keyboxPriorityPreference,
         )
     }
 
@@ -1320,7 +1329,7 @@ object PolicyState {
             readPropertyDate("system")?.isBefore(currentDateSource().minusMonths(thresholdMonths)) == true
         runCatching { Files.deleteIfExists(File(root, CronAutoIdentity.TOGGLE_FILE).toPath()) }
             .onFailure { Logger.e("Could not clear Cron Auto Identity while restoring defaults", it) }
-        persistAndPublish(
+            persistAndPublish(
             Snapshot(
                 explicit = true,
                 features = FeatureSet(false, false, false, false, false, securityPatchRecommended),
@@ -1331,6 +1340,10 @@ object PolicyState {
                 wildcardAssignments = emptyList(),
                 generation = generationCounter.incrementAndGet(),
                 recovery = "default",
+                // Explicit: recommended defaults always block invalid keyboxes
+                // with default priority, matching installer and template state.
+                blockInvalidKeyboxes = true,
+                keyboxPriorityPreference = KeyboxPriorityPreference.DEFAULT,
             ),
         )
     }

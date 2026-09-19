@@ -13,6 +13,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayInputStream
 import java.io.File
+import java.net.InetAddress
 import java.net.URI
 import java.net.URL
 import java.nio.charset.StandardCharsets
@@ -408,7 +409,28 @@ object ServerManager {
                 uri.fragment == null,
         ) { "Server URL must be an absolute HTTPS URL without credentials or a fragment" }
         require(uri.port == -1 || uri.port in 1..65535) { "Invalid server port" }
+        rejectNonRoutableServerHost(uri.host)
         return uri.toURL()
+    }
+
+    /**
+     * Rejects loopback, link-local, multicast, and unspecified IP literals plus
+     * localhost without any DNS lookup, so this stays safe on boot, load, and
+     * fetch paths. Hostnames are intentionally not resolved here (no stalls);
+     * private LAN ranges stay allowed for legitimate local servers.
+     */
+    private fun rejectNonRoutableServerHost(host: String) {
+        if (host.equals("localhost", ignoreCase = true) || host.equals("localhost.", ignoreCase = true)) {
+            throw IllegalArgumentException("Server URL must not target a non-routable host")
+        }
+        val isIpLiteral =
+            host.contains(':') || host.matches(Regex("\\d{1,3}(\\.\\d{1,3}){3}"))
+        if (!isIpLiteral) return
+        val address = runCatching { InetAddress.getByName(host) }.getOrNull() ?: return
+        require(
+            !address.isLoopbackAddress && !address.isLinkLocalAddress &&
+                !address.isMulticastAddress && !address.isAnyLocalAddress,
+        ) { "Server URL must not target a non-routable host" }
     }
 
     private fun requireSafeHeader(
