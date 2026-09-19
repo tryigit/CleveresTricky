@@ -41,10 +41,9 @@ const IMPACTS = {
   'App Rules': 'Estimated impact: CPU very low with cached lookups; RAM low and proportional to configured rules.'
 };
 const KEYBOX_PRIORITY_CATEGORIES = [
-  'VALID_RKP','VALID_STRONGBOX','VALID_TEE','VALID_UNKNOWN',
-  'INVALID_EXPIRED_RKP','INVALID_EXPIRED_STRONGBOX','INVALID_EXPIRED_TEE','INVALID_EXPIRED_UNKNOWN',
-  'INVALID_REVOKED_RKP','INVALID_REVOKED_STRONGBOX','INVALID_REVOKED_TEE','INVALID_REVOKED_UNKNOWN',
-  'INVALID_VERIFICATION_FAILED_RKP','INVALID_VERIFICATION_FAILED_STRONGBOX','INVALID_VERIFICATION_FAILED_TEE','INVALID_VERIFICATION_FAILED_UNKNOWN'
+  'VALID_RKP','VALID_TEE',
+  'INVALID_EXPIRED_RKP','INVALID_EXPIRED_TEE',
+  'INVALID_REVOKED_RKP','INVALID_REVOKED_TEE'
 ];
 const SAVED_BUILD_IDENTITY_KEYS = new Set([
   'BRAND','PRODUCT','DEVICE','MANUFACTURER','MODEL','FINGERPRINT','RELEASE','BUILD_ID','INCREMENTAL','SECURITY_PATCH'
@@ -557,8 +556,7 @@ function buildFeatureCenterMarkup(prefix) {
     ${cardMarkup(`${prefix}_global`,'Global Keybox','Applies custom Keybox attestation spoofing to all applications without requiring target.txt.',globalKeyboxOn,helpMarkup('Global Keybox is the module-wide attestation scope switch. Recommended ON for normal root usage.'))}
     ${cardMarkup(`${prefix}_sec_patch`,'Security Patch','Controls system, vendor, and boot security patch levels independently from Identity properties.',secPatchOn,secPatchHelp + secPatchChildren)}
     ${identityCards}
-    ${cardMarkup(`${prefix}_keybox`,'Auto Keybox Check','Checks configured keyboxes against the module revocation source when enabled.',keyboxOn,helpMarkup('Optional network-backed keybox hygiene; manual management remains available.'))}
-    ${cardMarkup(`${prefix}_block_invalid`,'Block Invalid Keyboxes','Excludes invalid, expired, and revoked keyboxes from the active selection pool. Verification failures are always excluded.',blockInvalidOn,helpMarkup('When enabled, only valid keyboxes are selected. When disabled, expired and revoked keyboxes can participate in selection, but structurally invalid keyboxes remain blocked.'))}
+    ${cardMarkup(`${prefix}_block_invalid`,'Block Invalid Keyboxes','Excludes invalid, expired, and revoked keyboxes from the active selection pool. Verification failures are always excluded.',blockInvalidOn,helpMarkup('When enabled, only valid keyboxes are selected. When disabled, expired and revoked keyboxes can participate in selection, but structurally invalid keyboxes remain blocked.') + `<div class="ct-subcontrols" id="${prefix}_block_invalid_children"><div class="row" style="align-items:center"><label for="${prefix}_keybox" style="flex:1;min-width:0;padding-right:12px"><strong>Automatic Keybox Check</strong><span class="res-desc">Checks configured keyboxes against the module revocation source when enabled.</span></label>${switchMarkup(`${prefix}_keybox`,keyboxOn)}</div>${helpMarkup('Optional network-backed keybox hygiene; manual management remains available.')}</div>`)}
     ${cardMarkup(`${prefix}_drm_passthrough`,'DRM App Passthrough',"Keeps packages from drm_packages.txt on Android's genuine Keystore path. This does not fake a DRM security level.",drmOn,drmHelp + drmChildren)}
     <div class="ct-feature-card"><strong>Keybox / TEE path</strong><p>Keyboxes are selected per profile or from the stored pool. Stored XML/CBOX sources are reloaded without requiring an environment reset.</p>${helpMarkup('The core Keystore hook remains separate from Identity. Certificate chains are cached to avoid repeated expensive work.')}<button type="button" data-open-tab="keys" style="width:100%;margin-top:10px">Open keyboxes</button></div>
   </div>`;

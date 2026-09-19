@@ -27,6 +27,26 @@ enum class KeyboxPriorityCategory {
     companion object {
         val DEFAULT_ORDER: List<KeyboxPriorityCategory> = entries.toList()
 
+        // The six categories exposed in the WebUI custom-order list. StrongBox and
+        // Unknown levels plus always-blocked verification failures stay valid enum
+        // values, but the UI only exposes RKP/TEE combined with the eligible
+        // invalid reasons (Valid, Expired, Revoked).
+        val UI_ORDER: List<KeyboxPriorityCategory> =
+            listOf(
+                VALID_RKP,
+                VALID_TEE,
+                INVALID_EXPIRED_RKP,
+                INVALID_EXPIRED_TEE,
+                INVALID_REVOKED_RKP,
+                INVALID_REVOKED_TEE,
+            )
+
+        // Expands a UI six-permutation to the full deterministic order by appending
+        // the remaining categories in default relative order. Full permutations
+        // pass through unchanged.
+        fun expandToFullOrder(order: List<KeyboxPriorityCategory>): List<KeyboxPriorityCategory> =
+            (order + DEFAULT_ORDER).distinct()
+
         fun fromValidityAndLevel(
             validityState: KeyboxVerifier.ValidityState,
             invalidReason: KeyboxVerifier.InvalidReason?,
@@ -74,7 +94,7 @@ data class KeyboxPriorityPreference(
 
     fun effectiveOrder(): List<KeyboxPriorityCategory> =
         if (mode == Mode.CUSTOM && customOrder.isNotEmpty()) {
-            customOrder
+            KeyboxPriorityCategory.expandToFullOrder(customOrder)
         } else {
             KeyboxPriorityCategory.DEFAULT_ORDER
         }
@@ -92,7 +112,10 @@ data class KeyboxPriorityPreference(
                 }
                 val orderArray = json.optJSONArray("customOrder")
                 val customOrder = if (mode == Mode.CUSTOM) {
-                    if (orderArray == null || orderArray.length() != KeyboxPriorityCategory.DEFAULT_ORDER.size) {
+                    if (orderArray == null ||
+                        (orderArray.length() != KeyboxPriorityCategory.DEFAULT_ORDER.size &&
+                            orderArray.length() != KeyboxPriorityCategory.UI_ORDER.size)
+                    ) {
                         Logger.w("Invalid custom priority order: incomplete; falling back to default")
                         return DEFAULT
                     }
@@ -106,7 +129,11 @@ data class KeyboxPriorityPreference(
                             return DEFAULT
                         }
                     }
-                    if (parsed.toSet() != KeyboxPriorityCategory.DEFAULT_ORDER.toSet()) {
+                    // Full 16-permutations keep working; the UI submits the six
+                    // exposed categories, which effectiveOrder expands.
+                    if (parsed.toSet() != KeyboxPriorityCategory.DEFAULT_ORDER.toSet() &&
+                        parsed.toSet() != KeyboxPriorityCategory.UI_ORDER.toSet()
+                    ) {
                         Logger.w("Invalid custom priority order: duplicate or missing category; falling back to default")
                         return DEFAULT
                     }

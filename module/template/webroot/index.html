@@ -799,20 +799,19 @@
 <div id="storedKeyboxesList" style="max-height: 200px; overflow-y: auto;"></div>
         </div>
         <div class="panel" id="ct_keybox_priority_panel">
-<div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
-    <h3 data-i18n="priority_order_title">Keybox Priority Order</h3>
-    <div style="display:flex; gap:8px; align-items:center;">
-        <select id="ct_keybox_priority_mode" style="padding:4px 8px; font-size:0.85em;">
-            <option value="default" data-i18n="priority_mode_default">Default (Random in Tier)</option>
-            <option value="custom" data-i18n="priority_mode_custom">Custom Ordering</option>
-        </select>
-    </div>
+<div class="card-header" style="display:flex; flex-direction:column; align-items:stretch; gap:10px;">
+    <h3 id="ct_keybox_priority_title" data-i18n="priority_order_title" style="margin:0;">Keybox Priority Order</h3>
+    <select id="ct_keybox_priority_mode" aria-labelledby="ct_keybox_priority_title" style="width:100%; padding:8px 10px; font-size:0.9em;">
+        <option value="default" data-i18n="priority_mode_default_short">Default</option>
+        <option value="custom" data-i18n="priority_mode_custom_short">Custom</option>
+    </select>
 </div>
 <p style="font-size:0.85em; color:var(--text-muted); margin-bottom:12px;" data-i18n="priority_order_desc">Configure selection preference by security level and validity state. The first non-empty tier is selected.</p>
+<p id="ct_keybox_priority_mode_hint" data-i18n="priority_mode_default" style="font-size:0.85em; color:var(--text-muted); margin:0 0 12px;">Default (Random in Tier)</p>
 <div id="ct_keybox_priority_list" style="display:none; flex-direction:column; gap:6px; margin-bottom:12px;"></div>
-<div id="ct_keybox_priority_actions" style="display:none; gap:10px;">
-    <button type="button" id="ct_keybox_priority_save" class="primary" style="flex:1;" data-i18n="save_priority_order">Save Priority Order</button>
-    <button type="button" id="ct_keybox_priority_reset" style="flex:1;" data-i18n="reset_to_default">Reset to Default</button>
+<div id="ct_keybox_priority_actions" style="display:none; justify-content:center; flex-wrap:wrap; gap:10px; margin-top:12px;">
+    <button type="button" id="ct_keybox_priority_save" class="primary" style="flex:1 1 200px; max-width:340px; min-height:44px;" data-i18n="save_priority_order">Save Priority Order</button>
+    <button type="button" id="ct_keybox_priority_reset" style="flex:1 1 200px; max-width:340px; min-height:44px;" data-i18n="reset_to_default">Reset to Default</button>
 </div>
         </div>
         <div class="panel">

@@ -12,12 +12,10 @@ assert.match(source, /validatePolicyLimits\(normalized\);/, 'policy saves must v
 const categoriesMatch = source.match(/const KEYBOX_PRIORITY_CATEGORIES = \[([\s\S]*?)\];/);
 assert.ok(categoriesMatch, 'keybox priority category allowlist is missing');
 const extractedCategories = Function(`return [${categoriesMatch[1]}];`)();
-assert.equal(extractedCategories.length, 16, 'keybox priority allowlist must cover all 16 validity categories');
-assert.equal(extractedCategories[0], 'VALID_RKP', 'keybox priority allowlist must start with VALID_RKP');
-assert.equal(
-  extractedCategories[extractedCategories.length - 1],
-  'INVALID_VERIFICATION_FAILED_UNKNOWN',
-  'keybox priority allowlist must end with INVALID_VERIFICATION_FAILED_UNKNOWN'
+assert.deepEqual(
+  extractedCategories,
+  ['VALID_RKP', 'VALID_TEE', 'INVALID_EXPIRED_RKP', 'INVALID_EXPIRED_TEE', 'INVALID_REVOKED_RKP', 'INVALID_REVOKED_TEE'],
+  'keybox priority allowlist must cover exactly the six RKP/TEE eligibility categories'
 );
 
 const start = source.indexOf('function safeClone(value)');

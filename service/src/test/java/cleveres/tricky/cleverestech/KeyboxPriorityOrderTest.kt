@@ -89,6 +89,28 @@ class KeyboxPriorityOrderTest {
     }
 
     @Test
+    fun `custom UI six-permutation is accepted and expanded deterministically`() {
+        val uiOrder = KeyboxPriorityCategory.UI_ORDER
+        assertEquals(6, uiOrder.size)
+        val submitted = uiOrder.reversed()
+        val json = JSONObject().apply {
+            put("mode", "custom")
+            put("customOrder", JSONArray(submitted.map { it.name }))
+        }
+        val restored = KeyboxPriorityPreference.fromJson(json)
+        assertEquals(KeyboxPriorityPreference.Mode.CUSTOM, restored.mode)
+        assertEquals(submitted, restored.customOrder)
+
+        val effective = restored.effectiveOrder()
+        assertEquals(16, effective.size)
+        assertEquals(submitted, effective.take(6))
+        assertEquals(
+            KeyboxPriorityCategory.DEFAULT_ORDER.filter { it !in submitted },
+            effective.drop(6),
+        )
+    }
+
+    @Test
     fun `custom preference falls back to default on incomplete order`() {
         val incompleteJson = JSONObject().apply {
             put("mode", "custom")

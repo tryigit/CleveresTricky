@@ -54,6 +54,7 @@ const priorityList = makeElement('div');
 const priorityActions = makeElement('div');
 const prioritySaveBtn = makeElement('button');
 const priorityResetBtn = makeElement('button');
+const priorityModeHint = makeElement('p');
 
 const elements = {
   storedKeyboxesList: list,
@@ -62,7 +63,8 @@ const elements = {
   ct_keybox_priority_list: priorityList,
   ct_keybox_priority_actions: priorityActions,
   ct_keybox_priority_save: prioritySaveBtn,
-  ct_keybox_priority_reset: priorityResetBtn
+  ct_keybox_priority_reset: priorityResetBtn,
+  ct_keybox_priority_mode_hint: priorityModeHint
 };
 
 const posts = [];
@@ -97,6 +99,10 @@ const context = {
   },
   notify() {},
   t(key) { return key; },
+  longPressAttachments: [],
+  recordLongPressAttachment(node, label, value) {
+    context.longPressAttachments.push({ node, label, value });
+  },
   ensureControls() {},
   updateControls() {},
   ensureVerificationControls() {},
@@ -153,6 +159,11 @@ vm.runInContext(`
   this.setPriorityMode = m => { currentPriorityMode = m; };
   this.setPriorityResponse = value => { priorityResponse = value; };
 `, context);
+
+// The expired-code slice also carries the real attachKeyboxLongPress
+// declaration, which shadows the harness recorder during setup. Reinstall the
+// recorder from the host so long-press wiring stays observable.
+context.attachKeyboxLongPress = context.recordLongPressAttachment;
 
 // Test 1: Validity badges for stored keyboxes
 context.setInventory([
@@ -220,13 +231,16 @@ context.setPriorityMode('default');
 context.renderPriorityOrder();
 assert.equal(priorityList.style.display, 'none');
 assert.equal(priorityActions.style.display, 'none');
+assert.notEqual(priorityModeHint.style.display, 'none', 'mode hint must be visible in default mode');
 
 // Test 4: Priority order rendering in custom mode
 context.setPriorityMode('custom');
+context.longPressAttachments.length = 0;
 context.renderPriorityOrder();
 assert.equal(priorityList.style.display, 'flex');
 assert.equal(priorityActions.style.display, 'flex');
-assert.equal(priorityList.children.length, 16);
+assert.equal(priorityModeHint.style.display, 'none', 'mode hint must hide when the list carries the detail');
+assert.equal(priorityList.children.length, 6);
 
 // Verify first item has up disabled, last has down disabled
 const firstItem = priorityList.children[0];
@@ -235,11 +249,18 @@ const firstDownBtn = firstItem.children[1].children[1];
 assert.equal(firstUpBtn.disabled, true, 'first item up button must be disabled');
 assert.equal(firstDownBtn.disabled, false, 'first item down button must be enabled');
 
-const lastItem = priorityList.children[15];
+const lastItem = priorityList.children[5];
 const lastUpBtn = lastItem.children[1].children[0];
 const lastDownBtn = lastItem.children[1].children[1];
 assert.equal(lastUpBtn.disabled, false, 'last item up button must be enabled');
 assert.equal(lastDownBtn.disabled, true, 'last item down button must be disabled');
+
+// Every item label keeps its full text available via title and long-press popup
+assert.equal(context.longPressAttachments.length, 6, 'each priority label must offer its full text on long-press');
+for (const attachment of context.longPressAttachments) {
+  assert.ok(attachment.value.length > 0, 'long-press value must not be empty');
+  assert.equal(attachment.node.title, attachment.value, 'label title must carry the full text');
+}
 
 // Test 5: Reordering via down button on first item
 const initialFirst = context.getCurrentOrder()[0];
@@ -263,7 +284,7 @@ assert.equal(context.getCurrentOrder()[1], initialSecond);
   const params = new URLSearchParams(posts[0].body);
   const data = JSON.parse(params.get('data'));
   assert.equal(data.mode, 'custom');
-  assert.equal(data.customOrder.length, 16);
+  assert.equal(data.customOrder.length, 6);
   assert.equal(data.customOrder[0], 'VALID_RKP');
 
   // Test 8: A complete permutation is accepted from the backend
@@ -290,6 +311,23 @@ assert.equal(context.getCurrentOrder()[1], initialSecond);
   await context.resetPriorityOrder();
   assert.equal(context.getPriorityMode(), 'default');
   assert.equal(context.getCurrentOrder()[0], 'VALID_RKP');
+
+  // Test 11: Legacy 16-category orders project onto the six exposed categories
+  const legacySixteen = [
+    'VALID_RKP', 'VALID_STRONGBOX', 'VALID_TEE', 'VALID_UNKNOWN',
+    'INVALID_EXPIRED_RKP', 'INVALID_EXPIRED_STRONGBOX', 'INVALID_EXPIRED_TEE', 'INVALID_EXPIRED_UNKNOWN',
+    'INVALID_REVOKED_RKP', 'INVALID_REVOKED_STRONGBOX', 'INVALID_REVOKED_TEE', 'INVALID_REVOKED_UNKNOWN',
+    'INVALID_VERIFICATION_FAILED_RKP', 'INVALID_VERIFICATION_FAILED_STRONGBOX',
+    'INVALID_VERIFICATION_FAILED_TEE', 'INVALID_VERIFICATION_FAILED_UNKNOWN'
+  ];
+  context.setPriorityResponse({ mode: 'custom', customOrder: legacySixteen });
+  await context.loadPriorityOrder();
+  assert.equal(context.getPriorityMode(), 'custom');
+  assert.deepEqual(Array.from(context.getCurrentOrder()), [
+    'VALID_RKP', 'VALID_TEE',
+    'INVALID_EXPIRED_RKP', 'INVALID_EXPIRED_TEE',
+    'INVALID_REVOKED_RKP', 'INVALID_REVOKED_TEE'
+  ]);
 
   console.log('Keybox priority ordering and explicit validity state tests passed');
 })().catch(err => {

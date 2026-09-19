@@ -104,7 +104,7 @@ class WebServerPostTest {
     @Test
     fun `keybox priority order parses authenticated form body`() {
         val priorityUrl = URL("http://localhost:${server.listeningPort}/api/keybox_priority_order?token=${server.token}")
-        val customOrder = KeyboxPriorityCategory.DEFAULT_ORDER.reversed().map { it.name }
+        val customOrder = KeyboxPriorityCategory.UI_ORDER.reversed().map { it.name }
         val payload = org.json.JSONObject()
             .put("mode", "custom")
             .put("customOrder", org.json.JSONArray(customOrder))
@@ -117,6 +117,9 @@ class WebServerPostTest {
         conn.outputStream.use { it.write(postData.toByteArray(StandardCharsets.UTF_8)) }
 
         assertEquals(200, conn.responseCode)
+        val echoed = org.json.JSONObject(conn.inputStream.bufferedReader().readText())
+        assertEquals("custom", echoed.getString("mode"))
+        assertEquals(customOrder, echoed.getJSONArray("customOrder").let { array -> List(array.length(), array::getString) })
     }
 
     @Test
