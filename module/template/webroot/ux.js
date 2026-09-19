@@ -4310,10 +4310,12 @@
             label.style.cssText = 'font-size:0.85em;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
             const labelText = formatCategoryLabel(cat);
             label.textContent = labelText;
-            label.title = labelText;
             if (typeof attachKeyboxLongPress === 'function') {
                 attachKeyboxLongPress(label, labelText, labelText);
             }
+            // Set after attach: the helper stores its hold hint in the title
+            // attribute, which browsers reflect into node.title.
+            label.title = labelText;
 
             left.append(num, label);
 

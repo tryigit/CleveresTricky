@@ -34,6 +34,8 @@ function makeElement(tagName) {
     },
     setAttribute(name, value) {
       this.attributes[name] = String(value);
+      // Mirror browser reflection so title-overwrite regressions surface.
+      if (name === 'title') this.title = String(value);
     }
   };
   Object.defineProperty(element, 'textContent', {
@@ -101,6 +103,9 @@ const context = {
   t(key) { return key; },
   longPressAttachments: [],
   recordLongPressAttachment(node, label, value) {
+    // Mirror the production helper, which stores its hold hint in the title
+    // attribute that browsers reflect into node.title.
+    node.setAttribute('title', 'Hold to view and copy');
     context.longPressAttachments.push({ node, label, value });
   },
   ensureControls() {},

@@ -146,6 +146,36 @@ class KeyboxValidityTrackerTest {
     }
 
     @Test
+    fun `error after worse verdict in one batch keeps the worse verdict`() {
+        val valid = createResult(
+            filename = "flaky.xml",
+            status = KeyboxVerifier.Status.VALID,
+            validityState = KeyboxVerifier.ValidityState.VALID,
+            invalidReason = null,
+        )
+        KeyboxValidityTracker.update(listOf(valid))
+
+        val revoked = createResult(
+            filename = "flaky.xml",
+            status = KeyboxVerifier.Status.REVOKED,
+            validityState = KeyboxVerifier.ValidityState.INVALID,
+            invalidReason = KeyboxVerifier.InvalidReason.REVOKED,
+        )
+        val error = createResult(
+            filename = "flaky.xml",
+            status = KeyboxVerifier.Status.ERROR,
+            validityState = KeyboxVerifier.ValidityState.VALID,
+            invalidReason = null,
+        )
+        KeyboxValidityTracker.update(listOf(revoked, error))
+        assertEquals(KeyboxVerifier.InvalidReason.REVOKED, KeyboxValidityTracker.getState("flaky.xml")?.invalidReason)
+        assertFalse(KeyboxValidityTracker.isEligible("flaky.xml", blockInvalid = true))
+
+        KeyboxValidityTracker.update(listOf(error, revoked))
+        assertEquals(KeyboxVerifier.InvalidReason.REVOKED, KeyboxValidityTracker.getState("flaky.xml")?.invalidReason)
+    }
+
+    @Test
     fun `clear empties the tracker snapshot`() {
         val result = createResult(
             filename = "sample.xml",

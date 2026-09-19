@@ -20,7 +20,10 @@ internal object KeyboxValidityTracker {
                 for (result in results) {
                     val key = result.storageId.ifEmpty { result.filename }
                     if (result.status == KeyboxVerifier.Status.ERROR) {
-                        previousMap[key]?.let { put(key, it) }
+                        // Only restore the previous verdict when this batch has no
+                        // entry for the key yet; otherwise a failed check would
+                        // overwrite the worse verdict merged above.
+                        if (!containsKey(key)) previousMap[key]?.let { put(key, it) }
                     } else {
                         val entry = Entry(result.validityState, result.invalidReason)
                         val existing = get(key)

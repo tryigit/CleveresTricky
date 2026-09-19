@@ -530,5 +530,13 @@ class KeyboxVerifierCheckFileTest {
         assertTrue(
             KeyboxVerifier.isBlockedByPolicy(KeyboxVerifier.Status.ERROR, "2126-07-08 19:46", blockInvalid = true),
         )
+        assertTrue(
+            KeyboxVerifier.isBlockedByPolicy(
+                KeyboxVerifier.Status.ERROR,
+                "2020-01-01 00:00",
+                blockInvalid = false,
+                previouslyValid = true,
+            ),
+        )
     }
 }

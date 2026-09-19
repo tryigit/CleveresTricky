@@ -117,7 +117,13 @@ object KeyboxVerifier {
         blockInvalid: Boolean,
         previouslyValid: Boolean = false,
     ): Boolean {
-        if (status == Status.ERROR) return !previouslyValid
+        if (status == Status.ERROR) {
+            // Expiry is known locally from the certificate itself: never serve
+            // an expired keybox through a failed check, even one with a valid
+            // history. Otherwise only boxes with no verified history fail here.
+            if (notAfter != null && isExpired(notAfter)) return true
+            return !previouslyValid
+        }
         val (validityState, invalidReason) = resolveValidity(status, notAfter)
         return !isEligible(validityState, invalidReason, blockInvalid)
     }
