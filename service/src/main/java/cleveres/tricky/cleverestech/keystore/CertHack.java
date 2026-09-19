@@ -1458,15 +1458,20 @@ public final class CertHack {
                     // TEE attestation must NEVER fall back to StrongBox keyboxes
                     candidates = Collections.emptyList();
                 }
-                list = selectKeyboxPool(candidates, KeyProperties.KEY_ALGORITHM_EC);
+                // Priority tiers are decided before the EC/RSA algorithm preference so a
+                // custom order compares every level-fixed candidate; in default mode the
+                // tier filter is a pass-through and selection is unchanged.
+                list = selectKeyboxPool(
+                        KeyboxPriorityOrder.filterTopPriorityTier(candidates),
+                        KeyProperties.KEY_ALGORITHM_EC);
             } else {
-                list = selectGlobalKeyboxPool(currentState, isStrongbox);
+                list = KeyboxPriorityOrder.filterTopPriorityTier(
+                        selectGlobalKeyboxPool(currentState, isStrongbox));
             }
             if (list.isEmpty()) {
                 return caList;
             }
 
-            list = KeyboxPriorityOrder.filterTopPriorityTier(list);
             KeyBox keybox = list.get(cacheKey.indexForPool(list.size()));
             PreparedKeyBox prepared = currentState.preparedKeyboxes.get(keybox);
             if (prepared == null) throw new UnsupportedOperationException("Keybox metadata is unavailable");
@@ -1684,16 +1689,21 @@ public final class CertHack {
                 } else {
                     candidates = Collections.emptyList();
                 }
-                list = selectKeyboxPool(candidates, KeyProperties.KEY_ALGORITHM_EC);
+                // Priority tiers are decided before the EC/RSA algorithm preference so a
+                // custom order compares every level-fixed candidate; in default mode the
+                // tier filter is a pass-through and selection is unchanged.
+                list = selectKeyboxPool(
+                        KeyboxPriorityOrder.filterTopPriorityTier(candidates),
+                        KeyProperties.KEY_ALGORITHM_EC);
             } else {
-                list = selectGlobalKeyboxPool(currentState, isStrongbox);
+                list = KeyboxPriorityOrder.filterTopPriorityTier(
+                        selectGlobalKeyboxPool(currentState, isStrongbox));
             }
             if (list.isEmpty()) {
                 noteAttestFailure(uid, 6);
                 return caList;
             }
 
-            list = KeyboxPriorityOrder.filterTopPriorityTier(list);
             KeyBox keybox = list.get(cacheKey.indexForPool(list.size()));
             PreparedKeyBox prepared = currentState.preparedKeyboxes.get(keybox);
             if (prepared == null) throw new UnsupportedOperationException("Keybox metadata is unavailable");
@@ -1846,14 +1856,19 @@ public final class CertHack {
             } else {
                 candidates = Collections.emptyList();
             }
-            list = selectKeyboxPool(candidates, KeyProperties.KEY_ALGORITHM_EC);
+            // Priority tiers are decided before the EC/RSA algorithm preference so a
+            // custom order compares every level-fixed candidate; in default mode the
+            // tier filter is a pass-through and selection is unchanged.
+            list = selectKeyboxPool(
+                    KeyboxPriorityOrder.filterTopPriorityTier(candidates),
+                    KeyProperties.KEY_ALGORITHM_EC);
         } else {
-            list = selectGlobalKeyboxPool(currentState, isStrongbox);
+            list = KeyboxPriorityOrder.filterTopPriorityTier(
+                    selectGlobalKeyboxPool(currentState, isStrongbox));
         }
         if (list == null || list.isEmpty()) {
             return null;
         }
-        list = KeyboxPriorityOrder.filterTopPriorityTier(list);
         KeyBox keybox = list.get(cacheKey.indexForPool(list.size()));
         return currentState.preparedKeyboxes.get(keybox);
     }
@@ -2349,12 +2364,48 @@ public final class CertHack {
         List<KeyBox> strongBoxRsa = KeyboxPriorityOrder.filterEligibleCandidates(currentState.globalStrongBoxRsa);
         List<KeyBox> teeEc = KeyboxPriorityOrder.filterEligibleCandidates(currentState.globalTeeEc);
         List<KeyBox> teeRsa = KeyboxPriorityOrder.filterEligibleCandidates(currentState.globalTeeRsa);
+        if (isCustomPriorityOrdering()) {
+            // Custom mode lets the priority engine compare every candidate the
+            // requested security level permits. StrongBox requests stay within
+            // StrongBox pools (TEE is only the established empty-pool fallback),
+            // so a custom order can never force a StrongBox caller onto TEE keys.
+            return unionAllowedPools(strongBoxEc, strongBoxRsa, teeEc, teeRsa, strongBox);
+        }
         if (strongBox) {
             if (!strongBoxEc.isEmpty()) return strongBoxEc;
             if (!strongBoxRsa.isEmpty()) return strongBoxRsa;
         }
         if (!teeEc.isEmpty()) return teeEc;
         return teeRsa;
+    }
+
+    private static boolean isCustomPriorityOrdering() {
+        try {
+            cleveres.tricky.cleverestech.KeyboxPriorityPreference preference =
+                    cleveres.tricky.cleverestech.Config.INSTANCE.getKeyboxPriorityPreference();
+            return preference.getMode() == cleveres.tricky.cleverestech.KeyboxPriorityPreference.Mode.CUSTOM
+                    && !preference.getCustomOrder().isEmpty();
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    static List<KeyBox> unionAllowedPools(
+            List<KeyBox> strongBoxEc,
+            List<KeyBox> strongBoxRsa,
+            List<KeyBox> teeEc,
+            List<KeyBox> teeRsa,
+            boolean strongBox) {
+        if (strongBox) {
+            List<KeyBox> strongBoxPools = new ArrayList<>();
+            if (strongBoxEc != null) strongBoxPools.addAll(strongBoxEc);
+            if (strongBoxRsa != null) strongBoxPools.addAll(strongBoxRsa);
+            if (!strongBoxPools.isEmpty()) return strongBoxPools;
+        }
+        List<KeyBox> teePools = new ArrayList<>();
+        if (teeEc != null) teePools.addAll(teeEc);
+        if (teeRsa != null) teePools.addAll(teeRsa);
+        return teePools;
     }
 
     private static List<KeyBox> selectKeyboxPool(List<KeyBox> candidates, String preferredAlgorithm) {

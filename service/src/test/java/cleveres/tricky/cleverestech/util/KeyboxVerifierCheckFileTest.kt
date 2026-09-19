@@ -459,4 +459,53 @@ class KeyboxVerifierCheckFileTest {
         assertEquals("StrongBox", result.securityLevel)
         assertTrue(result.isRkp)
     }
+
+    @Test
+    fun `resolveValidity keeps structurally invalid keyboxes as verification failed even when expired`() {
+        val (state, reason) =
+            KeyboxVerifier.resolveValidity(KeyboxVerifier.Status.INVALID, "2020-01-01 00:00")
+        assertEquals(KeyboxVerifier.ValidityState.INVALID, state)
+        assertEquals(KeyboxVerifier.InvalidReason.VERIFICATION_FAILED, reason)
+    }
+
+    @Test
+    fun `resolveValidity reports expired for structurally valid keyboxes past notAfter`() {
+        val (state, reason) =
+            KeyboxVerifier.resolveValidity(KeyboxVerifier.Status.VALID, "2020-01-01 00:00")
+        assertEquals(KeyboxVerifier.ValidityState.INVALID, state)
+        assertEquals(KeyboxVerifier.InvalidReason.EXPIRED, reason)
+    }
+
+    @Test
+    fun `resolveValidity reports revoked for fresh keyboxes flagged by the revocation source`() {
+        val (state, reason) =
+            KeyboxVerifier.resolveValidity(KeyboxVerifier.Status.REVOKED, "2126-07-08 19:46")
+        assertEquals(KeyboxVerifier.ValidityState.INVALID, state)
+        assertEquals(KeyboxVerifier.InvalidReason.REVOKED, reason)
+    }
+
+    @Test
+    fun `policy blocks verification failures in both modes and expired entries only when blocking`() {
+        assertTrue(
+            KeyboxVerifier.isBlockedByPolicy(KeyboxVerifier.Status.INVALID, "2020-01-01 00:00", blockInvalid = false),
+        )
+        assertTrue(
+            KeyboxVerifier.isBlockedByPolicy(KeyboxVerifier.Status.INVALID, "2020-01-01 00:00", blockInvalid = true),
+        )
+        assertFalse(
+            KeyboxVerifier.isBlockedByPolicy(KeyboxVerifier.Status.VALID, "2020-01-01 00:00", blockInvalid = false),
+        )
+        assertTrue(
+            KeyboxVerifier.isBlockedByPolicy(KeyboxVerifier.Status.VALID, "2020-01-01 00:00", blockInvalid = true),
+        )
+        assertFalse(
+            KeyboxVerifier.isBlockedByPolicy(KeyboxVerifier.Status.REVOKED, "2126-07-08 19:46", blockInvalid = false),
+        )
+        assertTrue(
+            KeyboxVerifier.isBlockedByPolicy(KeyboxVerifier.Status.REVOKED, "2126-07-08 19:46", blockInvalid = true),
+        )
+        assertFalse(
+            KeyboxVerifier.isBlockedByPolicy(KeyboxVerifier.Status.VALID, "2126-07-08 19:46", blockInvalid = true),
+        )
+    }
 }

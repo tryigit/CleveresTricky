@@ -25,30 +25,57 @@ class ConfigKeyboxActivationTest {
     }
 
     @Test
-    fun `mixed validity keybox pool is rejected as a unit and commits empty active set`() {
+    fun `mixed validity pool commits eligible keyboxes and tracks per-file validity`() {
         withKeyboxRoot { root ->
-            val keyboxDir = File(root, "keyboxes").also { check(it.mkdirs()) }
-            File(keyboxDir, "valid.xml").writeText(TestKeyboxFixtures.validEcKeyboxXml)
-            File(keyboxDir, "revoked.xml").writeText(TestKeyboxFixtures.validEcKeyboxXml)
+            PolicyState.setRootForTesting(root)
+            KeyboxValidityTracker.clear()
+            try {
+                val keyboxDir = File(root, "keyboxes").also { check(it.mkdirs()) }
+                File(keyboxDir, "valid.xml").writeText(TestKeyboxFixtures.validEcKeyboxXml)
+                File(keyboxDir, "revoked.xml").writeText(TestKeyboxFixtures.validEcKeyboxXml)
 
-            ManagedKeyboxParserOracle.install()
-            val verificationCalls = AtomicInteger()
-            val committedSizes = ArrayList<Int>()
-            KeyboxLoader.activeSetOverride = { ids ->
-                committedSizes += ids.size
-                ids.all(ManagedOpaqueKeyOracle::contains)
-            }
-            Config.updateKeyBoxesSync(emptySet()) { _, _ ->
-                if (verificationCalls.getAndIncrement() == 0) {
-                    KeyboxVerifier.Status.VALID
-                } else {
-                    KeyboxVerifier.Status.REVOKED
+                ManagedKeyboxParserOracle.install()
+                val verificationCalls = AtomicInteger()
+                val committedSizes = ArrayList<Int>()
+                KeyboxLoader.activeSetOverride = { ids ->
+                    committedSizes += ids.size
+                    ids.all(ManagedOpaqueKeyOracle::contains)
                 }
-            }
+                val verifier: (CertHack.KeyBox, Set<String>) -> KeyboxVerifier.Status = { _, _ ->
+                    if (verificationCalls.getAndIncrement() == 0) {
+                        KeyboxVerifier.Status.VALID
+                    } else {
+                        KeyboxVerifier.Status.REVOKED
+                    }
+                }
 
-            assertEquals(2, verificationCalls.get())
-            assertEquals(listOf(0), committedSizes)
-            assertEquals(0, CertHack.getKeyboxCount())
+                // Block ON (default): the revoked file is excluded but the valid
+                // file still commits instead of poisoning the whole pool.
+                PolicyState.setBlockInvalidKeyboxes(true).getOrThrow()
+                assertTrue(Config.updateKeyBoxesSync(emptySet(), verifier))
+                assertEquals(2, verificationCalls.get())
+                assertEquals(listOf(1), committedSizes)
+                assertEquals(1, CertHack.getKeyboxCount())
+                val revokedKey =
+                    KeyboxValidityTracker.snapshot().entries.first {
+                        it.value.invalidReason == KeyboxVerifier.InvalidReason.REVOKED
+                    }.key
+                assertFalse(KeyboxValidityTracker.isEligible(revokedKey, blockInvalid = true))
+
+                // Block OFF: the revoked file rejoins selection while its tracked
+                // reason stays explicit. Both files carry the same key material,
+                // so the backend commit still dedups to one id while both file
+                // boxes are published.
+                verificationCalls.set(0)
+                PolicyState.setBlockInvalidKeyboxes(false).getOrThrow()
+                assertTrue(Config.updateKeyBoxesSync(emptySet(), verifier))
+                assertEquals(listOf(1, 1), committedSizes)
+                assertEquals(2, CertHack.getKeyboxCount())
+                assertTrue(KeyboxValidityTracker.isEligible(revokedKey, blockInvalid = false))
+            } finally {
+                PolicyState.resetForTesting()
+                KeyboxValidityTracker.clear()
+            }
         }
     }
 

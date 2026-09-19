@@ -35,12 +35,7 @@ internal object KeyboxValidityTracker {
 
     fun isEligible(storageId: String, blockInvalid: Boolean): Boolean {
         val entry = stateMap[storageId] ?: return true // Unknown state -> eligible
-        if (entry.validityState == KeyboxVerifier.ValidityState.VALID) return true
-        if (!blockInvalid) {
-            // When block is OFF, Verification Failed is always blocked
-            return entry.invalidReason != KeyboxVerifier.InvalidReason.VERIFICATION_FAILED
-        }
-        return false // Block ON -> all Invalid entries excluded
+        return KeyboxVerifier.isEligible(entry.validityState, entry.invalidReason, blockInvalid)
     }
 
     fun snapshot(): Map<String, Entry> = stateMap

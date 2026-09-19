@@ -40,6 +40,12 @@ const IMPACTS = {
   'Keybox Storage': 'Estimated impact: CPU low during refresh/verification; RAM moderate and bounded by active certificate chains.',
   'App Rules': 'Estimated impact: CPU very low with cached lookups; RAM low and proportional to configured rules.'
 };
+const KEYBOX_PRIORITY_CATEGORIES = [
+  'VALID_RKP','VALID_STRONGBOX','VALID_TEE','VALID_UNKNOWN',
+  'INVALID_EXPIRED_RKP','INVALID_EXPIRED_STRONGBOX','INVALID_EXPIRED_TEE','INVALID_EXPIRED_UNKNOWN',
+  'INVALID_REVOKED_RKP','INVALID_REVOKED_STRONGBOX','INVALID_REVOKED_TEE','INVALID_REVOKED_UNKNOWN',
+  'INVALID_VERIFICATION_FAILED_RKP','INVALID_VERIFICATION_FAILED_STRONGBOX','INVALID_VERIFICATION_FAILED_TEE','INVALID_VERIFICATION_FAILED_UNKNOWN'
+];
 const SAVED_BUILD_IDENTITY_KEYS = new Set([
   'BRAND','PRODUCT','DEVICE','MANUFACTURER','MODEL','FINGERPRINT','RELEASE','BUILD_ID','INCREMENTAL','SECURITY_PATCH'
 ]);
@@ -160,6 +166,18 @@ function normalizeProfile(profile) {
   };
 }
 
+function normalizeKeyboxPriorityOrder(value) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  if (source.mode !== 'custom') return {mode: 'default'};
+  const order = Array.isArray(source.customOrder) ? source.customOrder.map(String) : [];
+  const complete =
+    order.length === KEYBOX_PRIORITY_CATEGORIES.length &&
+    new Set(order).size === KEYBOX_PRIORITY_CATEGORIES.length &&
+    order.every(category => KEYBOX_PRIORITY_CATEGORIES.includes(category));
+  if (!complete) return {mode: 'default'};
+  return {mode: 'custom', customOrder: order};
+}
+
 function normalizeSecurityPatch(value) {
   const source = value && typeof value === 'object' ? value : {};
   const normalized = {
@@ -198,7 +216,9 @@ function stateForSave(source) {
     features: normalizePolicyFeatures(source.features),
     securityPatch: normalizeSecurityPatch(source.securityPatch),
     profiles: Array.isArray(source.profiles) ? source.profiles.map(normalizeProfile) : [],
-    activeProfile: typeof source.activeProfile === 'string' ? source.activeProfile.slice(0, MAX_PROFILE_VALUE_LENGTH) : null
+    activeProfile: typeof source.activeProfile === 'string' ? source.activeProfile.slice(0, MAX_PROFILE_VALUE_LENGTH) : null,
+    blockInvalidKeyboxes: source.blockInvalidKeyboxes !== false,
+    keyboxPriorityOrder: normalizeKeyboxPriorityOrder(source.keyboxPriorityOrder)
   };
   validatePolicyLimits(normalized);
   return normalized;
@@ -210,6 +230,8 @@ function normalizePolicyState(value) {
   source.profiles = Array.isArray(source.profiles) ? source.profiles.map(normalizeProfile) : [];
   source.securityPatch = normalizeSecurityPatch(source.securityPatch);
   source.activeProfile = typeof source.activeProfile === 'string' ? source.activeProfile.slice(0, MAX_PROFILE_VALUE_LENGTH) : null;
+  source.blockInvalidKeyboxes = source.blockInvalidKeyboxes !== false;
+  source.keyboxPriorityOrder = normalizeKeyboxPriorityOrder(source.keyboxPriorityOrder);
   return source;
 }
 

@@ -518,6 +518,35 @@ class PolicyStateTest {
         assertTrue(PolicyState.validateStateJson(oversized.toString(), false).isFailure)
     }
 
+    @Test
+    fun `keybox block flag and custom priority order survive policy replacement`() {
+        val customOrder = KeyboxPriorityCategory.DEFAULT_ORDER.reversed().map { it.name }
+        val state = stateJson()
+            .put("blockInvalidKeyboxes", false)
+            .put(
+                "keyboxPriorityOrder",
+                JSONObject()
+                    .put("mode", "custom")
+                    .put("customOrder", JSONArray(customOrder)),
+            )
+
+        val saved = PolicyState.replaceFromJson(state.toString()).getOrThrow()
+
+        assertFalse(PolicyState.blockInvalidKeyboxes)
+        assertEquals(KeyboxPriorityPreference.Mode.CUSTOM, PolicyState.keyboxPriorityPreference.mode)
+        assertEquals(customOrder, PolicyState.keyboxPriorityPreference.customOrder.map { it.name })
+        assertFalse(saved.getBoolean("blockInvalidKeyboxes"))
+        assertEquals("custom", saved.getJSONObject("keyboxPriorityOrder").getString("mode"))
+    }
+
+    @Test
+    fun `missing keybox settings default to blocking with default priority`() {
+        PolicyState.replaceFromJson(stateJson().toString()).getOrThrow()
+
+        assertTrue(PolicyState.blockInvalidKeyboxes)
+        assertEquals(KeyboxPriorityPreference.DEFAULT, PolicyState.keyboxPriorityPreference)
+    }
+
     private fun install(
         features: JSONObject = featureJson(),
         thresholdMonths: Int = 6,

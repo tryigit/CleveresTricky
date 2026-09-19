@@ -68,6 +68,13 @@ object KeyboxVerifier {
         status: Status,
         notAfter: String?,
     ): Pair<ValidityState, InvalidReason?> {
+        // Structural distrust dominates the time-based signal: a keybox that fails
+        // verification stays VERIFICATION_FAILED (always blocked) even when it is
+        // also expired. Otherwise an expired date would launder it into EXPIRED,
+        // which rejoins selection when blocking is disabled.
+        if (status == Status.INVALID) {
+            return ValidityState.INVALID to InvalidReason.VERIFICATION_FAILED
+        }
         if (notAfter != null && isExpired(notAfter)) {
             return ValidityState.INVALID to InvalidReason.EXPIRED
         }
@@ -77,6 +84,35 @@ object KeyboxVerifier {
             Status.INVALID -> ValidityState.INVALID to InvalidReason.VERIFICATION_FAILED
             Status.ERROR -> ValidityState.VALID to null
         }
+    }
+
+    /**
+     * Single eligibility invariant shared by the config refresh path, the server
+     * content gates, and the validity tracker. VERIFICATION_FAILED is always
+     * blocked; EXPIRED and REVOKED rejoin selection only when blocking is off.
+     */
+    fun isEligible(
+        validityState: ValidityState,
+        invalidReason: InvalidReason?,
+        blockInvalid: Boolean,
+    ): Boolean {
+        if (validityState == ValidityState.VALID) return true
+        if (!blockInvalid) return invalidReason != InvalidReason.VERIFICATION_FAILED
+        return false
+    }
+
+    /**
+     * Status-based form of [isEligible] for call sites that verify first and
+     * resolve validity inline. Callers force RKP status to VALID before this
+     * point, so expiry still applies to RKP boxes exactly as before.
+     */
+    fun isBlockedByPolicy(
+        status: Status,
+        notAfter: String?,
+        blockInvalid: Boolean,
+    ): Boolean {
+        val (validityState, invalidReason) = resolveValidity(status, notAfter)
+        return !isEligible(validityState, invalidReason, blockInvalid)
     }
 
     internal fun isExpired(notAfter: String): Boolean {

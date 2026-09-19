@@ -671,11 +671,9 @@ object Config {
                             val notAfter = CertHack.getDeviceCertificateNotAfter(listOf(keybox))
                             val (validity, reason) = KeyboxVerifier.resolveValidity(status, notAfter)
 
-                            val isEligible = when {
-                                validity == KeyboxVerifier.ValidityState.VALID -> true
-                                !blockInvalid -> reason != KeyboxVerifier.InvalidReason.VERIFICATION_FAILED
-                                else -> false
-                            }
+                            // Status is already forced to VALID for RKP above, so expiry
+                            // still applies to RKP boxes exactly as before.
+                            val isEligible = !KeyboxVerifier.isBlockedByPolicy(status, notAfter, blockInvalid)
 
                             if (isEligible) {
                                 eligibleKeyboxes.add(keybox)

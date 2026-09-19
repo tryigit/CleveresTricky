@@ -892,7 +892,10 @@
         'Valid': 'Geçerli',
         'Invalid - Expired': 'Geçersiz - Süresi Geçmiş',
         'Invalid - Revoked': 'Geçersiz - İptal Edilmiş',
-        'Invalid - Verification Failed': 'Geçersiz - Doğrulama Başarısız'
+        'Invalid - Verification Failed': 'Geçersiz - Doğrulama Başarısız',
+        'Invalid keys blocked': 'Geçersiz anahtarlar engellendi',
+        'Expired/revoked permitted (failures blocked)': 'Süresi geçmiş/iptal edilmiş keyboxlara izin verilir (başarısız olanlar engellenir)',
+        'Keybox selection pool': 'Keybox seçim havuzu'
     });
 
     // Complete catalogs share one source key per row to keep all built-in
@@ -1378,6 +1381,9 @@
         ["Invalid - Expired", "无效 - 已过期", "Inválido - Vencido", "Ungültig - Abgelaufen", "Недействителен - Истек", "Tidak Valid - Kedaluwarsa", "अमान्य - समाप्त", "غير صالح - منتهي الصلاحية"],
         ["Invalid - Revoked", "无效 - 已吊销", "Inválido - Revocado", "Ungültig - Widerrufen", "Недействителен - Отозван", "Tidak Valid - Dicabut", "अमान्य - निरस्त", "غير صالح - ملغى"],
         ["Invalid - Verification Failed", "无效 - 验证失败", "Inválido - Error de verificación", "Ungültig - Überprüfung fehlgeschlagen", "Недействителен - Сбой проверки", "Tidak Valid - Verifikasi Gagal", "अमान्य - सत्यापन विफल", "غير صالح - فشل التحقق"],
+        ["Invalid keys blocked", "无效密钥已阻止", "Claves inválidas bloqueadas", "Ungültige Schlüssel blockiert", "Недействительные ключи заблокированы", "Kunci tidak valid diblokir", "अमान्य कुंजियाँ ब्लॉक की गईं", "تم حظر المفاتيح غير الصالحة"],
+        ["Expired/revoked permitted (failures blocked)", "允许已过期/已吊销（失败项仍被阻止）", "Vencidas/revocadas permitidas (fallos bloqueados)", "Abgelaufene/widerrufene zulässig (Fehler blockiert)", "Истекшие/отозванные разрешены (ошибки заблокированы)", "Kedaluwarsa/dicabut diizinkan (kegagalan diblokir)", "समाप्त/निरस्त की अनुमति है (विफलताएं ब्लॉक रहती हैं)", "مسموح بمنتهية الصلاحية/الملغاة (الفشل محظور)"],
+        ["Keybox selection pool", "密钥盒选择池", "Grupo de selección de keyboxes", "Keybox-Auswahlpool", "Пул выбора keybox", "Pool pemilihan keybox", "Keybox चयन पूल", "مجموعة اختيار Keybox"],
     ];
 
     for (const row of COMPLETE_CATALOG_ROWS) {

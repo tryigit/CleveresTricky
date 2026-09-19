@@ -9,6 +9,17 @@ assert.match(source, /const MAX_PROFILE_APPLICATIONS = 256;/, 'WebUI per-profile
 assert.match(source, /const MAX_TOTAL_ASSIGNMENTS = 2048;/, 'WebUI total assignment limit must match PolicyState');
 assert.match(source, /validatePolicyLimits\(normalized\);/, 'policy saves must validate the complete normalized state');
 
+const categoriesMatch = source.match(/const KEYBOX_PRIORITY_CATEGORIES = \[([\s\S]*?)\];/);
+assert.ok(categoriesMatch, 'keybox priority category allowlist is missing');
+const extractedCategories = Function(`return [${categoriesMatch[1]}];`)();
+assert.equal(extractedCategories.length, 16, 'keybox priority allowlist must cover all 16 validity categories');
+assert.equal(extractedCategories[0], 'VALID_RKP', 'keybox priority allowlist must start with VALID_RKP');
+assert.equal(
+  extractedCategories[extractedCategories.length - 1],
+  'INVALID_VERIFICATION_FAILED_UNKNOWN',
+  'keybox priority allowlist must end with INVALID_VERIFICATION_FAILED_UNKNOWN'
+);
+
 const start = source.indexOf('function safeClone(value)');
 const end = source.indexOf('function transitionRequiresReboot', start);
 assert.ok(start >= 0 && end > start, 'policy normalization implementation is missing');
@@ -30,6 +41,7 @@ vm.runInContext(`
   const MAX_PROFILE_APPLICATIONS = 256;
   const MAX_TOTAL_ASSIGNMENTS = 2048;
   const MAX_PROFILE_VALUE_LENGTH = 256;
+  const KEYBOX_PRIORITY_CATEGORIES = ${JSON.stringify(extractedCategories)};
   ${implementation}
   this.normalizePolicyState = normalizePolicyState;
   this.stateForSave = stateForSave;
@@ -119,5 +131,49 @@ assert.throws(
   /at most 2048 total application assignments/,
   'global assignment overflow must fail in WebUI before backend rejection'
 );
+
+// Values cross the vm realm boundary, so structural assertions compare JSON
+// snapshots instead of relying on prototype-sensitive deep equality.
+const snapshot = value => JSON.stringify(value);
+const customOrder = [...extractedCategories].reverse();
+const keyboxPolicy = policy([]);
+keyboxPolicy.blockInvalidKeyboxes = false;
+keyboxPolicy.keyboxPriorityOrder = { mode: 'custom', customOrder };
+const normalizedKeybox = context.normalizePolicyState(keyboxPolicy);
+assert.strictEqual(normalizedKeybox.blockInvalidKeyboxes, false, 'disabled block flag must survive normalization');
+assert.strictEqual(
+  snapshot(normalizedKeybox.keyboxPriorityOrder),
+  snapshot({ mode: 'custom', customOrder }),
+  'complete custom priority permutation must survive normalization'
+);
+const savedKeybox = context.stateForSave(normalizedKeybox);
+assert.strictEqual(savedKeybox.blockInvalidKeyboxes, false, 'disabled block flag must survive save normalization');
+assert.strictEqual(
+  snapshot(savedKeybox.keyboxPriorityOrder),
+  snapshot({ mode: 'custom', customOrder }),
+  'complete custom priority permutation must survive save normalization'
+);
+
+const defaultedKeybox = context.stateForSave(policy([]));
+assert.strictEqual(defaultedKeybox.blockInvalidKeyboxes, true, 'missing block flag must default to enabled like the backend');
+assert.strictEqual(
+  snapshot(defaultedKeybox.keyboxPriorityOrder),
+  snapshot({ mode: 'default' }),
+  'missing priority order must default like the backend'
+);
+
+for (const broken of [
+  { mode: 'custom', customOrder: customOrder.slice(1) },
+  { mode: 'custom', customOrder: [...customOrder.slice(0, -1), customOrder[0]] },
+  { mode: 'custom', customOrder: [...customOrder.slice(0, -1), 'VALID_FUTURE'] },
+  { mode: 'custom' }
+]) {
+  const normalized = context.normalizePolicyState({ ...policy([]), keyboxPriorityOrder: broken });
+  assert.strictEqual(
+    snapshot(normalized.keyboxPriorityOrder),
+    snapshot({ mode: 'default' }),
+    'incomplete, duplicate, unknown, or missing custom orders must fall back to default before save'
+  );
+}
 
 console.log('Policy WebUI/backend limit contract regression checks passed');
