@@ -427,9 +427,14 @@ object ServerManager {
             host.contains(':') || host.matches(Regex("\\d{1,3}(\\.\\d{1,3}){3}"))
         if (!isIpLiteral) return
         val address = runCatching { InetAddress.getByName(host) }.getOrNull() ?: return
+        // IPv4-mapped IPv6 loopback (::ffff:127.0.0.1 in any spelling) is not
+        // reported as loopback on every platform, so match the bytes directly.
+        val raw = address.address
+        val isMappedLoopback = raw.size == 16 && raw.take(10).all { it == 0.toByte() } &&
+            raw[10] == 0xff.toByte() && raw[11] == 0xff.toByte() && raw[12] == 127.toByte()
         require(
             !address.isLoopbackAddress && !address.isLinkLocalAddress &&
-                !address.isMulticastAddress && !address.isAnyLocalAddress,
+                !address.isMulticastAddress && !address.isAnyLocalAddress && !isMappedLoopback,
         ) { "Server URL must not target a non-routable host" }
     }
 

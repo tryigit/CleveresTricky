@@ -237,6 +237,7 @@ class ServerManagerCacheTest {
                 "https://LOCALHOST/keyboxes.zip",
                 "https://[::1]/x",
                 "https://[::]/x",
+                "https://[::ffff:127.0.0.1]/x",
                 "https://169.254.10.20/x",
                 "https://224.0.0.1/x",
                 "https://0.0.0.0/x",
