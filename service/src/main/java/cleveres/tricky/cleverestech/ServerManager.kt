@@ -1318,15 +1318,17 @@ object ServerManager {
     /**
      * Exports the remote server configuration for an encrypted backup archive.
      * The payload stays encrypted exactly as persisted on disk, so credentials
-     * never enter the backup as plaintext. Returns null when no configuration
-     * exists, it is unreadable, or it exceeds the archive entry bound.
+     * never enter the backup as plaintext. Returns null only when no
+     * configuration exists or the file cannot be read; size bounds are
+     * enforced by the caller so an oversized configuration fails the backup
+     * instead of being silently omitted.
      */
     fun exportServersForBackup(): ByteArray? {
         val file = serverFile
         val path = file.toPath()
         if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) return null
         return try {
-            readFileSnapshotBounded(file, 1, MAX_CONFIG_BYTES)
+            readFileSnapshotBounded(file, 1, MAX_SERVERS_FILE_BYTES)
         } catch (e: Exception) {
             Logger.e("Failed to read server configuration for backup", e)
             null
@@ -1341,12 +1343,13 @@ object ServerManager {
      * instead of writing unusable bytes.
      */
     fun validateRestoredServers(bytes: ByteArray): ByteArray? {
-        if (bytes.isEmpty() || bytes.size > MAX_CONFIG_BYTES) return null
+        if (bytes.isEmpty() || bytes.size > MAX_SERVERS_FILE_BYTES) return null
         // Legacy plaintext arrays are still read by loadServers, so a restored
         // archive may carry one. Encrypted blobs must decrypt on this device.
         val wasPlaintext = bytes.firstOrNull() == '['.code.toByte()
         val plaintext = if (wasPlaintext) bytes else DeviceKeyManager.decrypt(bytes) ?: return null
         return try {
+            if (plaintext.size > MAX_CONFIG_BYTES) return null
             val json = JSONArray(String(plaintext, StandardCharsets.UTF_8))
             require(json.length() <= MAX_SERVERS) { "Too many server configurations" }
             for (i in 0 until json.length()) {
@@ -1390,6 +1393,15 @@ object ServerManager {
     private const val MAX_SERVERS = 64
     private const val MAX_REMOTE_KEYBOXES = 64
     private const val MAX_CONFIG_BYTES = 2L * 1024 * 1024
+
+    /**
+     * servers.json stores a device-encrypted blob whose plaintext stays within
+     * [MAX_CONFIG_BYTES]; AES-GCM adds one IV-length byte, a 12-byte IV and a
+     * 16-byte tag, so the persisted file may exceed the plaintext bound by 29
+     * bytes. Backup export, archive entry limits, and restore must all accept
+     * this same bound or a validly saved configuration becomes unrestorable.
+     */
+    internal const val MAX_SERVERS_FILE_BYTES = MAX_CONFIG_BYTES + 29L
     private const val MAX_CACHE_BYTES = 16L * 1024 * 1024
     private const val MAX_HEADER_VALUE_CHARS = 8192
     private const val MAX_BASIC_CREDENTIAL_UTF16_UNITS = 1024

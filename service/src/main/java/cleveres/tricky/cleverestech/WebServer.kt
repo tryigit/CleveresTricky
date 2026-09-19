@@ -3921,6 +3921,9 @@ class WebServer(
             when {
                 name.endsWith(".cbox", ignoreCase = true) -> MAX_BACKUP_CBOX_ENTRY_BYTES
                 isBackupKeyboxEntry(name) -> MAX_BACKUP_XML_ENTRY_BYTES
+                // Matches the encrypted export bound: a blob saveServers wrote
+                // must stay restorable, not fail under the generic text bound.
+                name == SERVERS_CONFIG_FILE -> ServerManager.MAX_SERVERS_FILE_BYTES.toInt()
                 else -> MAX_BACKUP_CONFIG_ENTRY_BYTES
             }
 
