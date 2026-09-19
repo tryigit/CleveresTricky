@@ -295,6 +295,102 @@ class WebServerBackupTest {
     }
 
     @Test
+    fun testDisabledKeyboxesBackupRestoreRoundTrip() {
+        val disabledContent = "keyboxes:keybox.xml\nroot:legacy.xml\n"
+        File(configDir, "disabled_keyboxes").writeText(disabledContent)
+        File(configDir, "target.txt").writeText("com.example.app")
+
+        val zipBytes = WebServer.createBackupZip(configDir)
+        assertTrue(zipBytes.isNotEmpty())
+        configDir.deleteRecursively()
+        configDir.mkdirs()
+
+        WebServer.restoreBackupZip(configDir, ByteArrayInputStream(zipBytes))
+        val restored = File(configDir, "disabled_keyboxes")
+        assertTrue(restored.exists())
+        assertEquals(disabledContent, restored.readText())
+    }
+
+    @Test
+    fun testRestoreRemovesDisabledKeyboxesMissingFromBackup() {
+        File(configDir, "target.txt").writeText("com.example.app")
+        val zipBytes = WebServer.createBackupZip(configDir)
+
+        // Created after the backup, so the archive never contains this list.
+        File(configDir, "disabled_keyboxes").writeText("keyboxes:stale.xml\n")
+        WebServer.restoreBackupZip(configDir, ByteArrayInputStream(zipBytes))
+
+        assertFalse("a disabled list absent from the backup must be removed by restore", File(configDir, "disabled_keyboxes").exists())
+    }
+
+    @Test
+    fun testServersConfigBackupRestoreRoundTrip() {
+        val plaintext = """[{"id":"srv1","name":"Primary","url":"https://example.com/kb.xml","priority":0,"enabled":true,"authType":"NONE","authData":{},"autoRefresh":false,"refreshIntervalHours":24}]"""
+        File(configDir, "servers.json").writeText(plaintext)
+        File(configDir, "boot_key").writeText("a".repeat(64))
+        File(configDir, "boot_hash").writeText("b".repeat(64))
+        File(configDir, "lang.json").writeText("""{"Refresh":"Yenile"}""")
+
+        val zipBytes = WebServer.createBackupZip(configDir)
+        assertTrue(zipBytes.isNotEmpty())
+        configDir.deleteRecursively()
+        configDir.mkdirs()
+
+        WebServer.restoreBackupZip(configDir, ByteArrayInputStream(zipBytes))
+
+        assertEquals(plaintext, File(configDir, "servers.json").readText())
+        assertEquals("a".repeat(64), File(configDir, "boot_key").readText())
+        assertEquals("b".repeat(64), File(configDir, "boot_hash").readText())
+        assertEquals("""{"Refresh":"Yenile"}""", File(configDir, "lang.json").readText())
+    }
+
+    @Test
+    fun testServerConfigMissingFromBackupIsNotDeleted() {
+        // Older backups predate servers.json, so an absent entry must preserve
+        // the device-specific encrypted server configuration.
+        File(configDir, "target.txt").writeText("com.example.app")
+        val zipBytes = WebServer.createBackupZip(configDir)
+
+        File(configDir, "servers.json").writeText("""[{"id":"srv1"}]""")
+        WebServer.restoreBackupZip(configDir, ByteArrayInputStream(zipBytes))
+
+        assertTrue("server configuration absent from the backup must survive restore", File(configDir, "servers.json").exists())
+    }
+
+    @Test
+    fun testServersConfigValidation() {
+        assertFalse(WebServer.validateContent("servers.json", "not a blob"))
+    }
+
+    @Test
+    fun testDisabledKeyboxesValidation() {
+        assertTrue(WebServer.validateContent("disabled_keyboxes", "keyboxes:keybox.xml\nroot:legacy.xml\n"))
+        assertTrue(WebServer.validateContent("disabled_keyboxes", ""))
+        assertTrue(WebServer.validateContent("disabled_keyboxes", "\n \n"))
+
+        // Unknown scopes are rejected: they can never resolve at runtime.
+        assertFalse(WebServer.validateContent("disabled_keyboxes", "managed:keybox.xml"))
+        assertFalse(WebServer.validateContent("disabled_keyboxes", "keyboxes2:keybox.xml"))
+
+        // Malformed identifiers are rejected instead of being persisted.
+        assertFalse(WebServer.validateContent("disabled_keyboxes", "keyboxes:"))
+        assertFalse(WebServer.validateContent("disabled_keyboxes", ":keybox.xml"))
+        assertFalse(WebServer.validateContent("disabled_keyboxes", "noseparator.xml"))
+        assertFalse(WebServer.validateContent("disabled_keyboxes", "keyboxes:../escape.xml"))
+        assertFalse(WebServer.validateContent("disabled_keyboxes", "keyboxes:sub/dir.xml"))
+        assertFalse(WebServer.validateContent("disabled_keyboxes", "keyboxes:not_a_keybox.txt"))
+        assertFalse(WebServer.validateContent("disabled_keyboxes", "keyboxes:keybox.xml\nbroken-line\n"))
+
+        // Entry-count bound matches the runtime inventory limit.
+        val tooMany = (0 until 257).joinToString("") { index -> "keyboxes:kb$index.xml\n" }
+        assertFalse(WebServer.validateContent("disabled_keyboxes", tooMany))
+
+        // Size bound.
+        val large = "keyboxes:" + "k".repeat(65 * 1024) + ".xml\n"
+        assertFalse(WebServer.validateContent("disabled_keyboxes", large))
+    }
+
+    @Test
     fun testRkpProvenanceValidation() {
         assertTrue(WebServer.validateContent(RkpProvenanceStore.PROVENANCE_FILE_NAME, """{"rkp_keyboxes":["keybox.xml","test.cbox"]}"""))
         assertTrue(WebServer.validateContent(RkpProvenanceStore.PROVENANCE_FILE_NAME, """{"rkp_keyboxes":[]}"""))

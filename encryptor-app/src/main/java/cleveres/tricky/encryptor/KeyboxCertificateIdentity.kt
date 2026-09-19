@@ -53,39 +53,6 @@ internal object KeyboxCertificateIdentity {
         }
     }
 
-    @Deprecated("Leaf-first identity replaced the shared-root read", ReplaceWith("leafCertificateSerial(xmlUtf8)"))
-    fun thirdCertificateSerial(xmlUtf8: ByteArray): String? {
-        var cursor = indexOf(xmlUtf8, chainOpen, 0, xmlUtf8.size)
-        if (cursor < 0) return null
-        val chainBody = indexOfByte(xmlUtf8, '>'.code.toByte(), cursor, xmlUtf8.size)
-        if (chainBody < 0) return null
-        val chainEnd = indexOf(xmlUtf8, chainClose, chainBody + 1, xmlUtf8.size)
-        if (chainEnd < 0) return null
-        cursor = chainBody + 1
-        repeat(3) { index ->
-            val begin = indexOf(xmlUtf8, pemBegin, cursor, chainEnd)
-            if (begin < 0) return null
-            val endMarker = indexOf(xmlUtf8, pemEnd, begin + pemBegin.size, chainEnd)
-            if (endMarker < 0) return null
-            val end = endMarker + pemEnd.size
-            if (index == 2) {
-                val pem = xmlUtf8.copyOfRange(begin, end)
-                return try {
-                    val certificate = ByteArrayInputStream(pem).use {
-                        CertificateFactory.getInstance("X.509").generateCertificate(it)
-                    } as? X509Certificate ?: return null
-                    certificate.serialNumber.toString(16).uppercase(Locale.ROOT)
-                } catch (_: Exception) {
-                    null
-                } finally {
-                    pem.fill(0)
-                }
-            }
-            cursor = end
-        }
-        return null
-    }
-
     private fun indexOf(
         bytes: ByteArray,
         needle: ByteArray,

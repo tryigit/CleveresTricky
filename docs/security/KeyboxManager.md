@@ -20,7 +20,7 @@ The opt-out list lives in a plain-text `disabled_keyboxes` file inside the confi
 
 ## Naming on upload
 
-Pasted or dropped keyboxes are stored as `keybox.xml`. When that name already exists, the manager automatically picks the next free name (`keybox2.xml`, `keybox3.xml`, and so on), so an existing keybox is never silently replaced. The assigned name is returned to the WebUI, and RKP provenance is bound to the final stored name.
+Pasted or dropped keyboxes are stored under the supplied filename, or as `keybox.xml` when no filename is supplied. When that name already exists, the manager automatically picks the next free name (`keybox2.xml`, `keybox3.xml`, and so on), so an existing keybox is never silently replaced. The assigned name is returned to the WebUI, and RKP provenance is bound to the final stored name.
 
 ## Verification
 

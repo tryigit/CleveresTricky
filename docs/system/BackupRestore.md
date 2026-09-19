@@ -24,6 +24,10 @@ Sensitive staged byte arrays are cleared after the operation. Successful restore
 
 Backups include the validated version two policy state, including optional feature controls, independent System, Vendor, and Boot patch policies, and named profile configuration. Profile keybox entries remain references to validated keybox files rather than embedded private key material. Restore validates the policy state before publishing it and reloads one complete snapshot.
 
+## Remote servers
+
+Backups also include the Remote Server configuration, WebUI language file, debug logging marker, and the boot identity digests. The server configuration stays device-encrypted and is restored only when it decrypts and validates on the restoring device, so a backup can move Remote Server settings between installs on the same device but not to a device that holds a different encryption key. A backup without server settings preserves the server configuration already present instead of deleting it. Applying the Default profile removes all Remote Servers and their cached keybox content.
+
 ## Recovery guidance
 
 Keep the password separate from the archive. Test an export before removing the original installation. If restore fails, review Logs and correct the archive or password rather than repeatedly changing unrelated settings.

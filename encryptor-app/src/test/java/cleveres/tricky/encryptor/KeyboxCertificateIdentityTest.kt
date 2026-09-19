@@ -8,11 +8,11 @@ import org.junit.Test
 
 class KeyboxCertificateIdentityTest {
     @Test
-    fun `real single certificate fixture has no third certificate identity`() {
+    fun `leaf certificate identity uses the device attestation certificate`() {
         val root = locateRoot()
         val xml = File(root, "service/src/test/resources/keybox/valid_ec.xml").readBytes()
         try {
-            assertNull(KeyboxCertificateIdentity.thirdCertificateSerial(xml))
+            assertNotNull(KeyboxCertificateIdentity.leafCertificateSerial(xml))
         } finally {
             xml.fill(0)
         }
@@ -39,9 +39,15 @@ class KeyboxCertificateIdentityTest {
     }
 
     @Test
-    fun `fewer than three certificate PEM blocks has no identity`() {
+    fun `certificate chain without a leaf PEM block has no identity`() {
+        val emptyChain = "<CertificateChain></CertificateChain>".toByteArray()
+        assertNull(KeyboxCertificateIdentity.leafCertificateSerial(emptyChain))
+    }
+
+    @Test
+    fun `malformed leaf PEM block has no identity`() {
         val xml = "<CertificateChain><Certificate>-----BEGIN CERTIFICATE-----x-----END CERTIFICATE-----</Certificate></CertificateChain>".toByteArray()
-        assertNull(KeyboxCertificateIdentity.thirdCertificateSerial(xml))
+        assertNull(KeyboxCertificateIdentity.leafCertificateSerial(xml))
     }
 
     private fun locateRoot(): File {

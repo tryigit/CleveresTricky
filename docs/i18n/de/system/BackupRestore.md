@@ -4,4 +4,4 @@
 
 Verschiebt Konfiguration und autorisiertes Schlüsselmaterial in einem authentifiziert verschlüsselten Archiv. Export verlangt mindestens 12 Zeichen Passwort und verwendet eine Allowlist; Symlinks, unbekannte Pfade und Größenüberschreitungen werden verworfen.
 
-Import akzeptiert nur CTSB und begrenzt Upload, Entries, Keyboxes sowie Einzel- und Gesamtgröße. Traversal, Duplikate, Verzeichnisse, Symlink-Ziele, fehlerhafte Settings und Keyboxes werden vor dem Schreiben abgewiesen. Policy v2 wird als vollständiger Snapshot validiert.
+Import akzeptiert nur CTSB und begrenzt Upload, Entries, Keyboxes sowie Einzel- und Gesamtgröße. Traversal, Duplikate, Verzeichnisse, Symlink-Ziele, fehlerhafte Settings und Keyboxes werden vor dem Schreiben abgewiesen. Policy v2 wird als vollständiger Snapshot validiert. Remote-Server-Einstellungen werden ebenfalls gerätegebunden verschlüsselt eingeschlossen; sie werden nur wiederhergestellt, wenn sie auf demselben Gerät entschlüsselt und validiert werden, und ohne Eintrag bleiben vorhandene Server-Einstellungen erhalten. Das Default-Profil entfernt alle Remote-Server samt zwischengespeichertem Keybox-Inhalt.

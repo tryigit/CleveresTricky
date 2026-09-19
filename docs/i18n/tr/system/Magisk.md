@@ -71,7 +71,7 @@ Tüm ayar ve kural dosyaları `/data/adb/cleverestricky/` klasöründe yer alır
 
 * **`keybox.xml`**: Geçerli donanım sertifikasyon anahtar kutunuzu doğrudan `/data/adb/cleverestricky/keybox.xml` yoluna yerleştirin. İzinlerin kısıtlı olduğundan emin olun (`chmod 600`).
 * **`keyboxes/`**: Birden fazla keybox dosyası saklamak için kullanılan dizin.
-* **Yükleme üzerine yazmaz:** Bırakılan veya yapıştırılan keybox `keybox.xml` olarak kaydedilir; bu ad zaten kullanımdaysa sıradaki boş ad (`keybox2.xml`, `keybox3.xml`, ...) otomatik olarak kullanılır.
+* **Yükleme üzerine yazmaz:** Bırakılan veya yapıştırılan keybox verilen adla kaydedilir, ad verilmemişse `keybox.xml` olarak; bu ad zaten kullanımdaysa sıradaki boş ad (`keybox2.xml`, `keybox3.xml`, ...) otomatik olarak kullanılır.
 * **`disabled_keyboxes`**: Havuzdan çıkarma listesi. Her satır bir `kapsam:dosyaadı` tanımlayıcısı içerir (`keyboxes:keybox2.xml`, `root:keybox.xml`) ve WebUI Keybox panelinde gösterilen dosya adlarıyla eşleşir. Listelenen keybox'lar görünür ve yönetilebilir kalır ancak sertifikasyon havuzuna hiçbir zaman yüklenmez. WebUI'deki Devre dışı bırak ve Etkinleştir düğmeleri bu dosyayı okur ve yazar; dosyayı elle de düzenleyebilirsiniz.
 
 ---

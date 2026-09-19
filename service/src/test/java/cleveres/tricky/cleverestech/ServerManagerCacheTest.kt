@@ -263,9 +263,11 @@ class ServerManagerCacheTest {
                 ServerManager.validateServer(configWith(bad))
             }
         }
-        // Ordinary public hosts and private LAN servers stay accepted.
+        // Ordinary public hosts stay accepted; private LAN ranges are non-public.
         ServerManager.validateServer(configWith("https://example.com/keyboxes.zip"))
-        ServerManager.validateServer(configWith("https://192.168.1.10/keyboxes.zip"))
+        assertThrows(IllegalArgumentException::class.java) {
+            ServerManager.validateServer(configWith("https://192.168.1.10/keyboxes.zip"))
+        }
     }
 
     @Test

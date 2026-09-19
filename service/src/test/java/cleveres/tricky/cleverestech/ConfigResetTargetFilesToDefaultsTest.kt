@@ -68,4 +68,30 @@ class ConfigResetTargetFilesToDefaultsTest {
         assertEquals(Config.DEFAULT_TARGET_CONTENT, identityTargetFile.readText())
         assertTrue(Config.isGlobalMode)
     }
+
+    @Test
+    fun `applyProfile default removes configured remote servers and their caches`() {
+        val serversFile = File(root, ServerManager.SERVERS_FILE_NAME)
+        val cacheFile = File(root, "server_cache_srv1.enc")
+        val unrelatedFile = File(root, "server_cache_notes.txt")
+        serversFile.writeText("[]")
+        cacheFile.writeBytes(ByteArray(32) { 1 })
+        unrelatedFile.writeText("keep")
+
+        Config.applyProfile("default")
+
+        org.junit.Assert.assertFalse("default profile must remove the server configuration", serversFile.exists())
+        org.junit.Assert.assertFalse("default profile must remove server caches", cacheFile.exists())
+        assertTrue("unrelated files must survive the reset", unrelatedFile.exists())
+    }
+
+    @Test
+    fun `non-default profiles preserve configured remote servers`() {
+        val serversFile = File(root, ServerManager.SERVERS_FILE_NAME)
+        serversFile.writeText("[]")
+
+        Config.applyProfile("minimal")
+
+        assertTrue("only the default profile clears remote servers", serversFile.exists())
+    }
 }

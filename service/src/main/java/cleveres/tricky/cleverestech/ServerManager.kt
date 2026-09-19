@@ -34,6 +34,8 @@ import javax.net.ssl.HttpsURLConnection
 import javax.net.ssl.SSLSocketFactory
 
 object ServerManager {
+    const val SERVERS_FILE_NAME = "servers.json"
+
     data class ServerConfig(
         val id: String,
         val name: String,
@@ -69,7 +71,7 @@ object ServerManager {
     private var stateGeneration = 0L
     private val ioLock = Any()
     private val fetchLocks = Array(FETCH_LOCK_STRIPES) { Any() }
-    private val serverFile get() = File(Config.keyboxDirectory.parentFile, "servers.json")
+    private val serverFile get() = File(Config.keyboxDirectory.parentFile, SERVERS_FILE_NAME)
     private val validServerId = Regex("[A-Za-z0-9_-]{1,64}")
     private val validHeaderName = Regex("[!#$%&'*+.^_`|~0-9A-Za-z-]{1,128}")
     private val supportedAuthTypes = setOf("NONE", "BEARER", "BASIC", "API_KEY", "CUSTOM")
@@ -487,8 +489,9 @@ object ServerManager {
     /**
      * Rejects non-public IP literals plus localhost without any DNS lookup, so
      * this stays safe on boot, load, and fetch paths. Hostnames are resolved
-     * and pinned at fetch time instead (no stalls here); private LAN ranges
-     * stay allowed for legitimate local servers.
+     * and pinned at fetch time instead (no stalls here). Private LAN ranges
+     * (RFC1918) are non-public destinations and are rejected like the other
+     * special registries.
      */
     private fun rejectNonRoutableServerHost(host: String) {
         if (host.equals("localhost", ignoreCase = true) || host.equals("localhost.", ignoreCase = true)) {
@@ -1312,6 +1315,78 @@ object ServerManager {
         }
     }
 
+    /**
+     * Exports the remote server configuration for an encrypted backup archive.
+     * The payload stays encrypted exactly as persisted on disk, so credentials
+     * never enter the backup as plaintext. Returns null when no configuration
+     * exists, it is unreadable, or it exceeds the archive entry bound.
+     */
+    fun exportServersForBackup(): ByteArray? {
+        val file = serverFile
+        val path = file.toPath()
+        if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) return null
+        return try {
+            val bytes = readFileSnapshotBounded(file, 1, MAX_CONFIG_BYTES)
+            if (bytes.size > MAX_BACKUP_SERVERS_BYTES) {
+                bytes.fill(0)
+                null
+            } else {
+                bytes
+            }
+        } catch (e: Exception) {
+            Logger.e("Failed to read server configuration for backup", e)
+            null
+        }
+    }
+
+    /**
+     * Validates and stages a restored server configuration. The payload must be
+     * a device-encrypted blob that decrypts on this device and passes the same
+     * structural and URL policy as live configuration. Returns null when the
+     * payload is not restorable, in which case the restore must fail closed
+     * instead of writing unusable bytes.
+     */
+    fun validateRestoredServers(bytes: ByteArray): ByteArray? {
+        if (bytes.isEmpty() || bytes.size > MAX_CONFIG_BYTES) return null
+        // Legacy plaintext arrays are still read by loadServers, so a restored
+        // archive may carry one. Encrypted blobs must decrypt on this device.
+        val wasPlaintext = bytes.firstOrNull() == '['.code.toByte()
+        val plaintext = if (wasPlaintext) bytes else DeviceKeyManager.decrypt(bytes) ?: return null
+        return try {
+            val json = JSONArray(String(plaintext, StandardCharsets.UTF_8))
+            require(json.length() <= MAX_SERVERS) { "Too many server configurations" }
+            for (i in 0 until json.length()) {
+                validateServer(parseServer(json.getJSONObject(i)))
+            }
+            bytes
+        } catch (e: Exception) {
+            Logger.e("Refusing unrestorable server configuration from backup", e)
+            null
+        } finally {
+            if (!wasPlaintext) plaintext.fill(0)
+        }
+    }
+
+    /**
+     * Removes every configured remote server. Each removal goes through the
+     * regular path so an already missing configuration file cannot leave stale
+     * in-memory servers behind, then every remaining server cache file is
+     * deleted. Profile resets use this to clear remote servers without needing
+     * the device encryption key.
+     */
+    fun clearAllServers() {
+        while (true) {
+            val nextId = serversList.firstOrNull()?.id ?: break
+            if (!removeServer(nextId)) break
+        }
+        val configDir = Config.keyboxDirectory.parentFile ?: return
+        configDir.listFiles()?.forEach { file ->
+            val name = file.name
+            if (!name.startsWith("server_cache_") || !name.endsWith(".enc")) return@forEach
+            deleteCacheFile(file, "reset")
+        }
+    }
+
     private const val FETCH_LOCK_STRIPES = 16
     private const val DNS_TIMEOUT_MS = 10_000L
     private const val CONNECT_TIMEOUT_MS = 15_000
@@ -1319,6 +1394,7 @@ object ServerManager {
     private const val MAX_SERVERS = 64
     private const val MAX_REMOTE_KEYBOXES = 64
     private const val MAX_CONFIG_BYTES = 2L * 1024 * 1024
+    private const val MAX_BACKUP_SERVERS_BYTES = 1024 * 1024
     private const val MAX_CACHE_BYTES = 16L * 1024 * 1024
     private const val MAX_HEADER_VALUE_CHARS = 8192
     private const val MAX_BASIC_CREDENTIAL_UTF16_UNITS = 1024

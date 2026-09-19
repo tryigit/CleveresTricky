@@ -71,7 +71,7 @@ All module settings and policy files reside in `/data/adb/cleverestricky/`.
 
 * **`keybox.xml`**: Place your hardware-backed attestation keybox XML directly at `/data/adb/cleverestricky/keybox.xml`. Ensure permissions are restricted (`chmod 600`).
 * **`keyboxes/`**: Directory for placing multiple keybox files.
-* **Uploads never overwrite:** Dropping or pasting a keybox is stored as `keybox.xml`; when that name is already taken, the next free name (`keybox2.xml`, `keybox3.xml`, ...) is used automatically.
+* **Uploads never overwrite:** Dropping or pasting a keybox is stored under the supplied filename, or as `keybox.xml` when no filename is supplied; when that name is already taken, the next free name (`keybox2.xml`, `keybox3.xml`, ...) is used automatically.
 * **`disabled_keyboxes`**: Pool opt-out list. Each line holds one `scope:filename` identifier (`keyboxes:keybox2.xml`, `root:keybox.xml`) matching the filenames shown in the WebUI Keybox panel. Listed keyboxes stay visible and manageable but are never loaded into the attestation pool. The WebUI Disable and Enable buttons read and write this file, so you can also maintain it by hand.
 
 ---

@@ -123,8 +123,10 @@ private fun isValidKeyboxFilename(s: String): Boolean {
  * suffix before the extension when the original already exists.
  * `keybox.xml` -> `keybox2.xml` -> `keybox3.xml` -> ...
  * Returns the original [name] unchanged when it does not yet exist.
+ * Returns null when every suffixed candidate is already taken, so callers can
+ * reject the upload instead of overwriting the original file.
  */
-private fun deduplicateKeyboxFilename(directory: File, name: String): String {
+private fun deduplicateKeyboxFilename(directory: File, name: String): String? {
     val dot = name.lastIndexOf('.')
     if (dot < 0) return name
     val base = name.substring(0, dot)
@@ -134,7 +136,7 @@ private fun deduplicateKeyboxFilename(directory: File, name: String): String {
         val candidate = "$base$i$ext"
         if (isValidKeyboxFilename(candidate) && !File(directory, candidate).exists()) return candidate
     }
-    return name
+    return null
 }
 
 private const val DISABLED_KEYBOXES_FILENAME = "disabled_keyboxes"
@@ -444,6 +446,8 @@ class WebServer(
         DeviceTemplateManager.initialize(configDir, persistBuiltInTemplates = false)
         WEB_UI_SETTINGS.forEach(Config::refreshRuntimeSetting)
         Config.refreshRestoredConfiguration().getOrThrow()
+        // Re-publish the pre-restore remote server state recovered by the transaction.
+        ServerManager.initialize()
         if (!updateKeyboxesFromConfiguredRevocationSource()) {
             throw RestoreKeyboxActivationException()
         }
@@ -1705,8 +1709,16 @@ class WebServer(
                         // Multipart uploads share the pasted-text invariant: an
                         // existing keybox must never be overwritten, so the
                         // final stored name is deduplicated before any write,
-                        // provenance, or response binding.
-                        val finalName = deduplicateKeyboxFilename(keyboxDir, storedName)
+                        // provenance, or response binding. When every suffixed
+                        // name is taken the upload is rejected instead of
+                        // falling back to the original file.
+                        val finalName =
+                            deduplicateKeyboxFilename(keyboxDir, storedName)
+                                ?: return secureResponse(
+                                    Response.Status.BAD_REQUEST,
+                                    "text/plain",
+                                    "No free keybox filename is available",
+                                )
                         val dest = getSafeFile(keyboxDir, finalName)
                         if (dest == null) {
                             return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid upload path")
@@ -1761,7 +1773,13 @@ class WebServer(
                     keyboxValidationError(validation)?.let { return it }
                     val keyboxDir = File(configDir, "keyboxes")
                     SecureFile.mkdirs(keyboxDir, 448)
-                    val finalName = deduplicateKeyboxFilename(keyboxDir, storedName)
+                    val finalName =
+                        deduplicateKeyboxFilename(keyboxDir, storedName)
+                            ?: return secureResponse(
+                                Response.Status.BAD_REQUEST,
+                                "text/plain",
+                                "No free keybox filename is available",
+                            )
                     val file = getSafeFile(keyboxDir, finalName)
                     if (file == null) {
                         return secureResponse(Response.Status.BAD_REQUEST, "text/plain", "Path traversal attempt detected")
@@ -2869,6 +2887,9 @@ class WebServer(
                                     PolicyState.validatePublishedState().getOrThrow()
                                     WEB_UI_SETTINGS.forEach(Config::refreshRuntimeSetting)
                                     Config.refreshRestoredConfiguration().getOrThrow()
+                                    // Re-publish the restored remote server set (or its
+                                    // absence) before keyboxes are rebuilt from it.
+                                    ServerManager.initialize()
                                     if (!updateKeyboxesFromConfiguredRevocationSource()) {
                                         throw RestoreKeyboxActivationException()
                                     }
@@ -3110,7 +3131,12 @@ class WebServer(
                 "spoof_region_cn",
                 "telephony",
                 "camera_visibility",
+                "lang.json",
+                DEBUG_LOGGING_FILE,
+                "boot_key",
+                "boot_hash",
                 RkpProvenanceStore.PROVENANCE_FILE_NAME,
+                DISABLED_KEYBOXES_FILENAME,
                 // Retained only for legacy backup compatibility.
                 "rkp_passthrough",
                 "drm_passthrough",
@@ -3118,6 +3144,10 @@ class WebServer(
                 "boot_props_mode",
                 PolicyState.STATE_FILE,
             )
+        // servers.json stays out of BACKUP_CONFIG_FILES: it is a device-encrypted
+        // binary blob, so it is staged through a dedicated validated path instead
+        // of the text-config pipeline.
+        private const val SERVERS_CONFIG_FILE = ServerManager.SERVERS_FILE_NAME
         private val APP_RULE_FIELDS = setOf("package", "template", "keybox", "privacy", "autoIdentity")
 
         internal fun refreshSelectedTemplateIdentity(configDir: File): Boolean {
@@ -3352,6 +3382,30 @@ class WebServer(
                     }
                     true
                 }.getOrDefault(false)
+            }
+            if (filename == DISABLED_KEYBOXES_FILENAME) {
+                if (content.utf8ByteLength() > 64 * 1024) return false
+                var entryCount = 0
+                return content.lineSequence().all { rawLine ->
+                    val line = rawLine.trim()
+                    // Blank lines are tolerated to match the runtime reader.
+                    if (line.isEmpty()) return@all true
+                    if (++entryCount > StoredKeyboxInventory.MAX_STORED_SOURCES) return@all false
+                    isValidDisabledKeyboxIdentifier(line)
+                }
+            }
+            if (filename == "lang.json") {
+                // User-provided WebUI translation map: a flat string-to-string JSON object.
+                if (content.utf8ByteLength() > MAX_CONFIG_FILE_SIZE) return false
+                return runCatching {
+                    val json = JSONObject(content)
+                    json.keys().asSequence().all { key -> json.opt(key) is String }
+                }.getOrDefault(false)
+            }
+            if (filename == DEBUG_LOGGING_FILE) return content.isEmpty()
+            if (filename == "boot_key" || filename == "boot_hash") {
+                val value = content.trim()
+                return value.length == 64 && value.all { it in '0'..'9' || it in 'a'..'f' }
             }
             if (filename == "target.txt" || filename == "identity_target.txt") {
                 var ruleCount = 0
@@ -3652,6 +3706,23 @@ class WebServer(
                             totalBytes += copied
                         }
                     }
+
+                    // Remote server settings ride along as their device-encrypted
+                    // blob: credentials never enter the archive as plaintext, and
+                    // the entry can only be restored on the same device key.
+                    val serversBytes = ServerManager.exportServersForBackup()
+                    if (serversBytes != null) {
+                        try {
+                            val remaining = MAX_BACKUP_UNCOMPRESSED_BYTES.toLong() - totalBytes
+                            if (remaining < 0) throw IOException("Backup exceeds uncompressed size limit")
+                            zos.putNextEntry(ZipEntry(SERVERS_CONFIG_FILE))
+                            zos.write(serversBytes)
+                            zos.closeEntry()
+                            totalBytes += serversBytes.size
+                        } finally {
+                            serversBytes.fill(0)
+                        }
+                    }
                 }
                 bos.toByteArray()
             } finally {
@@ -3697,7 +3768,10 @@ class WebServer(
                             throw IOException("Backup contains too many entries")
                         }
                         val name = entry.name
-                        val allowed = name in BACKUP_CONFIG_FILES || isValidKeyboxBackupPath(name)
+                        val allowed =
+                            name in BACKUP_CONFIG_FILES ||
+                                name == SERVERS_CONFIG_FILE ||
+                                isValidKeyboxBackupPath(name)
                         if (entry.isDirectory || !allowed || staged.containsKey(name)) {
                             throw SecurityException("Unsupported or duplicate backup entry: $name")
                         }
@@ -3737,7 +3811,7 @@ class WebServer(
                 val staleConfigFiles =
                     BACKUP_CONFIG_FILES
                         .asSequence()
-                        .filter { it !in staged && it != "privacy_seed" }
+                        .filter { it !in staged && !backupStalenessExempt(it) }
                         .map { File(configDir, it) }
                         .filter { file ->
                             val path = file.toPath()
@@ -3816,12 +3890,42 @@ class WebServer(
 
         private fun isBackupKeyboxEntry(name: String): Boolean = name == "keybox.xml" || isValidKeyboxBackupPath(name)
 
+        /**
+         * Restored opt-out entries must match the runtime identifier contract:
+         * one `scope:filename` line whose scope is a known keybox scope and
+         * whose filename is a bounded, traversal-free keybox file name. Anything
+         * else is rejected instead of being written to disk, where a malformed
+         * identifier could silently disable an unintended file or resurrect on
+         * a later same-name upload.
+         */
+        private fun isValidDisabledKeyboxIdentifier(identifier: String): Boolean {
+            val separator = identifier.indexOf(':')
+            if (separator <= 0 || separator == identifier.length - 1) return false
+            val scope = identifier.substring(0, separator)
+            if (scope != StoredKeyboxInventory.Scope.ROOT.apiValue &&
+                scope != StoredKeyboxInventory.Scope.KEYBOXES.apiValue
+            ) {
+                return false
+            }
+            val filename = identifier.substring(separator + 1)
+            if (filename.isEmpty() || filename.utf8ByteLength() > StoredKeyboxInventory.MAX_FILENAME_BYTES) return false
+            if (filename.contains('/') || filename.contains('\\') || filename.contains('\u0000')) return false
+            if (filename.any { it.code < 0x20 || it.code == 0x7f }) return false
+            return isValidKeyboxFilename(filename)
+        }
+
         private fun backupEntryLimit(name: String): Int =
             when {
                 name.endsWith(".cbox", ignoreCase = true) -> MAX_BACKUP_CBOX_ENTRY_BYTES
                 isBackupKeyboxEntry(name) -> MAX_BACKUP_XML_ENTRY_BYTES
                 else -> MAX_BACKUP_CONFIG_ENTRY_BYTES
             }
+
+        private fun backupStalenessExempt(name: String): Boolean =
+            name == "privacy_seed" ||
+                name == "boot_key" ||
+                name == "boot_hash" ||
+                name == SERVERS_CONFIG_FILE
 
         private fun isValidKeyboxBackupPath(name: String): Boolean {
             if (!name.startsWith("keyboxes/") || name.count { it == '/' } != 1) return false
@@ -3982,6 +4086,16 @@ class WebServer(
             if (name == "privacy_seed") {
                 if (!isValidPrivacySeedBytes(bytes)) {
                     throw IOException("Backup privacy seed is invalid: $name")
+                }
+                return
+            }
+            if (name == SERVERS_CONFIG_FILE) {
+                val validated = ServerManager.validateRestoredServers(bytes)
+                if (validated == null) {
+                    throw IOException("Backup server configuration is invalid: $name")
+                }
+                if (!validated.contentEquals(bytes)) {
+                    throw IOException("Backup server configuration is unstable: $name")
                 }
                 return
             }

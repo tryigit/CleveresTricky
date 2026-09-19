@@ -515,7 +515,7 @@ ${TestKeyboxFixtures.certificate.prependIndent("                    ")}
     }
 
     @Test
-    fun testUploadRkpKeyboxWithoutFilenameDefaultsToRkpXml() {
+    fun testUploadRkpKeyboxWithoutFilenameDefaultsToKeyboxXml() {
         val originalRoot = Config.getConfigRoot()
         try {
             Config.setRootForTesting(configDir)
@@ -539,9 +539,18 @@ ${TestKeyboxFixtures.certificate.prependIndent("                    ")}
 
         val (responseCode, _) = uploadKeyboxPost(mapOf("content" to "<!-- rkp -->\n$rawRkpXml"))
         assertEquals(200, responseCode)
-        val file = File(configDir, "keyboxes/rkp.xml")
+        // A filename-less paste upload is stored under the shared keybox.xml fallback.
+        val file = File(configDir, "keyboxes/keybox.xml")
         assertTrue(file.isFile)
-        assertTrue(RkpProvenanceStore.isRkp("rkp.xml", configDir))
+        // The result is stable: a second filename-less paste does not overwrite the first.
+        val (secondCode, secondBody) = uploadKeyboxPost(mapOf("content" to "<!-- rkp -->\n$rawRkpXml"))
+        assertEquals(200, secondCode)
+        assertEquals("keybox2.xml", JSONObject(secondBody).getString("filename"))
+        // An unauthenticated RKP hint must not grant provenance: the WebUI did not
+        // authenticate the claim, so the judgment stays unverified until a real
+        // RKP check records it.
+        assertFalse(RkpProvenanceStore.isRkp("keybox.xml", configDir))
+        assertFalse(RkpProvenanceStore.isRkp("keybox2.xml", configDir))
         } finally {
             Config.setRootForTesting(originalRoot)
             RkpProvenanceStore.resetForTesting(configDir)

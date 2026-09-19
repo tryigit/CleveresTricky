@@ -11,6 +11,8 @@
 - **More reliable automatic identity:** The Pixel identity refresh now tracks the latest test builds correctly and no longer falls back to outdated profiles.
 - **Custom templates that just work:** Saving a custom template works on first use, and custom templates can be applied everywhere built-in ones can.
 - **Safer remote servers:** Server connections can no longer be tricked into reaching device-internal or otherwise invalid network addresses, and redirects from a server are rejected instead of followed silently.
+- **Backups now cover remote servers:** Encrypted backups include the Remote Server configuration, the WebUI language file, debug logging marker, and boot identity digests. Server settings stay device-encrypted and restore only on the same device key, and a backup without server settings preserves the current configuration instead of deleting it.
+- **Reset Defaults clears remote servers:** Applying the built-in default profile removes every configured Remote Server together with its cached keybox content.
 - **More trustworthy restores:** Backups are re-checked more strictly during restore, including revocation data and keybox authenticity, so a modified backup cannot grant itself trusted status.
 - **Smoother operation:** Background refreshes and the revocation list stay consistent under unlucky timing, and installer safeguards protect existing settings during module updates.
 - **Nine languages:** All new screens, settings, and messages are fully translated.
