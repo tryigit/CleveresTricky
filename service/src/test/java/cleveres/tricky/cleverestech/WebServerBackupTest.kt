@@ -7,12 +7,14 @@ import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import java.io.ByteArrayInputStream
 import java.io.File
+import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 
@@ -282,6 +284,52 @@ class WebServerBackupTest {
     }
 
     @Test
+    fun testRestoreDropsAmbiguousNormalizedRkpProvenanceBinding() {
+        File(configDir, "keybox.xml").writeText(TestKeyboxFixtures.validRkpKeyboxXml)
+        val keyboxDir = File(configDir, "keyboxes").apply { mkdirs() }
+        File(keyboxDir, "keybox.xml").writeText(TestKeyboxFixtures.validEcKeyboxXml)
+        File(configDir, RkpProvenanceStore.PROVENANCE_FILE_NAME).writeText(
+            """{"rkp_keyboxes":["keybox.xml"]}""",
+        )
+
+        val zipBytes = WebServer.createBackupZip(configDir)
+        configDir.deleteRecursively()
+        configDir.mkdirs()
+        WebServer.restoreBackupZip(configDir, ByteArrayInputStream(zipBytes))
+
+        assertTrue(File(configDir, "keybox.xml").isFile)
+        assertTrue(File(configDir, "keyboxes/keybox.xml").isFile)
+        assertFalse(
+            "one provenance identifier must not vouch for two restored paths",
+            RkpProvenanceStore.isRkp("keybox.xml", configDir),
+        )
+    }
+
+    @Test
+    fun testRestoreDropsEncryptedRkpProvenanceBinding() {
+        val keyboxDir = File(configDir, "keyboxes").apply { mkdirs() }
+        val encrypted = ByteArray(CboxWireLimits.MIN_BYTES)
+        ByteBuffer.wrap(encrypted)
+            .put("CBOX".toByteArray(StandardCharsets.US_ASCII))
+            .putInt(2)
+        File(keyboxDir, "encrypted.cbox").writeBytes(encrypted)
+        File(configDir, RkpProvenanceStore.PROVENANCE_FILE_NAME).writeText(
+            """{"rkp_keyboxes":["encrypted.cbox"]}""",
+        )
+
+        val zipBytes = WebServer.createBackupZip(configDir)
+        configDir.deleteRecursively()
+        configDir.mkdirs()
+        WebServer.restoreBackupZip(configDir, ByteArrayInputStream(zipBytes))
+
+        assertArrayEquals(encrypted, File(configDir, "keyboxes/encrypted.cbox").readBytes())
+        assertFalse(
+            "encrypted entries cannot retain an unverified provenance claim",
+            RkpProvenanceStore.isRkp("encrypted.cbox", configDir),
+        )
+    }
+
+    @Test
     fun testRkpProvenanceRecordFailsClosedPastEntryLimit() {
         try {
             repeat(256) { index -> RkpProvenanceStore.recordRkp("kb$index.xml", configDir) }
@@ -330,6 +378,7 @@ class WebServerBackupTest {
         File(configDir, "boot_key").writeText("a".repeat(64))
         File(configDir, "boot_hash").writeText("b".repeat(64))
         File(configDir, "lang.json").writeText("""{"Refresh":"Yenile"}""")
+        File(configDir, "server_cache_srv1.enc").writeBytes(ByteArray(32) { 7 })
 
         val zipBytes = WebServer.createBackupZip(configDir)
         assertTrue(zipBytes.isNotEmpty())
@@ -342,6 +391,7 @@ class WebServerBackupTest {
         assertEquals("a".repeat(64), File(configDir, "boot_key").readText())
         assertEquals("b".repeat(64), File(configDir, "boot_hash").readText())
         assertEquals("""{"Refresh":"Yenile"}""", File(configDir, "lang.json").readText())
+        assertFalse("disposable server caches must not enter backups", File(configDir, "server_cache_srv1.enc").exists())
     }
 
     @Test
@@ -360,6 +410,48 @@ class WebServerBackupTest {
     @Test
     fun testServersConfigValidation() {
         assertFalse(WebServer.validateContent("servers.json", "not a blob"))
+    }
+
+    @Test
+    fun testRestoredServerConfigUsesLiveUrlPolicy() {
+        fun config(url: String): ByteArray =
+            """[{"id":"srv1","name":"Primary","url":"$url","priority":0,"enabled":true,"authType":"NONE","authData":{},"autoRefresh":false,"refreshIntervalHours":24}]"""
+                .toByteArray(StandardCharsets.UTF_8)
+
+        val publicConfig = config("https://example.com/keyboxes.xml")
+        assertArrayEquals(publicConfig, ServerManager.validateRestoredServers(publicConfig))
+        assertNull(ServerManager.validateRestoredServers(config("https://127.0.0.1/keyboxes.xml")))
+        assertNull(ServerManager.validateRestoredServers(config("https://192.168.1.10/keyboxes.xml")))
+        assertNull(ServerManager.validateRestoredServers(ByteArray(0)))
+    }
+
+    @Test
+    fun testServersConfigExportUsesEncryptedBlobBoundary() {
+        val serversFile = File(configDir, ServerManager.SERVERS_FILE_NAME)
+        RandomAccessFile(serversFile, "rw").use { it.setLength(ServerManager.MAX_SERVERS_FILE_BYTES) }
+        assertEquals(
+            ServerManager.MAX_SERVERS_FILE_BYTES,
+            requireNotNull(ServerManager.exportServersForBackup()).size.toLong(),
+        )
+
+        RandomAccessFile(serversFile, "rw").use { it.setLength(ServerManager.MAX_SERVERS_FILE_BYTES + 1) }
+        assertNull(ServerManager.exportServersForBackup())
+    }
+
+    @Test
+    fun testAdditionalBackupConfigurationValidation() {
+        assertTrue(WebServer.validateContent("lang.json", """{"Refresh":"Yenile","Delete":"Sil"}"""))
+        assertFalse(WebServer.validateContent("lang.json", """{"Refresh":1}"""))
+        assertFalse(WebServer.validateContent("lang.json", "[]"))
+
+        assertTrue(WebServer.validateContent("debug_logging", ""))
+        assertFalse(WebServer.validateContent("debug_logging", "enabled"))
+
+        val digest = "0123456789abcdef".repeat(4)
+        assertTrue(WebServer.validateContent("boot_key", "$digest\n"))
+        assertTrue(WebServer.validateContent("boot_hash", digest))
+        assertFalse(WebServer.validateContent("boot_key", digest.uppercase()))
+        assertFalse(WebServer.validateContent("boot_hash", digest.dropLast(1)))
     }
 
     @Test

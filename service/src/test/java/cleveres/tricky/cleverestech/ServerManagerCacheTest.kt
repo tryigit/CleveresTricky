@@ -265,6 +265,8 @@ class ServerManagerCacheTest {
         }
         // Ordinary public hosts stay accepted; private LAN ranges are non-public.
         ServerManager.validateServer(configWith("https://example.com/keyboxes.zip"))
+        ServerManager.validateServer(configWith("https://134744072/keyboxes.zip"))
+        ServerManager.validateServer(configWith("https://0x08080808/keyboxes.zip"))
         assertThrows(IllegalArgumentException::class.java) {
             ServerManager.validateServer(configWith("https://192.168.1.10/keyboxes.zip"))
         }
@@ -294,11 +296,14 @@ class ServerManagerCacheTest {
                 "fd12:3456::1",
                 "::ffff:127.0.0.1",
                 "100.64.0.1",
+                "100.127.255.255",
                 "192.0.0.170",
+                "192.0.0.255",
                 "192.0.2.1",
                 "198.51.100.2",
                 "203.0.113.3",
                 "198.18.0.1",
+                "198.19.255.255",
                 "240.0.0.1",
                 "255.255.255.255",
             )
@@ -314,6 +319,10 @@ class ServerManagerCacheTest {
                 "1.1.1.1",
                 "9.9.9.9",
                 "172.32.0.1",
+                "100.63.255.255",
+                "100.128.0.0",
+                "192.0.1.1",
+                "198.20.0.1",
                 "2001:4860:4860::8888",
                 "64:ff9b::808:808",
             )
@@ -334,6 +343,11 @@ class ServerManagerCacheTest {
         assertThrows(java.io.IOException::class.java) {
             ServerManager.resolvePublicAddress("blocked.example") {
                 resolved("127.0.0.1", "10.0.0.1")
+            }
+        }
+        assertThrows(java.io.IOException::class.java) {
+            ServerManager.resolvePublicAddress("failed.example") {
+                throw IllegalStateException("resolver failed")
             }
         }
         val picked =

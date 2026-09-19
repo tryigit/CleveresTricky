@@ -1,6 +1,7 @@
 package cleveres.tricky.cleverestech
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -104,5 +105,19 @@ class StoredKeyboxInventoryTest {
         val disabled = File(root, "disabled_keyboxes")
         disabled.writeText("\n  \nroot:a.xml\n\n")
         assertEquals(emptyList<String>(), StoredKeyboxInventory.runtimeXmlSources(root).map { it.id })
+    }
+
+    @Test
+    fun `disabled sources do not consume the active XML limit`() {
+        val root = temp.newFolder("disabled-boundary")
+        repeat(StoredKeyboxInventory.MAX_ACTIVE_XML_SOURCES + 1) { index ->
+            File(root, "keybox-$index.xml").writeText("keybox")
+        }
+        File(root, "disabled_keyboxes").writeText("root:keybox-0.xml\n")
+
+        val active = StoredKeyboxInventory.runtimeXmlSources(root)
+
+        assertEquals(StoredKeyboxInventory.MAX_ACTIVE_XML_SOURCES, active.size)
+        assertFalse(active.any { it.id == "root:keybox-0.xml" })
     }
 }
