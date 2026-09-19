@@ -24,7 +24,9 @@ internal object AutoIdentityPersistence {
     ): Result<Unit> =
         runCatching {
             val updates = LinkedHashMap(result.buildVars())
+            val removed = result.removedBuildVars()
             require(updates.isNotEmpty()) { "Auto Identity returned no build fields" }
+            require(updates.keys.intersect(removed).isEmpty()) { "Auto Identity returned conflicting build fields" }
             updates.forEach { (key, value) ->
                 require(Config.isValidBuildVarEntry(key, value)) { "Auto Identity returned an invalid build field" }
             }
@@ -66,6 +68,7 @@ internal object AutoIdentityPersistence {
                     val separator = if (trimmed.startsWith("#")) -1 else trimmed.indexOf('=')
                     val key = if (separator > 0) trimmed.substring(0, separator).trim() else ""
                     if (key == "TEMPLATE") return@forEach
+                    if (key in removed) return@forEach
                     if (key in updates) {
                         if (processed.add(key)) rewritten += "$key=${updates.getValue(key)}"
                     } else {

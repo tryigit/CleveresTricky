@@ -46,6 +46,9 @@ object AutoIdentityManager {
                 put("TAGS", "release-keys")
                 put("SECURITY_PATCH", securityPatch)
             }
+
+        fun removedBuildVars(): Set<String> =
+            if (release == null) setOf("RELEASE") else emptySet()
     }
 
     internal data class DeviceCandidate(
