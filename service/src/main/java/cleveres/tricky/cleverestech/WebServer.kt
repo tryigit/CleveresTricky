@@ -3709,12 +3709,15 @@ class WebServer(
 
                     // Remote server settings ride along as their device-encrypted
                     // blob: credentials never enter the archive as plaintext, and
-                    // the entry can only be restored on the same device key.
+                    // the entry can only be restored on the same device key. The
+                    // export already caps at the config read bound; reject here
+                    // when the remaining archive capacity cannot hold the full
+                    // entry so a restore never sees a silently dropped file.
                     val serversBytes = ServerManager.exportServersForBackup()
                     if (serversBytes != null) {
                         try {
                             val remaining = MAX_BACKUP_UNCOMPRESSED_BYTES.toLong() - totalBytes
-                            if (remaining < 0) throw IOException("Backup exceeds uncompressed size limit")
+                            if (remaining < serversBytes.size) throw IOException("Backup exceeds uncompressed size limit")
                             zos.putNextEntry(ZipEntry(SERVERS_CONFIG_FILE))
                             zos.write(serversBytes)
                             zos.closeEntry()

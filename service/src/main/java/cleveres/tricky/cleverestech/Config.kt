@@ -2054,11 +2054,9 @@ object Config {
                     BootLogic.FILE_HIDE_PROPS, BootLogic.FILE_SPOOF_CN, TELEPHONY_FILE, RKP_PASSTHROUGH_FILE, DRM_PASSTHROUGH_FILE)
                 resetTargetFilesToDefaults()
                 // Restoring the default environment also clears configured remote
-                // servers and their cached content. The in-memory removal runs
-                // first because it re-persists an empty configuration file, so
-                // the file itself is removed afterwards. Removal goes through the
-                // delete-based path so it succeeds even when the device
-                // encryption key is unavailable (saveServers would fail then).
+                // servers and their cached content. In-memory state plus caches
+                // are cleared first, then the servers.json file itself, so the
+                // reset completes without the device encryption key.
                 ServerManager.clearAllServers()
                 removeConfigFiles(SERVERS_FILE)
             }

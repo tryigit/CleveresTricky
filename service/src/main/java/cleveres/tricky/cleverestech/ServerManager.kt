@@ -1326,13 +1326,7 @@ object ServerManager {
         val path = file.toPath()
         if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) return null
         return try {
-            val bytes = readFileSnapshotBounded(file, 1, MAX_CONFIG_BYTES)
-            if (bytes.size > MAX_BACKUP_SERVERS_BYTES) {
-                bytes.fill(0)
-                null
-            } else {
-                bytes
-            }
+            readFileSnapshotBounded(file, 1, MAX_CONFIG_BYTES)
         } catch (e: Exception) {
             Logger.e("Failed to read server configuration for backup", e)
             null
@@ -1368,16 +1362,18 @@ object ServerManager {
     }
 
     /**
-     * Removes every configured remote server. Each removal goes through the
-     * regular path so an already missing configuration file cannot leave stale
-     * in-memory servers behind, then every remaining server cache file is
-     * deleted. Profile resets use this to clear remote servers without needing
-     * the device encryption key.
+     * Removes every configured remote server plus its disposable caches. The
+     * in-memory state is cleared and cache files are deleted directly, without
+     * persisting any intermediate configuration: the reset must complete even
+     * when the device encryption key is unavailable. The caller removes the
+     * servers.json file itself after this returns.
      */
     fun clearAllServers() {
-        while (true) {
-            val nextId = serversList.firstOrNull()?.id ?: break
-            if (!removeServer(nextId)) break
+        synchronized(this) {
+            serversList.clear()
+            serversMap.clear()
+            serverKeyboxes.clear()
+            stateGeneration++
         }
         val configDir = Config.keyboxDirectory.parentFile ?: return
         configDir.listFiles()?.forEach { file ->
@@ -1394,7 +1390,6 @@ object ServerManager {
     private const val MAX_SERVERS = 64
     private const val MAX_REMOTE_KEYBOXES = 64
     private const val MAX_CONFIG_BYTES = 2L * 1024 * 1024
-    private const val MAX_BACKUP_SERVERS_BYTES = 1024 * 1024
     private const val MAX_CACHE_BYTES = 16L * 1024 * 1024
     private const val MAX_HEADER_VALUE_CHARS = 8192
     private const val MAX_BASIC_CREDENTIAL_UTF16_UNITS = 1024
